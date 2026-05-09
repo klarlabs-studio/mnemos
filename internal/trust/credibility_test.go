@@ -82,6 +82,76 @@ func TestScoreCredibility_AgentAuthority_ZeroIsNeutral(t *testing.T) {
 	}
 }
 
+func TestScoreCredibility_TestRecency_OverridesClaimTimestamps(t *testing.T) {
+	now := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	// Claim row was created and verified yesterday, but the test itself
+	// last ran a year ago. Recency must reflect the test run, not the row.
+	in := CredibilityInputs{
+		CurrentTrust:    0.7,
+		SourceAuthority: 0.5,
+		Liveness:        domain.LivenessLive,
+		LastExecuted:    now.Add(-1 * 24 * time.Hour),
+		LastVerified:    now.Add(-1 * 24 * time.Hour),
+		CreatedAt:       now.Add(-1 * 24 * time.Hour),
+		Now:             now,
+		IsTest:          true,
+		TestLastRunAt:   now.Add(-365 * 24 * time.Hour),
+		TestPassCount:   5,
+		TestFailCount:   0,
+	}
+	withTestRecency, _ := ScoreCredibility(in)
+
+	// Same inputs but with the test recency aligned with the claim row.
+	in2 := in
+	in2.TestLastRunAt = now.Add(-1 * 24 * time.Hour)
+	freshTest, _ := ScoreCredibility(in2)
+
+	if freshTest <= withTestRecency {
+		t.Fatalf("fresh test run must beat stale: stale=%.3f fresh=%.3f", withTestRecency, freshTest)
+	}
+}
+
+func TestScoreCredibility_TestDecisiveness_FlakyDeflates(t *testing.T) {
+	now := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	base := CredibilityInputs{
+		CurrentTrust:    0.7,
+		SourceAuthority: 0.5,
+		Liveness:        domain.LivenessLive,
+		Now:             now,
+		IsTest:          true,
+		TestLastRunAt:   now.Add(-2 * 24 * time.Hour),
+	}
+	flaky := base
+	flaky.TestPassCount = 5
+	flaky.TestFailCount = 5
+	decisive := base
+	decisive.TestPassCount = 10
+	decisive.TestFailCount = 0
+
+	flakyScore, flakyRationale := ScoreCredibility(flaky)
+	decisiveScore, _ := ScoreCredibility(decisive)
+	if decisiveScore <= flakyScore {
+		t.Fatalf("decisive test must beat flaky: flaky=%.3f decisive=%.3f", flakyScore, decisiveScore)
+	}
+	if !strings.Contains(flakyRationale, "test_decisiveness=") {
+		t.Fatalf("rationale should include test_decisiveness for test claims: %q", flakyRationale)
+	}
+}
+
+func TestScoreCredibility_NonTest_NoTestRationale(t *testing.T) {
+	now := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	in := CredibilityInputs{
+		CurrentTrust: 0.7,
+		Liveness:     domain.LivenessLive,
+		Now:          now,
+		IsTest:       false,
+	}
+	_, rationale := ScoreCredibility(in)
+	if strings.Contains(rationale, "test_decisiveness=") {
+		t.Fatalf("non-test rationale must not include test_decisiveness: %q", rationale)
+	}
+}
+
 func TestScoreCredibility_AgentAuthority_RationaleIncludesField(t *testing.T) {
 	now := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	in := CredibilityInputs{

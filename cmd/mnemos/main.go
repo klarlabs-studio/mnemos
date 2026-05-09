@@ -202,6 +202,8 @@ func main() {
 		handleLessons(args, flags)
 	case "verify":
 		handleVerify(args, flags)
+	case "trust":
+		handleTrust(args, flags)
 	case "decision":
 		handleDecision(args, flags)
 	case "incident":
@@ -1277,6 +1279,7 @@ func printUsage() {
 	fmt.Println("  audit [--include-embeddings]         Export the full knowledge base as JSON")
 	fmt.Println("  resolve <winner> --over <loser>      Resolve a contradiction: winner -> resolved, loser -> deprecated")
 	fmt.Println("  resolve <new> --supersedes <old>     Temporal supersession: close old.valid_to at new.valid_from")
+	fmt.Println("  trust --test <requirement-ref>       Rank test_result claims for a requirement and pick a winner")
 	fmt.Println("")
 	fmt.Println("Identity:")
 	fmt.Println("  user create --name <n> --email <e>   Create a user identity")

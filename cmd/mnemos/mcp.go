@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -25,6 +26,7 @@ import (
 	"github.com/felixgeelhaar/mnemos/internal/relate"
 	"github.com/felixgeelhaar/mnemos/internal/store"
 	"github.com/felixgeelhaar/mnemos/internal/synthesize"
+	"github.com/felixgeelhaar/mnemos/internal/trust"
 	"github.com/felixgeelhaar/mnemos/internal/workflow"
 )
 
@@ -160,6 +162,30 @@ type mcpRecordOutcomeOutput struct {
 type mcpQueryLessonsInput struct {
 	Service string `json:"service,omitempty" jsonschema:"description=Filter to lessons scoped to this service"`
 	Trigger string `json:"trigger,omitempty" jsonschema:"description=Filter to lessons matching this trigger label"`
+}
+
+type mcpWhichTestToTrustInput struct {
+	RequirementRef string `json:"requirement_ref" jsonschema:"required,description=Test requirement reference; matches Claim.TestRequirementRef on test_result claims"`
+}
+
+type mcpWhichTestToTrustCandidate struct {
+	ClaimID       string  `json:"claim_id"`
+	Text          string  `json:"text"`
+	TestID        string  `json:"test_id,omitempty"`
+	TestAuthor    string  `json:"test_author,omitempty"`
+	TestLastRunAt string  `json:"test_last_run_at,omitempty"`
+	TestPassCount int     `json:"test_pass_count"`
+	TestFailCount int     `json:"test_fail_count"`
+	Score         float64 `json:"score"`
+	Rationale     string  `json:"rationale"`
+}
+
+type mcpWhichTestToTrustOutput struct {
+	RequirementRef string                         `json:"requirement_ref"`
+	Verdict        string                         `json:"verdict"`
+	WinnerClaimID  string                         `json:"winner_claim_id,omitempty"`
+	WinnerScore    float64                        `json:"winner_score,omitempty"`
+	Candidates     []mcpWhichTestToTrustCandidate `json:"candidates"`
 }
 
 type mcpQueryLessonsOutput struct {
@@ -417,6 +443,14 @@ func handleMCP() {
 		ValidateInput().
 		Handler(func(ctx context.Context, input mcpQueryLessonsInput) (mcpQueryLessonsOutput, error) {
 			return mcpRunQueryLessons(ctx, input)
+		})
+
+	srv.Tool("which_test_to_trust").
+		Description("Rank every test_result claim sharing a TestRequirementRef by epistemic credibility (recency, pass-ratio, authority, citations) and return the winner with rationale. Use when CI shows divergent results for the same requirement and the agent must decide which test to believe.").
+		OutputSchema(mcpWhichTestToTrustOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpWhichTestToTrustInput) (mcpWhichTestToTrustOutput, error) {
+			return mcpRunWhichTestToTrust(ctx, input)
 		})
 
 	srv.Tool("record_decision").
@@ -1069,6 +1103,82 @@ func mcpRunQueryLessons(ctx context.Context, input mcpQueryLessonsInput) (mcpQue
 		return mcpQueryLessonsOutput{}, err
 	}
 	return mcpQueryLessonsOutput{Lessons: ls}, nil
+}
+
+func mcpRunWhichTestToTrust(ctx context.Context, input mcpWhichTestToTrustInput) (mcpWhichTestToTrustOutput, error) {
+	if input.RequirementRef == "" {
+		return mcpWhichTestToTrustOutput{}, fmt.Errorf("requirement_ref is required")
+	}
+	conn, err := openConn(ctx)
+	if err != nil {
+		return mcpWhichTestToTrustOutput{}, err
+	}
+	defer closeConn(conn)
+
+	all, err := conn.Claims.ListAll(ctx)
+	if err != nil {
+		return mcpWhichTestToTrustOutput{}, err
+	}
+
+	now := time.Now().UTC()
+	cands := make([]mcpWhichTestToTrustCandidate, 0)
+	for _, c := range all {
+		if c.Type != domain.ClaimTypeTestResult || c.TestRequirementRef != input.RequirementRef {
+			continue
+		}
+		score, rationale := trust.ScoreCredibility(trust.CredibilityInputs{
+			CurrentTrust:    c.TrustScore,
+			SourceAuthority: c.SourceAuthority,
+			Liveness:        c.Liveness,
+			CitationCount:   c.CitationCount,
+			LastExecuted:    c.LastExecuted,
+			LastVerified:    c.LastVerified,
+			ValidFrom:       c.ValidFrom,
+			CreatedAt:       c.CreatedAt,
+			Now:             now,
+			IsTest:          true,
+			TestLastRunAt:   c.TestLastRunAt,
+			TestPassCount:   c.TestPassCount,
+			TestFailCount:   c.TestFailCount,
+		})
+		lastRun := ""
+		if !c.TestLastRunAt.IsZero() {
+			lastRun = c.TestLastRunAt.UTC().Format(time.RFC3339)
+		}
+		cands = append(cands, mcpWhichTestToTrustCandidate{
+			ClaimID:       c.ID,
+			Text:          c.Text,
+			TestID:        c.TestID,
+			TestAuthor:    c.TestAuthor,
+			TestLastRunAt: lastRun,
+			TestPassCount: c.TestPassCount,
+			TestFailCount: c.TestFailCount,
+			Score:         score,
+			Rationale:     rationale,
+		})
+	}
+
+	if len(cands) == 0 {
+		return mcpWhichTestToTrustOutput{
+			RequirementRef: input.RequirementRef,
+			Verdict:        "no_candidates",
+			Candidates:     []mcpWhichTestToTrustCandidate{},
+		}, nil
+	}
+
+	sort.Slice(cands, func(i, j int) bool { return cands[i].Score > cands[j].Score })
+
+	verdict := "winner"
+	if len(cands) > 1 && cands[0].Score-cands[1].Score < 0.05 {
+		verdict = "ambiguous"
+	}
+	return mcpWhichTestToTrustOutput{
+		RequirementRef: input.RequirementRef,
+		Verdict:        verdict,
+		WinnerClaimID:  cands[0].ClaimID,
+		WinnerScore:    cands[0].Score,
+		Candidates:     cands,
+	}, nil
 }
 
 func mcpRunSynthesize(ctx context.Context, input mcpSynthesizeInput) (mcpSynthesizeOutput, error) {

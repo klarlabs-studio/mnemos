@@ -231,6 +231,10 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 			ValidFrom:       claims[i].ValidFrom,
 			CreatedAt:       claims[i].CreatedAt,
 			Now:             nowUTC,
+			IsTest:          claims[i].Type == domain.ClaimTypeTestResult,
+			TestLastRunAt:   claims[i].TestLastRunAt,
+			TestPassCount:   claims[i].TestPassCount,
+			TestFailCount:   claims[i].TestFailCount,
 		})
 		claims[i].TrustScore = score
 		claims[i].ProvenanceRationale = rationale
@@ -454,6 +458,31 @@ func resolveContradictionsForAgent(claims []domain.Claim, contradictions []domai
 			continue
 		}
 
+		// Test-aware tiebreak runs before the generic confidence path: when
+		// both claims are test_result rows under the same requirement ref,
+		// the most recent run with the higher pass-ratio is the right
+		// winner regardless of LLM-assigned Confidence (which is uniform
+		// across CI-generated test claims). Falls through to the generic
+		// path on a tie or when one side lacks test provenance.
+		if from.Type == domain.ClaimTypeTestResult && to.Type == domain.ClaimTypeTestResult &&
+			from.TestRequirementRef != "" && from.TestRequirementRef == to.TestRequirementRef {
+			if winner, loser, rationale, ok := pickTestWinner(*from, *to); ok {
+				demoted[loser.ID] = struct{}{}
+				action := domain.VerdictActionTrust
+				if loser.TrustScore > 0.5 {
+					action = domain.VerdictActionUpdate
+				}
+				verdicts = append(verdicts, domain.Verdict{
+					WinnerClaimID: winner.ID,
+					LoserClaimID:  loser.ID,
+					Confidence:    winner.Confidence,
+					Rationale:     rationale,
+					Action:        action,
+				})
+				continue
+			}
+		}
+
 		diff := from.Confidence - to.Confidence
 		if diff < 0 {
 			diff = -diff
@@ -543,6 +572,82 @@ func resolveContradictionsForAgent(claims []domain.Claim, contradictions []domai
 		}
 	}
 	return pruned, verdicts, true
+}
+
+// pickTestWinner resolves a contradiction between two ClaimTypeTestResult
+// claims under the same TestRequirementRef. Returns the winner, loser, a
+// rationale string, and ok=true when a confident pick can be made.
+//
+// Decision order:
+//  1. Recency: more-recent TestLastRunAt wins when the gap is ≥ 24h. A
+//     test that ran today with 0/0 still loses to a stale 50/0 only if
+//     the recency gap is below threshold and the pass-ratio gap is
+//     decisive — see step 2.
+//  2. Pass-ratio decisiveness: |pass-fail|/total. Wins when the ratio
+//     gap is ≥ 0.2 and at least one side has a meaningful run count.
+//
+// Returns ok=false when neither signal exceeds its threshold so the
+// generic confidence/trust path can take over.
+func pickTestWinner(a, b domain.Claim) (winner, loser *domain.Claim, rationale string, ok bool) {
+	const (
+		recencyThreshold = 24 * time.Hour
+		ratioThreshold   = 0.2
+	)
+
+	recencyGap := a.TestLastRunAt.Sub(b.TestLastRunAt)
+	if recencyGap < 0 {
+		recencyGap = -recencyGap
+	}
+	if !a.TestLastRunAt.IsZero() && !b.TestLastRunAt.IsZero() && recencyGap >= recencyThreshold {
+		var w, l *domain.Claim
+		if a.TestLastRunAt.After(b.TestLastRunAt) {
+			w, l = &a, &b
+		} else {
+			w, l = &b, &a
+		}
+		return w, l, fmt.Sprintf(
+			"test recency: winner ran %s, loser ran %s (Δ%s ≥ %s)",
+			w.TestLastRunAt.UTC().Format(time.RFC3339),
+			l.TestLastRunAt.UTC().Format(time.RFC3339),
+			recencyGap.Round(time.Hour),
+			recencyThreshold,
+		), true
+	}
+
+	ra := passRatio(a)
+	rb := passRatio(b)
+	gap := ra - rb
+	if gap < 0 {
+		gap = -gap
+	}
+	if gap >= ratioThreshold {
+		var w, l *domain.Claim
+		if ra >= rb {
+			w, l = &a, &b
+		} else {
+			w, l = &b, &a
+		}
+		return w, l, fmt.Sprintf(
+			"test pass-ratio: winner %d/%d (%.2f) vs loser %d/%d (%.2f), Δ%.2f ≥ %.2f",
+			w.TestPassCount, w.TestPassCount+w.TestFailCount, passRatio(*w),
+			l.TestPassCount, l.TestPassCount+l.TestFailCount, passRatio(*l),
+			gap, ratioThreshold,
+		), true
+	}
+
+	return nil, nil, "", false
+}
+
+func passRatio(c domain.Claim) float64 {
+	total := c.TestPassCount + c.TestFailCount
+	if total == 0 {
+		return 0
+	}
+	diff := c.TestPassCount - c.TestFailCount
+	if diff < 0 {
+		diff = -diff
+	}
+	return float64(diff) / float64(total)
 }
 
 // buildContradictionExplanation produces a human-readable prose summary of
@@ -1620,6 +1725,10 @@ func (e Engine) WhyTrustClaim(ctx context.Context, claimID string) (domain.Prove
 		ValidFrom:       c.ValidFrom,
 		CreatedAt:       c.CreatedAt,
 		Now:             nowUTC,
+		IsTest:          c.Type == domain.ClaimTypeTestResult,
+		TestLastRunAt:   c.TestLastRunAt,
+		TestPassCount:   c.TestPassCount,
+		TestFailCount:   c.TestFailCount,
 	}
 	score, rationale := trust.ScoreCredibility(in)
 
@@ -1654,7 +1763,12 @@ func provenanceSignals(in trust.CredibilityInputs, _ float64) []domain.Provenanc
 		authority = 0.5
 	}
 	citationSignal := clamp01(math.Log1p(float64(maxInt(0, in.CitationCount))) / math.Log(11))
-	ref := trust.EffectiveExecutionTime(in.LastExecuted, in.LastVerified, in.ValidFrom, in.CreatedAt)
+	var ref time.Time
+	if in.IsTest && !in.TestLastRunAt.IsZero() {
+		ref = in.TestLastRunAt
+	} else {
+		ref = trust.EffectiveExecutionTime(in.LastExecuted, in.LastVerified, in.ValidFrom, in.CreatedAt)
+	}
 	recencySignal := 0.5
 	if !ref.IsZero() {
 		days := now.Sub(ref).Hours() / 24
@@ -1669,12 +1783,27 @@ func provenanceSignals(in trust.CredibilityInputs, _ float64) []domain.Provenanc
 		agentFactor = clamp01(in.AgentAuthority)
 	}
 
+	testDecisiveness := 0.5
+	if in.IsTest {
+		total := in.TestPassCount + in.TestFailCount
+		if total > 0 {
+			diff := in.TestPassCount - in.TestFailCount
+			if diff < 0 {
+				diff = -diff
+			}
+			testDecisiveness = float64(diff) / float64(total)
+		} else {
+			testDecisiveness = 0
+		}
+	}
+
 	const (
-		wBase      = 0.55
+		wBase      = 0.50
 		wAuthority = 0.15
-		wCitation  = 0.15
+		wCitation  = 0.13
 		wRecency   = 0.10
 		wLiveness  = 0.05
+		wTest      = 0.07
 	)
 
 	signals := []domain.ProvenanceSignal{
@@ -1713,6 +1842,16 @@ func provenanceSignals(in trust.CredibilityInputs, _ float64) []domain.Provenanc
 			Contribution: livenessSignal * wLiveness,
 			Detail:       string(in.Liveness),
 		},
+	}
+
+	if in.IsTest {
+		signals = append(signals, domain.ProvenanceSignal{
+			Name:         "test_decisiveness",
+			Value:        testDecisiveness,
+			Weight:       wTest,
+			Contribution: testDecisiveness * wTest,
+			Detail:       fmt.Sprintf("%d pass / %d fail", in.TestPassCount, in.TestFailCount),
+		})
 	}
 
 	if agentFactor != 1.0 {
@@ -1864,13 +2003,14 @@ func (e Engine) EscalateClaimForAgent(ctx context.Context, claimID, agentReason 
 
 // SLOThresholds defines the reliability-first SLOs for rollout guardrails.
 type SLOThresholds struct {
-	MinRecallPassRate  float64 // recall_pass_rate must be >= this
+	MinRecallPassRate float64 // recall_pass_rate must be >= this
 	MinConfidenceAvg  float64 // avg confidence must be >= this
 	MaxStaleRatio     float64 // stale claims / total must be <= this
 }
 
+// DefaultSLOs is the baseline SLO configuration for production rollouts.
 var DefaultSLOs = SLOThresholds{
-	MinRecallPassRate:  0.95, // "never wrong on recall" = 95%+
+	MinRecallPassRate: 0.95, // "never wrong on recall" = 95%+
 	MinConfidenceAvg:  0.6,  // reasonably confident answers
 	MaxStaleRatio:     0.1,  // at most 10% stale claims
 }

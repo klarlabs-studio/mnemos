@@ -1098,6 +1098,95 @@ func TestTrustTiebreak_TieEscalates(t *testing.T) {
 	}
 }
 
+// TestTestConflict_RecencyWins covers the test-aware tiebreak: when two
+// test_result claims under the same TestRequirementRef contradict each other
+// (one passing, one failing), the more recent run wins regardless of
+// confidence parity.
+func TestTestConflict_RecencyWins(t *testing.T) {
+	now := time.Now().UTC()
+	stale := domain.Claim{
+		ID: "cl_stale", Text: "test_login passed", Type: domain.ClaimTypeTestResult,
+		Status: domain.ClaimStatusActive, Confidence: 0.85, TrustScore: 0.7,
+		TestID: "t1", TestRequirementRef: "REQ-LOGIN", TestPassCount: 1, TestFailCount: 0,
+		TestLastRunAt: now.Add(-30 * 24 * time.Hour),
+		CreatedAt:     now, Visibility: domain.VisibilityTeam,
+	}
+	fresh := domain.Claim{
+		ID: "cl_fresh", Text: "test_login failed", Type: domain.ClaimTypeTestResult,
+		Status: domain.ClaimStatusActive, Confidence: 0.85, TrustScore: 0.7,
+		TestID: "t2", TestRequirementRef: "REQ-LOGIN", TestPassCount: 0, TestFailCount: 1,
+		TestLastRunAt: now.Add(-1 * time.Hour),
+		CreatedAt:     now, Visibility: domain.VisibilityTeam,
+	}
+	contradiction := domain.Relationship{
+		FromClaimID: stale.ID, ToClaimID: fresh.ID,
+		Type: domain.RelationshipTypeContradicts,
+	}
+
+	resolved, verdicts, autoResolved := resolveContradictionsForAgent(
+		[]domain.Claim{stale, fresh},
+		[]domain.Relationship{contradiction},
+		now,
+	)
+
+	if !autoResolved {
+		t.Fatal("expected auto-resolved=true for fresh-vs-stale test conflict")
+	}
+	if len(verdicts) == 0 || verdicts[0].WinnerClaimID != fresh.ID {
+		t.Fatalf("expected fresh test (cl_fresh) to win, got verdicts: %+v", verdicts)
+	}
+	if !strings.Contains(verdicts[0].Rationale, "test recency") {
+		t.Errorf("expected rationale to cite test recency, got: %q", verdicts[0].Rationale)
+	}
+	for _, c := range resolved {
+		if c.ID == stale.ID {
+			t.Errorf("stale claim should be demoted from resolved set")
+		}
+	}
+}
+
+// TestTestConflict_PassRatioWins covers the secondary test-aware tiebreak:
+// when recency is tied, the test with the higher pass-ratio wins.
+func TestTestConflict_PassRatioWins(t *testing.T) {
+	now := time.Now().UTC()
+	flaky := domain.Claim{
+		ID: "cl_flaky", Text: "test_payment failed once", Type: domain.ClaimTypeTestResult,
+		Status: domain.ClaimStatusActive, Confidence: 0.85, TrustScore: 0.7,
+		TestID: "t_flaky", TestRequirementRef: "REQ-PAY",
+		TestPassCount: 5, TestFailCount: 5, // 0/10 decisiveness
+		TestLastRunAt: now.Add(-2 * time.Hour),
+		CreatedAt:     now, Visibility: domain.VisibilityTeam,
+	}
+	stable := domain.Claim{
+		ID: "cl_stable", Text: "test_payment passed", Type: domain.ClaimTypeTestResult,
+		Status: domain.ClaimStatusActive, Confidence: 0.85, TrustScore: 0.7,
+		TestID: "t_stable", TestRequirementRef: "REQ-PAY",
+		TestPassCount: 10, TestFailCount: 0, // 10/10 decisiveness
+		TestLastRunAt: now.Add(-2 * time.Hour),
+		CreatedAt:     now, Visibility: domain.VisibilityTeam,
+	}
+	contradiction := domain.Relationship{
+		FromClaimID: flaky.ID, ToClaimID: stable.ID,
+		Type: domain.RelationshipTypeContradicts,
+	}
+
+	_, verdicts, autoResolved := resolveContradictionsForAgent(
+		[]domain.Claim{flaky, stable},
+		[]domain.Relationship{contradiction},
+		now,
+	)
+
+	if !autoResolved {
+		t.Fatal("expected auto-resolved=true for flaky-vs-stable")
+	}
+	if verdicts[0].WinnerClaimID != stable.ID {
+		t.Fatalf("expected stable test to win on pass-ratio, got winner=%s", verdicts[0].WinnerClaimID)
+	}
+	if !strings.Contains(verdicts[0].Rationale, "pass-ratio") {
+		t.Errorf("expected rationale to cite pass-ratio, got: %q", verdicts[0].Rationale)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // fakeIncidentRepo — minimal in-memory IncidentRepository for engine tests.
 // ---------------------------------------------------------------------------
