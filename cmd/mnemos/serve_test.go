@@ -13,7 +13,7 @@ import (
 	"github.com/felixgeelhaar/mnemos/internal/domain"
 )
 
-func TestServe_WebRootReturnsHTML(t *testing.T) {
+func TestServe_LandingReturnsHTML(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(newServerTestStore_conn(t)))
 	defer srv.Close()
 
@@ -36,12 +36,33 @@ func TestServe_WebRootReturnsHTML(t *testing.T) {
 	if len(body) < 100 {
 		t.Fatalf("body suspiciously small: %d bytes", len(body))
 	}
-	if !strings.Contains(string(body), "Mnemos Registry") {
-		t.Errorf("body missing expected title")
+	if !strings.Contains(string(body), "Mnemos") {
+		t.Errorf("landing body missing Mnemos brand")
 	}
 }
 
-func TestServe_WebRootRejectsNonGetWithoutCatchAll(t *testing.T) {
+func TestServe_RegistryAppReturnsHTML(t *testing.T) {
+	srv := httptest.NewServer(newServerMux(newServerTestStore_conn(t)))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/app")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !strings.Contains(string(body), "Mnemos Registry") {
+		t.Errorf("/app body missing expected title 'Mnemos Registry'")
+	}
+}
+
+func TestServe_RootRejectsUnknownPath(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(newServerTestStore_conn(t)))
 	defer srv.Close()
 

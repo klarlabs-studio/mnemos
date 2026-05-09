@@ -30,6 +30,9 @@ import (
 //go:embed web/index.html
 var webIndexHTML []byte
 
+//go:embed web/landing.html
+var webLandingHTML []byte
+
 const (
 	defaultServePort   = 7777
 	maxServePageLimit  = 200
@@ -242,8 +245,10 @@ func newServerMux(conn *store.Conn) http.Handler {
 	verifier := auth.NewVerifierWithPrevious(secret, prev, conn.RevokedTokens)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handleWebRoot)
+	mux.HandleFunc("/", handleLanding)
+	mux.HandleFunc("/app", handleWebRoot)
 	mux.HandleFunc("/health", makeHealthHandler(conn))
+	mux.HandleFunc("/v1/leads", makeLeadsHandler())
 	mux.HandleFunc("/v1/events", makeEventsHandler(conn))
 	mux.HandleFunc("/v1/claims", makeClaimsHandler(conn))
 	mux.HandleFunc("/v1/relationships", makeRelationshipsHandler(conn))
@@ -270,6 +275,38 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(status int) {
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)
+}
+
+type leadRequest struct {
+	Email string `json:"email"`
+}
+
+type leadResponse struct {
+	Status string `json:"status"`
+}
+
+func makeLeadsHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+
+		var req leadRequest
+		dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if strings.TrimSpace(req.Email) == "" || !strings.Contains(req.Email, "@") {
+			writeError(w, http.StatusBadRequest, "email is required")
+			return
+		}
+
+		fmt.Fprintf(os.Stderr, "lead captured email=%s\n", req.Email)
+		writeJSON(w, http.StatusOK, leadResponse{Status: "ok"})
+	}
 }
 
 type healthResponse struct {
@@ -327,11 +364,11 @@ func ternary(cond bool, t, f string) string {
 	return f
 }
 
-// handleWebRoot serves the embedded single-page UI at GET /. Any other
+// handleWebRoot serves the embedded single-page UI at GET /app. Any other
 // path returns 404 — we don't want catch-all behavior masking real route
 // typos like /v1/clams. Unsupported methods get 405.
 func handleWebRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
+	if r.URL.Path != "/app" {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}
@@ -347,6 +384,27 @@ func handleWebRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := w.Write(webIndexHTML); err != nil {
 		fmt.Fprintf(os.Stderr, "serve web: %v\n", err)
+	}
+}
+
+// handleLanding serves the marketing landing page at GET /.
+func handleLanding(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if _, err := w.Write(webLandingHTML); err != nil {
+		fmt.Fprintf(os.Stderr, "serve landing: %v\n", err)
 	}
 }
 

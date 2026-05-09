@@ -101,6 +101,11 @@ func requireScope(w http.ResponseWriter, r *http.Request, want string) bool {
 //     context for created_by stamping.
 func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/leads" {
+			h.ServeHTTP(w, r)
+			return
+		}
+
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
 			h.ServeHTTP(w, r)
 			return

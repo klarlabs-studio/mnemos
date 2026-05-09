@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mnemos – Data Sovereignty & Compliance Platform</title>
+  <meta name="description" content="Mnemos – a local‑first evidence layer for data sovereignty, AI‑driven claim extraction and contradiction detection.">
+  <style>
+    :root {
+      --fg: #1a1a1a;
+      --bg: #fafaf7;
+      --muted: #6b6b6b;
+      --border: #e5e5e0;
+      --accent: #0b5fff;
+      --warn: #b04a00;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.6 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    
+    /* Header */
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+    nav a { color: var(--fg); text-decoration: none; margin-left: 24px; font-size: 14px; }
+    nav a:hover { color: var(--accent); }
+    
+    /* Hero */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+    .hero h2 {
+      font-size: 42px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin: 0 0 20px;
+      letter-spacing: -0.02em;
+    }
+    .hero p {
+      font-size: 20px;
+      color: var(--muted);
+      max-width: 600px;
+      margin: 0 auto 32px;
+    }
+    .cta-primary {
+      display: inline-block;
+      padding: 14px 32px;
+      background: var(--accent);
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      margin: 0 8px 16px 8px;
+      transition: opacity 0.2s;
+    }
+    .cta-primary:hover { opacity: 0.9; }
+    .cta-secondary {
+      display: inline-block;
+      padding: 14px 32px;
+      background: white;
+      color: var(--fg);
+      text-decoration: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      margin: 0 8px 16px 8px;
+      transition: border-color 0.2s;
+    }
+    .cta-secondary:hover { border-color: var(--accent); }
+    
+    /* Features */
+    .features {
+      padding: 80px 0;
+      background: white;
+    }
+    .section-title {
+      text-align: center;
+      font-size: 32px;
+      font-weight: 700;
+      margin: 0 0 48px;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 40px;
+    }
+    .feature-card {
+      padding: 24px;
+    }
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--accent);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      color: white;
+      font-size: 24px;
+    }
+    .feature-card h3 {
+      margin: 0 0 12px;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .feature-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    
+    /* Social proof */
+    .social-proof {
+      padding: 60px 0;
+      text-align: center;
+    }
+    .social-proof p {
+      color: var(--muted);
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 24px;
+    }
+    .logos {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    /* Lead capture */
+    .lead-section {
+      padding: 80px 0;
+      background: white;
+      text-align: center;
+    }
+    .lead-section h2 {
+      font-size: 32px;
+      font-weight: 700;
+      margin: 0 0 16px;
+    }
+    .lead-section p {
+      color: var(--muted);
+      margin: 0 0 32px;
+    }
+    .lead-form {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .lead-form input {
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 16px;
+      width: 300px;
+    }
+    .lead-form button {
+      padding: 12px 24px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    footer a { color: var(--muted); text-decoration: none; margin: 0 12px; }
+    footer a:hover { color: var(--accent); }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero h2 { font-size: 32px; }
+      .hero p { font-size: 18px; }
+      nav a { margin-left: 12px; font-size: 13px; }
+    }
+    
+    /* Focus styles for accessibility */
+    :focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+  </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Mnemos – Data Sovereignty & Compliance Platform",
+    "description": "Mnemos – a local‑first evidence layer for data sovereignty, AI‑driven claim extraction and contradiction detection.",
+    "url": "http://localhost:7777/",
+    "potentialAction": {
+      "@type": "TryAction",
+      "target": "http://localhost:7777/",
+      "name": "Start free trial"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Mnemos</h1>
+      <nav>
+        <a href="/app">Registry</a>
+        <a href="https://github.com/felixgeelhaar/mnemos">GitHub</a>
+        <a href="https://github.com/felixgeelhaar/mnemos#readme">Docs</a>
+        <a href="mailto:hello@mnemos.ai">Contact</a>
+      </nav>
+    </header>
+  </div>
+  
+  <section class="hero">
+    <div class="container">
+      <h2>Local-first memory and evidence layer for compliant teams</h2>
+      <p>Capture decisions, claims, and outcomes in one place, then surface conflicts with provenance you can audit.</p>
+      <a href="/app" class="cta-primary">Open App</a>
+      <a href="https://github.com/felixgeelhaar/mnemos#readme" class="cta-secondary">Read Docs</a>
+    </div>
+  </section>
+  
+  <section class="features">
+    <div class="container">
+      <h2 class="section-title">Why Mnemos?</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📥</div>
+          <h3>Evidence Capture</h3>
+          <p>Auto‑extract claims from documents, emails, and code commits. Support for multiple input formats with AI‑assisted extraction.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔍</div>
+          <h3>Contradiction Detection</h3>
+          <p>AI‑driven graph analysis highlights conflicting claims instantly. Resolve disputes with full context and audit trails.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Immutable Audit Log</h3>
+          <p>All changes stored on local‑first SQLite / libsql with cryptographic proof. Data‑sovereign, GDPR‑friendly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <section class="social-proof">
+    <div class="container">
+      <p>Built on practical principles</p>
+      <div class="logos">
+        <span>Local First</span>
+        <span>Open Source</span>
+        <span>Auditable by Design</span>
+      </div>
+    </div>
+  </section>
+  
+  <section class="lead-section">
+    <div class="container">
+      <h2>Ready to strengthen your compliance posture?</h2>
+      <p>Join teams using Mnemos for reliable, explainable evidence management.</p>
+      <form class="lead-form" id="lead-form">
+        <label for="lead-email" style="position:absolute;left:-9999px;">Work email</label>
+        <input id="lead-email" type="email" name="email" placeholder="Your work email" required>
+        <button type="submit">Request Demo</button>
+      </form>
+      <p style="margin-top:12px;color:var(--muted);font-size:14px;">No spam. We only use your email to reply to your demo request.</p>
+    </div>
+  </section>
+  
+  <footer>
+    <div class="container">
+      <p>
+        <a href="https://github.com/felixgeelhaar/mnemos#readme">Documentation</a>
+        <a href="https://github.com/felixgeelhaar/mnemos/issues">Support</a>
+        <a href="/app">Open App</a>
+      </p>
+      <p>&copy; 2026 Mnemos. Built with local‑first principles.</p>
+    </div>
+  </footer>
+  
+  <script>
+    // Lead form handler
+    document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = e.target.email.value;
+      if (!email) return;
+      
+      const btn = e.target.querySelector('button');
+      btn.textContent = 'Sending...';
+      btn.disabled = true;
+      
+      try {
+        const resp = await fetch('/v1/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        if (resp.ok) {
+          alert('Thank you! We'll be in touch soon.');
+          e.target.reset();
+        } else {
+          alert('Something went wrong. Please try again later.');
+        }
+      } catch (err) {
+        // Fallback: open mailto
+        window.location.href = 'mailto:hello@mnemos.ai?subject=Demo Request&body=Email: ' + encodeURIComponent(email);
+      } finally {
+        btn.textContent = 'Request Demo';
+        btn.disabled = false;
+      }
+    });
+    
+    // CTA click tracking
+    document.querySelectorAll('.cta-primary, .cta-secondary').forEach(el => {
+      el.addEventListener('click', () => {
+        if (window.gtag) {
+          gtag('event', 'cta_click', {
+            event_category: 'Landing',
+            event_label: el.textContent.trim()
+          });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
