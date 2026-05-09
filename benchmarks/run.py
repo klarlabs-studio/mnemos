@@ -9,12 +9,15 @@ from datetime import datetime
 
 from .providers.mnemos import MnemosProvider
 from .providers.mem0 import Mem0Provider
+from .providers.zep import ZepProvider
+from .providers.letta import LettaProvider
 from .suites import contradiction_detection, locomo, longmemeval, real_trace_recall
 
 PROVIDERS = {
     "mnemos": MnemosProvider,
     "mem0": Mem0Provider,
-    # zep, letta, gbrain land here as adapters ship.
+    "zep": ZepProvider,
+    "letta": LettaProvider,
 }
 
 SUITES = {

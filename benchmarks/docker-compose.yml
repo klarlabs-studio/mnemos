@@ -79,12 +79,45 @@ services:
   #     DATABASE_HOST: mem0-postgres
   #     ...
 
-  # zep — placeholder for next adapter ship.
+  # --- zep OSS server -------------------------------------------------
+  # Adapter: benchmarks/providers/zep.py (uncomment to enable in stack).
+  # zep-postgres:
+  #   image: ankane/pgvector:latest
+  #   environment:
+  #     POSTGRES_USER: zep
+  #     POSTGRES_PASSWORD: zep
+  #     POSTGRES_DB: zep
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U zep"]
+  #     interval: 5s
+  #
   # zep:
-  #   image: zepai/zep:latest
+  #   image: ghcr.io/getzep/zep:latest
+  #   depends_on:
+  #     zep-postgres: { condition: service_healthy }
+  #   environment:
+  #     ZEP_STORE_TYPE: postgres
+  #     ZEP_STORE_POSTGRES_DSN: postgres://zep:zep@zep-postgres:5432/zep?sslmode=disable
+  #     ZEP_OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
   #   ports: ["8000:8000"]
 
-  # letta — placeholder for next adapter ship.
+  # --- letta OSS server -----------------------------------------------
+  # Adapter: benchmarks/providers/letta.py (uncomment to enable in stack).
   # letta:
   #   image: letta/letta:latest
+  #   environment:
+  #     OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
+  #     LETTA_PG_URI: postgres://letta:letta@letta-postgres:5432/letta?sslmode=disable
+  #   depends_on:
+  #     letta-postgres: { condition: service_healthy }
   #   ports: ["8283:8283"]
+  #
+  # letta-postgres:
+  #   image: ankane/pgvector:latest
+  #   environment:
+  #     POSTGRES_USER: letta
+  #     POSTGRES_PASSWORD: letta
+  #     POSTGRES_DB: letta
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U letta"]
+  #     interval: 5s

@@ -3,6 +3,35 @@
 Latest run per (provider, suite) pair. Re-run any with
 `python -m benchmarks.run --provider <name> --suite <name>`.
 
+## Cross-provider matrix (head-to-head)
+
+Adapters wired: `mnemos`, `mem0`, `zep`, `letta`. Each non-Mnemos
+adapter speaks to a self-hosted instance of the upstream service:
+
+| Provider | URL env       | Auth env       | Setup                                                          |
+| -------- | ------------- | -------------- | -------------------------------------------------------------- |
+| mem0     | `MEM0_URL`    | none (OSS)     | `docker run -p 8888:8888 mem0/mem0`                            |
+| zep      | `ZEP_URL`     | `ZEP_API_KEY`  | follow getzep/zep README; OSS server on `:8000`                |
+| letta    | `LETTA_URL`   | `LETTA_TOKEN`  | follow letta-ai/letta README; OSS server on `:8283`            |
+
+Run all four against a suite once each backend is reachable:
+
+```sh
+for p in mnemos mem0 zep letta; do
+  python -m benchmarks.run --provider "$p" --suite contradiction_detection
+done
+python -m benchmarks.summarize > benchmarks/RESULTS.md
+```
+
+The mem0/zep/letta adapters do not silently pass when the upstream
+service is unreachable — `_check_alive` raises so the comparison is
+honest. Public head-to-head numbers land here once all four backends
+have completed runs on the same suite + dataset split.
+
+Mem0 cites LongMemEval 93.4% / LoCoMo 91.6%; Zep and Letta publish
+their own deltas. Mnemos's published numbers will be the ones the
+local harness produces, not vendor-claim citations.
+
 ## contradiction_detection
 
 | Provider | n | Precision | Recall | F1 | Run |

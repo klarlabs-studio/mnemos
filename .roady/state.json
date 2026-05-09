@@ -1,6 +1,6 @@
 {
   "project_id": "Mnemos",
-  "version": 245,
+  "version": 247,
   "task_states": {
     "task-action-outcome-recording": {
       "status": "done",
@@ -443,9 +443,12 @@
       "elapsed_minutes": 2
     },
     "task-honest-competitor-benchmarks-vs-mem0-/-zep-/-letta-on-longmemeval-+-locomo": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "started_at": "2026-05-09T11:55:34.430649+02:00",
+      "completed_at": "2026-05-09T11:57:23.573853+02:00",
+      "elapsed_minutes": 1
     },
     "task-human-editable-markdown-layer-with-system-versioned-history": {
       "status": "done",
@@ -1176,5 +1179,5 @@
       "elapsed_minutes": 6
     }
   },
-  "updated_at": "2026-05-09T11:55:05.681252+02:00"
+  "updated_at": "2026-05-09T11:57:23.573853+02:00"
 }
