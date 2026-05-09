@@ -36,10 +36,9 @@ policy:
     - name: domain
       match:
         - ./internal/domain/...
-      # Floor lowered 35 → 34 in v0.15.1 after ProvenanceReport.ProseRationale
-      # added one untested field; restore to 35 once a domain-level test
-      # exercises the new field.
-      min: 34
+      # Restored to 35 after a domain-level test for ProvenanceReport
+      # round-trip plus Scope predicates lifted actual to 39%.
+      min: 35
     - name: embedding
       match:
         - ./internal/embedding/...
