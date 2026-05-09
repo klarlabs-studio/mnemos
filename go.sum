@@ -19,8 +19,8 @@ github.com/felixgeelhaar/bolt v1.3.0 h1:s0sIqOgwcOtqsiqdkISyFS2v1NoaL6lfs2KU3NcG
 github.com/felixgeelhaar/bolt v1.3.0/go.mod h1:F2rG7IiusJpvjlHqpQz7Yflrux9G5+4l9HLXy3dMCiI=
 github.com/felixgeelhaar/fortify v1.2.1 h1:a7iHkUOSExA0dMrK/x6FDTjlKXTcYpWHqNcWX2Eadcg=
 github.com/felixgeelhaar/fortify v1.2.1/go.mod h1:+JBmX7va4NVUAHCYml9/4w3PAVU/7geQmwZfIA3+wU4=
-github.com/felixgeelhaar/mcp-go v1.9.0 h1:UrIOWT7AMsQNNoWdMzxYyC8YgiMpVSZ/AaglGdMjZa4=
-github.com/felixgeelhaar/mcp-go v1.9.0/go.mod h1:+E+JdA57NcKoC1uwfa3YxdW7iKCMqAhvkDOaLINaQKA=
+github.com/felixgeelhaar/mcp-go v1.10.0 h1:NF9Sm1lYIPhtGXZAD2yi8TIHlagBY9uxXQV4FRR6dx0=
+github.com/felixgeelhaar/mcp-go v1.10.0/go.mod h1:+E+JdA57NcKoC1uwfa3YxdW7iKCMqAhvkDOaLINaQKA=
 github.com/felixgeelhaar/statekit v1.3.2 h1:S3iFKHiy1KqyXw1Q8tB4uqxIM5QR7wopuibuoV1dp9o=
 github.com/felixgeelhaar/statekit v1.3.2/go.mod h1:qju98MBsu7vTyl7uWsRj8cJ/sMH6QUqMnecbRWq1suw=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
