@@ -87,6 +87,9 @@ jobs:
       - name: Run real-trace recall benchmark (holdout)
         env:
           MNEMOS_BIN: bin/mnemos
+          # CI runners have no LLM provider configured; force rule-based
+          # extraction so the harness exercises Mnemos's deterministic path.
+          MNEMOS_BENCH_LLM: "0"
         run: |
           python3 -m benchmarks.run \
             --provider mnemos \
