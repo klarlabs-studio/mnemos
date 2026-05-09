@@ -1,6 +1,6 @@
 {
   "project_id": "Mnemos",
-  "version": 233,
+  "version": 234,
   "task_states": {
     "task-action-outcome-recording": {
       "status": "done",
@@ -957,8 +957,10 @@
       "elapsed_minutes": 883
     },
     "task-request-id-+-red-metrics-+-slo-doc-+-supply-chain-attestation": {
-      "status": "pending",
+      "status": "in_progress",
       "path": "",
+      "owner": "ai-agent",
+      "started_at": "2026-05-09T08:57:31.210632+02:00",
       "elapsed_minutes": 0
     },
     "task-run-scoped-querying": {
@@ -1149,5 +1151,5 @@
       "elapsed_minutes": 6
     }
   },
-  "updated_at": "2026-05-09T08:56:43.202668+02:00"
+  "updated_at": "2026-05-09T08:57:31.210632+02:00"
 }

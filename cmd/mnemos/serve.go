@@ -269,8 +269,10 @@ func newServerMux(conn *store.Conn) http.Handler {
 	// middleware (auth, access log) still produces a clean 500
 	// response instead of leaving the client hanging. securityHeaders
 	// sits just inside it so the hardened headers are applied to
-	// recovery responses too.
-	return panicRecover(logger, securityHeaders(boltAccessLog(logger, jwtAuthMiddleware(verifier, mux))))
+	// recovery responses too. requestIDMiddleware decorates the
+	// context so the access log and downstream handlers can include
+	// the correlation id.
+	return panicRecover(logger, securityHeaders(requestIDMiddleware(boltAccessLog(logger, jwtAuthMiddleware(verifier, mux)))))
 }
 
 type statusRecorder struct {

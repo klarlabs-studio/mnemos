@@ -178,6 +178,7 @@ func boltAccessLog(logger *bolt.Logger, h http.Handler) http.Handler {
 
 		actor := actorFromContext(r.Context())
 		logger.Info().
+			Str("request_id", requestIDFromContext(r.Context())).
 			Str("method", r.Method).
 			Str("path", r.URL.RequestURI()).
 			Int("status", rw.status).
