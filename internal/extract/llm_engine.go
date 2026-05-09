@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -304,6 +306,70 @@ func (e LLMEngine) storeCachedClaims(key string, claims []llmClaim) {
 		return
 	}
 	_ = os.WriteFile(filepath.Join(e.cacheDir, key+".json"), data, 0o600)
+	// Evict oldest entries once the cap is exceeded. Runs on every
+	// store rather than on a goroutine so the cache footprint cannot
+	// drift past the cap between sweeps. Cost is one Readdir + a
+	// bounded number of os.Remove calls per write — negligible vs an
+	// LLM round-trip.
+	evictCacheIfOverCap(e.cacheDir, llmCacheMaxBytes())
+}
+
+// llmCacheMaxBytes returns the cap from MNEMOS_LLM_CACHE_MAX_BYTES,
+// defaulting to 1 GiB. Zero or unparseable values disable the sweep
+// (return 0) — operators who want unbounded growth (e.g. local benchmark
+// runs that want every cache hit) opt in by setting the var to 0.
+func llmCacheMaxBytes() int64 {
+	v := os.Getenv("MNEMOS_LLM_CACHE_MAX_BYTES")
+	if v == "" {
+		return 1 << 30 // 1 GiB
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		return 1 << 30
+	}
+	return n
+}
+
+func evictCacheIfOverCap(dir string, cap int64) {
+	if cap <= 0 {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	type cacheFile struct {
+		name string
+		size int64
+		mod  time.Time
+	}
+	files := make([]cacheFile, 0, len(entries))
+	var total int64
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, cacheFile{name: e.Name(), size: info.Size(), mod: info.ModTime()})
+		total += info.Size()
+	}
+	if total <= cap {
+		return
+	}
+	// Sort oldest-first; remove until under cap.
+	sort.Slice(files, func(i, j int) bool { return files[i].mod.Before(files[j].mod) })
+	for _, f := range files {
+		if total <= cap {
+			break
+		}
+		path := filepath.Join(dir, f.name)
+		if err := os.Remove(path); err == nil {
+			total -= f.size
+		}
+	}
 }
 
 // ExtractClaims implements ports.ExtractionEngine.

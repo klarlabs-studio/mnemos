@@ -1,6 +1,6 @@
 {
   "project_id": "Mnemos",
-  "version": 229,
+  "version": 231,
   "task_states": {
     "task-action-outcome-recording": {
       "status": "done",
@@ -786,9 +786,15 @@
       "elapsed_minutes": 7
     },
     "task-postgres/mysql-connection-pool-tuning-+-llm-cache-eviction": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "internal/store/postgres/pool.go + internal/store/mysql/pool.go: tuneConnPool sets MaxOpenConns=25, MaxIdleConns=5, ConnMaxLifetime=30m by default; envIntDefault + envDurationDefault honour MNEMOS_DB_MAX_CONNS / MAX_IDLE_CONNS / CONN_MAX_LIFETIME with safe fallback. Wired into postgres.go and mysql.go after sql.Open. internal/extract/llm_engine.go: storeCachedClaims now invokes evictCacheIfOverCap which lists dir, sums bytes, sorts oldest-first, removes until under cap. llmCacheMaxBytes default 1 GiB, MNEMOS_LLM_CACHE_MAX_BYTES override (0 disables). Tests TestEvictCacheIfOverCap_RemovesOldestUntilUnderCap, TestEvictCacheIfOverCap_NoopUnderCap, TestEvictCacheIfOverCap_DisabledWhenCapZero, TestLLMCacheMaxBytes_EnvOverride pass. CLAUDE.md env section updated. Note: duplicate idx_events_run_id schema fix already shipped in earlier commit."
+      ],
+      "started_at": "2026-05-09T08:47:00.718001+02:00",
+      "completed_at": "2026-05-09T08:50:36.066293+02:00",
+      "elapsed_minutes": 3
     },
     "task-project-scoped-database-with-init-subcommand": {
       "status": "done",
@@ -1137,5 +1143,5 @@
       "elapsed_minutes": 6
     }
   },
-  "updated_at": "2026-05-09T08:46:30.423241+02:00"
+  "updated_at": "2026-05-09T08:50:36.066294+02:00"
 }

@@ -117,6 +117,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: sql.Open: %w", err)
 	}
+	tuneConnPool(db)
 
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
