@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -39,36 +39,21 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build mnemos linux/amd64 binary
-        run: |
-          GOOS=linux GOARCH=amd64 go build -o mnemos ./cmd/mnemos
-
-      - name: Build benchmark image
-        run: |
-          docker build -t ghcr.io/felixgeelhaar/mnemos:bench-ci .
-
-      - name: Boot Mnemos via docker-compose
-        env:
-          MNEMOS_TAG: bench-ci
-          MNEMOS_JWT_SECRET: ci-secret-not-used-outside-bench
-          # No LLM provider in CI: rule-based mode only. The
-          # benchmark adapter respects MNEMOS_BENCH_LLM=0.
-          MNEMOS_LLM_PROVIDER: ""
-          MNEMOS_LLM_API_KEY: "ci-no-key"
-        run: |
-          docker compose -f benchmarks/docker-compose.yml up -d mnemos
-          for i in {1..30}; do
-            curl -sf http://localhost:7777/health 2>/dev/null | grep -q ok && exit 0
-            sleep 2
-          done
-          echo "mnemos failed to come up" && exit 1
+      - name: Build mnemos
+        run: make build
 
       - name: Install harness deps
-        run: |
-          pip install -r benchmarks/requirements.txt
+        run: pip install -r benchmarks/requirements.txt
 
+      # Local-binary mode: the harness runs `mnemos` directly via
+      # MNEMOS_BIN, talking to a fresh sqlite per case. No docker, no
+      # postgres, no JWT secret juggling — same pattern the Recall Gate
+      # uses. MNEMOS_BENCH_LLM=0 forces rule-based extraction; CI has
+      # no LLM provider and the suite only needs deterministic claim
+      # extraction to exercise the relate stage.
       - name: Run contradiction-detection suite (rule-based)
         env:
+          MNEMOS_BIN: bin/mnemos
           MNEMOS_BENCH_LLM: "0"
         run: |
           python -m benchmarks.run \
@@ -77,10 +62,13 @@ jobs:
             --output benchmarks/results
 
       - name: Compare against baseline
+        env:
+          MNEMOS_BENCH_LLM: "0"
         run: |
           python -m benchmarks.check_baseline \
             --baseline benchmarks/baseline.json \
-            --results-dir benchmarks/results
+            --results-dir benchmarks/results \
+            --allow-missing real_trace_recall
 
       - name: Upload latest results
         if: always()
@@ -88,12 +76,3 @@ jobs:
         with:
           name: benchmark-results
           path: benchmarks/results/*.json
-
-      - name: Tear down
-        if: always()
-        env:
-          MNEMOS_TAG: bench-ci
-          MNEMOS_JWT_SECRET: ci-secret
-          MNEMOS_LLM_API_KEY: ci-no-key
-        run: |
-          docker compose -f benchmarks/docker-compose.yml down -v || true

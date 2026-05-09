@@ -33,3 +33,6 @@ data/cache/
 mutation-*.json
 mutation-*.log
 /mutate
+
+# Nox local state (per-tree fingerprint baseline)
+.nox/
