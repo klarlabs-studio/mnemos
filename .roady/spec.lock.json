@@ -517,6 +517,12 @@
       "id": "supply-chain-attestation:-sbom,-cosign-signing,-slsa-provenance,-arm64-docker",
       "title": "Supply-chain attestation: SBOM, cosign signing, SLSA provenance, arm64 docker",
       "description": "Step 3 of the original observability bundle, scoped to its own task because it's pure release pipeline work. .goreleaser.yaml has no `sboms:`, no `signs:` (cosign keyless), no SLSA provenance generator wiring, and `dockers:` only builds linux/amd64 — arm64 server users (Graviton, Apple-Silicon Linux) get no image. Add: `sboms: - artifacts: archive` for SPDX SBOM emission; `signs:` block with cosign keyless OIDC; switch `dockers:` to `docker_manifests:` covering amd64+arm64; add slsa-framework/slsa-github-generator workflow to produce SLSA L3 provenance for binaries and container images. Acceptance: `cosign verify-blob` passes against published archives; SBOM downloadable from GitHub release; arm64 image pulls from registry; SLSA provenance attached.",
+      "requirements": []
+    },
+    {
+      "id": "jwt-kid-header-+-key-id-driven-verification",
+      "title": "JWT kid header + key-id-driven verification",
+      "description": "Split from the original observability+rotation bundle. internal/auth/jwt.go currently signs HS256 without a `kid` (key id) header. The dual-key Verifier (NewVerifierWithPrevious) brute-tries the previous secret on every signature error — when an attacker forges a wrong-but-plausible token the verifier silently consults both secrets, masking real attacks in logs. Add: include `kid` (an opaque short id, e.g. first 8 hex chars of SHA-256(secret)) in the JWT header on issue; select verification key by `kid` in NewVerifierWithPrevious; record the chosen key in audit logs so anomalous combinations surface; rotate kid on each LoadOrCreateSecret cycle. Tests cover (a) issue→verify happy path with kid, (b) rotation across two kids, (c) fabricated unknown-kid is rejected. Out of scope here: full asymmetric signing — HS256 stays.",
       "requirements": null
     }
   ],

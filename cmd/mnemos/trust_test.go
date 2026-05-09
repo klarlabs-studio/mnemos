@@ -141,6 +141,62 @@ func TestMcpRunWhichTestToTrust_RequiresRequirementRef(t *testing.T) {
 	}
 }
 
+// TestMcpRunWhichTestToTrust_ScopeFilter ensures the per-call scope
+// filter narrows the candidate set so a low-privilege caller cannot
+// enumerate test claims across services / envs / teams it shouldn't
+// see — closes the security gap flagged in the audit.
+func TestMcpRunWhichTestToTrust_ScopeFilter(t *testing.T) {
+	t.Setenv("MNEMOS_DB_URL", "sqlite://"+filepath.Join(t.TempDir(), "mnemos.db"))
+	ctx := context.Background()
+	conn, err := openConn(ctx)
+	if err != nil {
+		t.Fatalf("openConn: %v", err)
+	}
+	defer closeConn(conn)
+
+	now := time.Now().UTC()
+	prod := domain.Claim{
+		ID: "cl_prod", Text: "test_x in prod passed", Type: domain.ClaimTypeTestResult,
+		Status: domain.ClaimStatusActive, Confidence: 0.85,
+		TestID: "tx_prod", TestRequirementRef: "REQ-MULTI",
+		TestPassCount: 5, TestFailCount: 0, TestLastRunAt: now,
+		Scope:     domain.Scope{Service: "billing", Env: "prod"},
+		CreatedAt: now,
+	}
+	staging := domain.Claim{
+		ID: "cl_stg", Text: "test_x in staging failed", Type: domain.ClaimTypeTestResult,
+		Status: domain.ClaimStatusActive, Confidence: 0.85,
+		TestID: "tx_stg", TestRequirementRef: "REQ-MULTI",
+		TestPassCount: 0, TestFailCount: 5, TestLastRunAt: now,
+		Scope:     domain.Scope{Service: "billing", Env: "staging"},
+		CreatedAt: now,
+	}
+	if err := conn.Claims.Upsert(ctx, []domain.Claim{prod, staging}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Without filter, both candidates appear.
+	all, err := mcpRunWhichTestToTrust(ctx, mcpWhichTestToTrustInput{RequirementRef: "REQ-MULTI"})
+	if err != nil {
+		t.Fatalf("all: %v", err)
+	}
+	if len(all.Candidates) != 2 {
+		t.Errorf("unfiltered candidates = %d, want 2", len(all.Candidates))
+	}
+
+	// With env=prod, only the prod claim should appear.
+	prodOnly, err := mcpRunWhichTestToTrust(ctx, mcpWhichTestToTrustInput{
+		RequirementRef: "REQ-MULTI",
+		Env:            "prod",
+	})
+	if err != nil {
+		t.Fatalf("prod-only: %v", err)
+	}
+	if len(prodOnly.Candidates) != 1 || prodOnly.Candidates[0].ClaimID != "cl_prod" {
+		t.Errorf("env=prod filter wrong: got %+v", prodOnly.Candidates)
+	}
+}
+
 // TestMcpRunWhichTestToTrust_FilterScopedToTestResultOnly proves the
 // underlying ListByTestRequirementRef path ignores non-test claims even
 // when their text mentions the requirement_ref. Guards against future

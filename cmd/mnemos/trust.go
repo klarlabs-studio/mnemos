@@ -17,7 +17,7 @@ import (
 // or agent can answer "which test should I trust?" without reading
 // the underlying evidence row by row.
 func handleTrust(args []string, _ Flags) {
-	var testRef string
+	var testRef, svc, env, team string
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
 		case a == "--test" || a == "--requirement":
@@ -26,6 +26,27 @@ func handleTrust(args []string, _ Flags) {
 				return
 			}
 			testRef = args[i+1]
+			i++
+		case a == "--service":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("%s requires a value", a))
+				return
+			}
+			svc = args[i+1]
+			i++
+		case a == "--env":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("%s requires a value", a))
+				return
+			}
+			env = args[i+1]
+			i++
+		case a == "--team":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("%s requires a value", a))
+				return
+			}
+			team = args[i+1]
 			i++
 		default:
 			exitWithMnemosError(false, NewUserError("unknown argument %q", a))
@@ -36,6 +57,7 @@ func handleTrust(args []string, _ Flags) {
 		exitWithMnemosError(false, NewUserError("trust requires --test=<requirement-ref>"))
 		return
 	}
+	scopeFilter := domain.Scope{Service: svc, Env: env, Team: team}
 
 	ctx := context.Background()
 	conn, err := openConn(ctx)
@@ -49,6 +71,15 @@ func handleTrust(args []string, _ Flags) {
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "list claims by test requirement"))
 		return
+	}
+	if !scopeFilter.IsEmpty() {
+		filtered := candidates[:0]
+		for _, c := range candidates {
+			if c.Scope.Matches(scopeFilter) {
+				filtered = append(filtered, c)
+			}
+		}
+		candidates = filtered
 	}
 	if len(candidates) == 0 {
 		emitJSON(map[string]any{

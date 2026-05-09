@@ -166,6 +166,15 @@ type mcpQueryLessonsInput struct {
 
 type mcpWhichTestToTrustInput struct {
 	RequirementRef string `json:"requirement_ref" jsonschema:"required,description=Test requirement reference; matches Claim.TestRequirementRef on test_result claims"`
+	// Optional scope filter — narrows the candidate set to claims
+	// whose Scope matches the supplied filter. An empty filter (the
+	// zero value) returns every test_result for the requirement,
+	// matching the previous behaviour. Use this from a low-privilege
+	// caller to avoid enumerating tests across services / environments
+	// / teams that are not in scope.
+	Service string `json:"service,omitempty" jsonschema:"description=Restrict to claims whose Scope.Service matches"`
+	Env     string `json:"env,omitempty" jsonschema:"description=Restrict to claims whose Scope.Env matches"`
+	Team    string `json:"team,omitempty" jsonschema:"description=Restrict to claims whose Scope.Team matches"`
 }
 
 type mcpWhichTestToTrustCandidate struct {
@@ -1121,9 +1130,14 @@ func mcpRunWhichTestToTrust(ctx context.Context, input mcpWhichTestToTrustInput)
 		return mcpWhichTestToTrustOutput{}, err
 	}
 
+	scopeFilter := domain.Scope{Service: input.Service, Env: input.Env, Team: input.Team}
+
 	now := time.Now().UTC()
 	cands := make([]mcpWhichTestToTrustCandidate, 0)
 	for _, c := range matches {
+		if !scopeFilter.IsEmpty() && !c.Scope.Matches(scopeFilter) {
+			continue
+		}
 		score, _, rationale, prose := trust.BuildReport(trust.CredibilityInputs{
 			CurrentTrust:    c.TrustScore,
 			SourceAuthority: c.SourceAuthority,

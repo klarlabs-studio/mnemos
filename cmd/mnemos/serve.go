@@ -238,7 +238,20 @@ func newServerMux(conn *store.Conn) http.Handler {
 		os.Exit(int(ExitError))
 	}
 	if created {
-		fmt.Fprintf(os.Stderr, "serve: generated new JWT secret at %s — previously-issued tokens are invalid\n", secretPath)
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "===========================================================================")
+		fmt.Fprintln(os.Stderr, "serve: generated a new JWT signing secret on first boot.")
+		fmt.Fprintf(os.Stderr, "       location: %s\n", secretPath)
+		fmt.Fprintln(os.Stderr, "       Any tokens issued under a prior secret no longer validate.")
+		fmt.Fprintln(os.Stderr, "       Recommended next steps:")
+		fmt.Fprintln(os.Stderr, "         1. Back the file up alongside your DB (.mnemos/) for disaster recovery.")
+		fmt.Fprintln(os.Stderr, "         2. Set MNEMOS_JWT_SECRET via your secret store in production rather than")
+		fmt.Fprintln(os.Stderr, "            relying on the on-disk file (the file is fine for local dev).")
+		fmt.Fprintln(os.Stderr, "         3. Plan a rotation cadence (90 days recommended). Use")
+		fmt.Fprintln(os.Stderr, "            MNEMOS_JWT_PREV_SECRET to bridge the rollover so live tokens keep")
+		fmt.Fprintln(os.Stderr, "            validating until they expire — see internal/auth/secret.go.")
+		fmt.Fprintln(os.Stderr, "===========================================================================")
+		fmt.Fprintln(os.Stderr, "")
 	}
 	prev, err := auth.LoadPreviousSecret(secretPath)
 	if err != nil {

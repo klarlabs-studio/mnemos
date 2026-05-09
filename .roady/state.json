@@ -1,6 +1,6 @@
 {
   "project_id": "Mnemos",
-  "version": 235,
+  "version": 237,
   "task_states": {
     "task-action-outcome-recording": {
       "status": "done",
@@ -486,9 +486,15 @@
       "elapsed_minutes": 108
     },
     "task-jwt-kid-header-+-rotation;-scope/run-filter-on-trust-path": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "Scope filter on trust path shipped: mcpWhichTestToTrustInput gains optional service/env/team fields; mcpRunWhichTestToTrust narrows candidates by Scope.Matches before scoring. CLI mnemos trust accepts --service/--env/--team and applies the same filter. Test TestMcpRunWhichTestToTrust_ScopeFilter (env=prod narrows multi-env candidates from 2 to 1). cmd/mnemos/serve.go: generated-on-first-boot JWT-secret message rewritten as a multi-line operator banner with backup, env-injection, and 90-day rotation guidance plus pointer to MNEMOS_JWT_PREV_SECRET. JWT kid header + key-id-driven verification split into its own roady task — that work is structural to internal/auth/jwt.go and warranted independent scoping."
+      ],
+      "started_at": "2026-05-09T09:03:50.200768+02:00",
+      "completed_at": "2026-05-09T09:08:08.386238+02:00",
+      "elapsed_minutes": 4
     },
     "task-knowledge-browsing-mcp-tools": {
       "status": "done",
@@ -1155,5 +1161,5 @@
       "elapsed_minutes": 6
     }
   },
-  "updated_at": "2026-05-09T09:02:59.962426+02:00"
+  "updated_at": "2026-05-09T09:08:08.386239+02:00"
 }
