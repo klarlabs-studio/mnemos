@@ -263,7 +263,7 @@
     "applicationCategory": "DeveloperApplication",
     "description": "Self-hosted memory and evidence layer for AI agents. Extracts claims, detects contradictions, answers queries with citations.",
     "operatingSystem": "Linux, macOS, Windows",
-    "url": "https://mnemos.dev/",
+    "url": "https://felixgeelhaar.github.io/mnemos/",
     "offers": [
       {"@type": "Offer", "name": "OSS", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock"},
       {"@type": "Offer", "name": "Team", "availability": "https://schema.org/PreOrder", "description": "Waitlist"},
@@ -290,7 +290,7 @@
 
   <section class="hero">
     <div class="container">
-      <span class="pill">Self-hosted · MCP-native · Apache-2.0</span>
+      <span class="pill">Self-hosted · MCP-native · MIT-licensed</span>
       <h2>Memory for AI agents that stays on your servers — and tells you when it's lying.</h2>
       <p class="tagline">
         Mnemos is a self-hosted memory + evidence layer for AI agents. Every recall comes with citations,
@@ -504,7 +504,7 @@
           <div class="price-tier">OSS</div>
           <div class="price-amount">Free <span class="small">forever</span></div>
           <ul>
-            <li>Full feature set, self-hosted (Apache-2.0)</li>
+            <li>Full feature set, self-hosted · MIT-licensed</li>
             <li>5 storage backends · CLI · MCP · REST · gRPC</li>
             <li>JWT auth, agent principals, scope filters</li>
             <li>Audit log export (<code>mnemos audit</code>)</li>
@@ -513,12 +513,12 @@
           <a href="https://github.com/felixgeelhaar/mnemos#install" class="price-cta">Install</a>
         </div>
         <div class="price-card highlight">
-          <div class="price-tier">Team · Waitlist</div>
-          <div class="price-amount">TBA</div>
+          <div class="price-tier">Team · Private beta</div>
+          <div class="price-amount">By application</div>
           <ul>
             <li>Managed registry sync across hosts</li>
             <li>Hosted MCP gateway (planned)</li>
-            <li>SSO via OIDC (planned, deferred from A.4)</li>
+            <li>SSO via OIDC (planned)</li>
             <li>Email support during business hours</li>
           </ul>
           <a href="#contact" class="price-cta">Join waitlist</a>
@@ -529,10 +529,13 @@
           <ul>
             <li>Air-gapped deploy support</li>
             <li>SLA + incident response</li>
-            <li>SOC2 alignment roadmap</li>
+            <li>SOC2-ready controls today: audit log, scope filters, agent principals</li>
             <li>Custom retention &amp; key-management</li>
           </ul>
-          <a href="mailto:hello@mnemos.dev?subject=Enterprise%20enquiry" class="price-cta">Contact sales</a>
+          <a href="mailto:felix@felixgeelhaar.de?subject=Enterprise%20enquiry" class="price-cta">Contact sales</a>
+          <p style="margin:12px 0 0;font-size:13px;color:var(--muted);text-align:center;">
+            Founder-led. felix@ replies same business day.
+          </p>
         </div>
       </div>
     </div>
@@ -597,7 +600,7 @@
           alert('Something went wrong. Please try again later.');
         }
       } catch (err) {
-        window.location.href = 'mailto:hello@mnemos.dev?subject=Team%20waitlist&body=Email: ' + encodeURIComponent(email);
+        window.location.href = 'mailto:felix@felixgeelhaar.de?subject=Team%20waitlist&body=Email: ' + encodeURIComponent(email);
       } finally {
         btn.textContent = 'Join waitlist';
         btn.disabled = false;
