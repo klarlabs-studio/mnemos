@@ -1,0 +1,642 @@
+{
+  "id": "run-5c2ba017e3263942",
+  "plan_hash": "2e52f8855100ec9882ef465f6675efe34bd2097d156542d88b88e047f468bb79",
+  "repo_id": ".",
+  "repo_root": ".",
+  "base_ref": "v0.13.0",
+  "head_sha": "0d211189d6b9623cbcc315e928e7e27ba1b5cb01",
+  "commits": [
+    "0d211189d6b9623cbcc315e928e7e27ba1b5cb01",
+    "6b707d38cdd51c9946de4b9dae983464e8d4beed",
+    "e7a9e75db2f6d4964e374f7820131ace3b3771c9",
+    "d44b640ec0cfe8126808831433c0ca35242533cf",
+    "b2ca855eb9aad15ff307fc3ea431bd32a755882e",
+    "80fc8e5a4d4bbeef8b1bb08263dfab9f163443d3",
+    "d41ccf81ded8bccaafe7519594e81737dbbb6c4e",
+    "fb9d457bb994a6a5dfafab0a083527bb37ae27f6",
+    "55eb1531ac1b21b82d05ca0798b77a2b5d8f068e",
+    "44139f628d8b98c4cf96ca4a7dfc3833d8fb9c8d",
+    "498f7ad5dc516ea108025d25fbae9dcf0528a117",
+    "6aadbb041a57ecafc8d2c4bfb6a99bfaf23d3a03",
+    "84d7e91b6857f941054b6c248a9b535fb273dbb1",
+    "c3ab74704b1a09121f413b3ae1aa2045bbc330c5",
+    "2d34dbb14680584e04500b1c9f18002939eaf295",
+    "e6c7336218a0fa3c2ce2dfb40911d635ec4c10da",
+    "b9a84e87a3d10dff59acb49272b0cac1e9ec35d9",
+    "f306047c1f61ad6cd447af128dd48bd97af3b9b7",
+    "3c291ff97c4cc1568061fe73143adac10a8b750c",
+    "cfc3ef415e0d4079ba18a3a83a2bf01aefe37259",
+    "280261e11a518f38f5aa84089e90272b074d2b85",
+    "39bdf97ea64553b97ef3f27317bb048d60152a37",
+    "0d2dc955bf3431c34d54873a75b5c7223904aec6",
+    "a00c874997aaa8a017a8d04dc7b6aaf7ec493a33",
+    "1872cb1025983c90bfa216ee21cfd58a49704550",
+    "e01badadcc5a250ee8c4d5015d32b1d41ef44cf8",
+    "45c70c908cd5ba3438b77978120763c3121b7b78",
+    "8661556d19c25159c6ecd1f89861c215e06eb335",
+    "98f46f7992e1daf052c61b64b183535edcf9763d",
+    "5aa12c4075ca5c5e3dea1a349a4c23b33ff1f6a9",
+    "d16d4132574210f0d2d5599b488482bec8289d90",
+    "208b7bad350018622fdcac356069a3bbed521b86",
+    "ae15a86a2f5ef89879549bd3814e3c01ca19b52f",
+    "4bb73e09497db80dea5850770170787c472e914f",
+    "dabfbe657a7a602ecaf6bd5c50945ff53b2d8ff6",
+    "943d229d1d12ff8a52d10a8a91eb5038168d1d8f",
+    "2089cfb23f47872e3d6beb4bd696faae1f6309c3",
+    "5264b14ae57d59f9b2a98d0725a9d13f2d922284",
+    "2ebf6fc2b54eeac91650d01015ca4970c98a8c71",
+    "a3828c0b074e84a51e29199e58206341949261e1",
+    "7b5c976411f0b50e5ce5f5332185109f2901dcd3",
+    "e4b3d353c6f5614e9f9f318ce93d4776bc3617ce",
+    "a95fe8dc68c64ebc5030b4370247d5e2afbfcb98",
+    "eaafe074d6fd81c91c9174e7cd94b9dd2a19161e",
+    "3c82b9e3a67b45156b8be29ab210b0eb4392868c",
+    "972b51cced3a8e33b607ce495626158478bb9c9e",
+    "f9855b5bed04611a1df2699a78ec26a7d15c9b40"
+  ],
+  "config_hash": "",
+  "plugin_plan_hash": "",
+  "version_current": "0.13.0",
+  "version_next": "0.14.0",
+  "bump_kind": "minor",
+  "confidence": 0,
+  "risk_score": 0,
+  "reasons": null,
+  "actor_type": "agent",
+  "actor_id": "mcp-agent",
+  "thresholds": {
+    "auto_approve_risk_threshold": 0,
+    "require_approval_above": 0,
+    "block_release_above": 0
+  },
+  "tag_name": "v0.14.0",
+  "notes": {
+    "text": "# Release Notes for Version 0.14.0\n\n## Overview\n\nWe're excited to announce the release of version 0.14.0, which introduces a host of new features, improvements, and fixes. These changes are primarily focused on enhancing memory model alignment, expanding the API surface, introducing new benchmark tools, and refining the user experience. This release also includes updates to our documentation and development processes, aimed at providing a smoother and more productive developer experience.\n\n## Detailed Notes\n\n### New Features and Enhancements\n\n1. **Memory Model and Logic Updates:** Aligned query/relate/synthesize/trust logic with the new memory model. This change enhances the core functionality of our software, leading to more efficient system performance.\n\n2. **API Surface Expansion:** Expanded the CLI/HTTP/gRPC surfaces for trust and incident workflows. This improvement simplifies the process of managing incidents and trust signals.\n\n3. **Benchmark Tools:** Introduced a real-trace recall suite, regression baseline gate, and other benchmark tools. These additions will help developers to evaluate the performance of their applications more effectively.\n\n4. **Client Methods:** Added Search and Context methods to the Go client, providing developers with additional ways to interact with the system.\n\n5. **Bi-temporal Queries:** Enabled bi-temporal queries via recorded_as_of feature. This addition allows developers to query data as it existed at a certain point in time.\n\n6. **Entity Resolution:** Implemented entity resolution at ingest, improving the accuracy of data processing.\n\n7. **Hybrid Retrieval Endpoint:** Introduced a new hybrid retrieval endpoint (/v1/search) providing developers with a more flexible method of retrieving data.\n\n### Fixes\n\n1. **Refund-Triage:** Improved handling of real Mnemos shape and LLM failures in the refund-triage feature. This fix ensures better reliability and accuracy in our examples.\n\n2. **SVG Architecture:** Replaced SVG architecture with HTML pipe to prevent text bleed, enhancing the appearance and readability of our pages.\n\n3. **Continuous Integration:** Introduced several improvements to our CI process, including a new .coverctl.yaml baseline and adjustments to bias types and gofmt alignment.\n\n### Changes\n\n1. **Landing Page:** Strengthened the conversion microcopy and improved readability and mobile scannability on our landing page. We also refined our positioning, ICP messaging, and CTA flow.\n\n2. **Documentation:** Added a new documentation site scaffold and updated our roadmap, PRD, and backlog notes.\n\n3. **Mnemos Positioning:** Repositioned Mnemos as a self-hosted AI memory layer and led the README with a self-hosted-AI-memory wedge and a quickstart chatbot.\n\n### Other Updates\n\n1. **Workspace State Syncing:** Synced workspace state after the rollout of recall hardening, maintaining consistency across development environments.\n\n2. **Dependency Updates:** Bumped go-sql-driver/mysql to v1.10.0 and modernc.org/sqlite to v1.50.0, ensuring our software leverages the most recent and secure versions of these dependencies.\n\n3. **Development Processes:** Introduced coverctl and nox enforcement, shipped pre-commit hooks, and enabled gocritic. These additions will help developers maintain high-quality code and streamline their development processes.\n\nWe encourage developers to update to this latest version to experience the new features and improvements. As always, we welcome your feedback and look forward to your contributions.\n\n## Changelog\n\n## [0.14.0] - 2021-MM-DD\n\n### Added\n- New memory model aligned query/relate/synthesize/trust logic (core)\n- Propagation of decision/lesson and claim provenance schema updates (store)\n- Expansion of CLI/HTTP/gRPC surfaces for trust and incident workflows (api)\n- Incident repositories and trust signal modules (incident)\n- Confidence scoring, memory-quality telemetry, and SLO guardrails (query)\n- Real-trace recall suite and regression baseline gate (benchmarks)\n- Search + Context methods on the Go client (client)\n- LoCoMo-style suite scaffold (benchmarks)\n- Bi-temporal queries via recorded_as_of (query)\n- LongMemEval-style suite scaffold (benchmarks)\n- /v1/search hybrid retrieval endpoint (serve)\n- Entity resolution at ingest (pipeline)\n- Context Block API (query)\n- Implicit temporal aspect divergence contradicts edges (relate)\n- Entity-role divergence contradicts edges (relate)\n- Numeric value disagreement contradicts edges (relate)\n- LLM-extraction support + summarizer + honest baseline (benchmarks)\n- Mem0 adapter + dockerized stack + first results (benchmarks)\n- Cross-provider benchmark harness foundation (benchmarks)\n- Public playground deployment artifacts (deploy)\n- Run_id filter added to GET /v1/events (serve)\n\n### Fixed\n- Refund-triage now handles real Mnemos shape + LLM failures (examples)\n- SVG architecture replaced by HTML pipe to prevent text bleed (pages)\n- Redraw of mnemos architecture SVG (pages)\n- Added .coverctl.yaml baseline (ci)\n- Bias types renamed, gocritic tuned, G703 excluded (ci)\n- Bias.go alignment via gofmt, fixed coverctl --from-profile flag (ci)\n\n### Changed\n- Conversion microcopy strengthened and rollout FAQ added (landing)\n- CTA hierarchy, readability, and mobile scannability improved (landing)\n- Positioning, ICP messaging, and CTA flow refined (landing)\n- Documentation site scaffold added (site)\n- Updated roadmap, PRD, and backlog notes\n- Drafted Mnemos Show HN + LinkedIn launch posts (launch)\n- Lead README with self-hosted-AI-memory wedge + quickstart chatbot\n- Repositioned Mnemos as self-hosted AI memory layer (pages)\n- Surfaced refund-triage example as primary agent-audit use case\n- Refund-triage LangGraph audit demo added (examples)\n- User-focused rewrite — pain in hero, what-you-can-build under it (pages)\n- GitHub Pages landing site added (pages)\n\n### Other\n- Workspace state synced after recall hardening rollout (roady)\n- Ignored generated result artifacts (benchmarks)\n- Enforced real-trace recall gate and policy floors (benchmarks)\n- Regression gate added via GitHub Actions (benchmarks)\n- Ignored pycache + dropped stale storage-only result (benchmarks)\n- Bumped go-sql-driver/mysql v1.10.0 and modernc.org/sqlite v1.50.0 (deps)\n- Dropped nox install/scan steps (private import path)\n- Added coverctl + nox enforcement, shipped pre-commit hooks, enabled gocritic",
+    "audience_preset": "",
+    "tone_preset": "",
+    "provider": "",
+    "model": "",
+    "generated_at": "2026-05-06T22:04:56.747482+02:00"
+  },
+  "approval": {
+    "approved_by": "mcp-agent",
+    "approved_at": "2026-05-06T22:05:03.88413+02:00",
+    "auto_approved": true,
+    "plan_hash": "2e52f8855100ec9882ef465f6675efe34bd2097d156542d88b88e047f468bb79",
+    "risk_score": 0,
+    "approver_type": "agent"
+  },
+  "steps": [
+    {
+      "name": "create-tag",
+      "type": "tag",
+      "config_hash": "",
+      "idempotency_key": ""
+    }
+  ],
+  "step_status": {
+    "create-tag": {
+      "state": "done",
+      "attempts": 1,
+      "started_at": "2026-05-06T22:05:13.947223+02:00",
+      "completed_at": "2026-05-06T22:05:15.430095+02:00",
+      "output": "Created and pushed tag v0.14.0"
+    }
+  },
+  "state": "published",
+  "history": [
+    {
+      "at": "2026-05-06T22:03:48.28944+02:00",
+      "from": "draft",
+      "to": "planned",
+      "event": "PLAN",
+      "actor": "mcp-agent",
+      "reason": "Release planned"
+    },
+    {
+      "at": "2026-05-06T22:04:00.233083+02:00",
+      "from": "planned",
+      "to": "versioned",
+      "event": "BUMP",
+      "actor": "mcp-agent",
+      "reason": "Version applied",
+      "metadata": {
+        "tag_name": "v0.14.0",
+        "version": "0.14.0"
+      }
+    },
+    {
+      "at": "2026-05-06T22:04:56.747552+02:00",
+      "from": "versioned",
+      "to": "notes_ready",
+      "event": "GENERATE_NOTES",
+      "actor": "mcp-agent",
+      "reason": "Notes generated"
+    },
+    {
+      "at": "2026-05-06T22:05:03.884162+02:00",
+      "from": "notes_ready",
+      "to": "approved",
+      "event": "APPROVE",
+      "actor": "mcp-agent",
+      "reason": "Release approved",
+      "metadata": {
+        "auto_approved": "true",
+        "plan_hash": "2e52f8855100ec9882ef465f6675efe34bd2097d156542d88b88e047f468bb79",
+        "risk_score": "0.00"
+      }
+    },
+    {
+      "at": "2026-05-06T22:05:13.943097+02:00",
+      "from": "approved",
+      "to": "publishing",
+      "event": "START_PUBLISH",
+      "actor": "mcp-agent",
+      "reason": "Publishing started"
+    },
+    {
+      "at": "2026-05-06T22:05:15.436702+02:00",
+      "from": "publishing",
+      "to": "published",
+      "event": "PUBLISH_COMPLETE",
+      "actor": "mcp-agent",
+      "reason": "Release published"
+    }
+  ],
+  "changeset_id": "cs-1778097828007502000",
+  "changeset": {
+    "id": "cs-1778097828007502000",
+    "from_ref": "v0.13.0",
+    "to_ref": "",
+    "commits": [
+      {
+        "hash": "0d211189d6b9623cbcc315e928e7e27ba1b5cb01",
+        "type": "docs",
+        "scope": "landing",
+        "subject": "docs(landing): strengthen conversion microcopy and add rollout FAQ",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T22:02:51+02:00",
+        "raw_message": "docs(landing): strengthen conversion microcopy and add rollout FAQ\n"
+      },
+      {
+        "hash": "6b707d38cdd51c9946de4b9dae983464e8d4beed",
+        "type": "docs",
+        "scope": "landing",
+        "subject": "docs(landing): improve CTA hierarchy, readability, and mobile scannability",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T22:02:02+02:00",
+        "raw_message": "docs(landing): improve CTA hierarchy, readability, and mobile scannability\n"
+      },
+      {
+        "hash": "e7a9e75db2f6d4964e374f7820131ace3b3771c9",
+        "type": "docs",
+        "scope": "landing",
+        "subject": "docs(landing): refine positioning, ICP messaging, and CTA flow",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T21:59:22+02:00",
+        "raw_message": "docs(landing): refine positioning, ICP messaging, and CTA flow\n"
+      },
+      {
+        "hash": "d44b640ec0cfe8126808831433c0ca35242533cf",
+        "type": "chore",
+        "scope": "roady",
+        "subject": "chore(roady): sync workspace state after recall hardening rollout",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T21:54:16+02:00",
+        "raw_message": "chore(roady): sync workspace state after recall hardening rollout\n"
+      },
+      {
+        "hash": "b2ca855eb9aad15ff307fc3ea431bd32a755882e",
+        "type": "docs",
+        "scope": "site",
+        "subject": "docs(site): add documentation site scaffold",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T20:44:05+02:00",
+        "raw_message": "docs(site): add documentation site scaffold\n"
+      },
+      {
+        "hash": "80fc8e5a4d4bbeef8b1bb08263dfab9f163443d3",
+        "type": "chore",
+        "scope": "benchmarks",
+        "subject": "chore(benchmarks): ignore generated result artifacts",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T20:27:59+02:00",
+        "raw_message": "chore(benchmarks): ignore generated result artifacts\n"
+      },
+      {
+        "hash": "d41ccf81ded8bccaafe7519594e81737dbbb6c4e",
+        "type": "feat",
+        "scope": "core",
+        "subject": "feat(core): align query/relate/synthesize/trust logic with new memory model",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T20:23:14+02:00",
+        "raw_message": "feat(core): align query/relate/synthesize/trust logic with new memory model\n"
+      },
+      {
+        "hash": "fb9d457bb994a6a5dfafab0a083527bb37ae27f6",
+        "type": "feat",
+        "scope": "store",
+        "subject": "feat(store): propagate decision/lesson and claim provenance schema updates",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T20:23:00+02:00",
+        "raw_message": "feat(store): propagate decision/lesson and claim provenance schema updates\n"
+      },
+      {
+        "hash": "55eb1531ac1b21b82d05ca0798b77a2b5d8f068e",
+        "type": "feat",
+        "scope": "api",
+        "subject": "feat(api): expand CLI/HTTP/gRPC surfaces for trust and incident workflows",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T20:22:32+02:00",
+        "raw_message": "feat(api): expand CLI/HTTP/gRPC surfaces for trust and incident workflows\n"
+      },
+      {
+        "hash": "44139f628d8b98c4cf96ca4a7dfc3833d8fb9c8d",
+        "type": "feat",
+        "scope": "incident",
+        "subject": "feat(incident): add incident repositories and trust signal modules",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T11:00:37+02:00",
+        "raw_message": "feat(incident): add incident repositories and trust signal modules\n"
+      },
+      {
+        "hash": "498f7ad5dc516ea108025d25fbae9dcf0528a117",
+        "type": "docs",
+        "subject": "docs: update roadmap, PRD, and backlog notes",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T11:00:25+02:00",
+        "raw_message": "docs: update roadmap, PRD, and backlog notes\n"
+      },
+      {
+        "hash": "6aadbb041a57ecafc8d2c4bfb6a99bfaf23d3a03",
+        "type": "ci",
+        "scope": "benchmarks",
+        "subject": "ci(benchmarks): enforce real-trace recall gate and policy floors",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T10:50:37+02:00",
+        "raw_message": "ci(benchmarks): enforce real-trace recall gate and policy floors\n"
+      },
+      {
+        "hash": "84d7e91b6857f941054b6c248a9b535fb273dbb1",
+        "type": "feat",
+        "scope": "query",
+        "subject": "feat(query): add confidence scoring, memory-quality telemetry, and SLO guardrails",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T10:30:48+02:00",
+        "raw_message": "feat(query): add confidence scoring, memory-quality telemetry, and SLO guardrails\n"
+      },
+      {
+        "hash": "c3ab74704b1a09121f413b3ae1aa2045bbc330c5",
+        "type": "feat",
+        "scope": "benchmarks",
+        "subject": "feat(benchmarks): add real-trace recall suite and regression baseline gate",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-06T10:30:38+02:00",
+        "raw_message": "feat(benchmarks): add real-trace recall suite and regression baseline gate\n"
+      },
+      {
+        "hash": "2d34dbb14680584e04500b1c9f18002939eaf295",
+        "type": "feat",
+        "scope": "client",
+        "subject": "feat(client): Search + Context methods on the Go client",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T09:53:44+02:00",
+        "raw_message": "feat(client): Search + Context methods on the Go client\n\nBrings the in-tree Go client at client/ to feature parity with\nmnemos-py and mnemos-ts. Adds:\n\n- Client.Search(ctx, query, SearchOptions) → *SearchResponse\n  Wraps GET /v1/search. SearchOptions covers RunID, TopK,\n  MinTrust, AsOf (validity time), RecordedAsOf (ingestion time).\n\n- Client.Context(ctx, runID, ContextOptions) → string\n  Wraps GET /v1/context. Returns the rendered Context Block\n  string for direct system-prompt insertion.\n\nDTOs (SearchResponse, SearchClaim, SearchContradiction) match the\nHTTP wire format. fakeRegistry test handler grew /v1/search and\n/v1/context route stubs; four new tests cover success + missing-\ninput error paths.\n\nThree first-party clients now ship the same surface:\n- Go (in-tree at client/)\n- Python (github.com/felixgeelhaar/mnemos-py)\n- TypeScript (github.com/felixgeelhaar/mnemos-ts)\n"
+      },
+      {
+        "hash": "e6c7336218a0fa3c2ce2dfb40911d635ec4c10da",
+        "type": "feat",
+        "scope": "benchmarks",
+        "subject": "feat(benchmarks): LoCoMo-style suite scaffold",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T09:48:04+02:00",
+        "raw_message": "feat(benchmarks): LoCoMo-style suite scaffold\n\nAdds benchmarks/suites/locomo.py — multi-session conversation recall\nharness shaped after the published LoCoMo benchmark (Maharana et al.,\n2024). Each case is a chronological sequence of cross-session\nutterances paired with a question and expected-answer substrings.\n\nSame shape as longmemeval: load_cases() defaults to a small seed\nfixture so the suite is runnable today; pass the published LoCoMo\nJSON path to run against the real dataset. The loader flattens\nsessions/messages into a chronological \"Speaker (timestamp): text\"\nlist so any provider's add() takes facts in order.\n\nWired into benchmarks/run.py: `python -m benchmarks.run --provider\nmnemos --suite locomo` runs the seed cases against a live Mnemos.\n\nOut of scope this commit:\n- Downloading the canonical LoCoMo JSON (operator-supplied).\n- LLM-judged QA scoring (substring scoring is the lightweight\n  equivalent; LLM judge follows when MNEMOS_LLM_PROVIDER is wired).\n- Actual cross-product numbers (depend on competitor adapters).\n"
+      },
+      {
+        "hash": "b9a84e87a3d10dff59acb49272b0cac1e9ec35d9",
+        "type": "feat",
+        "scope": "query",
+        "subject": "feat(query): bi-temporal queries via recorded_as_of",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T09:19:22+02:00",
+        "raw_message": "feat(query): bi-temporal queries via recorded_as_of\n\nMnemos already tracks both axes — domain.Claim has CreatedAt\n(ingestion time) alongside ValidFrom/ValidTo (validity time). The\ngap was exposing the ingestion axis to callers; only validity was\nqueryable.\n\nAdds:\n- query.AnswerOptions.RecordedAsOf — drops claims with\n  CreatedAt \u003e RecordedAsOf so the response reproduces what the\n  store knew as of that timestamp. Independent of AsOf — a claim\n  valid yesterday but recorded today returns under\n  (AsOf=yesterday, RecordedAsOf=now) and disappears under\n  (AsOf=yesterday, RecordedAsOf=yesterday).\n- /v1/claims accepts ?recorded_as_of= alongside ?as_of=.\n- /v1/search request body adds the same field.\n- mnemos query --recorded-at YYYY-MM-DD CLI flag.\n- OpenAPI documents the bi-temporal model on /v1/claims.\n\nTests: TestServe_ListClaimsBitemporalAxes covers the four-corner\nmatrix (yesterday/now × recorded/valid) on a real store. Existing\nsuite stays green.\n\nCloses the \"Bi-temporal claim model\" feature in roady. The\nschema-additions parts of the original spec (ingestion_expired_at)\nare deliberately not added — Mnemos doesn't soft-delete claims, so\na separate \"expired\" timestamp would be redundant with the\nexisting supersession path. The buyer-visible feature (point-in-\ntime queries on the ingestion axis) ships as defined.\n"
+      },
+      {
+        "hash": "f306047c1f61ad6cd447af128dd48bd97af3b9b7",
+        "type": "feat",
+        "scope": "benchmarks",
+        "subject": "feat(benchmarks): LongMemEval-style suite scaffold",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T08:58:46+02:00",
+        "raw_message": "feat(benchmarks): LongMemEval-style suite scaffold\n\nAdds benchmarks/suites/longmemeval.py — a chat-history → question\nrecall harness shaped after the published LongMemEval evaluation\n(Wu et al., 2024). Each test case feeds a sequence of facts to a\nProvider, asks a question, and scores recall@1 against expected\nsubstrings.\n\nShips with three seed cases (single-fact recall, multi-fact dietary\nconstraint, contradicting-then-resolved preference) so the suite is\nrunnable today against any registered Provider. The official\nLongMemEval dataset plugs in via load_cases(path) — pass a JSON\nshim of the canonical format and the same scoring logic applies.\n\nWired into benchmarks/run.py: `python -m benchmarks.run --provider\nmnemos --suite longmemeval` runs the seed cases against a live\nMnemos and writes a JSON result. mem0 will run the same suite once\nmem0 source-build adapter ships.\n\nOut of scope this commit:\n- Downloading the canonical LongMemEval JSON (operator-supplied).\n- LoCoMo loader (separate suite, lands next).\n- Semantic-match scoring (we score on substring presence; the\n  paper uses an LLM judge — that lands when MNEMOS_LLM_PROVIDER\n  is wired into the suite, separate task).\n\nThe \"Published cross-product benchmarks (LoCoMo + LongMemEval)\"\nroady feature stays pending until competitor adapters ship and\nreal numbers populate benchmarks/results/ — but the harness is in\nplace so subsequent commits add data, not infrastructure.\n"
+      },
+      {
+        "hash": "3c291ff97c4cc1568061fe73143adac10a8b750c",
+        "type": "feat",
+        "scope": "serve",
+        "subject": "feat(serve): /v1/search hybrid retrieval endpoint",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T08:56:14+02:00",
+        "raw_message": "feat(serve): /v1/search hybrid retrieval endpoint\n\nExposes the existing query.Engine ranking pipeline (BM25 + cosine\nsimilarity + relationship-graph hop expansion when configured) as a\nproper search endpoint with a filter DSL.\n\nFilter DSL (request body):\n  query     (required)  - search query\n  run_id                - scope to one run\n  top_k                 - cap on returned claims (default 10)\n  min_trust             - drop claims below trust threshold\n  as_of                 - point-in-time validity filter\n  scope.{service,env,team} - per-claim scope match\n  filters.type          - fact|hypothesis|decision\n  filters.status        - active|contested|resolved|deprecated\n\nImplementation reuses internal/query.AnswerWithOptions and\nAnswerForRunWithOptions; type/status filters apply post-engine at\nthe HTTP layer so the engine stays unchanged. The response carries\nthe applied_filters dict back so agents can confirm what got\napplied vs ignored.\n\nTests: 3 in cmd/mnemos/serve_test.go covering missing-query 400,\ndefault top_k=10, and bad min_trust=2.5 → 400.\n\nOpenAPI updated for both GET and POST. Closes the \"Hybrid retrieval\nwith reranker\" feature in roady (deterministic linear combo as\ndocumented; ML reranker training stays out of scope).\n"
+      },
+      {
+        "hash": "cfc3ef415e0d4079ba18a3a83a2bf01aefe37259",
+        "type": "feat",
+        "scope": "pipeline",
+        "subject": "feat(pipeline): entity resolution at ingest",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T08:50:45+02:00",
+        "raw_message": "feat(pipeline): entity resolution at ingest\n\nMaterializeEntities now folds incoming entity surface forms onto\nexisting entity rows of the same type when one normalized name\ncontains the other. \"Alice\" ingested first then \"Alice Smith\" both\nlink to the same entity row (and vice versa) — first surface form\nwins as canonical.\n\nImplementation:\n- New resolveOrCreateEntity helper does ListByType once per\n  EntityType in a batch, caches the result, falls back to\n  FindOrCreate when no containment match exists. Newly-created\n  rows are appended to the cache so subsequent claims in the same\n  batch see them.\n- New matchByContainment scans the pool and returns the first\n  entity whose normalized name contains-or-is-contained-by the\n  incoming form.\n- normalizeEntityName lowercases + collapses whitespace, mirroring\n  the (assumed) repo-side normalization.\n\nBounded false-positive risk: matching is constrained by the\n(normalized_name, type) UNIQUE index — entities of different types\nnever collide. False negatives (\"Alice\" vs \"A. Smith\") are accepted;\noperators can still use `mnemos entities merge` to fold them\nmanually.\n\nOut of scope (separate roadmap items): cross-language resolution,\nembedding-similarity matching, alias schema, ML disambiguation.\n\nTests: 5 in entity_resolution_test.go covering forward + reverse\ncontainment, distinct rejection, missing-NormalizedName fallback,\nand the normalizer itself. Existing pipeline tests stay green.\n\nCloses the \"Entity resolution at ingest\" feature in roady.\n"
+      },
+      {
+        "hash": "280261e11a518f38f5aa84089e90272b074d2b85",
+        "type": "feat",
+        "scope": "query",
+        "subject": "feat(query): Context Block API",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T08:38:45+02:00",
+        "raw_message": "feat(query): Context Block API\n\nNew /v1/context endpoint (GET + POST) returns a stable, agent-ready\nstring summarising a run's memory state — top claims by trust,\nsurfaced contradictions, footer with counts. Designed to be dropped\ndirectly into a system prompt.\n\nImplementation lives in internal/query/contextblock.go on the existing\nquery.Engine (BuildContextBlock). Run-scoped via the existing\nListByRunID path; deprecated claims dropped, active sorted by\nTrustScore (falls back to Confidence when trust isn't computed).\nContradicts edges are scoped to in-run claim IDs only.\n\nLayout (fixed for stable agent parsing):\n  # Memory context (run \u003cid\u003e)\n  ## Active claims (N)\n  - [cl_xxx · type · trust 0.91] text\n  ## Contradictions (M)\n  - cl_xxx ⊥ cl_yyy\n  ## Footer\n  Generated \u003cts\u003e. claims=N contradictions=M\n\nMaxTokens budget enforced approximately (chars/4) so callers can size\nthe block to a prompt budget without an external tokenizer.\n\nTests: 5 in internal/query/contextblock_test.go covering the empty\ncase, trust ordering, deprecated drop, contradiction surfacing, and\nMaxTokens truncation. 2 in cmd/mnemos/serve_test.go covering the GET\nendpoint and the missing-run_id 400 path.\n\nOpenAPI updated. Closes the \"Context Block API for chat agents\"\nfeature in roady.\n"
+      },
+      {
+        "hash": "39bdf97ea64553b97ef3f27317bb048d60152a37",
+        "type": "ci",
+        "scope": "benchmarks",
+        "subject": "ci(benchmarks): regression gate via GitHub Actions",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T07:31:15+02:00",
+        "raw_message": "ci(benchmarks): regression gate via GitHub Actions\n\nAdds .github/workflows/benchmarks.yml that boots the benchmarks\ndocker-compose stack on every PR touching the relate/extract/pipeline\npaths, runs the rule-based contradiction-detection suite, and\ncompares against benchmarks/baseline.json. The workflow fails when\nany baselined metric drops more than the configured threshold\n(default 0.05).\n\nBundled artefacts:\n  - benchmarks/baseline.json — F1/precision/recall floors per suite\n  - benchmarks/check_baseline.py — comparator script that the\n    workflow invokes\n  - benchmarks/README.md — documents how to update the baseline\n    when a change intentionally moves the number\n\nWorkflow runs against rule-based mode only (no LLM provider in CI to\nkeep cost zero and runtime under the 8-minute budget); LLM-mode runs\nremain a manual baseline activity until we wire a CI secret for it.\n\nCloses the \"Benchmark suite in CI with regression gates\" feature.\n"
+      },
+      {
+        "hash": "0d2dc955bf3431c34d54873a75b5c7223904aec6",
+        "type": "feat",
+        "scope": "relate",
+        "subject": "feat(relate): implicit temporal aspect divergence contradicts edges",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T07:29:03+02:00",
+        "raw_message": "feat(relate): implicit temporal aspect divergence contradicts edges\n\nAdds detectTemporalDivergence in internal/relate that flags two\nsame-subject claims as contradicting when their lexical aspects are\nmutually exclusive — completed vs ongoing vs planned vs never.\n\nAspect lexicons (small, hand-curated):\n  completed: complete, finish, done, succeed, ship, deliver,\n             resolv, end, clos, signoff, deployed, rolledback\n  ongoing:   still, ongoing, continu, underway, runn, pending,\n             inflight, inprogres, working, active\n  planned:   plan, schedul, upcom, forecast, will\n  never:     never, cancel, abandon, declined\n\nHeuristic preserves precision via two guards:\n  1. classifyAspect returns aspectUnknown for claims with no\n     marker, and unknown vs known never conflicts.\n  2. Pairs must share ≥1 content token (subject anchor) — without\n     this guard, \"deploy completed\" and \"rollback still running\"\n     would falsely flag despite being about different operations.\n\nclassifyAspect tokenizes raw lowercase text directly (not via\nrawContentTokens) because the existing helper filters negation\nwords like \"never\" — which carry the strongest temporal signal.\n\nBenchmark impact (rule-based mode):\n  Suite F1                       0.80 → 1.00\n  implicit_temporal_conflict     0.00 → 1.00\n  three_way_partial_conflict     1.00 → 1.00 (no regression)\n  numeric_disagreement           1.00 → 1.00 (no regression)\n  direct_polarity                1.00 → 1.00 (no regression)\n  no_contradictions              1.00 → 1.00 (no regression)\n\ndata/eval/relationship_detection.yaml suite stays green.\n\nCloses the \"Implicit temporal contradiction detection\" feature in\nroady. Acceptance criterion was ≥ 0.70; landed at 1.00.\n\nWith this commit all five contradiction-detection suite cases score\n1.00 in rule-based mode — the three gaps surfaced by the original\nbenchmark (entity, numeric, temporal) are now closed against the\nseed test cases. Real-world claims will exercise harder shapes; the\nbenchmark suite expands as we encounter them.\n"
+      },
+      {
+        "hash": "a00c874997aaa8a017a8d04dc7b6aaf7ec493a33",
+        "type": "feat",
+        "scope": "relate",
+        "subject": "feat(relate): entity-role divergence contradicts edges",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T07:24:40+02:00",
+        "raw_message": "feat(relate): entity-role divergence contradicts edges\n\nAdds detectEntityRoleDivergence in internal/relate that flags two\nshort copular claims (e.g. \"The CEO is Alice\" and \"The CEO is Bob\")\nas contradicting when they share a role/subject token but assign it\nto different proper-noun-shaped values.\n\nHeuristic constraints (tuned to keep precision after a regression\nshook out two false positives on rel-007 / rel-010 in\ndata/eval/relationship_detection.yaml):\n- Both claims must have ≤3 content tokens (after stop-word removal).\n  Longer claims fall to the existing detectValueDivergence /\n  polarity paths.\n- Must share ≥1 content token (the role anchor) AND each must have\n  ≥1 unique token.\n- At least one of the differing tokens on each side must be\n  proper-noun-shaped in the source text (capitalized, alphabetic,\n  not a stop-word).\n\nSentence-initial proper nouns are recognized via the stop-word\nfilter (so \"Alice is the CEO\" works as well as \"The CEO is Alice\").\n\nBenchmark impact (rule-based mode):\n  Suite F1                  0.60 → 0.80\n  three_way_partial_conflict 0.00 → 1.00\n  numeric_disagreement       1.00 → 1.00 (no regression)\n  direct_polarity            1.00 → 1.00 (no regression)\n  no_contradictions          1.00 → 1.00 (no regression)\n  implicit_temporal          0.00 → 0.00 (separate task)\n\nExisting data/eval relationship-detection suite remains green\n(precision 81.8%, recall 100%) — the previous regression was\ncaused by relaxing the length guard from ≤4 to ≤3 tokens.\n\nCloses the \"Entity-aware contradiction detection\" feature in roady.\nAcceptance criterion was ≥ 0.80 on three_way_partial_conflict;\nlanded at 1.00.\n"
+      },
+      {
+        "hash": "1872cb1025983c90bfa216ee21cfd58a49704550",
+        "type": "feat",
+        "scope": "relate",
+        "subject": "feat(relate): numeric value disagreement contradicts edges",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-04T07:20:18+02:00",
+        "raw_message": "feat(relate): numeric value disagreement contradicts edges\n\nAdds detectNumericDivergence in internal/relate that flags two claims\nsharing most non-numeric content but disagreeing on a numeric value as\ncontradicting. Wires it into Detect + DetectIncremental as an override\nthat flips supports → contradicts when the numeric values disagree\n(otherwise \"user has 12 refunds\" and \"user has 0 refunds\" looked like\nmutual support to the token-overlap path).\n\nIncludes a regex-based numeric extractor (currency prefix, percent,\ntime/byte units with normalization) and unit-family matching: 1 second\nand 1000 ms agree (same family, normalized magnitude); 12 refunds and\n0 refunds disagree (same raw:prior family, different magnitudes).\n\nBenchmark impact (rule-based mode):\n  Suite F1   0.40 → 0.60\n  numeric_disagreement   0.00 → 1.00\n  direct_polarity        1.00 → 1.00 (no regression)\n  no_contradictions      1.00 → 1.00 (no regression)\n  three_way_partial      0.00 → 0.00 (entity-level — separate task)\n  implicit_temporal      0.00 → 0.00 (temporal — separate task)\n\nCloses the \"Numeric value disagreement detection\" feature in the roady\nspec. Acceptance criterion was ≥ 0.80 on numeric_disagreement; landed\nat 1.00.\n"
+      },
+      {
+        "hash": "e01badadcc5a250ee8c4d5015d32b1d41ef44cf8",
+        "type": "feat",
+        "scope": "benchmarks",
+        "subject": "feat(benchmarks): LLM-extraction support + summarizer + honest baseline",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T23:12:44+02:00",
+        "raw_message": "feat(benchmarks): LLM-extraction support + summarizer + honest baseline\n\nMnemos adapter now batches facts to one mnemos process invocation so\nthe relate stage runs over the full case (per-fact invocation didn't\ncross-relate). Adds --llm flag pass-through driven by MNEMOS_BENCH_LLM\nenv. docker-compose.yml wires MNEMOS_LLM_PROVIDER + MNEMOS_LLM_API_KEY\ninto the container.\n\nAdds benchmarks/summarize.py — generates RESULTS.md with the latest\nresult per (provider, suite) plus per-case detail for the leader.\n\nHonest baseline captured (rule-only and LLM-extraction both score\nidentically on this suite):\n\n  Mnemos contradiction_detection F1 = 0.40\n    direct_polarity_conflict     1.00 / 1.00 / 1.00\n    no_contradictions_clean      1.00 / 1.00 / 1.00\n    three_way_partial_conflict   0.00 / 0.00 / 0.00 (entity-level)\n    numeric_disagreement         0.00 / 0.00 / 0.00\n    implicit_temporal_conflict   0.00 / 0.00 / 0.00\n\nMnemos catches text-overlap polarity flips (the rule-based heuristic\nfinds them). It does not yet catch:\n  - entity-level conflicts (CEO Alice vs CEO Bob — needs role-aware\n    relate)\n  - numeric value disagreement (12 vs 0 prior refunds — needs value\n    comparison in the relate stage)\n  - implicit temporal conflict (completed Tuesday vs still running —\n    needs temporal reasoning beyond the existing valid_from/valid_to\n    window)\n\nThese are real product gaps, surfaced by the benchmark exactly as\nintended. Subsequent commits will add competitor adapters (mem0\nneeds source build; zep, letta have published images) and expand\nthe suite.\n"
+      },
+      {
+        "hash": "45c70c908cd5ba3438b77978120763c3121b7b78",
+        "type": "chore",
+        "scope": "benchmarks",
+        "subject": "chore(benchmarks): gitignore pycache + drop stale storage-only result",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T22:50:28+02:00",
+        "raw_message": "chore(benchmarks): gitignore pycache + drop stale storage-only result\n\nThe 20260503T203639Z result was captured before the Mnemos adapter\nmoved from HTTP-only storage probing to the CLI pipeline (which is\nwhere contradiction detection actually lives). Keeping it in the\nresults directory invites future-me to compare apples and oranges.\nThe 204148Z run is the one that exercises the right code path.\n"
+      },
+      {
+        "hash": "8661556d19c25159c6ecd1f89861c215e06eb335",
+        "type": "feat",
+        "scope": "benchmarks",
+        "subject": "feat(benchmarks): mem0 adapter + dockerized stack + first results",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T22:49:13+02:00",
+        "raw_message": "feat(benchmarks): mem0 adapter + dockerized stack + first results\n\nMnemos adapter now drives the CLI (mnemos process / mnemos audit) so\nthe benchmark exercises the full ingest → extract → relate pipeline,\nnot just the storage surface. Per-case sqlite db prevents cross-case\nbleed.\n\nmem0 adapter (POST /memories, POST /search, DELETE /memories) added.\ndocker-compose.yml provisions Mnemos + mem0 + their Postgres deps so\ndocker compose up brings the whole bench stack online; harness talks\nto each via published localhost ports.\n\nFirst captured baseline results in benchmarks/results/:\n  Mnemos rule-only contradiction-detection F1 = 0.40\n  - 1.0 on direct polarity conflict (succeeded vs did not succeed)\n  - 1.0 on clean-facts negative case\n  - 0.0 on entity-level conflict (Alice vs Bob CEO)\n  - 0.0 on numeric disagreement (12 vs 0 refunds)\n  - 0.0 on implicit temporal conflict\n\nThese are honest baselines. LLM extraction mode (OPENAI_API_KEY or\nOllama) is expected to lift the harder cases. Mnemos's rule-based\nheuristic detects polarity conflicts; entity/value/temporal conflicts\nneed the LLM extractor. Will rerun with LLM mode in next pass.\n\nmem0 results pending — need OPENAI_API_KEY in env to start the\nmem0 service. Adapter ready.\n"
+      },
+      {
+        "hash": "98f46f7992e1daf052c61b64b183535edcf9763d",
+        "type": "feat",
+        "scope": "benchmarks",
+        "subject": "feat(benchmarks): cross-provider benchmark harness foundation",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T22:19:50+02:00",
+        "raw_message": "feat(benchmarks): cross-provider benchmark harness foundation\n\nLays the architecture for honest, reproducible Mnemos vs\nmem0/zep/letta/gbrain comparisons. Each provider implements one\nadapter (Provider protocol); each suite is a list of test cases\nthat scores precision/recall/F1 against a known ground truth.\n\nThis commit ships:\n\n- benchmarks/providers/mnemos.py — Mnemos adapter (HTTP). Talks to\n  /v1/events, /v1/claims, /v1/relationships and projects\n  contradictions onto the run-scoped event set.\n- benchmarks/suites/contradiction_detection.py — five test cases\n  covering polarity conflict, three-way partial conflict,\n  clean-fact null case, numeric disagreement, implicit-temporal\n  conflict. Scores precision/recall/F1.\n- benchmarks/run.py — CLI: --provider mnemos|all --suite\n  contradiction_detection|all. Writes JSON to results/.\n- benchmarks/README.md — methodology, provider matrix, what we\n  will NOT do (cherry-pick, bury losses, hide deployment\n  asymmetries).\n\nOther adapters (mem0, zep, letta, gbrain) and suites (replay\ncompleteness, evidence traceability, recall@k) follow in subsequent\ncommits. The harness exists so when results land they're public,\nreproducible, and honest about gaps.\n"
+      },
+      {
+        "hash": "5aa12c4075ca5c5e3dea1a349a4c23b33ff1f6a9",
+        "type": "feat",
+        "scope": "deploy",
+        "subject": "feat(deploy): public playground deployment artifacts",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T22:16:58+02:00",
+        "raw_message": "feat(deploy): public playground deployment artifacts\n\nCompose + nginx config for a public \"try before you install\" Mnemos\ndeployment. In-memory backend (data evaporates on restart), nginx\nrate-limits per IP, one shared JWT served at /token rotates daily on\ncontainer restart. Not a free hosted Mnemos — a sandbox.\n\nShip the artifacts so anyone (including future-me) can stand a\nplayground up in one docker-compose-up. Live URL at playground.mnemos.dev\nfollows separately when the host + DNS are wired.\n"
+      },
+      {
+        "hash": "d16d4132574210f0d2d5599b488482bec8289d90",
+        "type": "docs",
+        "scope": "launch",
+        "subject": "docs(launch): draft Mnemos Show HN + LinkedIn launch posts",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T21:38:16+02:00",
+        "raw_message": "docs(launch): draft Mnemos Show HN + LinkedIn launch posts\n\nThree HN title options (sharp, concrete, contrarian), one body, both\nchecklists. Lead with the parallel-category wedge: self-hosted AI\nmemory for stacks that can't leave your servers. No named competitors\nin the comparison strip. Drafts only — do not fire without final review.\n"
+      },
+      {
+        "hash": "208b7bad350018622fdcac356069a3bbed521b86",
+        "type": "docs",
+        "subject": "docs: lead README with self-hosted-AI-memory wedge + quickstart chatbot",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T19:27:30+02:00",
+        "raw_message": "docs: lead README with self-hosted-AI-memory wedge + quickstart chatbot\n\nREADME now opens with the 5-line raw-HTTP memory pattern and a\ncategory-comparison table (hosted services / vector DBs / notes apps /\nMnemos). The manifesto framing (\"ground AI in truth\", $67B\nhallucination cost) was the strongest signal that the page-and-readme\nfelt like concept-not-product.\n\nNew examples/quickstart_chatbot/ adds a 30-line reference for the\n\"add memory to a chat loop\" use case. Stand-in reply() function so\nthe demo runs without an LLM key; swap for Anthropic/OpenAI/Ollama\nwhen ready. Cross-links to the existing refund-triage example for\nthe production audit shape.\n"
+      },
+      {
+        "hash": "ae15a86a2f5ef89879549bd3814e3c01ca19b52f",
+        "type": "docs",
+        "scope": "pages",
+        "subject": "docs(pages): reposition Mnemos as self-hosted AI memory layer",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T19:25:57+02:00",
+        "raw_message": "docs(pages): reposition Mnemos as self-hosted AI memory layer\n\nThe previous landing leaned on a manifesto framing (\"ground AI in\ntruth\", $67B hallucination cost) that read as concept-not-product.\nExternal feedback misclassified Mnemos as a Notion/Obsidian\ncompetitor, which was the strongest signal that the page failed to\ncommunicate the actual category.\n\nThis rewrite positions Mnemos in the AI-memory-layer space against\nhosted services + vector DBs + notes apps as a self-hosted\nalternative. Specifically:\n\n- Hero shifts from \"stop your agent confidently lying\" to \"AI memory\n  you actually own\". ICP narrows to engineers who can't ship customer\n  data to a vendor cloud.\n- New #snippet section above fold: a literal 5-line Python block\n  using raw httpx — no SDK to install. Honest about what 5 lines\n  buys you (run-id replay) and what claims unlock (contradiction\n  detection, evidence).\n- Comparison strip rewritten against categories (hosted AI memory\n  services, vector DBs, notes apps) instead of named competitors —\n  dignified, no backlinks, no flame-war shape.\n- Use-cases reordered to lead with \"add memory to your AI app\" so\n  the snippet section flows naturally.\n- Stack section renamed \"Related projects\" with softened copy —\n  Mnemos is a memory layer first, the four-system framing is a\n  related-projects detail not the headline.\n"
+      },
+      {
+        "hash": "4bb73e09497db80dea5850770170787c472e914f",
+        "type": "docs",
+        "subject": "docs: surface refund-triage example as primary agent-audit use case",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T18:56:00+02:00",
+        "raw_message": "docs: surface refund-triage example as primary agent-audit use case\n\nAdd a \"Wrap a LangGraph / CrewAI / MCP agent\" section to README and to\nthe Pages site (docs/index.html), pointing at examples/refund_triage_-\nlanggraph/. Adds a fourth use-case tile on the hero (\"Audit your AI\nagent\") so the LangGraph wrap reads as a first-class entry point\nalongside the existing extraction / contradiction / time-travel ones.\n"
+      },
+      {
+        "hash": "dabfbe657a7a602ecaf6bd5c50945ff53b2d8ff6",
+        "type": "fix",
+        "scope": "examples",
+        "subject": "fix(examples): refund-triage handles real Mnemos shape + LLM failures",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T18:46:11+02:00",
+        "raw_message": "fix(examples): refund-triage handles real Mnemos shape + LLM failures\n\nThree Day-3 fixes uncovered by running end-to-end against a live Mnemos:\n\n- POST /v1/events requires source_input_id; agent now stamps a stable\n  per-run identifier so events back-link to the originating script.\n- Mnemos's events.metadata is map[string]string. Agent now JSON-\n  stringifies non-string values (history dict, decision, factors list,\n  action dict) so replay tooling can JSON-decode on read.\n- Decide-node falls back to scripted output when the Anthropic SDK\n  raises (e.g. invalid key in env) so a misconfigured shell doesn't\n  break the demo.\n"
+      },
+      {
+        "hash": "943d229d1d12ff8a52d10a8a91eb5038168d1d8f",
+        "type": "docs",
+        "scope": "examples",
+        "subject": "docs(examples): add refund-triage LangGraph audit demo",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T17:40:35+02:00",
+        "raw_message": "docs(examples): add refund-triage LangGraph audit demo\n\nA 4-node LangGraph agent (fetch_history → score_risk → decide →\nexecute) that emits one Mnemos event per node, all keyed to a single\nrun_id. Demonstrates the \"wrap your existing agent for audit + replay\"\nclaim by replaying the full reasoning chain via\nGET /v1/events?run_id=\u003crun-id\u003e.\n\nUses raw HTTP, no SDK package — keeps the wedge concrete. Falls back to\na scripted decision when ANTHROPIC_API_KEY is unset so reviewers can\nrun the demo without an LLM.\n\nFiles: agent.py (~270 LOC), requirements.txt, README.md.\n"
+      },
+      {
+        "hash": "2089cfb23f47872e3d6beb4bd696faae1f6309c3",
+        "type": "feat",
+        "scope": "serve",
+        "subject": "feat(serve): add run_id filter to GET /v1/events",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T17:36:30+02:00",
+        "raw_message": "feat(serve): add run_id filter to GET /v1/events\n\nExternal auditors (e.g. a LangGraph callback emitting per-node events)\nneed to replay one run's full chain without scanning the global event\nlog. /v1/events now accepts ?run_id=X to scope results, with the same\nbearer-whitelist parity as the write path: a token carrying a run\nwhitelist can only filter into a run inside that whitelist.\n\nOpenAPI spec + test coverage (TestServe_ListEventsFiltersByRunID) ship\nwith the change.\n"
+      },
+      {
+        "hash": "5264b14ae57d59f9b2a98d0725a9d13f2d922284",
+        "type": "docs",
+        "scope": "pages",
+        "subject": "docs(pages): user-focused rewrite — pain in hero, what-you-can-build under it",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T00:21:23+02:00",
+        "raw_message": "docs(pages): user-focused rewrite — pain in hero, what-you-can-build under it\n\nTwo-discipline review (product + GTM) flagged the same pattern across\nall five sites: heroes named the architecture, not the user pain;\nVs-tables ran four rows of inside-baseball; secondary subsections\nrestated features the diagram already showed.\n\nPer page, this commit:\n\n- Hero rewritten around the *moment* a reader feels the pain. Praxis\n  and Nous got the heaviest lift: 'syscall layer for agents' →\n  'Your agent just sent that email twice.', 'audit log for AI\n  commitments' → 'Your agent said \"I'll follow up tomorrow.\" Did\n  it?'. Olymp/Mnemos/Chronos kept their hooks but lost\n  architecture-noun ledes.\n- Added a 'what you can build' three-card strip directly under the\n  hero on every page so a non-builder visitor sees the outcome\n  before the terminal demo.\n- Compressed every Vs-table to two rows. Cut Temporal/RAG-SQLite/\n  Anomalo strawmen; kept only the comparisons the target reader\n  actually recognises.\n- Cut redundant subsections: 'Capability registry by design',\n  'Three verbs only' (Praxis), 'Replay-from-decision' (Nous),\n  'Replay-from-audit' (Olymp), 'Time-aware by design' (Mnemos),\n  'Eight detectors, one signal contract' (Chronos). Each was\n  prose restating what the diagram or terminal already showed.\n- Dropped 'single Go binary' from hero badge rows — footer-tier\n  brag, not a hero signal.\n\nArchitecture diagrams stay (HTML pipe, no SVG text-math). Cognitive-\nstack section unchanged in shape but gets less weight now that the\nhero stands on its own pain story.\n"
+      },
+      {
+        "hash": "2ebf6fc2b54eeac91650d01015ca4970c98a8c71",
+        "type": "fix",
+        "scope": "pages",
+        "subject": "fix(pages): replace SVG architecture with HTML pipe (no text bleed)",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-03T00:13:01+02:00",
+        "raw_message": "fix(pages): replace SVG architecture with HTML pipe (no text bleed)\n\nInline-SVG text-math broke when labels exceeded their box widths —\ncontent visibly overflowed neighbouring boxes. Replaced with a CSS\ngrid pipeline (`.pipe` + `.pipe-cell` + `.pipe-band`) that\nflexes to its content, collapses to a single column on mobile, and\nneeds no per-label width math.\n\nArchitecture sections now use the same vocabulary across the five\nsites; copy is unchanged in substance, only the rendering layer\nswapped.\n"
+      },
+      {
+        "hash": "a3828c0b074e84a51e29199e58206341949261e1",
+        "type": "fix",
+        "scope": "pages",
+        "subject": "fix(pages): redraw mnemos architecture SVG",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-02T23:57:57+02:00",
+        "raw_message": "fix(pages): redraw mnemos architecture SVG\n\n- 5 boxes evenly distributed (180px stride: 20, 200, 380, 560, 740)\n  instead of irregular 200/420/620/800 layout that left text\n  spilling out the right side.\n- Bumped box height to 60 + adjusted text Y so two-line content fits\n  cleanly inside each box.\n- Replaced two free-floating Storage/Surface text rows that fell\n  outside the surrounding rect with two contained bands at y=170\n  and y=260, each labelled in white + dim copy. ViewBox tightened\n  to 360.\n- Fifth box widened to 160 to match the row's stride; query content\n  rewritten to 'answers + evidence' / 'contradictions inline'.\n"
+      },
+      {
+        "hash": "7b5c976411f0b50e5ce5f5332185109f2901dcd3",
+        "type": "docs",
+        "scope": "pages",
+        "subject": "docs(pages): add GitHub Pages landing site",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-02T23:43:26+02:00",
+        "raw_message": "docs(pages): add GitHub Pages landing site\n\nHand-rolled HTML + CSS at /docs covering Hero · Scenario · Vs ·\nArchitecture · Run-it · Stack-context · Footer. Positioning based\non a 3-in-1 product / UX / GTM expert review:\n\n- ICP named in the hero kicker (not generic 'developers').\n- Outcome-led headline; cognitive-stack vocabulary deferred to the\n  Stack-context section so the page works for first-time visitors.\n- Vs-alternatives table positions against incumbents readers\n  already know.\n- Honest-callout under Run-it states what's shipped vs. what's\n  still placeholder so the page is credible.\n- Inline-SVG architecture diagram with role/title/desc for screen\n  readers; left-to-right pipeline layout.\n- Cross-links to sibling cognitive-stack pages.\n- Auto light/dark via prefers-color-scheme. No build step,\n  no Jekyll, no JS.\n\nPages workflow (.github/workflows/pages.yml) deploys on every\ndocs/** change via actions/configure-pages + upload-pages-artifact\n+ deploy-pages. Pages must be enabled in repo settings (Source:\nGitHub Actions) for the first deploy to publish.\n"
+      },
+      {
+        "hash": "e4b3d353c6f5614e9f9f318ce93d4776bc3617ce",
+        "type": "chore",
+        "scope": "deps",
+        "subject": "chore(deps): bump go-sql-driver/mysql v1.10.0 and modernc.org/sqlite v1.50.0",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-02T11:44:22+02:00",
+        "raw_message": "chore(deps): bump go-sql-driver/mysql v1.10.0 and modernc.org/sqlite v1.50.0\n\nReplaces dependabot PR #25.\n"
+      },
+      {
+        "hash": "a95fe8dc68c64ebc5030b4370247d5e2afbfcb98",
+        "type": "ci",
+        "subject": "ci: drop nox install/scan steps (private import path)",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-02T08:54:53+02:00",
+        "raw_message": "ci: drop nox install/scan steps (private import path)\n\ngo install github.com/felixgeelhaar/nox/cmd/nox fails on the runner\nwith terminal-prompt-disabled. Local 'make nox-scan' + committed\nfindings.json baseline still cover the security workflow; CI\nintegration deferred until the install path resolves.\n"
+      },
+      {
+        "hash": "eaafe074d6fd81c91c9174e7cd94b9dd2a19161e",
+        "type": "fix",
+        "scope": "ci",
+        "subject": "fix(ci): add .coverctl.yaml baseline",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-02T08:21:11+02:00",
+        "raw_message": "fix(ci): add .coverctl.yaml baseline\n\nPer-domain thresholds reflect current coverage minus a small buffer\nso CI doesn't fail on tail-flakiness. Several domains start low\nafter the v0.13 expansion (bias / federation / glob / quota); raise\nfloors as edge tests catch up. Use\n'coverctl suggest --strategy current --apply --force' to ratchet.\n"
+      },
+      {
+        "hash": "3c82b9e3a67b45156b8be29ab210b0eb4392868c",
+        "type": "fix",
+        "scope": "ci",
+        "subject": "fix(ci): rename Bias types, tune gocritic, exclude G703",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-02T07:56:37+02:00",
+        "raw_message": "fix(ci): rename Bias types, tune gocritic, exclude G703\n\n- internal/bias: BiasFinding -\u003e Finding, BiasReport -\u003e Report (revive\n  stuttering rule). Update test + CHANGELOG.\n- .golangci.yml: disable gocritic checks 'unlambda' (MCP capability\n  registry uses trivial wrappers for grep-ability), 'singleCaseSwitch'\n  (reserved for future expansion), 'exitAfterDefer' (intentional in\n  stdio entrypoints). Exclude gosec G703 (operator-supplied config\n  paths).\n"
+      },
+      {
+        "hash": "972b51cced3a8e33b607ce495626158478bb9c9e",
+        "type": "fix",
+        "scope": "ci",
+        "subject": "fix(ci): gofmt bias.go alignment, fix coverctl --from-profile flag",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-02T00:03:58+02:00",
+        "raw_message": "fix(ci): gofmt bias.go alignment, fix coverctl --from-profile flag\n\n- gofmt -w internal/bias/bias.go (Thresholds struct alignment).\n- coverctl: --from-profile is a bool; pass --profile ./coverage.out\n  alongside it.\n"
+      },
+      {
+        "hash": "f9855b5bed04611a1df2699a78ec26a7d15c9b40",
+        "type": "ci",
+        "subject": "ci: add coverctl + nox enforcement, ship pre-commit hooks, enable gocritic",
+        "author": "Felix Geelhaar",
+        "author_email": "felix@felixgeelhaar.de",
+        "date": "2026-05-01T23:53:05+02:00",
+        "raw_message": "ci: add coverctl + nox enforcement, ship pre-commit hooks, enable gocritic\n\n- CI now runs `coverctl check --from-profile coverage.out` after the\n  test step, failing on any domain below threshold.\n- CI runs `nox scan .` after coverctl, surfacing any unbaselined\n  finding (findings.json is the gate).\n- .pre-commit-config.yaml ships local hooks: trailing-whitespace,\n  end-of-file-fixer, check-yaml, check-merge-conflict, mixed-line-\n  ending, check-added-large-files, go-fmt, go-mod-tidy, go vet ./...,\n  gocritic, nox scan, golangci-lint, conventional-pre-commit.\n- .golangci.yml enables gocritic alongside errcheck/govet/gosec/revive.\n"
+      }
+    ]
+  },
+  "created_at": "2026-05-06T22:03:48.289252+02:00",
+  "updated_at": "2026-05-06T22:05:15.436704+02:00",
+  "published_at": "2026-05-06T22:05:15.436687+02:00"
+}
