@@ -525,6 +525,50 @@ func TestPrecisionRecall(t *testing.T) {
 	if f1 < minF1 {
 		t.Errorf("F1 regression: got %.1f%%, baseline floor %.1f%%", f1*100, minF1*100)
 	}
+
+	// Per-category F1 floors. Aggregate alone hides the failure mode
+	// where one suite collapses (say causal_detection F1 drops 0.95→
+	// 0.40) while another lifts the average. Each suite gets its own
+	// floor; if a category's name isn't in this map it's treated as
+	// "no floor required" so newly-added suites don't fail CI before
+	// a baseline lands. Update the floor and bump the date when
+	// committing an intentional baseline change.
+	//
+	// Baseline as of 2026-05-09 (first per-category gate). Floors set
+	// 5 percentage points below observed F1 to allow noise on small
+	// suites; tighten as the suites stabilise.
+	categoryFloors := map[string]float64{
+		"claim_types":         0.95, // observed 100%
+		"deduplication":       0.95, // observed 100%
+		"contested_detection": 0.95, // observed 100%
+		"confidence_scoring":  0.90, // observed 100%
+		"real_world":          0.85, // observed F1 ≈ 91.6% (P=84.5% R=100%)
+		"robustness":          0.45, // observed F1 ≈ 52.7% (noisy adversarial set)
+		"edge_cases":          0.95, // observed F1 ≈ 98.7%
+	}
+	for cat, m := range byCategory {
+		floor, ok := categoryFloors[cat]
+		if !ok {
+			continue
+		}
+		catTotalExpected := m.truePositives + m.falseNegatives
+		catP := 0.0
+		if m.totalExtracted > 0 {
+			catP = float64(m.truePositives) / float64(m.totalExtracted)
+		}
+		catR := 0.0
+		if catTotalExpected > 0 {
+			catR = float64(m.truePositives) / float64(catTotalExpected)
+		}
+		catF1 := 0.0
+		if catP+catR > 0 {
+			catF1 = 2 * catP * catR / (catP + catR)
+		}
+		if catF1 < floor {
+			t.Errorf("category %q F1 regression: got %.1f%%, floor %.1f%% (TP=%d FN=%d Ext=%d)",
+				cat, catF1*100, floor*100, m.truePositives, m.falseNegatives, m.totalExtracted)
+		}
+	}
 }
 
 // TestRelationshipDetection evaluates the relate engine against annotated

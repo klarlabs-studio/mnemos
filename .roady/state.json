@@ -1,6 +1,6 @@
 {
   "project_id": "Mnemos",
-  "version": 237,
+  "version": 239,
   "task_states": {
     "task-action-outcome-recording": {
       "status": "done",
@@ -366,9 +366,15 @@
       "elapsed_minutes": 0
     },
     "task-eval-ci-regression-gate-across-extraction,-causal,-relationship,-longmem,-locomo-suites": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "data/eval/eval_test.go TestPrecisionRecall extended with per-category F1 floors. Existing aggregate floor (P≥80%, R≥93%, F1≥86%) now joined by per-category gates: claim_types ≥0.95, deduplication ≥0.95, contested_detection ≥0.95, confidence_scoring ≥0.90, real_world ≥0.85, robustness ≥0.45, edge_cases ≥0.95. A regression that drops one category from 0.95→0.50 fails the gate even if the aggregate stays above 86%. Already running on every PR via existing go test ./data/eval/... in ci.yml. LongMemEval / LoCoMo per-suite gates are gated on the honest-competitor-benchmarks task landing the adapters; relationship-detection eval lives in internal/relate as binary case tests rather than F1 — separate shape outside this task's spec."
+      ],
+      "started_at": "2026-05-09T09:08:57.378449+02:00",
+      "completed_at": "2026-05-09T09:10:34.254308+02:00",
+      "elapsed_minutes": 1
     },
     "task-file-watch-mcp-tool": {
       "status": "done",
@@ -1161,5 +1167,5 @@
       "elapsed_minutes": 6
     }
   },
-  "updated_at": "2026-05-09T09:08:08.386239+02:00"
+  "updated_at": "2026-05-09T09:10:34.254308+02:00"
 }
