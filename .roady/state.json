@@ -1,6 +1,6 @@
 {
   "project_id": "Mnemos",
-  "version": 223,
+  "version": 225,
   "task_states": {
     "task-action-outcome-recording": {
       "status": "done",
@@ -960,9 +960,15 @@
       "elapsed_minutes": 9
     },
     "task-security-headers-middleware-(csp,-hsts,-x-frame-options,-x-content-type-options,-referrer-policy)": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "cmd/mnemos/serve_security.go: securityHeaders middleware sets X-Content-Type-Options nosniff, X-Frame-Options DENY, Referrer-Policy no-referrer, X-XSS-Protection 0, Permissions-Policy (camera/microphone/geolocation/payment denied), CSP (default-src 'self'; script-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'), Strict-Transport-Security only when MNEMOS_TLS_CERT_FILE and MNEMOS_TLS_KEY_FILE set. Wired into serve.go middleware chain inside panicRecover. Tests TestServe_SecurityHeadersOnPublicRoutes (/ /app /health), TestServe_HSTSOnlyWithTLSEnv pass. CSP allows 'unsafe-inline' for landing.html inline submit handler — TODO removal tracked."
+      ],
+      "started_at": "2026-05-09T08:38:44.518043+02:00",
+      "completed_at": "2026-05-09T08:40:26.420412+02:00",
+      "elapsed_minutes": 1
     },
     "task-source-credibility-scoring": {
       "status": "done",
@@ -1119,5 +1125,5 @@
       "elapsed_minutes": 6
     }
   },
-  "updated_at": "2026-05-09T08:38:19.092282+02:00"
+  "updated_at": "2026-05-09T08:40:26.420413+02:00"
 }

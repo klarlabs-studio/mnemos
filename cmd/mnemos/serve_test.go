@@ -62,6 +62,61 @@ func TestServe_RegistryAppReturnsHTML(t *testing.T) {
 	}
 }
 
+func TestServe_SecurityHeadersOnPublicRoutes(t *testing.T) {
+	srv := httptest.NewServer(newServerMux(newServerTestStore_conn(t)))
+	defer srv.Close()
+
+	cases := []string{"/", "/app", "/health"}
+	for _, path := range cases {
+		t.Run(path, func(t *testing.T) {
+			resp, err := http.Get(srv.URL + path)
+			if err != nil {
+				t.Fatalf("get %s: %v", path, err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			required := map[string]string{
+				"X-Content-Type-Options": "nosniff",
+				"X-Frame-Options":        "DENY",
+				"Referrer-Policy":        "no-referrer",
+			}
+			for k, want := range required {
+				if got := resp.Header.Get(k); got != want {
+					t.Errorf("%s header %s = %q, want %q", path, k, got, want)
+				}
+			}
+			csp := resp.Header.Get("Content-Security-Policy")
+			if csp == "" {
+				t.Errorf("%s missing Content-Security-Policy", path)
+			}
+			for _, fragment := range []string{"default-src 'self'", "frame-ancestors 'none'", "form-action 'self'"} {
+				if !strings.Contains(csp, fragment) {
+					t.Errorf("%s CSP missing %q (got %q)", path, fragment, csp)
+				}
+			}
+		})
+	}
+}
+
+func TestServe_HSTSOnlyWithTLSEnv(t *testing.T) {
+	// Without TLS env vars set, HSTS must NOT be emitted — sending
+	// it over plain HTTP would brick subsequent local-dev requests.
+	t.Setenv("MNEMOS_TLS_CERT_FILE", "")
+	t.Setenv("MNEMOS_TLS_KEY_FILE", "")
+
+	srv := httptest.NewServer(newServerMux(newServerTestStore_conn(t)))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/health")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if got := resp.Header.Get("Strict-Transport-Security"); got != "" {
+		t.Errorf("HSTS emitted without TLS: %q", got)
+	}
+}
+
 func TestServe_RootRejectsUnknownPath(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(newServerTestStore_conn(t)))
 	defer srv.Close()

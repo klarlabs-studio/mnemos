@@ -263,8 +263,10 @@ func newServerMux(conn *store.Conn) http.Handler {
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 	// panicRecover is the outermost layer so a panic in any later
 	// middleware (auth, access log) still produces a clean 500
-	// response instead of leaving the client hanging.
-	return panicRecover(logger, boltAccessLog(logger, jwtAuthMiddleware(verifier, mux)))
+	// response instead of leaving the client hanging. securityHeaders
+	// sits just inside it so the hardened headers are applied to
+	// recovery responses too.
+	return panicRecover(logger, securityHeaders(boltAccessLog(logger, jwtAuthMiddleware(verifier, mux))))
 }
 
 type statusRecorder struct {
