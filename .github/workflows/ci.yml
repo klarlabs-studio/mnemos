@@ -78,6 +78,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install benchmark Python dependencies
+        run: pip install -r benchmarks/requirements.txt
+
       - name: Build
         run: make build
 
