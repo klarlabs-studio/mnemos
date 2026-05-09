@@ -462,3 +462,9 @@ internal/store/postgres/postgres.go:116-121 and internal/store/mysql/mysql.go:15
 No correlation/request IDs across HTTP/MCP/pipeline (cmd/mnemos/serve_auth.go:173-188 boltAccessLog has no request_id/trace_id), making distributed tracing impossible. No /metrics Prometheus endpoint, no histogram of http_request_duration_seconds — operators cannot answer "is mnemos healthy right now" beyond /health. No SLO/error budget defined. Supply chain weak: .goreleaser.yaml has no SBOMs, no cosign signing, no SLSA provenance, dockers: only linux/amd64. Step 1 (small): add requestIDMiddleware (UUIDv7) injecting X-Request-ID into context; propagate to bolt log lines. Step 2 (medium): add prometheus/client_golang RED metrics on /internal/metrics; document SLO.md (p99<250ms reads, 99.9% availability/30d). Step 3 (medium): add `sboms:`, `signs:` (cosign keyless), arm64+amd64 docker_manifests, slsa-framework/slsa-github-generator workflow.
 
 ---
+
+## Supply-chain attestation: SBOM, cosign signing, SLSA provenance, arm64 docker
+
+Step 3 of the original observability bundle, scoped to its own task because it's pure release pipeline work. .goreleaser.yaml has no `sboms:`, no `signs:` (cosign keyless), no SLSA provenance generator wiring, and `dockers:` only builds linux/amd64 — arm64 server users (Graviton, Apple-Silicon Linux) get no image. Add: `sboms: - artifacts: archive` for SPDX SBOM emission; `signs:` block with cosign keyless OIDC; switch `dockers:` to `docker_manifests:` covering amd64+arm64; add slsa-framework/slsa-github-generator workflow to produce SLSA L3 provenance for binaries and container images. Acceptance: `cosign verify-blob` passes against published archives; SBOM downloadable from GitHub release; arm64 image pulls from registry; SLSA provenance attached.
+
+---

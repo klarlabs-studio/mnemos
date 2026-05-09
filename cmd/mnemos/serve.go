@@ -263,6 +263,7 @@ func newServerMux(conn *store.Conn) http.Handler {
 	mux.HandleFunc("/v1/claims/", makeClaimSubresourceHandler(conn))
 	mux.HandleFunc("/v1/incidents", makeIncidentsHandler(conn))
 	mux.HandleFunc("/v1/incidents/", makeIncidentSubresourceHandler(conn))
+	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 	// panicRecover is the outermost layer so a panic in any later
@@ -271,8 +272,9 @@ func newServerMux(conn *store.Conn) http.Handler {
 	// sits just inside it so the hardened headers are applied to
 	// recovery responses too. requestIDMiddleware decorates the
 	// context so the access log and downstream handlers can include
-	// the correlation id.
-	return panicRecover(logger, securityHeaders(requestIDMiddleware(boltAccessLog(logger, jwtAuthMiddleware(verifier, mux)))))
+	// the correlation id. metricsMiddleware sits inside the access
+	// log so duration recorded in prometheus matches what's logged.
+	return panicRecover(logger, securityHeaders(requestIDMiddleware(boltAccessLog(logger, metricsMiddleware(mux, jwtAuthMiddleware(verifier, mux))))))
 }
 
 type statusRecorder struct {

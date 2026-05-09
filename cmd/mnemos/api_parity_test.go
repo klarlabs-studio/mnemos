@@ -117,6 +117,7 @@ var parityMatrix = []parityEntry{
 
 	// Metrics, search, context — read-only.
 	{Capability: "knowledge metrics", MCPTool: "knowledge_metrics", HTTPRoute: "/v1/metrics", GRPCMethod: "Metrics"},
+	{Capability: "Prometheus RED metrics (operators)", MCPTool: parityNA, HTTPRoute: "/internal/metrics", GRPCMethod: parityNA},
 	{Capability: "context block (chat-agent prompt slice)", MCPTool: parityNA, HTTPRoute: "/v1/context", GRPCMethod: parityNA},
 	{Capability: "hybrid search", MCPTool: parityNA, HTTPRoute: "/v1/search", GRPCMethod: parityNA},
 	{Capability: "incidents", MCPTool: parityNA, HTTPRoute: "/v1/incidents", GRPCMethod: parityNA},

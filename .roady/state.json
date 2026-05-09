@@ -1,6 +1,6 @@
 {
   "project_id": "Mnemos",
-  "version": 234,
+  "version": 235,
   "task_states": {
     "task-action-outcome-recording": {
       "status": "done",
@@ -957,11 +957,15 @@
       "elapsed_minutes": 883
     },
     "task-request-id-+-red-metrics-+-slo-doc-+-supply-chain-attestation": {
-      "status": "in_progress",
+      "status": "done",
       "path": "",
       "owner": "ai-agent",
+      "evidence": [
+        "Step 1 (request id middleware) + Step 2 (Prometheus RED metrics + SLO doc) shipped. Step 3 (SBOM/cosign/SLSA/arm64 docker) split into its own task because it's pure release-pipeline work. cmd/mnemos/serve_request_id.go: requestIDMiddleware mints/sanitises/round-trips X-Request-ID, stores in context. cmd/mnemos/serve_metrics.go: private prometheus registry + RED counters (mnemos_http_requests_total, mnemos_http_request_duration_seconds, mnemos_http_in_flight_requests) labelled by method/route/status, exposed via promhttp at /internal/metrics. metricsMiddleware records duration before access log. SLO.md: 99.9% availability/30d, p99 read 250ms, p99 write 500ms, error budget policy, PromQL examples. Tests TestRequestID_*, TestServe_MetricsEndpointExposesPrometheusFormat. parityMatrix updated for /internal/metrics route."
+      ],
       "started_at": "2026-05-09T08:57:31.210632+02:00",
-      "elapsed_minutes": 0
+      "completed_at": "2026-05-09T09:02:59.962425+02:00",
+      "elapsed_minutes": 5
     },
     "task-run-scoped-querying": {
       "status": "done",
@@ -1151,5 +1155,5 @@
       "elapsed_minutes": 6
     }
   },
-  "updated_at": "2026-05-09T08:57:31.210632+02:00"
+  "updated_at": "2026-05-09T09:02:59.962426+02:00"
 }
