@@ -6,7 +6,7 @@ require (
 	github.com/felixgeelhaar/axi-go v1.2.0
 	github.com/felixgeelhaar/bolt v1.4.0
 	github.com/felixgeelhaar/fortify v1.4.0
-	github.com/felixgeelhaar/mcp-go v1.11.0
+	github.com/felixgeelhaar/mcp-go v1.11.2
 	github.com/felixgeelhaar/statekit v1.5.0
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
