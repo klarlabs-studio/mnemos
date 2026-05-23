@@ -18,8 +18,9 @@ on:
       - "tools/mutate/**"
       - ".github/workflows/mutation.yml"
   schedule:
-    # 04:00 UTC daily
-    - cron: "0 4 * * *"
+    # Weekly Sun 04:00 UTC. Daily cron retired — mutation runs are
+    # ~N× full-test-run cost; workflow_dispatch covers ad-hoc.
+    - cron: "0 4 * * 0"
   workflow_dispatch:
 
 permissions:
