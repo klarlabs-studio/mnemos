@@ -132,6 +132,75 @@ func TestClaimsRoundTrip(t *testing.T) {
 	}
 }
 
+// TestListClaims_RunIDFilter pins the gRPC tenant boundary: run_id
+// returns only claims whose evidence links to an event tagged with
+// the matching RunID. Mirrors HTTP behaviour for parity.
+func TestListClaims_RunIDFilter(t *testing.T) {
+	client, cleanup := startTestServer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := timestamppb.New(time.Now().UTC())
+
+	// Two tenants — A and B. Each gets one event + one claim evidence
+	// link to that event.
+	if _, err := client.AppendEvents(ctx, &mnemosv1.AppendEventsRequest{
+		Events: []*mnemosv1.Event{
+			{Id: "ev-a", RunId: "tenant:A", SchemaVersion: "v1", Content: "a", SourceInputId: "in1", Timestamp: now, IngestedAt: now},
+			{Id: "ev-b", RunId: "tenant:B", SchemaVersion: "v1", Content: "b", SourceInputId: "in2", Timestamp: now, IngestedAt: now},
+		},
+	}); err != nil {
+		t.Fatalf("AppendEvents: %v", err)
+	}
+	if _, err := client.AppendClaims(ctx, &mnemosv1.AppendClaimsRequest{
+		Claims: []*mnemosv1.Claim{
+			{Id: "cl-a", Text: "claim A", Type: "fact", Confidence: 0.9, Status: "active", CreatedAt: now},
+			{Id: "cl-b", Text: "claim B", Type: "fact", Confidence: 0.9, Status: "active", CreatedAt: now},
+		},
+		Evidence: []*mnemosv1.ClaimEvidence{
+			{ClaimId: "cl-a", EventId: "ev-a"},
+			{ClaimId: "cl-b", EventId: "ev-b"},
+		},
+	}); err != nil {
+		t.Fatalf("AppendClaims: %v", err)
+	}
+
+	// Tenant A's filter must return ONLY cl-a.
+	list, err := client.ListClaims(ctx, &mnemosv1.ListClaimsRequest{RunId: "tenant:A"})
+	if err != nil {
+		t.Fatalf("ListClaims: %v", err)
+	}
+	if len(list.Claims) != 1 || list.Claims[0].Id != "cl-a" {
+		t.Fatalf("run_id=tenant:A leaked: got %v", list.Claims)
+	}
+}
+
+// TestListClaims_RunIDFilter_UnknownRunFailsClosed returns empty when
+// no events exist under the requested run, even if other unrelated
+// claims would otherwise match the type/status filters.
+func TestListClaims_RunIDFilter_UnknownRunFailsClosed(t *testing.T) {
+	client, cleanup := startTestServer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := timestamppb.New(time.Now().UTC())
+	if _, err := client.AppendClaims(ctx, &mnemosv1.AppendClaimsRequest{
+		Claims: []*mnemosv1.Claim{
+			{Id: "cl-orphan", Text: "orphan", Type: "fact", Confidence: 0.9, Status: "active", CreatedAt: now},
+		},
+	}); err != nil {
+		t.Fatalf("AppendClaims: %v", err)
+	}
+
+	list, err := client.ListClaims(ctx, &mnemosv1.ListClaimsRequest{RunId: "tenant:nobody"})
+	if err != nil {
+		t.Fatalf("ListClaims: %v", err)
+	}
+	if len(list.Claims) != 0 {
+		t.Fatalf("unknown run_id leaked %d claims", len(list.Claims))
+	}
+}
+
 func TestRelationshipsRoundTrip(t *testing.T) {
 	client, cleanup := startTestServer(t)
 	defer cleanup()

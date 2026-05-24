@@ -454,6 +454,110 @@ func TestServe_ListClaimsRejectsInvalidType(t *testing.T) {
 	}
 }
 
+// TestServe_ListClaimsByRunID pins the load-bearing tenant filter:
+// run_id returns only claims whose evidence links to an event tagged
+// with the matching RunID. Critical contract for integrators that
+// scope memory by run_id prefix (e.g. animal:<uuid>).
+func TestServe_ListClaimsByRunID(t *testing.T) {
+	_, conn := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Seed events on two different runs.
+	seedEventConn(t, conn, "ev_runA", "tenant:A", "content A", "src_a", "{}", now)
+	seedEventConn(t, conn, "ev_runB", "tenant:B", "content B", "src_b", "{}", now)
+
+	// Two claims, each evidence-linked to its tenant's event.
+	seedClaimConn(t, conn, "cl_A", "claim A", "fact", "active", 0.9, now)
+	seedClaimConn(t, conn, "cl_B", "claim B", "fact", "active", 0.9, now)
+	if err := conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{
+		{ClaimID: "cl_A", EventID: "ev_runA"},
+		{ClaimID: "cl_B", EventID: "ev_runB"},
+	}); err != nil {
+		t.Fatalf("UpsertEvidence: %v", err)
+	}
+
+	mux := newServerMux(conn)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// Tenant A's filter should return ONLY cl_A — never cl_B.
+	resp, err := http.Get(srv.URL + "/v1/claims?run_id=tenant:A")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var body claimsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Total != 1 || len(body.Claims) != 1 || body.Claims[0].ID != "cl_A" {
+		t.Fatalf("run_id=tenant:A returned %d claims, want only cl_A: %+v", body.Total, body.Claims)
+	}
+}
+
+// TestServe_ListClaimsByRunID_UnknownRun returns empty, never the
+// unfiltered claim list. Fail-closed contract.
+func TestServe_ListClaimsByRunID_UnknownRun(t *testing.T) {
+	_, conn := openTestStore(t)
+	now := time.Now().UTC()
+	// Seed a claim WITHOUT an event for the requested run.
+	seedClaimConn(t, conn, "cl_only", "lonely", "fact", "active", 0.9, now)
+
+	mux := newServerMux(conn)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/v1/claims?run_id=tenant:nobody")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var body claimsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Total != 0 || len(body.Claims) != 0 {
+		t.Fatalf("unknown run_id leaked %d claims: %+v", body.Total, body.Claims)
+	}
+}
+
+// TestServe_ListClaimsByRunID_NoEvidenceFailsClosed pins that a claim
+// with NO evidence whatsoever is excluded from a run_id-scoped query.
+// Otherwise an orphan claim would leak across every tenant filter.
+func TestServe_ListClaimsByRunID_NoEvidenceFailsClosed(t *testing.T) {
+	_, conn := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// One event under run X, one orphan claim with no evidence link.
+	seedEventConn(t, conn, "ev_x", "tenant:X", "content X", "src_x", "{}", now)
+	seedClaimConn(t, conn, "cl_with_ev", "tied", "fact", "active", 0.9, now)
+	seedClaimConn(t, conn, "cl_orphan", "untied", "fact", "active", 0.9, now)
+	if err := conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{
+		{ClaimID: "cl_with_ev", EventID: "ev_x"},
+	}); err != nil {
+		t.Fatalf("UpsertEvidence: %v", err)
+	}
+
+	mux := newServerMux(conn)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/v1/claims?run_id=tenant:X")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var body claimsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.Total != 1 || body.Claims[0].ID != "cl_with_ev" {
+		t.Fatalf("orphan claim should be excluded; got %+v", body.Claims)
+	}
+}
+
 func TestServe_ListRelationshipsFiltersByType(t *testing.T) {
 	_, conn := openTestStore(t)
 	now := time.Now().UTC()
