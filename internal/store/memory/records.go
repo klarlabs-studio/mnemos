@@ -155,38 +155,47 @@ func copyFloatMap(in map[string]float64) map[string]float64 {
 }
 
 type storedClaim struct {
-	ID           string
-	Text         string
-	Type         domain.ClaimType
-	Confidence   float64
-	Status       domain.ClaimStatus
-	CreatedAt    time.Time
-	CreatedBy    string
-	TrustScore   float64
-	ValidFrom    time.Time
-	ValidTo      time.Time
-	LastVerified time.Time
-	VerifyCount  int
-	HalfLifeDays float64
-	Scope        domain.Scope
+	ID                   string
+	Text                 string
+	Type                 domain.ClaimType
+	Confidence           float64
+	Status               domain.ClaimStatus
+	CreatedAt            time.Time
+	CreatedBy            string
+	TrustScore           float64
+	ValidFrom            time.Time
+	ValidTo              time.Time
+	LastVerified         time.Time
+	VerifyCount          int
+	HalfLifeDays         float64
+	Scope                domain.Scope
+	ConfidenceComponents map[string]float64
 }
 
 func (c storedClaim) toDomain() domain.Claim {
+	var components map[string]float64
+	if len(c.ConfidenceComponents) > 0 {
+		components = make(map[string]float64, len(c.ConfidenceComponents))
+		for k, v := range c.ConfidenceComponents {
+			components[k] = v
+		}
+	}
 	return domain.Claim{
-		ID:           c.ID,
-		Text:         c.Text,
-		Type:         c.Type,
-		Confidence:   c.Confidence,
-		Status:       c.Status,
-		CreatedAt:    c.CreatedAt,
-		CreatedBy:    c.CreatedBy,
-		TrustScore:   c.TrustScore,
-		ValidFrom:    c.ValidFrom,
-		ValidTo:      c.ValidTo,
-		LastVerified: c.LastVerified,
-		VerifyCount:  c.VerifyCount,
-		HalfLifeDays: c.HalfLifeDays,
-		Scope:        c.Scope,
+		ID:                   c.ID,
+		Text:                 c.Text,
+		Type:                 c.Type,
+		Confidence:           c.Confidence,
+		Status:               c.Status,
+		CreatedAt:            c.CreatedAt,
+		CreatedBy:            c.CreatedBy,
+		TrustScore:           c.TrustScore,
+		ValidFrom:            c.ValidFrom,
+		ValidTo:              c.ValidTo,
+		LastVerified:         c.LastVerified,
+		VerifyCount:          c.VerifyCount,
+		HalfLifeDays:         c.HalfLifeDays,
+		Scope:                c.Scope,
+		ConfidenceComponents: components,
 	}
 }
 
@@ -198,21 +207,31 @@ func storedClaimFromDomain(c domain.Claim) storedClaim {
 		// in earlier from the source event's timestamp.
 		validFrom = c.CreatedAt
 	}
+	// Copy the caller's components map so a later mutation by the
+	// caller cannot retroactively change what's persisted.
+	var components map[string]float64
+	if len(c.ConfidenceComponents) > 0 {
+		components = make(map[string]float64, len(c.ConfidenceComponents))
+		for k, v := range c.ConfidenceComponents {
+			components[k] = v
+		}
+	}
 	return storedClaim{
-		ID:           c.ID,
-		Text:         c.Text,
-		Type:         c.Type,
-		Confidence:   c.Confidence,
-		Status:       c.Status,
-		CreatedAt:    c.CreatedAt.UTC(),
-		CreatedBy:    actorOr(c.CreatedBy),
-		TrustScore:   c.TrustScore,
-		ValidFrom:    validFrom.UTC(),
-		ValidTo:      c.ValidTo.UTC(),
-		LastVerified: c.LastVerified.UTC(),
-		VerifyCount:  c.VerifyCount,
-		HalfLifeDays: c.HalfLifeDays,
-		Scope:        c.Scope,
+		ID:                   c.ID,
+		Text:                 c.Text,
+		Type:                 c.Type,
+		Confidence:           c.Confidence,
+		Status:               c.Status,
+		CreatedAt:            c.CreatedAt.UTC(),
+		CreatedBy:            actorOr(c.CreatedBy),
+		TrustScore:           c.TrustScore,
+		ValidFrom:            validFrom.UTC(),
+		ValidTo:              c.ValidTo.UTC(),
+		LastVerified:         c.LastVerified.UTC(),
+		VerifyCount:          c.VerifyCount,
+		HalfLifeDays:         c.HalfLifeDays,
+		Scope:                c.Scope,
+		ConfidenceComponents: components,
 	}
 }
 

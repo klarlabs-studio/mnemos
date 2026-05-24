@@ -656,6 +656,14 @@ type claimDTO struct {
 	// identical) between the query embedding and this claim's
 	// embedding. Absent from the standard list response.
 	Similarity float64 `json:"similarity,omitempty"`
+	// ConfidenceComponents decomposes the scalar Confidence into
+	// named contributors (e.g. data_quality / corroboration /
+	// source_authority / recency). Empty when the producer did not
+	// surface a decomposition — consumers treat absent as "no
+	// decomposition available", NOT "all zero". The scalar
+	// Confidence field stays the canonical "overall" number for
+	// readers that don't care about the breakdown.
+	ConfidenceComponents map[string]float64 `json:"confidence_components,omitempty"`
 }
 
 func makeClaimsHandler(conn *store.Conn) http.HandlerFunc {
@@ -816,13 +824,14 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 	ids := make([]string, 0, len(page))
 	for _, c := range page {
 		claims = append(claims, claimDTO{
-			ID:         c.ID,
-			Text:       c.Text,
-			Type:       string(c.Type),
-			Confidence: c.Confidence,
-			Status:     string(c.Status),
-			CreatedAt:  c.CreatedAt.UTC().Format(time.RFC3339),
-			Visibility: string(c.Visibility),
+			ID:                   c.ID,
+			Text:                 c.Text,
+			Type:                 string(c.Type),
+			Confidence:           c.Confidence,
+			Status:               string(c.Status),
+			CreatedAt:            c.CreatedAt.UTC().Format(time.RFC3339),
+			Visibility:           string(c.Visibility),
+			ConfidenceComponents: c.ConfidenceComponents,
 		})
 		ids = append(ids, c.ID)
 	}
@@ -966,14 +975,15 @@ func semanticSearchClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *htt
 			continue
 		}
 		out = append(out, claimDTO{
-			ID:         c.ID,
-			Text:       c.Text,
-			Type:       string(c.Type),
-			Confidence: c.Confidence,
-			Status:     string(c.Status),
-			CreatedAt:  c.CreatedAt.UTC().Format(time.RFC3339),
-			Visibility: string(c.Visibility),
-			Similarity: h.Similarity,
+			ID:                   c.ID,
+			Text:                 c.Text,
+			Type:                 string(c.Type),
+			Confidence:           c.Confidence,
+			Status:               string(c.Status),
+			CreatedAt:            c.CreatedAt.UTC().Format(time.RFC3339),
+			Visibility:           string(c.Visibility),
+			Similarity:           h.Similarity,
+			ConfidenceComponents: c.ConfidenceComponents,
 		})
 	}
 	writeJSON(w, http.StatusOK, claimsResponse{
@@ -1410,25 +1420,26 @@ func appendClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 			return
 		}
 		claim := domain.Claim{
-			ID:                 c.ID,
-			Text:               c.Text,
-			Type:               domain.ClaimType(c.Type),
-			Confidence:         c.Confidence,
-			Status:             domain.ClaimStatus(c.Status),
-			CreatedAt:          created,
-			CreatedBy:          actor,
-			SourceDocument:     c.SourceDocument,
-			SourceType:         domain.SourceType(c.SourceType),
-			SourceAuthority:    c.SourceAuthority,
-			Liveness:           domain.LivenessStatus(c.Liveness),
-			TestID:             c.TestID,
-			TestRequirementRef: c.TestRequirementRef,
-			TestAuthor:         c.TestAuthor,
-			TestLastModified:   testLastModified,
-			TestLastRunAt:      testLastRunAt,
-			TestPassCount:      c.TestPassCount,
-			TestFailCount:      c.TestFailCount,
-			Visibility:         domain.Visibility(c.Visibility),
+			ID:                   c.ID,
+			Text:                 c.Text,
+			Type:                 domain.ClaimType(c.Type),
+			Confidence:           c.Confidence,
+			Status:               domain.ClaimStatus(c.Status),
+			CreatedAt:            created,
+			CreatedBy:            actor,
+			SourceDocument:       c.SourceDocument,
+			SourceType:           domain.SourceType(c.SourceType),
+			SourceAuthority:      c.SourceAuthority,
+			Liveness:             domain.LivenessStatus(c.Liveness),
+			TestID:               c.TestID,
+			TestRequirementRef:   c.TestRequirementRef,
+			TestAuthor:           c.TestAuthor,
+			TestLastModified:     testLastModified,
+			TestLastRunAt:        testLastRunAt,
+			TestPassCount:        c.TestPassCount,
+			TestFailCount:        c.TestFailCount,
+			Visibility:           domain.Visibility(c.Visibility),
+			ConfidenceComponents: c.ConfidenceComponents,
 		}
 		claims = append(claims, claim)
 	}

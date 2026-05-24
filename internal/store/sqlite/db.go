@@ -449,7 +449,7 @@ CREATE INDEX IF NOT EXISTS idx_incidents_root_cause_claim_id ON incidents(root_c
 // currentSchemaVersion is the schema generation this binary expects.
 // Bump whenever a column or table is added; pair the bump with a step
 // in addMissingColumns so existing DBs upgrade in place.
-const currentSchemaVersion = 13
+const currentSchemaVersion = 14
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -521,6 +521,11 @@ var expectedColumns = []addMissingColumn{
 	{"decisions", "scope_team", "TEXT NOT NULL DEFAULT ''"},
 	// v10 — visibility field (personal / team / org).
 	{"claims", "visibility", "TEXT NOT NULL DEFAULT 'team'"},
+	// v13 — confidence decomposition (Refs #39). JSON column carrying
+	// named components ("data_quality", "corroboration", ...) so
+	// downstream consumers can weight contributors. Empty object
+	// means "no decomposition surfaced".
+	{"claims", "confidence_components", "TEXT NOT NULL DEFAULT '{}'"},
 	// v11 — lesson polarity (positive / negative anti-lesson).
 	{"lessons", "polarity", "TEXT NOT NULL DEFAULT ''"},
 	// v12 — decision audit trail: refuted beliefs + failed outcome link.

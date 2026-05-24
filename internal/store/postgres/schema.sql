@@ -62,6 +62,7 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_days double precision NOT 
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_service  text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_env      text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_team     text             NOT NULL DEFAULT '';
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS confidence_components jsonb NOT NULL DEFAULT '{}'::jsonb;
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);
 
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);

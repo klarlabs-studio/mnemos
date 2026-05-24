@@ -94,7 +94,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility
+       visibility, confidence_components
 FROM claims
 ORDER BY created_at ASC
 `
@@ -140,6 +140,7 @@ func (q *Queries) ListAllClaims(ctx context.Context) ([]Claim, error) {
 			&i.TestPassCount,
 			&i.TestFailCount,
 			&i.Visibility,
+			&i.ConfidenceComponents,
 		); err != nil {
 			return nil, err
 		}
@@ -213,7 +214,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility
+       visibility, confidence_components
 FROM claims
 WHERE type = 'test_result'
   AND test_requirement_ref = ?
@@ -265,6 +266,7 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 			&i.TestPassCount,
 			&i.TestFailCount,
 			&i.Visibility,
+			&i.ConfidenceComponents,
 		); err != nil {
 			return nil, err
 		}
@@ -340,8 +342,8 @@ func (q *Queries) UpdateClaimTrust(ctx context.Context, arg UpdateClaimTrustPara
 }
 
 const upsertClaim = `-- name: UpsertClaim :exec
-INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   text = excluded.text,
   type = excluded.type,
@@ -367,36 +369,38 @@ ON CONFLICT(id) DO UPDATE SET
   test_last_run_at = excluded.test_last_run_at,
   test_pass_count = excluded.test_pass_count,
   test_fail_count = excluded.test_fail_count,
-  visibility = excluded.visibility
+  visibility = excluded.visibility,
+  confidence_components = excluded.confidence_components
 `
 
 type UpsertClaimParams struct {
-	ID                  string  `json:"id"`
-	Text                string  `json:"text"`
-	Type                string  `json:"type"`
-	Confidence          float64 `json:"confidence"`
-	Status              string  `json:"status"`
-	CreatedAt           string  `json:"created_at"`
-	CreatedBy           string  `json:"created_by"`
-	ValidFrom           string  `json:"valid_from"`
-	ScopeService        string  `json:"scope_service"`
-	ScopeEnv            string  `json:"scope_env"`
-	ScopeTeam           string  `json:"scope_team"`
-	SourceDocument      string  `json:"source_document"`
-	SourceType          string  `json:"source_type"`
-	SourceAuthority     float64 `json:"source_authority"`
-	Liveness            string  `json:"liveness"`
-	LastExecuted        string  `json:"last_executed"`
-	CitationCount       int64   `json:"citation_count"`
-	ProvenanceRationale string  `json:"provenance_rationale"`
-	TestID              string  `json:"test_id"`
-	TestRequirementRef  string  `json:"test_requirement_ref"`
-	TestAuthor          string  `json:"test_author"`
-	TestLastModified    string  `json:"test_last_modified"`
-	TestLastRunAt       string  `json:"test_last_run_at"`
-	TestPassCount       int64   `json:"test_pass_count"`
-	TestFailCount       int64   `json:"test_fail_count"`
-	Visibility          string  `json:"visibility"`
+	ID                   string  `json:"id"`
+	Text                 string  `json:"text"`
+	Type                 string  `json:"type"`
+	Confidence           float64 `json:"confidence"`
+	Status               string  `json:"status"`
+	CreatedAt            string  `json:"created_at"`
+	CreatedBy            string  `json:"created_by"`
+	ValidFrom            string  `json:"valid_from"`
+	ScopeService         string  `json:"scope_service"`
+	ScopeEnv             string  `json:"scope_env"`
+	ScopeTeam            string  `json:"scope_team"`
+	SourceDocument       string  `json:"source_document"`
+	SourceType           string  `json:"source_type"`
+	SourceAuthority      float64 `json:"source_authority"`
+	Liveness             string  `json:"liveness"`
+	LastExecuted         string  `json:"last_executed"`
+	CitationCount        int64   `json:"citation_count"`
+	ProvenanceRationale  string  `json:"provenance_rationale"`
+	TestID               string  `json:"test_id"`
+	TestRequirementRef   string  `json:"test_requirement_ref"`
+	TestAuthor           string  `json:"test_author"`
+	TestLastModified     string  `json:"test_last_modified"`
+	TestLastRunAt        string  `json:"test_last_run_at"`
+	TestPassCount        int64   `json:"test_pass_count"`
+	TestFailCount        int64   `json:"test_fail_count"`
+	Visibility           string  `json:"visibility"`
+	ConfidenceComponents string  `json:"confidence_components"`
 }
 
 // ON CONFLICT preserves trust_score and valid_to (computed/managed
@@ -431,6 +435,7 @@ func (q *Queries) UpsertClaim(ctx context.Context, arg UpsertClaimParams) error 
 		arg.TestPassCount,
 		arg.TestFailCount,
 		arg.Visibility,
+		arg.ConfidenceComponents,
 	)
 	return err
 }

@@ -262,6 +262,17 @@ type Claim struct {
 	// Org = all principals in the workspace.
 	// Zero value is treated as VisibilityTeam at read/write time.
 	Visibility Visibility
+
+	// ConfidenceComponents decomposes the scalar Confidence into named
+	// contributors (e.g. "data_quality": 0.9, "corroboration": 0.5,
+	// "source_authority": 0.8). The scalar Confidence stays the
+	// canonical "overall" number for back-compat; components are
+	// purely additional context for richer downstream narration and
+	// the reaction loop in #40 (which decays "corroboration" on
+	// negative feedback). Nil/empty means the producer did not
+	// surface a decomposition — consumers treat absent as "no
+	// decomposition available", NOT as "all components are zero".
+	ConfidenceComponents map[string]float64
 }
 
 // IsValidAt reports whether the claim was in force at instant t.
@@ -712,6 +723,14 @@ func (c Claim) Validate() error {
 	case ClaimStatusActive, ClaimStatusContested, ClaimStatusResolved, ClaimStatusDeprecated:
 	default:
 		return errors.New("claim status is invalid")
+	}
+	for k, v := range c.ConfidenceComponents {
+		if strings.TrimSpace(k) == "" {
+			return errors.New("confidence_components key must be non-empty")
+		}
+		if v < 0 || v > 1 {
+			return fmt.Errorf("confidence_components[%q] must be between 0 and 1", k)
+		}
 	}
 	return nil
 }
