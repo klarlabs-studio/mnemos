@@ -22,6 +22,7 @@ import (
 	"github.com/felixgeelhaar/mnemos/internal/llm"
 	"github.com/felixgeelhaar/mnemos/internal/parser"
 	"github.com/felixgeelhaar/mnemos/internal/pipeline"
+	"github.com/felixgeelhaar/mnemos/internal/ports"
 	"github.com/felixgeelhaar/mnemos/internal/query"
 	"github.com/felixgeelhaar/mnemos/internal/relate"
 	"github.com/felixgeelhaar/mnemos/internal/store"
@@ -549,6 +550,39 @@ func handleMCP() {
 		ValidateInput().
 		Handler(func(ctx context.Context, input mcpMemoryContextInput) (mcpMemoryContextOutput, error) {
 			return mcpRunMemoryContext(ctx, input)
+		})
+
+	// --- Agent memory-management primitives (Refs #41) ---
+	srv.Tool("remember").
+		Description("Store a single fact as a claim, scoped to a run_id, with an event + evidence link so it is auditable. Use this when the agent decides to commit something to long-term memory.").
+		OutputSchema(mcpRememberOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpRememberInput) (mcpRememberOutput, error) {
+			return mcpRunRemember(ctx, mcpActor, input)
+		})
+
+	srv.Tool("forget").
+		Description("Soft-delete a claim by flipping its status to deprecated. The claim and its evidence stay queryable for audit; future recall paths exclude it from active context.").
+		OutputSchema(mcpForgetOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpForgetInput) (mcpForgetOutput, error) {
+			return mcpRunForget(ctx, mcpActor, input)
+		})
+
+	srv.Tool("update").
+		Description("Rewrite a claim's text (and optionally its confidence) when the agent's understanding refines. The reason is recorded in the status history.").
+		OutputSchema(mcpUpdateOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpUpdateInput) (mcpUpdateOutput, error) {
+			return mcpRunUpdate(ctx, mcpActor, input)
+		})
+
+	srv.Tool("search_memory").
+		Description("Semantic search over the agent's memory: embeds the query, ranks claims by cosine similarity, scoped to a run_id (tenant boundary).").
+		OutputSchema(mcpSearchMemoryOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpSearchMemoryInput) (mcpSearchMemoryOutput, error) {
+			return mcpRunSearchMemory(ctx, input)
 		})
 
 	// Wire signal handling so a SIGINT/SIGTERM cancels the parent
@@ -1447,4 +1481,339 @@ func mcpRunMemoryContext(ctx context.Context, input mcpMemoryContextInput) (mcpM
 		return mcpMemoryContextOutput{}, err
 	}
 	return mcpMemoryContextOutput{RunID: input.RunID, Context: block}, nil
+}
+
+// --- Agent memory-management tools (Refs #41) ---
+//
+// remember / forget / update / search_memory are the four primitives an
+// LLM agent needs to keep its own working memory inside Mnemos. They
+// wrap the existing claim / event / evidence + similarity-search
+// primitives so an agent doesn't have to compose three lower-level
+// MCP tools to register a single fact.
+
+type mcpRememberInput struct {
+	Text       string `json:"text" jsonschema:"required,description=The fact to remember"`
+	Kind       string `json:"kind,omitempty" jsonschema:"description=Claim kind: fact (default), hypothesis, decision"`
+	RunID      string `json:"run_id" jsonschema:"required,description=Tenant scope; events are stamped with this for run_id-filtered recall"`
+	ValidUntil string `json:"valid_until,omitempty" jsonschema:"description=RFC3339 timestamp at which this claim should automatically be considered no longer in force"`
+	Confidence float64 `json:"confidence,omitempty" jsonschema:"description=Confidence in [0,1]; defaults to 0.9 when omitted"`
+}
+
+type mcpRememberOutput struct {
+	ClaimID string `json:"claim_id"`
+	EventID string `json:"event_id"`
+	RunID   string `json:"run_id"`
+	Status  string `json:"status"`
+}
+
+type mcpForgetInput struct {
+	ClaimID string `json:"claim_id" jsonschema:"required,description=ID of the claim to forget (status flips to deprecated; audit history preserved)"`
+	Reason  string `json:"reason,omitempty" jsonschema:"description=Why the agent is forgetting this claim (recorded in the audit trail)"`
+}
+
+type mcpForgetOutput struct {
+	ClaimID   string `json:"claim_id"`
+	OldStatus string `json:"old_status"`
+	NewStatus string `json:"new_status"`
+}
+
+type mcpUpdateInput struct {
+	ClaimID    string  `json:"claim_id" jsonschema:"required,description=ID of the claim to update"`
+	NewText    string  `json:"new_text" jsonschema:"required,description=Replacement text for the claim"`
+	Confidence float64 `json:"confidence,omitempty" jsonschema:"description=New confidence in [0,1]; omit to keep the current value"`
+	Reason     string  `json:"reason,omitempty" jsonschema:"description=Why the agent is rewriting this claim (recorded in the audit trail)"`
+}
+
+type mcpUpdateOutput struct {
+	ClaimID string `json:"claim_id"`
+	OldText string `json:"old_text"`
+	NewText string `json:"new_text"`
+}
+
+type mcpSearchMemoryInput struct {
+	Query         string  `json:"query" jsonschema:"required,description=Free-text query; embedded by the configured provider and matched by cosine similarity"`
+	RunID         string  `json:"run_id" jsonschema:"required,description=Tenant scope; required to prevent cross-tenant semantic leakage"`
+	TopK          int     `json:"top_k,omitempty" jsonschema:"description=Maximum hits to return (default 10, max 100)"`
+	MinSimilarity float64 `json:"min_similarity,omitempty" jsonschema:"description=Drop hits below this cosine similarity threshold (default 0)"`
+}
+
+type mcpSearchMemoryHit struct {
+	ClaimID    string  `json:"claim_id"`
+	Text       string  `json:"text"`
+	Similarity float64 `json:"similarity"`
+	Status     string  `json:"status"`
+}
+
+type mcpSearchMemoryOutput struct {
+	Hits []mcpSearchMemoryHit `json:"hits"`
+}
+
+func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (mcpRememberOutput, error) {
+	text := strings.TrimSpace(input.Text)
+	runID := strings.TrimSpace(input.RunID)
+	if text == "" {
+		return mcpRememberOutput{}, fmt.Errorf("text is required")
+	}
+	if runID == "" {
+		return mcpRememberOutput{}, fmt.Errorf("run_id is required")
+	}
+	kind := domain.ClaimType(strings.TrimSpace(input.Kind))
+	if kind == "" {
+		kind = domain.ClaimTypeFact
+	}
+	switch kind {
+	case domain.ClaimTypeFact, domain.ClaimTypeHypothesis, domain.ClaimTypeDecision:
+	default:
+		return mcpRememberOutput{}, fmt.Errorf("kind must be one of: fact, hypothesis, decision (got %q)", input.Kind)
+	}
+	conf := input.Confidence
+	if conf == 0 {
+		conf = 0.9
+	}
+	if conf < 0 || conf > 1 {
+		return mcpRememberOutput{}, fmt.Errorf("confidence must be in [0, 1]")
+	}
+	var validTo time.Time
+	if raw := strings.TrimSpace(input.ValidUntil); raw != "" {
+		t, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return mcpRememberOutput{}, fmt.Errorf("valid_until must be RFC3339: %v", err)
+		}
+		validTo = t.UTC()
+	}
+
+	conn, err := openConn(ctx)
+	if err != nil {
+		return mcpRememberOutput{}, err
+	}
+	defer closeConn(conn)
+
+	now := time.Now().UTC()
+	eventID := fmt.Sprintf("ev_remember_%d", now.UnixNano())
+	claimID := fmt.Sprintf("cl_remember_%d", now.UnixNano())
+
+	event := domain.Event{
+		ID:            eventID,
+		RunID:         runID,
+		SchemaVersion: "v1",
+		Content:       text,
+		SourceInputID: "agent_remember",
+		Timestamp:     now,
+		IngestedAt:    now,
+		CreatedBy:     actor,
+	}
+	if err := conn.Events.Append(ctx, event); err != nil {
+		return mcpRememberOutput{}, fmt.Errorf("append event: %w", err)
+	}
+
+	claim := domain.Claim{
+		ID:         claimID,
+		Text:       text,
+		Type:       kind,
+		Confidence: conf,
+		Status:     domain.ClaimStatusActive,
+		CreatedAt:  now,
+		CreatedBy:  actor,
+		ValidFrom:  now,
+		ValidTo:    validTo,
+	}
+	reason := "agent-remember"
+	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{claim}, reason, actor); err != nil {
+		return mcpRememberOutput{}, fmt.Errorf("append claim: %w", err)
+	}
+	// ValidTo lives on a separate write path (SetValidity) because
+	// it's mutated by lifecycle events (resolve --supersedes) rather
+	// than on every upsert. Apply it post-insert when the caller set
+	// an explicit TTL.
+	if !validTo.IsZero() {
+		if err := conn.Claims.SetValidity(ctx, claimID, validTo); err != nil {
+			return mcpRememberOutput{}, fmt.Errorf("set valid_to: %w", err)
+		}
+	}
+	if err := conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{
+		{ClaimID: claimID, EventID: eventID},
+	}); err != nil {
+		return mcpRememberOutput{}, fmt.Errorf("link evidence: %w", err)
+	}
+	return mcpRememberOutput{
+		ClaimID: claimID,
+		EventID: eventID,
+		RunID:   runID,
+		Status:  string(domain.ClaimStatusActive),
+	}, nil
+}
+
+func mcpRunForget(ctx context.Context, actor string, input mcpForgetInput) (mcpForgetOutput, error) {
+	if strings.TrimSpace(input.ClaimID) == "" {
+		return mcpForgetOutput{}, fmt.Errorf("claim_id is required")
+	}
+	conn, err := openConn(ctx)
+	if err != nil {
+		return mcpForgetOutput{}, err
+	}
+	defer closeConn(conn)
+	existing, err := conn.Claims.ListByIDs(ctx, []string{input.ClaimID})
+	if err != nil || len(existing) == 0 {
+		return mcpForgetOutput{}, fmt.Errorf("claim %s not found", input.ClaimID)
+	}
+	old := existing[0].Status
+	updated := existing[0]
+	updated.Status = domain.ClaimStatusDeprecated
+	reason := input.Reason
+	if reason == "" {
+		reason = "agent-forget"
+	}
+	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{updated}, reason, actor); err != nil {
+		return mcpForgetOutput{}, err
+	}
+	return mcpForgetOutput{
+		ClaimID:   input.ClaimID,
+		OldStatus: string(old),
+		NewStatus: string(domain.ClaimStatusDeprecated),
+	}, nil
+}
+
+func mcpRunUpdate(ctx context.Context, actor string, input mcpUpdateInput) (mcpUpdateOutput, error) {
+	claimID := strings.TrimSpace(input.ClaimID)
+	newText := strings.TrimSpace(input.NewText)
+	if claimID == "" {
+		return mcpUpdateOutput{}, fmt.Errorf("claim_id is required")
+	}
+	if newText == "" {
+		return mcpUpdateOutput{}, fmt.Errorf("new_text is required")
+	}
+	if input.Confidence < 0 || input.Confidence > 1 {
+		return mcpUpdateOutput{}, fmt.Errorf("confidence must be in [0, 1]")
+	}
+	conn, err := openConn(ctx)
+	if err != nil {
+		return mcpUpdateOutput{}, err
+	}
+	defer closeConn(conn)
+	existing, err := conn.Claims.ListByIDs(ctx, []string{claimID})
+	if err != nil || len(existing) == 0 {
+		return mcpUpdateOutput{}, fmt.Errorf("claim %s not found", claimID)
+	}
+	oldText := existing[0].Text
+	updated := existing[0]
+	updated.Text = newText
+	if input.Confidence > 0 {
+		updated.Confidence = input.Confidence
+	}
+	reason := input.Reason
+	if reason == "" {
+		reason = "agent-update"
+	}
+	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{updated}, reason, actor); err != nil {
+		return mcpUpdateOutput{}, err
+	}
+	return mcpUpdateOutput{
+		ClaimID: claimID,
+		OldText: oldText,
+		NewText: newText,
+	}, nil
+}
+
+func mcpRunSearchMemory(ctx context.Context, input mcpSearchMemoryInput) (mcpSearchMemoryOutput, error) {
+	q := strings.TrimSpace(input.Query)
+	runID := strings.TrimSpace(input.RunID)
+	if q == "" {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("query is required")
+	}
+	if runID == "" {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("run_id is required (tenant boundary)")
+	}
+	topK := input.TopK
+	if topK == 0 {
+		topK = 10
+	}
+	if topK < 0 || topK > 100 {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("top_k must be in [1, 100]")
+	}
+	if input.MinSimilarity < 0 || input.MinSimilarity > 1 {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("min_similarity must be in [0, 1]")
+	}
+
+	conn, err := openConn(ctx)
+	if err != nil {
+		return mcpSearchMemoryOutput{}, err
+	}
+	defer closeConn(conn)
+
+	searcher, ok := conn.Embeddings.(ports.ClaimSimilaritySearcher)
+	if !ok {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("current storage backend does not support vector similarity search")
+	}
+	embedder, err := embedderResolver()
+	if err != nil {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("embedding provider not configured: %w", err)
+	}
+
+	events, err := conn.Events.ListByRunID(ctx, runID)
+	if err != nil {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("list events for run: %w", err)
+	}
+	if len(events) == 0 {
+		return mcpSearchMemoryOutput{Hits: []mcpSearchMemoryHit{}}, nil
+	}
+	allowedEventIDs := make(map[string]struct{}, len(events))
+	for _, e := range events {
+		allowedEventIDs[e.ID] = struct{}{}
+	}
+	allEvidence, err := conn.Claims.ListAllEvidence(ctx)
+	if err != nil {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("list evidence: %w", err)
+	}
+	candidateClaimIDs := make(map[string]struct{})
+	for _, link := range allEvidence {
+		if _, ok := allowedEventIDs[link.EventID]; ok {
+			candidateClaimIDs[link.ClaimID] = struct{}{}
+		}
+	}
+	if len(candidateClaimIDs) == 0 {
+		return mcpSearchMemoryOutput{Hits: []mcpSearchMemoryHit{}}, nil
+	}
+
+	vectors, err := embedder.Embed(ctx, []string{q})
+	if err != nil {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("embed query: %w", err)
+	}
+	if len(vectors) == 0 || len(vectors[0]) == 0 {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("embed query: provider returned empty vector")
+	}
+
+	hits, err := searcher.SearchClaimsByVector(ctx, vectors[0], candidateClaimIDs, topK, input.MinSimilarity)
+	if err != nil {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("similarity search: %w", err)
+	}
+	if len(hits) == 0 {
+		return mcpSearchMemoryOutput{Hits: []mcpSearchMemoryHit{}}, nil
+	}
+
+	ids := make([]string, 0, len(hits))
+	for _, h := range hits {
+		ids = append(ids, h.ClaimID)
+	}
+	claims, err := conn.Claims.ListByIDs(ctx, ids)
+	if err != nil {
+		return mcpSearchMemoryOutput{}, fmt.Errorf("load claims: %w", err)
+	}
+	claimByID := make(map[string]domain.Claim, len(claims))
+	for _, c := range claims {
+		claimByID[c.ID] = c
+	}
+	out := make([]mcpSearchMemoryHit, 0, len(hits))
+	for _, h := range hits {
+		c, ok := claimByID[h.ClaimID]
+		if !ok {
+			continue
+		}
+		out = append(out, mcpSearchMemoryHit{
+			ClaimID:    c.ID,
+			Text:       c.Text,
+			Similarity: h.Similarity,
+			Status:     string(c.Status),
+		})
+	}
+	return mcpSearchMemoryOutput{Hits: out}, nil
 }

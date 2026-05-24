@@ -167,6 +167,12 @@ var parityMatrix = []parityEntry{
 	{Capability: "memory promote", MCPTool: "memory_promote", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "memory context (agent recall)", MCPTool: "memory_context", HTTPRoute: parityNA, GRPCMethod: parityNA},
 
+	// Agent memory-management primitives (MCP-only — agent self-edit surface). See #41.
+	{Capability: "remember (store a fact as a claim)", MCPTool: "remember", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "forget (soft-delete a claim)", MCPTool: "forget", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "update (rewrite a claim's text)", MCPTool: "update", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "search_memory (semantic claim recall)", MCPTool: "search_memory", HTTPRoute: "/v1/claims", GRPCMethod: parityNA},
+
 	// Entity relationships (gRPC-only).
 	{Capability: "list entity relationships (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "ListEntityRelationships"},
 	{Capability: "append entity relationships (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendEntityRelationships"},
