@@ -345,12 +345,30 @@ func (s *Server) ListClaims(ctx context.Context, req *mnemosv1.ListClaimsRequest
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list claims: %v", err)
 	}
+	var asOf, recordedAsOf time.Time
+	if req.AsOf != nil {
+		asOf = req.AsOf.AsTime()
+	}
+	if req.RecordedAsOf != nil {
+		recordedAsOf = req.RecordedAsOf.AsTime()
+	}
 	filtered := all[:0]
 	for _, c := range all {
 		if typeFilter != "" && string(c.Type) != typeFilter {
 			continue
 		}
 		if statusFilter != "" && string(c.Status) != statusFilter {
+			continue
+		}
+		// Validity-time filter: claim must have been valid at as_of.
+		// IsValidAt treats zero ValidFrom as "valid since forever".
+		if !asOf.IsZero() && !c.IsValidAt(asOf) {
+			continue
+		}
+		// Ingestion-time filter: drop rows recorded after the query
+		// timestamp so the response is reproducible from the snapshot
+		// of the store as it stood then.
+		if !recordedAsOf.IsZero() && c.CreatedAt.After(recordedAsOf) {
 			continue
 		}
 		filtered = append(filtered, c)

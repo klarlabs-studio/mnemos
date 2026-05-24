@@ -166,6 +166,15 @@ message ListClaimsRequest {
   // integrators that scope memory by run_id prefix (e.g. animal:<uuid>).
   // Claims with no evidence are excluded — fail closed.
   string     run_id            = 5;
+  // as_of: validity-time filter. When set, only returns claims that
+  // were valid at this timestamp (valid_from <= as_of AND (valid_to is
+  // zero OR as_of < valid_to)). Mirrors the HTTP ?as_of= query param —
+  // gRPC parity for Zep-style time-travel reads.
+  google.protobuf.Timestamp as_of = 6;
+  // recorded_as_of: ingestion-time filter. When set, drops claims
+  // recorded after this timestamp so the response is reproducible
+  // from the snapshot of the store as it stood then.
+  google.protobuf.Timestamp recorded_as_of = 7;
 }
 
 message ListClaimsResponse {

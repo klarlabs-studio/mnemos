@@ -590,7 +590,16 @@ type ListClaimsRequest struct {
 	// event whose RunID equals this value. Foundational tenant filter for
 	// integrators that scope memory by run_id prefix (e.g. animal:<uuid>).
 	// Claims with no evidence are excluded — fail closed.
-	RunId         string `protobuf:"bytes,5,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	RunId string `protobuf:"bytes,5,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// as_of: validity-time filter. When set, only returns claims that
+	// were valid at this timestamp (valid_from <= as_of AND (valid_to is
+	// zero OR as_of < valid_to)). Mirrors the HTTP ?as_of= query param —
+	// gRPC parity for Zep-style time-travel reads.
+	AsOf *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+	// recorded_as_of: ingestion-time filter. When set, drops claims
+	// recorded after this timestamp so the response is reproducible
+	// from the snapshot of the store as it stood then.
+	RecordedAsOf  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=recorded_as_of,json=recordedAsOf,proto3" json:"recorded_as_of,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -658,6 +667,20 @@ func (x *ListClaimsRequest) GetRunId() string {
 		return x.RunId
 	}
 	return ""
+}
+
+func (x *ListClaimsRequest) GetAsOf() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AsOf
+	}
+	return nil
+}
+
+func (x *ListClaimsRequest) GetRecordedAsOf() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RecordedAsOf
+	}
+	return nil
 }
 
 type ListClaimsResponse struct {
@@ -3350,7 +3373,7 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"visibility\"E\n" +
 	"\rClaimEvidence\x12\x19\n" +
 	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x19\n" +
-	"\bevent_id\x18\x02 \x01(\tR\aeventId\"\xd2\x01\n" +
+	"\bevent_id\x18\x02 \x01(\tR\aeventId\"\xc5\x02\n" +
 	"\x11ListClaimsRequest\x125\n" +
 	"\n" +
 	"pagination\x18\x01 \x01(\v2\x15.mnemos.v1.PaginationR\n" +
@@ -3359,7 +3382,9 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"typeFilter\x12#\n" +
 	"\rstatus_filter\x18\x03 \x01(\tR\fstatusFilter\x12)\n" +
 	"\x10include_evidence\x18\x04 \x01(\bR\x0fincludeEvidence\x12\x15\n" +
-	"\x06run_id\x18\x05 \x01(\tR\x05runId\"\xb8\x01\n" +
+	"\x06run_id\x18\x05 \x01(\tR\x05runId\x12/\n" +
+	"\x05as_of\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x12@\n" +
+	"\x0erecorded_as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\frecordedAsOf\"\xb8\x01\n" +
 	"\x12ListClaimsResponse\x12(\n" +
 	"\x06claims\x18\x01 \x03(\v2\x10.mnemos.v1.ClaimR\x06claims\x124\n" +
 	"\bevidence\x18\x02 \x03(\v2\x18.mnemos.v1.ClaimEvidenceR\bevidence\x12\x14\n" +
@@ -3714,101 +3739,103 @@ var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
 	3,  // 5: mnemos.v1.AppendEventsRequest.events:type_name -> mnemos.v1.Event
 	52, // 6: mnemos.v1.Claim.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 7: mnemos.v1.ListClaimsRequest.pagination:type_name -> mnemos.v1.Pagination
-	7,  // 8: mnemos.v1.ListClaimsResponse.claims:type_name -> mnemos.v1.Claim
-	8,  // 9: mnemos.v1.ListClaimsResponse.evidence:type_name -> mnemos.v1.ClaimEvidence
-	7,  // 10: mnemos.v1.AppendClaimsRequest.claims:type_name -> mnemos.v1.Claim
-	8,  // 11: mnemos.v1.AppendClaimsRequest.evidence:type_name -> mnemos.v1.ClaimEvidence
-	52, // 12: mnemos.v1.Relationship.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 13: mnemos.v1.ListRelationshipsRequest.pagination:type_name -> mnemos.v1.Pagination
-	12, // 14: mnemos.v1.ListRelationshipsResponse.relationships:type_name -> mnemos.v1.Relationship
-	12, // 15: mnemos.v1.AppendRelationshipsRequest.relationships:type_name -> mnemos.v1.Relationship
-	0,  // 16: mnemos.v1.ListEmbeddingsRequest.pagination:type_name -> mnemos.v1.Pagination
-	16, // 17: mnemos.v1.ListEmbeddingsResponse.embeddings:type_name -> mnemos.v1.Embedding
-	16, // 18: mnemos.v1.AppendEmbeddingsRequest.embeddings:type_name -> mnemos.v1.Embedding
-	52, // 19: mnemos.v1.Action.at:type_name -> google.protobuf.Timestamp
-	50, // 20: mnemos.v1.Action.metadata:type_name -> mnemos.v1.Action.MetadataEntry
-	52, // 21: mnemos.v1.Action.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 22: mnemos.v1.ListActionsRequest.pagination:type_name -> mnemos.v1.Pagination
-	23, // 23: mnemos.v1.ListActionsResponse.actions:type_name -> mnemos.v1.Action
-	23, // 24: mnemos.v1.AppendActionsRequest.actions:type_name -> mnemos.v1.Action
-	51, // 25: mnemos.v1.Outcome.metrics:type_name -> mnemos.v1.Outcome.MetricsEntry
-	52, // 26: mnemos.v1.Outcome.observed_at:type_name -> google.protobuf.Timestamp
-	52, // 27: mnemos.v1.Outcome.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 28: mnemos.v1.ListOutcomesRequest.pagination:type_name -> mnemos.v1.Pagination
-	27, // 29: mnemos.v1.ListOutcomesResponse.outcomes:type_name -> mnemos.v1.Outcome
-	27, // 30: mnemos.v1.AppendOutcomesRequest.outcomes:type_name -> mnemos.v1.Outcome
-	31, // 31: mnemos.v1.Lesson.scope:type_name -> mnemos.v1.Scope
-	52, // 32: mnemos.v1.Lesson.derived_at:type_name -> google.protobuf.Timestamp
-	52, // 33: mnemos.v1.Lesson.last_verified:type_name -> google.protobuf.Timestamp
-	0,  // 34: mnemos.v1.ListLessonsRequest.pagination:type_name -> mnemos.v1.Pagination
-	32, // 35: mnemos.v1.ListLessonsResponse.lessons:type_name -> mnemos.v1.Lesson
-	32, // 36: mnemos.v1.AppendLessonsRequest.lessons:type_name -> mnemos.v1.Lesson
-	31, // 37: mnemos.v1.Decision.scope:type_name -> mnemos.v1.Scope
-	52, // 38: mnemos.v1.Decision.chosen_at:type_name -> google.protobuf.Timestamp
-	52, // 39: mnemos.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 40: mnemos.v1.ListDecisionsRequest.pagination:type_name -> mnemos.v1.Pagination
-	36, // 41: mnemos.v1.ListDecisionsResponse.decisions:type_name -> mnemos.v1.Decision
-	36, // 42: mnemos.v1.AppendDecisionsRequest.decisions:type_name -> mnemos.v1.Decision
-	31, // 43: mnemos.v1.Playbook.scope:type_name -> mnemos.v1.Scope
-	40, // 44: mnemos.v1.Playbook.steps:type_name -> mnemos.v1.PlaybookStep
-	52, // 45: mnemos.v1.Playbook.derived_at:type_name -> google.protobuf.Timestamp
-	52, // 46: mnemos.v1.Playbook.last_verified:type_name -> google.protobuf.Timestamp
-	0,  // 47: mnemos.v1.ListPlaybooksRequest.pagination:type_name -> mnemos.v1.Pagination
-	41, // 48: mnemos.v1.ListPlaybooksResponse.playbooks:type_name -> mnemos.v1.Playbook
-	41, // 49: mnemos.v1.AppendPlaybooksRequest.playbooks:type_name -> mnemos.v1.Playbook
-	52, // 50: mnemos.v1.EntityRelationship.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 51: mnemos.v1.ListEntityRelationshipsRequest.pagination:type_name -> mnemos.v1.Pagination
-	45, // 52: mnemos.v1.ListEntityRelationshipsResponse.edges:type_name -> mnemos.v1.EntityRelationship
-	45, // 53: mnemos.v1.AppendEntityRelationshipsRequest.edges:type_name -> mnemos.v1.EntityRelationship
-	1,  // 54: mnemos.v1.MnemosService.Health:input_type -> mnemos.v1.HealthRequest
-	4,  // 55: mnemos.v1.MnemosService.ListEvents:input_type -> mnemos.v1.ListEventsRequest
-	6,  // 56: mnemos.v1.MnemosService.AppendEvents:input_type -> mnemos.v1.AppendEventsRequest
-	9,  // 57: mnemos.v1.MnemosService.ListClaims:input_type -> mnemos.v1.ListClaimsRequest
-	11, // 58: mnemos.v1.MnemosService.AppendClaims:input_type -> mnemos.v1.AppendClaimsRequest
-	13, // 59: mnemos.v1.MnemosService.ListRelationships:input_type -> mnemos.v1.ListRelationshipsRequest
-	15, // 60: mnemos.v1.MnemosService.AppendRelationships:input_type -> mnemos.v1.AppendRelationshipsRequest
-	17, // 61: mnemos.v1.MnemosService.ListEmbeddings:input_type -> mnemos.v1.ListEmbeddingsRequest
-	19, // 62: mnemos.v1.MnemosService.AppendEmbeddings:input_type -> mnemos.v1.AppendEmbeddingsRequest
-	21, // 63: mnemos.v1.MnemosService.Metrics:input_type -> mnemos.v1.MetricsRequest
-	24, // 64: mnemos.v1.MnemosService.ListActions:input_type -> mnemos.v1.ListActionsRequest
-	26, // 65: mnemos.v1.MnemosService.AppendActions:input_type -> mnemos.v1.AppendActionsRequest
-	28, // 66: mnemos.v1.MnemosService.ListOutcomes:input_type -> mnemos.v1.ListOutcomesRequest
-	30, // 67: mnemos.v1.MnemosService.AppendOutcomes:input_type -> mnemos.v1.AppendOutcomesRequest
-	33, // 68: mnemos.v1.MnemosService.ListLessons:input_type -> mnemos.v1.ListLessonsRequest
-	35, // 69: mnemos.v1.MnemosService.AppendLessons:input_type -> mnemos.v1.AppendLessonsRequest
-	37, // 70: mnemos.v1.MnemosService.ListDecisions:input_type -> mnemos.v1.ListDecisionsRequest
-	39, // 71: mnemos.v1.MnemosService.AppendDecisions:input_type -> mnemos.v1.AppendDecisionsRequest
-	42, // 72: mnemos.v1.MnemosService.ListPlaybooks:input_type -> mnemos.v1.ListPlaybooksRequest
-	44, // 73: mnemos.v1.MnemosService.AppendPlaybooks:input_type -> mnemos.v1.AppendPlaybooksRequest
-	46, // 74: mnemos.v1.MnemosService.ListEntityRelationships:input_type -> mnemos.v1.ListEntityRelationshipsRequest
-	48, // 75: mnemos.v1.MnemosService.AppendEntityRelationships:input_type -> mnemos.v1.AppendEntityRelationshipsRequest
-	2,  // 76: mnemos.v1.MnemosService.Health:output_type -> mnemos.v1.HealthResponse
-	5,  // 77: mnemos.v1.MnemosService.ListEvents:output_type -> mnemos.v1.ListEventsResponse
-	20, // 78: mnemos.v1.MnemosService.AppendEvents:output_type -> mnemos.v1.AppendResponse
-	10, // 79: mnemos.v1.MnemosService.ListClaims:output_type -> mnemos.v1.ListClaimsResponse
-	20, // 80: mnemos.v1.MnemosService.AppendClaims:output_type -> mnemos.v1.AppendResponse
-	14, // 81: mnemos.v1.MnemosService.ListRelationships:output_type -> mnemos.v1.ListRelationshipsResponse
-	20, // 82: mnemos.v1.MnemosService.AppendRelationships:output_type -> mnemos.v1.AppendResponse
-	18, // 83: mnemos.v1.MnemosService.ListEmbeddings:output_type -> mnemos.v1.ListEmbeddingsResponse
-	20, // 84: mnemos.v1.MnemosService.AppendEmbeddings:output_type -> mnemos.v1.AppendResponse
-	22, // 85: mnemos.v1.MnemosService.Metrics:output_type -> mnemos.v1.MetricsResponse
-	25, // 86: mnemos.v1.MnemosService.ListActions:output_type -> mnemos.v1.ListActionsResponse
-	20, // 87: mnemos.v1.MnemosService.AppendActions:output_type -> mnemos.v1.AppendResponse
-	29, // 88: mnemos.v1.MnemosService.ListOutcomes:output_type -> mnemos.v1.ListOutcomesResponse
-	20, // 89: mnemos.v1.MnemosService.AppendOutcomes:output_type -> mnemos.v1.AppendResponse
-	34, // 90: mnemos.v1.MnemosService.ListLessons:output_type -> mnemos.v1.ListLessonsResponse
-	20, // 91: mnemos.v1.MnemosService.AppendLessons:output_type -> mnemos.v1.AppendResponse
-	38, // 92: mnemos.v1.MnemosService.ListDecisions:output_type -> mnemos.v1.ListDecisionsResponse
-	20, // 93: mnemos.v1.MnemosService.AppendDecisions:output_type -> mnemos.v1.AppendResponse
-	43, // 94: mnemos.v1.MnemosService.ListPlaybooks:output_type -> mnemos.v1.ListPlaybooksResponse
-	20, // 95: mnemos.v1.MnemosService.AppendPlaybooks:output_type -> mnemos.v1.AppendResponse
-	47, // 96: mnemos.v1.MnemosService.ListEntityRelationships:output_type -> mnemos.v1.ListEntityRelationshipsResponse
-	20, // 97: mnemos.v1.MnemosService.AppendEntityRelationships:output_type -> mnemos.v1.AppendResponse
-	76, // [76:98] is the sub-list for method output_type
-	54, // [54:76] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	52, // 8: mnemos.v1.ListClaimsRequest.as_of:type_name -> google.protobuf.Timestamp
+	52, // 9: mnemos.v1.ListClaimsRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
+	7,  // 10: mnemos.v1.ListClaimsResponse.claims:type_name -> mnemos.v1.Claim
+	8,  // 11: mnemos.v1.ListClaimsResponse.evidence:type_name -> mnemos.v1.ClaimEvidence
+	7,  // 12: mnemos.v1.AppendClaimsRequest.claims:type_name -> mnemos.v1.Claim
+	8,  // 13: mnemos.v1.AppendClaimsRequest.evidence:type_name -> mnemos.v1.ClaimEvidence
+	52, // 14: mnemos.v1.Relationship.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 15: mnemos.v1.ListRelationshipsRequest.pagination:type_name -> mnemos.v1.Pagination
+	12, // 16: mnemos.v1.ListRelationshipsResponse.relationships:type_name -> mnemos.v1.Relationship
+	12, // 17: mnemos.v1.AppendRelationshipsRequest.relationships:type_name -> mnemos.v1.Relationship
+	0,  // 18: mnemos.v1.ListEmbeddingsRequest.pagination:type_name -> mnemos.v1.Pagination
+	16, // 19: mnemos.v1.ListEmbeddingsResponse.embeddings:type_name -> mnemos.v1.Embedding
+	16, // 20: mnemos.v1.AppendEmbeddingsRequest.embeddings:type_name -> mnemos.v1.Embedding
+	52, // 21: mnemos.v1.Action.at:type_name -> google.protobuf.Timestamp
+	50, // 22: mnemos.v1.Action.metadata:type_name -> mnemos.v1.Action.MetadataEntry
+	52, // 23: mnemos.v1.Action.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 24: mnemos.v1.ListActionsRequest.pagination:type_name -> mnemos.v1.Pagination
+	23, // 25: mnemos.v1.ListActionsResponse.actions:type_name -> mnemos.v1.Action
+	23, // 26: mnemos.v1.AppendActionsRequest.actions:type_name -> mnemos.v1.Action
+	51, // 27: mnemos.v1.Outcome.metrics:type_name -> mnemos.v1.Outcome.MetricsEntry
+	52, // 28: mnemos.v1.Outcome.observed_at:type_name -> google.protobuf.Timestamp
+	52, // 29: mnemos.v1.Outcome.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 30: mnemos.v1.ListOutcomesRequest.pagination:type_name -> mnemos.v1.Pagination
+	27, // 31: mnemos.v1.ListOutcomesResponse.outcomes:type_name -> mnemos.v1.Outcome
+	27, // 32: mnemos.v1.AppendOutcomesRequest.outcomes:type_name -> mnemos.v1.Outcome
+	31, // 33: mnemos.v1.Lesson.scope:type_name -> mnemos.v1.Scope
+	52, // 34: mnemos.v1.Lesson.derived_at:type_name -> google.protobuf.Timestamp
+	52, // 35: mnemos.v1.Lesson.last_verified:type_name -> google.protobuf.Timestamp
+	0,  // 36: mnemos.v1.ListLessonsRequest.pagination:type_name -> mnemos.v1.Pagination
+	32, // 37: mnemos.v1.ListLessonsResponse.lessons:type_name -> mnemos.v1.Lesson
+	32, // 38: mnemos.v1.AppendLessonsRequest.lessons:type_name -> mnemos.v1.Lesson
+	31, // 39: mnemos.v1.Decision.scope:type_name -> mnemos.v1.Scope
+	52, // 40: mnemos.v1.Decision.chosen_at:type_name -> google.protobuf.Timestamp
+	52, // 41: mnemos.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 42: mnemos.v1.ListDecisionsRequest.pagination:type_name -> mnemos.v1.Pagination
+	36, // 43: mnemos.v1.ListDecisionsResponse.decisions:type_name -> mnemos.v1.Decision
+	36, // 44: mnemos.v1.AppendDecisionsRequest.decisions:type_name -> mnemos.v1.Decision
+	31, // 45: mnemos.v1.Playbook.scope:type_name -> mnemos.v1.Scope
+	40, // 46: mnemos.v1.Playbook.steps:type_name -> mnemos.v1.PlaybookStep
+	52, // 47: mnemos.v1.Playbook.derived_at:type_name -> google.protobuf.Timestamp
+	52, // 48: mnemos.v1.Playbook.last_verified:type_name -> google.protobuf.Timestamp
+	0,  // 49: mnemos.v1.ListPlaybooksRequest.pagination:type_name -> mnemos.v1.Pagination
+	41, // 50: mnemos.v1.ListPlaybooksResponse.playbooks:type_name -> mnemos.v1.Playbook
+	41, // 51: mnemos.v1.AppendPlaybooksRequest.playbooks:type_name -> mnemos.v1.Playbook
+	52, // 52: mnemos.v1.EntityRelationship.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 53: mnemos.v1.ListEntityRelationshipsRequest.pagination:type_name -> mnemos.v1.Pagination
+	45, // 54: mnemos.v1.ListEntityRelationshipsResponse.edges:type_name -> mnemos.v1.EntityRelationship
+	45, // 55: mnemos.v1.AppendEntityRelationshipsRequest.edges:type_name -> mnemos.v1.EntityRelationship
+	1,  // 56: mnemos.v1.MnemosService.Health:input_type -> mnemos.v1.HealthRequest
+	4,  // 57: mnemos.v1.MnemosService.ListEvents:input_type -> mnemos.v1.ListEventsRequest
+	6,  // 58: mnemos.v1.MnemosService.AppendEvents:input_type -> mnemos.v1.AppendEventsRequest
+	9,  // 59: mnemos.v1.MnemosService.ListClaims:input_type -> mnemos.v1.ListClaimsRequest
+	11, // 60: mnemos.v1.MnemosService.AppendClaims:input_type -> mnemos.v1.AppendClaimsRequest
+	13, // 61: mnemos.v1.MnemosService.ListRelationships:input_type -> mnemos.v1.ListRelationshipsRequest
+	15, // 62: mnemos.v1.MnemosService.AppendRelationships:input_type -> mnemos.v1.AppendRelationshipsRequest
+	17, // 63: mnemos.v1.MnemosService.ListEmbeddings:input_type -> mnemos.v1.ListEmbeddingsRequest
+	19, // 64: mnemos.v1.MnemosService.AppendEmbeddings:input_type -> mnemos.v1.AppendEmbeddingsRequest
+	21, // 65: mnemos.v1.MnemosService.Metrics:input_type -> mnemos.v1.MetricsRequest
+	24, // 66: mnemos.v1.MnemosService.ListActions:input_type -> mnemos.v1.ListActionsRequest
+	26, // 67: mnemos.v1.MnemosService.AppendActions:input_type -> mnemos.v1.AppendActionsRequest
+	28, // 68: mnemos.v1.MnemosService.ListOutcomes:input_type -> mnemos.v1.ListOutcomesRequest
+	30, // 69: mnemos.v1.MnemosService.AppendOutcomes:input_type -> mnemos.v1.AppendOutcomesRequest
+	33, // 70: mnemos.v1.MnemosService.ListLessons:input_type -> mnemos.v1.ListLessonsRequest
+	35, // 71: mnemos.v1.MnemosService.AppendLessons:input_type -> mnemos.v1.AppendLessonsRequest
+	37, // 72: mnemos.v1.MnemosService.ListDecisions:input_type -> mnemos.v1.ListDecisionsRequest
+	39, // 73: mnemos.v1.MnemosService.AppendDecisions:input_type -> mnemos.v1.AppendDecisionsRequest
+	42, // 74: mnemos.v1.MnemosService.ListPlaybooks:input_type -> mnemos.v1.ListPlaybooksRequest
+	44, // 75: mnemos.v1.MnemosService.AppendPlaybooks:input_type -> mnemos.v1.AppendPlaybooksRequest
+	46, // 76: mnemos.v1.MnemosService.ListEntityRelationships:input_type -> mnemos.v1.ListEntityRelationshipsRequest
+	48, // 77: mnemos.v1.MnemosService.AppendEntityRelationships:input_type -> mnemos.v1.AppendEntityRelationshipsRequest
+	2,  // 78: mnemos.v1.MnemosService.Health:output_type -> mnemos.v1.HealthResponse
+	5,  // 79: mnemos.v1.MnemosService.ListEvents:output_type -> mnemos.v1.ListEventsResponse
+	20, // 80: mnemos.v1.MnemosService.AppendEvents:output_type -> mnemos.v1.AppendResponse
+	10, // 81: mnemos.v1.MnemosService.ListClaims:output_type -> mnemos.v1.ListClaimsResponse
+	20, // 82: mnemos.v1.MnemosService.AppendClaims:output_type -> mnemos.v1.AppendResponse
+	14, // 83: mnemos.v1.MnemosService.ListRelationships:output_type -> mnemos.v1.ListRelationshipsResponse
+	20, // 84: mnemos.v1.MnemosService.AppendRelationships:output_type -> mnemos.v1.AppendResponse
+	18, // 85: mnemos.v1.MnemosService.ListEmbeddings:output_type -> mnemos.v1.ListEmbeddingsResponse
+	20, // 86: mnemos.v1.MnemosService.AppendEmbeddings:output_type -> mnemos.v1.AppendResponse
+	22, // 87: mnemos.v1.MnemosService.Metrics:output_type -> mnemos.v1.MetricsResponse
+	25, // 88: mnemos.v1.MnemosService.ListActions:output_type -> mnemos.v1.ListActionsResponse
+	20, // 89: mnemos.v1.MnemosService.AppendActions:output_type -> mnemos.v1.AppendResponse
+	29, // 90: mnemos.v1.MnemosService.ListOutcomes:output_type -> mnemos.v1.ListOutcomesResponse
+	20, // 91: mnemos.v1.MnemosService.AppendOutcomes:output_type -> mnemos.v1.AppendResponse
+	34, // 92: mnemos.v1.MnemosService.ListLessons:output_type -> mnemos.v1.ListLessonsResponse
+	20, // 93: mnemos.v1.MnemosService.AppendLessons:output_type -> mnemos.v1.AppendResponse
+	38, // 94: mnemos.v1.MnemosService.ListDecisions:output_type -> mnemos.v1.ListDecisionsResponse
+	20, // 95: mnemos.v1.MnemosService.AppendDecisions:output_type -> mnemos.v1.AppendResponse
+	43, // 96: mnemos.v1.MnemosService.ListPlaybooks:output_type -> mnemos.v1.ListPlaybooksResponse
+	20, // 97: mnemos.v1.MnemosService.AppendPlaybooks:output_type -> mnemos.v1.AppendResponse
+	47, // 98: mnemos.v1.MnemosService.ListEntityRelationships:output_type -> mnemos.v1.ListEntityRelationshipsResponse
+	20, // 99: mnemos.v1.MnemosService.AppendEntityRelationships:output_type -> mnemos.v1.AppendResponse
+	78, // [78:100] is the sub-list for method output_type
+	56, // [56:78] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_mnemos_v1_mnemos_proto_init() }

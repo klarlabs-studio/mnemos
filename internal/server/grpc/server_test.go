@@ -25,6 +25,16 @@ func testLogger() *bolt.Logger {
 }
 
 func startTestServer(t *testing.T) (mnemosv1.MnemosServiceClient, func()) {
+	client, _, cleanup := startTestServerWithConn(t)
+	return client, cleanup
+}
+
+// startTestServerWithConn is the same wiring as startTestServer but
+// also returns the underlying *store.Conn so tests that need to bypass
+// gRPC (e.g. to call SetValidity, which is an internal lifecycle path
+// not exposed on the wire) can do so without standing up a second
+// store.
+func startTestServerWithConn(t *testing.T) (mnemosv1.MnemosServiceClient, *store.Conn, func()) {
 	t.Helper()
 	conn, err := store.Open(context.Background(), "memory://")
 	if err != nil {
@@ -53,7 +63,7 @@ func startTestServer(t *testing.T) (mnemosv1.MnemosServiceClient, func()) {
 		srv.GracefulStop()
 		_ = conn.Close()
 	}
-	return client, cleanup
+	return client, conn, cleanup
 }
 
 func TestHealth(t *testing.T) {
@@ -198,6 +208,88 @@ func TestListClaims_RunIDFilter_UnknownRunFailsClosed(t *testing.T) {
 	}
 	if len(list.Claims) != 0 {
 		t.Fatalf("unknown run_id leaked %d claims", len(list.Claims))
+	}
+}
+
+// TestListClaims_AsOfFilter pins gRPC parity with the HTTP ?as_of=
+// time-travel query: a claim with a closed [valid_from, valid_to)
+// window must surface only when as_of falls inside that window.
+// Without this, downstream agents that talk gRPC can't ask "what was
+// true on date X".
+func TestListClaims_AsOfFilter(t *testing.T) {
+	client, conn, cleanup := startTestServerWithConn(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	// Anchor the test instead of "now" so SetValidity's bookkeeping is
+	// deterministic regardless of wall-clock drift.
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	earlyCreated := timestamppb.New(t0)
+	if _, err := client.AppendClaims(ctx, &mnemosv1.AppendClaimsRequest{
+		Claims: []*mnemosv1.Claim{
+			{Id: "cl-old", Text: "old fact", Type: "fact", Confidence: 0.9, Status: "active", CreatedAt: earlyCreated},
+			{Id: "cl-current", Text: "current fact", Type: "fact", Confidence: 0.9, Status: "active", CreatedAt: earlyCreated},
+		},
+	}); err != nil {
+		t.Fatalf("AppendClaims: %v", err)
+	}
+
+	// cl-old's window closes at 2026-03-01. cl-current stays open.
+	// Use the store directly because the gRPC surface doesn't expose
+	// SetValidity (it's an internal lifecycle path).
+	if err := conn.Claims.SetValidity(ctx, "cl-old", t0.AddDate(0, 2, 0)); err != nil {
+		t.Fatalf("SetValidity: %v", err)
+	}
+
+	// Query as of 2026-02-01 — within cl-old's window, so both surface.
+	asOfFeb := timestamppb.New(t0.AddDate(0, 1, 0))
+	list, err := client.ListClaims(ctx, &mnemosv1.ListClaimsRequest{AsOf: asOfFeb})
+	if err != nil {
+		t.Fatalf("ListClaims as_of Feb: %v", err)
+	}
+	if len(list.Claims) != 2 {
+		t.Errorf("as_of=Feb got %d claims, want 2", len(list.Claims))
+	}
+
+	// Query as of 2026-04-01 — after cl-old's valid_to. Only cl-current
+	// survives, cl-old must drop.
+	asOfApr := timestamppb.New(t0.AddDate(0, 3, 0))
+	list, err = client.ListClaims(ctx, &mnemosv1.ListClaimsRequest{AsOf: asOfApr})
+	if err != nil {
+		t.Fatalf("ListClaims as_of Apr: %v", err)
+	}
+	if len(list.Claims) != 1 || list.Claims[0].Id != "cl-current" {
+		t.Errorf("as_of=Apr leaked superseded claim: %v", list.Claims)
+	}
+}
+
+// TestListClaims_RecordedAsOfFilter pins the ingestion-time axis: a
+// claim recorded after the query timestamp must drop, so callers can
+// reproduce a snapshot of the store as it stood at a past moment.
+func TestListClaims_RecordedAsOfFilter(t *testing.T) {
+	client, cleanup := startTestServer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	early := timestamppb.New(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	late := timestamppb.New(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC))
+	if _, err := client.AppendClaims(ctx, &mnemosv1.AppendClaimsRequest{
+		Claims: []*mnemosv1.Claim{
+			{Id: "cl-early", Text: "early", Type: "fact", Confidence: 0.9, Status: "active", CreatedAt: early},
+			{Id: "cl-late", Text: "late", Type: "fact", Confidence: 0.9, Status: "active", CreatedAt: late},
+		},
+	}); err != nil {
+		t.Fatalf("AppendClaims: %v", err)
+	}
+
+	// recorded_as_of = March 2026 — only cl-early should survive.
+	cutoff := timestamppb.New(time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	list, err := client.ListClaims(ctx, &mnemosv1.ListClaimsRequest{RecordedAsOf: cutoff})
+	if err != nil {
+		t.Fatalf("ListClaims: %v", err)
+	}
+	if len(list.Claims) != 1 || list.Claims[0].Id != "cl-early" {
+		t.Errorf("recorded_as_of=March leaked late row: %v", list.Claims)
 	}
 }
 
