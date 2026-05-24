@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"github.com/felixgeelhaar/mnemos/internal/embedding"
+	"github.com/felixgeelhaar/mnemos/internal/ports"
 )
 
 // EmbeddingRepository is the in-memory implementation of
@@ -77,6 +79,63 @@ func (r EmbeddingRepository) DeleteAll(_ context.Context) error {
 	defer r.state.mu.Unlock()
 	r.state.embeddings = map[embeddingKey]storedEmbedding{}
 	return nil
+}
+
+// SearchClaimsByVector ranks entity_type='claim' embeddings by cosine
+// similarity against queryVector and returns up to topK hits with
+// similarity >= minSimilarity, ordered by similarity desc.
+//
+// When candidateClaimIDs is non-nil it acts as a hard allowlist —
+// claims not in the set are skipped before scoring. The handler uses
+// this to enforce tenant scoping (e.g. via run_id → events →
+// claim_evidence) so the searcher never has to know about RunIDs.
+// candidateClaimIDs of len 0 (non-nil empty map) matches nothing, by
+// design: a tenant whose run_id resolves to zero events must NOT see a
+// corpus-wide dump.
+func (r EmbeddingRepository) SearchClaimsByVector(
+	_ context.Context,
+	queryVector []float32,
+	candidateClaimIDs map[string]struct{},
+	topK int,
+	minSimilarity float64,
+) ([]ports.ClaimSimilarityHit, error) {
+	if len(queryVector) == 0 {
+		return nil, nil
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+
+	hits := make([]ports.ClaimSimilarityHit, 0)
+	for k, v := range r.state.embeddings {
+		if k.EntityType != "claim" {
+			continue
+		}
+		if candidateClaimIDs != nil {
+			if _, ok := candidateClaimIDs[k.EntityID]; !ok {
+				continue
+			}
+		}
+		sim, err := embedding.CosineSimilarity(queryVector, v.Vector)
+		if err != nil {
+			continue
+		}
+		score := float64(sim)
+		if score < minSimilarity {
+			continue
+		}
+		hits = append(hits, ports.ClaimSimilarityHit{
+			ClaimID:    k.EntityID,
+			Similarity: score,
+			Model:      v.Model,
+		})
+	}
+	sort.Slice(hits, func(i, j int) bool {
+		return hits[i].Similarity > hits[j].Similarity
+	})
+	if topK > 0 && len(hits) > topK {
+		hits = hits[:topK]
+	}
+	return hits, nil
 }
 
 // ListAll returns every embedding row, ordered by created_at

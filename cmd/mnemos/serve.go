@@ -23,12 +23,26 @@ import (
 	"github.com/felixgeelhaar/bolt"
 	"github.com/felixgeelhaar/mnemos/internal/auth"
 	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"github.com/felixgeelhaar/mnemos/internal/embedding"
 	markdownpkg "github.com/felixgeelhaar/mnemos/internal/markdown"
+	"github.com/felixgeelhaar/mnemos/internal/ports"
 	"github.com/felixgeelhaar/mnemos/internal/query"
 	mnemosgrpc "github.com/felixgeelhaar/mnemos/internal/server/grpc"
 	"github.com/felixgeelhaar/mnemos/internal/store"
 	"google.golang.org/grpc"
 )
+
+// embedderResolver returns the embedding client used by the semantic-
+// search branch of /v1/claims. Production reads env via
+// embedding.ConfigFromEnv; tests override this hook to inject a stub
+// without touching env state.
+var embedderResolver = func() (embedding.Client, error) {
+	cfg, err := embedding.ConfigFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	return embedding.NewClient(cfg)
+}
 
 //go:embed web/index.html
 var webIndexHTML []byte
@@ -637,6 +651,11 @@ type claimDTO struct {
 	// Visibility gates audience access: personal | team | org.
 	// Defaults to "team" when omitted.
 	Visibility string `json:"visibility,omitempty"`
+	// Similarity is populated only by the semantic-search branch
+	// (?similar_to=...); it carries the cosine similarity (1.0 =
+	// identical) between the query embedding and this claim's
+	// embedding. Absent from the standard list response.
+	Similarity float64 `json:"similarity,omitempty"`
 }
 
 func makeClaimsHandler(conn *store.Conn) http.HandlerFunc {
@@ -653,6 +672,16 @@ func makeClaimsHandler(conn *store.Conn) http.HandlerFunc {
 }
 
 func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
+	// Semantic-search branch — short-circuits the rest of the
+	// filter pipeline. similar_to + run_id is the agent's episodic-
+	// recall path; everything else (type/status/as_of) is unrelated
+	// metadata filtering that doesn't compose meaningfully with
+	// ranked retrieval.
+	if similarTo := strings.TrimSpace(r.URL.Query().Get("similar_to")); similarTo != "" {
+		semanticSearchClaimsHandler(conn, w, r, similarTo)
+		return
+	}
+
 	limit, offset := parsePaginationFromQuery(r)
 	typeFilter := r.URL.Query().Get("type")
 	statusFilter := r.URL.Query().Get("status")
@@ -807,6 +836,150 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, claimsResponse{Claims: claims, Evidence: evidence, Total: total, Limit: limit, Offset: offset})
+}
+
+// semanticSearchClaimsHandler ranks claims by cosine similarity
+// against the embedding of the `similar_to` query. The tenant boundary
+// is the same `run_id` allowlist the standard list path uses:
+// similar_to REQUIRES run_id so a missing query param can never
+// produce a cross-tenant corpus dump.
+//
+// Why semantic search lives behind run_id-required rather than the
+// list path's optional run_id: the standard list path is auditable
+// (an operator can post-filter, every row is exact-match). Ranked
+// retrieval is the opposite — it surfaces "close enough" rows, so
+// without a hard tenant gate a forgotten run_id silently leaks the
+// nearest neighbour across tenants. Fail-closed beats audit-after.
+func semanticSearchClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request, similarTo string) {
+	runIDFilter := strings.TrimSpace(r.URL.Query().Get("run_id"))
+	if runIDFilter == "" {
+		writeError(w, http.StatusBadRequest, "similar_to requires run_id to scope the search (tenant boundary)")
+		return
+	}
+
+	topK := 10
+	if raw := r.URL.Query().Get("top_k"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n <= 0 || n > 100 {
+			writeError(w, http.StatusBadRequest, "top_k must be a positive integer ≤ 100")
+			return
+		}
+		topK = n
+	}
+	minSim := 0.0
+	if raw := r.URL.Query().Get("min_similarity"); raw != "" {
+		f, err := strconv.ParseFloat(raw, 64)
+		if err != nil || f < 0 || f > 1 {
+			writeError(w, http.StatusBadRequest, "min_similarity must be a float in [0, 1]")
+			return
+		}
+		minSim = f
+	}
+
+	searcher, ok := conn.Embeddings.(ports.ClaimSimilaritySearcher)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "current storage backend does not support vector similarity search")
+		return
+	}
+	embedder, err := embedderResolver()
+	if err != nil {
+		writeError(w, http.StatusNotImplemented, "embedding provider not configured (set MNEMOS_EMBED_PROVIDER)")
+		return
+	}
+
+	ctx := r.Context()
+
+	// Resolve the run_id allowlist to a candidate claim-id set. The
+	// flow is run_id → events → claim_evidence → claim_ids; same
+	// boundary as the standard list path so a single audit covers
+	// both.
+	events, err := conn.Events.ListByRunID(ctx, runIDFilter)
+	if err != nil {
+		writeInternalError(w, "list events by run id", err)
+		return
+	}
+	if len(events) == 0 {
+		writeJSON(w, http.StatusOK, claimsResponse{Claims: []claimDTO{}, Limit: topK, Offset: 0})
+		return
+	}
+	allowedEventIDs := make(map[string]struct{}, len(events))
+	for _, e := range events {
+		allowedEventIDs[e.ID] = struct{}{}
+	}
+	allEvidence, err := conn.Claims.ListAllEvidence(ctx)
+	if err != nil {
+		writeInternalError(w, "list evidence for semantic search", err)
+		return
+	}
+	candidateClaimIDs := make(map[string]struct{})
+	for _, link := range allEvidence {
+		if _, ok := allowedEventIDs[link.EventID]; ok {
+			candidateClaimIDs[link.ClaimID] = struct{}{}
+		}
+	}
+	if len(candidateClaimIDs) == 0 {
+		writeJSON(w, http.StatusOK, claimsResponse{Claims: []claimDTO{}, Limit: topK, Offset: 0})
+		return
+	}
+
+	vectors, err := embedder.Embed(ctx, []string{similarTo})
+	if err != nil {
+		writeInternalError(w, "embed query", err)
+		return
+	}
+	if len(vectors) == 0 || len(vectors[0]) == 0 {
+		writeInternalError(w, "embed query", fmt.Errorf("provider returned empty vector"))
+		return
+	}
+
+	hits, err := searcher.SearchClaimsByVector(ctx, vectors[0], candidateClaimIDs, topK, minSim)
+	if err != nil {
+		writeInternalError(w, "similarity search", err)
+		return
+	}
+	if len(hits) == 0 {
+		writeJSON(w, http.StatusOK, claimsResponse{Claims: []claimDTO{}, Limit: topK, Offset: 0})
+		return
+	}
+
+	ids := make([]string, 0, len(hits))
+	for _, h := range hits {
+		ids = append(ids, h.ClaimID)
+	}
+	claims, err := conn.Claims.ListByIDs(ctx, ids)
+	if err != nil {
+		writeInternalError(w, "load claims by ids", err)
+		return
+	}
+	claimByID := make(map[string]domain.Claim, len(claims))
+	for _, c := range claims {
+		claimByID[c.ID] = c
+	}
+
+	// Preserve the ranked order: iterate hits, not claimByID.
+	out := make([]claimDTO, 0, len(hits))
+	for _, h := range hits {
+		c, ok := claimByID[h.ClaimID]
+		if !ok {
+			continue
+		}
+		out = append(out, claimDTO{
+			ID:         c.ID,
+			Text:       c.Text,
+			Type:       string(c.Type),
+			Confidence: c.Confidence,
+			Status:     string(c.Status),
+			CreatedAt:  c.CreatedAt.UTC().Format(time.RFC3339),
+			Visibility: string(c.Visibility),
+			Similarity: h.Similarity,
+		})
+	}
+	writeJSON(w, http.StatusOK, claimsResponse{
+		Claims: out,
+		Total:  len(out),
+		Limit:  topK,
+		Offset: 0,
+	})
 }
 
 // (loadEvidenceForClaims is gone — folded into listClaimsHandler via

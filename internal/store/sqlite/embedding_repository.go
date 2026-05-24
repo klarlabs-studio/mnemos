@@ -9,8 +9,68 @@ import (
 
 	"github.com/felixgeelhaar/mnemos/internal/domain"
 	"github.com/felixgeelhaar/mnemos/internal/embedding"
+	"github.com/felixgeelhaar/mnemos/internal/ports"
 	"github.com/felixgeelhaar/mnemos/internal/store/sqlite/sqlcgen"
 )
+
+// SearchClaimsByVector ranks entity_type='claim' embeddings by cosine
+// similarity against queryVector and returns up to topK hits with
+// similarity >= minSimilarity, ordered by similarity desc. Scoring is
+// performed in Go after the rows are fetched — sqlite has no native
+// vector ops; a future sqlite-vec backend can push this down without
+// changing the port contract.
+//
+// candidateClaimIDs acts as a hard allowlist when non-nil; an empty
+// (but non-nil) map matches nothing, by design (a tenant scoped to
+// zero claims must not see a corpus-wide dump).
+func (r EmbeddingRepository) SearchClaimsByVector(
+	ctx context.Context,
+	queryVector []float32,
+	candidateClaimIDs map[string]struct{},
+	topK int,
+	minSimilarity float64,
+) ([]ports.ClaimSimilarityHit, error) {
+	if len(queryVector) == 0 {
+		return nil, nil
+	}
+	if candidateClaimIDs != nil && len(candidateClaimIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := r.q.ListEmbeddingsByEntityType(ctx, "claim")
+	if err != nil {
+		return nil, fmt.Errorf("list claim embeddings: %w", err)
+	}
+	hits := make([]ports.ClaimSimilarityHit, 0, len(rows))
+	for _, row := range rows {
+		if candidateClaimIDs != nil {
+			if _, ok := candidateClaimIDs[row.EntityID]; !ok {
+				continue
+			}
+		}
+		vec, err := embedding.DecodeVector(row.Vector)
+		if err != nil {
+			continue
+		}
+		sim, err := embedding.CosineSimilarity(queryVector, vec)
+		if err != nil {
+			continue
+		}
+		score := float64(sim)
+		if score < minSimilarity {
+			continue
+		}
+		hits = append(hits, ports.ClaimSimilarityHit{
+			ClaimID:    row.EntityID,
+			Similarity: score,
+			Model:      row.Model,
+		})
+	}
+	sortHitsDesc(hits)
+	if topK > 0 && len(hits) > topK {
+		hits = hits[:topK]
+	}
+	return hits, nil
+}
 
 // EmbeddingRepository provides SQLite-backed storage for vector embeddings.
 type EmbeddingRepository struct {
@@ -139,6 +199,14 @@ func (r EmbeddingRepository) ListAll(ctx context.Context) ([]domain.EmbeddingRec
 		return nil, fmt.Errorf("iterate embedding rows: %w", err)
 	}
 	return out, nil
+}
+
+func sortHitsDesc(hits []ports.ClaimSimilarityHit) {
+	for i := 1; i < len(hits); i++ {
+		for j := i; j > 0 && hits[j].Similarity > hits[j-1].Similarity; j-- {
+			hits[j-1], hits[j] = hits[j], hits[j-1]
+		}
+	}
 }
 
 func mapSQLEmbedding(row sqlcgen.Embedding) (domain.EmbeddingRecord, error) {

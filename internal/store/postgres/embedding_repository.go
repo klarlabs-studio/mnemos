@@ -8,7 +8,85 @@ import (
 
 	"github.com/felixgeelhaar/mnemos/internal/domain"
 	"github.com/felixgeelhaar/mnemos/internal/embedding"
+	"github.com/felixgeelhaar/mnemos/internal/ports"
 )
+
+// SearchClaimsByVector ranks entity_type='claim' embeddings by cosine
+// similarity against queryVector. The scoring is performed in Go since
+// the embedding column is stored as raw bytea; a future pgvector
+// migration can push the cosine into SQL without changing the port
+// contract.
+//
+// candidateClaimIDs acts as a hard allowlist when non-nil; an empty
+// (but non-nil) map matches nothing, by design.
+func (r EmbeddingRepository) SearchClaimsByVector(
+	ctx context.Context,
+	queryVector []float32,
+	candidateClaimIDs map[string]struct{},
+	topK int,
+	minSimilarity float64,
+) ([]ports.ClaimSimilarityHit, error) {
+	if len(queryVector) == 0 {
+		return nil, nil
+	}
+	if candidateClaimIDs != nil && len(candidateClaimIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(
+		`SELECT entity_id, vector, model FROM %s WHERE entity_type = $1`,
+		qualify(r.ns, "embeddings"),
+	), "claim")
+	if err != nil {
+		return nil, fmt.Errorf("list claim embeddings: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	hits := make([]ports.ClaimSimilarityHit, 0)
+	for rows.Next() {
+		var (
+			entityID string
+			blob     []byte
+			model    string
+		)
+		if err := rows.Scan(&entityID, &blob, &model); err != nil {
+			return nil, fmt.Errorf("scan claim embedding: %w", err)
+		}
+		if candidateClaimIDs != nil {
+			if _, ok := candidateClaimIDs[entityID]; !ok {
+				continue
+			}
+		}
+		vec, err := embedding.DecodeVector(blob)
+		if err != nil {
+			continue
+		}
+		sim, err := embedding.CosineSimilarity(queryVector, vec)
+		if err != nil {
+			continue
+		}
+		score := float64(sim)
+		if score < minSimilarity {
+			continue
+		}
+		hits = append(hits, ports.ClaimSimilarityHit{
+			ClaimID:    entityID,
+			Similarity: score,
+			Model:      model,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate claim embeddings: %w", err)
+	}
+	for i := 1; i < len(hits); i++ {
+		for j := i; j > 0 && hits[j].Similarity > hits[j-1].Similarity; j-- {
+			hits[j-1], hits[j] = hits[j], hits[j-1]
+		}
+	}
+	if topK > 0 && len(hits) > topK {
+		hits = hits[:topK]
+	}
+	return hits, nil
+}
 
 // EmbeddingRepository persists vector embeddings as bytea, using the
 // same little-endian float32 encoding as the SQLite backend

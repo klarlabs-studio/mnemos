@@ -191,6 +191,40 @@ type EmbeddingRepository interface {
 	DeleteAll(ctx context.Context) error
 }
 
+// ClaimSimilarityHit is one row of a vector-similarity search over
+// claim embeddings: the claim id, the cosine similarity (1.0 =
+// identical, 0.0 = orthogonal), and the model the stored vector was
+// generated with. Callers compare Model against their query embedding
+// model so a quietly-different stored model can't masquerade as a
+// match.
+type ClaimSimilarityHit struct {
+	ClaimID    string
+	Similarity float64
+	Model      string
+}
+
+// ClaimSimilaritySearcher is the optional capability to rank claims by
+// cosine similarity against a query vector. Implementations iterate
+// embeddings with entity_type='claim', restrict to candidateClaimIDs
+// when the set is non-nil (server-side tenant boundary applied
+// upstream), and return up to topK hits with similarity >=
+// minSimilarity ordered by similarity desc.
+//
+// The candidate-id set is the tenant-isolation seam: the HTTP handler
+// computes "claims this caller is allowed to see" — typically by
+// resolving run_id → events → claim_evidence — and hands the result
+// down so the searcher never has to know about RunIDs. A nil set means
+// "search the entire corpus" (admin / unscoped queries).
+type ClaimSimilaritySearcher interface {
+	SearchClaimsByVector(
+		ctx context.Context,
+		queryVector []float32,
+		candidateClaimIDs map[string]struct{},
+		topK int,
+		minSimilarity float64,
+	) ([]ClaimSimilarityHit, error)
+}
+
 // TextHit is one row of a keyword search: the matched row's id and a
 // positive relevance score (higher is better). Returned by
 // TextSearcher implementations so the query engine can rank without
