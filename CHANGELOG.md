@@ -6,9 +6,94 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ## [Unreleased]
 
-Phase 1-8 follow-ups since the v0.12.0 gRPC release.
+## [0.16.0] — 2026-05-24
+
+Agent-memory release. Eleven issues land that turn mnemos from a
+"claim store + query engine" into the full agent-side memory layer:
+LLM-callable tools, semantic recall, reaction loop, bitemporal
+queries, audit trail, GDPR cascade delete, federation export.
 
 ### Added
+- **Embedding-aware semantic search** (#36) —
+  `GET /v1/claims?similar_to=<text>&run_id=<scope>` ranks claims by
+  cosine similarity against the embedding of the query text. New
+  optional port `ports.ClaimSimilaritySearcher` (memory + sqlite +
+  postgres + mysql implementations); libsql inherits via sqlite.
+  Scoring runs in Go over the existing float32 blob/JSONB format;
+  a future pgvector / sqlite-vec swap can push the cosine into SQL
+  without touching the port contract. `run_id` is REQUIRED on
+  `similar_to` — ranked retrieval is a tenant-leak vector without a
+  hard scope gate (fail-closed, not audit-after).
+- **MCP memory-management tools** (#41) — `remember` (claim + event
+  + evidence link, optional `valid_until`), `forget` (status flips
+  to `deprecated`, audit preserved), `update` (rewrite text +
+  optional confidence), `search_memory` (semantic recall via #36).
+  Registered next to the existing `memory_*` governance tools;
+  `parityMatrix` carries them so future drift fails the surface-
+  drift test.
+- **OpenAI / Anthropic tool-call schemas** (#37) — `client/tools`
+  Go package returns ready-to-attach `OpenAITool` /
+  `AnthropicTool` definitions for the four memory verbs;
+  `client/tools/snapshots/{openai,anthropic}.json` ships the same
+  payload as data so non-Go callers can fetch the schemas without
+  binding the Go package. The two vendor formats are projected
+  from one `definition()` source so they can never drift apart.
+- **gRPC `as_of` / `recorded_as_of` parity on `ListClaims`** (#35)
+  — Bitemporal time-travel queries reach gRPC: `ListClaimsRequest`
+  grows `AsOf` and `RecordedAsOf` `Timestamp` fields, the handler
+  wires both into the existing filter loop via
+  `IsValidAt` + `CreatedAt` comparison. Non-HTTP callers can now
+  ask "what was true on date X" and "what did the store look like
+  at moment Y".
+- **GDPR Art.17 cascading delete** (#42) —
+  `DELETE /v1/claims?run_id=<prefix>` removes claims (and their
+  evidence links, embeddings, status history, claim-only
+  relationships) plus the events themselves. Per-table counts +
+  request_id in the response so compliance audits get concrete
+  numbers. Idempotent: a second call returns 200 with zero counts.
+  Shared-claim handling preserves a claim linked to multiple runs
+  when only one run is wiped.
+- **`buf lint` + `buf breaking` CI guard** (#44) — STANDARD ruleset
+  minus two opinions (`RPC_RESPONSE_STANDARD_NAME`,
+  `RPC_REQUEST_RESPONSE_UNIQUE`) that would force breaking renames.
+  `buf breaking` runs WIRE_JSON against main so a JSON-over-HTTP
+  rename matters as much as a tag-number change. Companion
+  workflow ships in the chronos sister repo.
+- **`confidence_components` JSONB on claims** (#39) — decomposes
+  the scalar `Confidence` into named contributors (`data_quality`,
+  `recency`, `corroboration`, `source_authority`, …). The scalar
+  stays the canonical "overall" number for back-compat. Persisted
+  as a new column (sqlite + postgres + mysql); schema-migrated
+  idempotently via the existing column-add ladder.
+- **`POST /v1/claims/{id}/feedback` reaction loop** (#40) — users
+  push back ("not helpful") and the signal flows back into the
+  claim: scalar `Confidence` decays by `MNEMOS_FEEDBACK_DECAY`
+  (default 0.9), the `corroboration` component decays in lockstep,
+  consecutive-negative streak is tracked in a new `claim_feedback`
+  side table. After `MNEMOS_FEEDBACK_CONTEST_THRESHOLD` (default 3)
+  consecutive negatives the status auto-transitions to `contested`.
+  Positive feedback resets the streak and bumps `helpful_count`.
+  Requires `claims:write` scope.
+- **`claim_versions` audit trail + `GET /v1/claims/{id}/history`**
+  (#38) — every `Upsert` path appends a snapshot to a new
+  `claim_versions` side table (text, confidence, status,
+  written_at, written_by). New port
+  `ports.ClaimVersionRepository`; sqlite + libsql + memory back it.
+  History returns newest-first so a consumer diffing reads
+  `versions[0].text` vs `versions[1].text` without re-sorting.
+  Required for GDPR Art.17 erasure proof and agent drift analysis.
+- **`GET /v1/federation/export`** (#45) — opt-in
+  (`MNEMOS_FEDERATION_ENABLED=true`) anonymized playbook export.
+  Trigger / statement / steps / confidence / lesson_count
+  preserved; playbook id, created_by, derived_from_lessons ids,
+  scope tuple, source-tag stripped. Companion to chronos #30.
+- **Joint chronos+mnemos integration harness** (#46) —
+  `test/integration/docker-compose.yml` stands the stack up;
+  `test/integration/smoke_test.go` (//go:build integration) pins
+  the cross-talk contracts. Nightly +
+  `repository_dispatch[chronos-main-advanced]` CI re-runs the
+  smoke against the sister repo's advancing main so version-skew
+  bugs surface within 24h.
 - **Phase 1 — causal edges** (`feat(relate)`): `causes`, `caused_by`, `action_of`, `outcome_of`, `validates`, `refutes`, `derived_from` extend the relationship graph beyond logical agreement. `relate.DetectCausal` infers from event-time + shared-entity signals; optional `relate.DetectCausalLLM` augments borderline pairs.
 - **Phase 2 — actions + outcomes**: `mnemos action record` / `mnemos outcome record`; Prometheus pull adapter (`internal/adapters/outcomes/prometheus.go`) emits Outcomes from PromQL instant queries.
 - **Phase 3 — lessons synthesis**: `mnemos synthesize` clusters action→outcome chains into validated Lessons; `mnemos lessons` lists them.
