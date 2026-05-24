@@ -179,6 +179,9 @@ var parityMatrix = []parityEntry{
 
 	// Trust / epistemic provenance.
 	{Capability: "which test to trust", MCPTool: "which_test_to_trust", HTTPRoute: parityNA, GRPCMethod: parityNA},
+
+	// Federation export (HTTP-only, opt-in). See #45.
+	{Capability: "federation export (anonymized playbooks)", MCPTool: parityNA, HTTPRoute: "/v1/federation/export", GRPCMethod: parityNA},
 }
 
 // repoRoot walks up from the test's working directory looking for go.mod.

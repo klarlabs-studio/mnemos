@@ -289,6 +289,7 @@ func newServerMux(conn *store.Conn) http.Handler {
 	mux.HandleFunc("/v1/search", makeSearchHandler(conn))
 	mux.HandleFunc("/v1/claims/", makeClaimSubresourceHandler(conn))
 	mux.HandleFunc("/v1/incidents", makeIncidentsHandler(conn))
+	mux.HandleFunc("/v1/federation/export", makeFederationExportHandler(conn))
 	mux.HandleFunc("/v1/incidents/", makeIncidentSubresourceHandler(conn))
 	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
