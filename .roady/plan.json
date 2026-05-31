@@ -32,7 +32,7 @@
     {
       "id": "task-parser-and-event-normalization",
       "title": "Implement Parser and Event Normalization",
-      "description": "Implement the feature: Parser and Event Normalization. Normalize heterogeneous inputs into immutable events with schema versioning and source linkage, forming the canonical Input -\u003e Event transformation.",
+      "description": "Implement the feature: Parser and Event Normalization. Normalize heterogeneous inputs into immutable events with schema versioning and source linkage, forming the canonical Input -> Event transformation.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -230,7 +230,7 @@
     {
       "id": "task-push/pull-synchronization-with-remote-registry",
       "title": "Implement Push/Pull Synchronization with Remote Registry",
-      "description": "Implement the feature: Push/Pull Synchronization with Remote Registry. Add `mnemos registry connect \u003curl\u003e` to wire a local project to a remote registry, plus push and pull semantics that mirror git's model. Push sends local events/claims/relationships to the registry; pull fetches remote knowledge and merges by source hash + run_id. Automatic sync hooks into process/query when enabled. Depends on Knowledge Registry Server.",
+      "description": "Implement the feature: Push/Pull Synchronization with Remote Registry. Add `mnemos registry connect <url>` to wire a local project to a remote registry, plus push and pull semantics that mirror git's model. Push sends local events/claims/relationships to the registry; pull fetches remote knowledge and merges by source hash + run_id. Automatic sync hooks into process/query when enabled. Depends on Knowledge Registry Server.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -302,7 +302,7 @@
     {
       "id": "task-multi-backend-storage-mnemos_db_url",
       "title": "Implement Multi-Backend Storage MNEMOS_DB_URL",
-      "description": "Implement the feature: Multi-Backend Storage MNEMOS_DB_URL. Phase 1b of ADR 0001: introduce a `MNEMOS_DB_URL` environment variable that takes precedence over `MNEMOS_DB_PATH` and is the canonical way to point Mnemos at any registered storage backend. Add a `resolveDSN()` helper in cmd/mnemos that returns the URL when set, otherwise wraps the legacy resolved file path as `sqlite:///\u003cpath\u003e`. Add an `openConn(ctx)` helper that calls `store.Open(ctx, resolveDSN())` so future call sites can switch by replacing two lines. Migrate the `mnemos doctor` deep-probe to use `openConn` as the proof-of-life consumer (it already exercises the deepest paths and is a natural smoke test for DSN resolution). Update help text + CLAUDE.md so MNEMOS_DB_URL appears alongside MNEMOS_DB_PATH. Mass call-site migration stays in a separate later phase.",
+      "description": "Implement the feature: Multi-Backend Storage MNEMOS_DB_URL. Phase 1b of ADR 0001: introduce a `MNEMOS_DB_URL` environment variable that takes precedence over `MNEMOS_DB_PATH` and is the canonical way to point Mnemos at any registered storage backend. Add a `resolveDSN()` helper in cmd/mnemos that returns the URL when set, otherwise wraps the legacy resolved file path as `sqlite:///<path>`. Add an `openConn(ctx)` helper that calls `store.Open(ctx, resolveDSN())` so future call sites can switch by replacing two lines. Migrate the `mnemos doctor` deep-probe to use `openConn` as the proof-of-life consumer (it already exercises the deepest paths and is a natural smoke test for DSN resolution). Update help text + CLAUDE.md so MNEMOS_DB_URL appears alongside MNEMOS_DB_PATH. Mass call-site migration stays in a separate later phase.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -365,7 +365,7 @@
     {
       "id": "task-multi-backend-storage-mysql-mariadb-provider",
       "title": "Implement Multi-Backend Storage MySQL MariaDB provider",
-      "description": "Implement the feature: Multi-Backend Storage MySQL MariaDB provider. Phase 4b of ADR 0001: add internal/store/mysql/ provider implementing every port interface, registered for `mysql://` and `mariadb://` schemes. Uses github.com/go-sql-driver/mysql + database/sql. Per ADR 0001 §3, MySQL has no per-tenant schemas — namespace translates to \"use a separate database (CREATE DATABASE IF NOT EXISTS \u003cns\u003e; USE \u003cns\u003e)\". Schema SQL adapted: jsonb → JSON, bytea → LONGBLOB, bigserial → BIGINT AUTO_INCREMENT, timestamptz → DATETIME(6), now() → CURRENT_TIMESTAMP. Integration tests gated on TEST_MYSQL_DSN. MariaDB shares the wire protocol so the same provider serves both.",
+      "description": "Implement the feature: Multi-Backend Storage MySQL MariaDB provider. Phase 4b of ADR 0001: add internal/store/mysql/ provider implementing every port interface, registered for `mysql://` and `mariadb://` schemes. Uses github.com/go-sql-driver/mysql + database/sql. Per ADR 0001 §3, MySQL has no per-tenant schemas — namespace translates to \"use a separate database (CREATE DATABASE IF NOT EXISTS <ns>; USE <ns>)\". Schema SQL adapted: jsonb → JSON, bytea → LONGBLOB, bigserial → BIGINT AUTO_INCREMENT, timestamptz → DATETIME(6), now() → CURRENT_TIMESTAMP. Integration tests gated on TEST_MYSQL_DSN. MariaDB shares the wire protocol so the same provider serves both.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -374,7 +374,7 @@
     {
       "id": "task-multi-backend-storage-ci-integration-job",
       "title": "Implement Multi-Backend Storage CI integration job",
-      "description": "Implement the feature: Multi-Backend Storage CI integration job. Phase 5 of ADR 0001: lock in the Postgres and MySQL integration tests with a CI job. Add a `database-providers` GitHub Actions job that runs alongside the existing `Build \u0026 Test` job, spinning up postgres:16 + mysql:8 services and running `go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/` with TEST_POSTGRES_DSN + TEST_MYSQL_DSN populated. Add a `make test-integration` target so developers can run the same suite locally.",
+      "description": "Implement the feature: Multi-Backend Storage CI integration job. Phase 5 of ADR 0001: lock in the Postgres and MySQL integration tests with a CI job. Add a `database-providers` GitHub Actions job that runs alongside the existing `Build & Test` job, spinning up postgres:16 + mysql:8 services and running `go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/` with TEST_POSTGRES_DSN + TEST_MYSQL_DSN populated. Add a `make test-integration` target so developers can run the same suite locally.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -437,7 +437,7 @@
     {
       "id": "task-temporal-validity-hardening",
       "title": "Implement Temporal Validity Hardening",
-      "description": "Implement the feature: Temporal Validity Hardening. Phase 4. Strengthen existing valid_from/valid_to with stale-detection signals. Add columns: claims.last_verified, claims.verify_count, claims.half_life_days (per-claim override of hardcoded 90d default in internal/trust/trust.go). Surface staleness: Answer.StaleClaims[] in query results when freshness \u003c threshold. New CLI: `mnemos verify \u003cclaim\u003e` re-confirms against new events, bumps last_verified + verify_count, recomputes trust. Trust formula stays confidence × corroboration × freshness but freshness now uses per-claim half-life. Prevents stale-memory poisoning of agent decisions. No new entity types — column additions + CLI.",
+      "description": "Implement the feature: Temporal Validity Hardening. Phase 4. Strengthen existing valid_from/valid_to with stale-detection signals. Add columns: claims.last_verified, claims.verify_count, claims.half_life_days (per-claim override of hardcoded 90d default in internal/trust/trust.go). Surface staleness: Answer.StaleClaims[] in query results when freshness < threshold. New CLI: `mnemos verify <claim>` re-confirms against new events, bumps last_verified + verify_count, recomputes trust. Trust formula stays confidence × corroboration × freshness but freshness now uses per-claim half-life. Prevents stale-memory poisoning of agent decisions. No new entity types — column additions + CLI.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -446,7 +446,7 @@
     {
       "id": "task-decision-memory",
       "title": "Implement Decision Memory",
-      "description": "Implement the feature: Decision Memory. Phase 5. New domain: Decision{ID, Belief []ClaimID, Plan, Alternatives []string, Reasoning, RiskLevel, ChosenAt, OutcomeID *string}. Closes the loop: decision → action → outcome → validates/refutes belief claims. Schema: decisions table, FK to outcomes. Decision.OutcomeID links to Phase 2 Outcome — when set, Phase 1 validates/refutes edges fire automatically against Belief claim list. Audit query: `mnemos decision \u003cid\u003e` replays decision with retrieved evidence as it existed at ChosenAt (point-in-time using Phase 4 temporal validity). MCP tool: `record_decision`. Enables agent self-audit and reasoning improvement.",
+      "description": "Implement the feature: Decision Memory. Phase 5. New domain: Decision{ID, Belief []ClaimID, Plan, Alternatives []string, Reasoning, RiskLevel, ChosenAt, OutcomeID *string}. Closes the loop: decision → action → outcome → validates/refutes belief claims. Schema: decisions table, FK to outcomes. Decision.OutcomeID links to Phase 2 Outcome — when set, Phase 1 validates/refutes edges fire automatically against Belief claim list. Audit query: `mnemos decision <id>` replays decision with retrieved evidence as it existed at ChosenAt (point-in-time using Phase 4 temporal validity). MCP tool: `record_decision`. Enables agent self-audit and reasoning improvement.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -455,7 +455,7 @@
     {
       "id": "task-playbook-synthesis",
       "title": "Implement Playbook Synthesis",
-      "description": "Implement the feature: Playbook Synthesis. Phase 6. Direct compete with gbrain \"skills\" but derived not authored-from-scratch. Domain: Playbook{ID, Trigger, Steps []Step, Scope, DerivedFromLesson []LessonID, Confidence}. Steps as structured JSON contract — Mnemos returns steps only, Praxis executes (separation of concerns). Auto-synthesis in internal/synthesize/playbooks.go: cluster Phase 3 lessons by trigger pattern (e.g. \"latency_spike_after_deploy\" from N lessons matching that scope+kind) → emit playbook. Manual authoring also supported via markdown source-of-truth (overlaps with Phase 7). Query: `mnemos playbook \u003ctrigger\u003e`. MCP tool: `query_playbook`. Distinct from skills: playbooks have provenance back to lessons back to actions back to events.",
+      "description": "Implement the feature: Playbook Synthesis. Phase 6. Direct compete with gbrain \"skills\" but derived not authored-from-scratch. Domain: Playbook{ID, Trigger, Steps []Step, Scope, DerivedFromLesson []LessonID, Confidence}. Steps as structured JSON contract — Mnemos returns steps only, Praxis executes (separation of concerns). Auto-synthesis in internal/synthesize/playbooks.go: cluster Phase 3 lessons by trigger pattern (e.g. \"latency_spike_after_deploy\" from N lessons matching that scope+kind) → emit playbook. Manual authoring also supported via markdown source-of-truth (overlaps with Phase 7). Query: `mnemos playbook <trigger>`. MCP tool: `query_playbook`. Distinct from skills: playbooks have provenance back to lessons back to actions back to events.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -464,7 +464,7 @@
     {
       "id": "task-human-editable-markdown-layer-with-system-versioned-history",
       "title": "Implement Human-Editable Markdown Layer with System-Versioned History",
-      "description": "Implement the feature: Human-Editable Markdown Layer with System-Versioned History. Phase 7. Markdown export-back loop for engineers to \"correct system memory\". CLI: `mnemos export --kind=lesson|claim|playbook [--scope=...]` emits Git-friendly markdown with stable IDs in frontmatter. `mnemos import \u003cfile.md\u003e` diffs against current state, creates new version row, fires extract+relate on changed text. Versioning best-practice: SQL:2011 system-versioned tables — append-only `*_versions` (claim_versions, lesson_versions, playbook_versions) with full row snapshot + valid_from/valid_to. Git-style deltas overcomplicate query. Audit-friendly, time-travel queries trivial: `WHERE @timestamp BETWEEN valid_from AND valid_to`. Schema migration adds versioning triggers in SQLite/Postgres/MySQL providers. Integrates with Phase 4 temporal validity.",
+      "description": "Implement the feature: Human-Editable Markdown Layer with System-Versioned History. Phase 7. Markdown export-back loop for engineers to \"correct system memory\". CLI: `mnemos export --kind=lesson|claim|playbook [--scope=...]` emits Git-friendly markdown with stable IDs in frontmatter. `mnemos import <file.md>` diffs against current state, creates new version row, fires extract+relate on changed text. Versioning best-practice: SQL:2011 system-versioned tables — append-only `*_versions` (claim_versions, lesson_versions, playbook_versions) with full row snapshot + valid_from/valid_to. Git-style deltas overcomplicate query. Audit-friendly, time-travel queries trivial: `WHERE @timestamp BETWEEN valid_from AND valid_to`. Schema migration adds versioning triggers in SQLite/Postgres/MySQL providers. Integrates with Phase 4 temporal validity.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -545,7 +545,7 @@
     {
       "id": "task-bi-temporal-claim-model",
       "title": "Implement Bi-temporal claim model",
-      "description": "Implement the feature: Bi-temporal claim model. Graphiti tracks four timestamps per fact-edge: valid_at, invalid_at (event/validity time) + created_at, expired_at (transaction/ingestion time). This bi-temporal split is their headline differentiator. Mnemos has valid_from/valid_to but no separate ingestion-time axis — point-in-time queries today read the validity axis only.\n\nAcceptance criteria:\n- domain.Claim and domain.Relationship gain ingestion_time + ingestion_expired_at fields (event time stays as valid_from/valid_to).\n- /v1/claims supports `as_of=\u003ctimestamp\u003e` (validity time) AND `recorded_as_of=\u003ctimestamp\u003e` (ingestion time) filters independently.\n- mnemos query --at and --recorded-at flags expose both axes.\n- Migration script for existing claim rows (default ingestion_time = created_at).\n- Tests: a claim that was valid yesterday but recorded today returns under recorded_as_of=today AND as_of=yesterday simultaneously.\n\nOut of scope:\n- UI/dashboard for time-axis browsing.\n- Per-evidence ingestion timestamps (events already have ingested_at; this task is the claim/relationship layer only).",
+      "description": "Implement the feature: Bi-temporal claim model. Graphiti tracks four timestamps per fact-edge: valid_at, invalid_at (event/validity time) + created_at, expired_at (transaction/ingestion time). This bi-temporal split is their headline differentiator. Mnemos has valid_from/valid_to but no separate ingestion-time axis — point-in-time queries today read the validity axis only.\n\nAcceptance criteria:\n- domain.Claim and domain.Relationship gain ingestion_time + ingestion_expired_at fields (event time stays as valid_from/valid_to).\n- /v1/claims supports `as_of=<timestamp>` (validity time) AND `recorded_as_of=<timestamp>` (ingestion time) filters independently.\n- mnemos query --at and --recorded-at flags expose both axes.\n- Migration script for existing claim rows (default ingestion_time = created_at).\n- Tests: a claim that was valid yesterday but recorded today returns under recorded_as_of=today AND as_of=yesterday simultaneously.\n\nOut of scope:\n- UI/dashboard for time-axis browsing.\n- Per-evidence ingestion timestamps (events already have ingested_at; this task is the claim/relationship layer only).",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -561,18 +561,18 @@
       "feature_id": "entity-resolution-at-ingest"
     },
     {
-      "id": "task-epistemic-provenance-\u0026-claim-trust-framework",
-      "title": "Implement Epistemic Provenance \u0026 Claim Trust Framework",
-      "description": "Implement the feature: Epistemic Provenance \u0026 Claim Trust Framework. Implement epistemic provenance tracking to explain *why* a claim or data source is trusted over others, addressing user feedback on broad knowledge bases (e.g. Obsidian/Karpathy-style setups) needing trust differentiation. Covers two core areas:\n1. Source Credibility Signals: Score claim trustworthiness using link density (convergence across multiple resources), liveness (e.g. 12-year-old process doc still being actively executed), recency, authoritativeness, and citation graph analysis.\n2. Test Conflict Resolution: Resolve conflicting test results (e.g. Test1 passes, Test2 fails for same functionality) via test provenance (recency, authority), confidence-weighted resolution, and first-class \"which source/test to trust?\" query support.",
+      "id": "task-epistemic-provenance-&-claim-trust-framework",
+      "title": "Implement Epistemic Provenance & Claim Trust Framework",
+      "description": "Implement the feature: Epistemic Provenance & Claim Trust Framework. Implement epistemic provenance tracking to explain *why* a claim or data source is trusted over others, addressing user feedback on broad knowledge bases (e.g. Obsidian/Karpathy-style setups) needing trust differentiation. Covers two core areas:\n1. Source Credibility Signals: Score claim trustworthiness using link density (convergence across multiple resources), liveness (e.g. 12-year-old process doc still being actively executed), recency, authoritativeness, and citation graph analysis.\n2. Test Conflict Resolution: Resolve conflicting test results (e.g. Test1 passes, Test2 fails for same functionality) via test provenance (recency, authority), confidence-weighted resolution, and first-class \"which source/test to trust?\" query support.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
-      "feature_id": "epistemic-provenance-\u0026-claim-trust-framework"
+      "feature_id": "epistemic-provenance-&-claim-trust-framework"
     },
     {
       "id": "task-reliability-first-recall-hardening-(never-wrong-on-recall)",
       "title": "Implement Reliability-first recall hardening (never wrong on recall)",
-      "description": "Implement the feature: Reliability-first recall hardening (never wrong on recall). Prioritize product trust strategy: \"never wrong on recall\". Add a reliability-first initiative that hardens retrieval/answering so factual recall is lossless and deterministic before any advanced synthesis expansion.\n\nScope:\n- Build a production eval harness using real anonymized conversation traces plus golden answers and required-substring assertions.\n- Enforce deterministic answer fallback: when generated answer omits required facts, return evidence-grounded claim text block.\n- Add confidence-calibrated answer policy with strict modes:\n  - high confidence + no conflict: concise direct answer\n  - low confidence or unresolved conflict: explicit uncertainty + evidence citations + escalation path\n- Add CI regression gates for recall metrics (hard fail on any drop beyond tolerance).\n- Add per-workspace memory quality telemetry: unresolved contradictions, stale claims, low-trust clusters, recall pass-rate trend.\n\nNon-goals:\n- New broad AI synthesis features.\n- Fancy UI redesign.\n\nSuccess metrics:\n- Recall pass-rate (required-substring) \u003e= 99% on held-out eval set.\n- Zero false factual omissions on golden critical set.\n- Regenerate rate and user correction rate decrease sprint-over-sprint.",
+      "description": "Implement the feature: Reliability-first recall hardening (never wrong on recall). Prioritize product trust strategy: \"never wrong on recall\". Add a reliability-first initiative that hardens retrieval/answering so factual recall is lossless and deterministic before any advanced synthesis expansion.\n\nScope:\n- Build a production eval harness using real anonymized conversation traces plus golden answers and required-substring assertions.\n- Enforce deterministic answer fallback: when generated answer omits required facts, return evidence-grounded claim text block.\n- Add confidence-calibrated answer policy with strict modes:\n  - high confidence + no conflict: concise direct answer\n  - low confidence or unresolved conflict: explicit uncertainty + evidence citations + escalation path\n- Add CI regression gates for recall metrics (hard fail on any drop beyond tolerance).\n- Add per-workspace memory quality telemetry: unresolved contradictions, stale claims, low-trust clusters, recall pass-rate trend.\n\nNon-goals:\n- New broad AI synthesis features.\n- Fancy UI redesign.\n\nSuccess metrics:\n- Recall pass-rate (required-substring) >= 99% on held-out eval set.\n- Zero false factual omissions on golden critical set.\n- Regenerate rate and user correction rate decrease sprint-over-sprint.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -662,7 +662,7 @@
     {
       "id": "task-claimrepository.listbytestrequirementref-port-+-index-for-trust-queries",
       "title": "Implement ClaimRepository.ListByTestRequirementRef port + index for trust queries",
-      "description": "Implement the feature: ClaimRepository.ListByTestRequirementRef port + index for trust queries. cmd/mnemos/trust.go:48-59 and cmd/mnemos/mcp.go:1118 (which_test_to_trust) call Claims.ListAll(ctx) and filter by TestRequirementRef in Go — O(n) scan over the full claim corpus per invocation, with all 30+ columns marshaled over the wire on Postgres/MySQL. Add `ListByTestRequirementRef(ctx, ref string) ([]Claim, error)` to ports.ClaimRepository. Implement across sqlite, postgres, mysql, memory, libsql. Add `CREATE INDEX idx_claims_test_requirement_ref ON claims(type, test_requirement_ref) WHERE test_requirement_ref != ''` (and dialect equivalents). Update both call sites. Acceptance: bench with 100k claims shows \u003c50ms p95 vs current ListAll baseline.",
+      "description": "Implement the feature: ClaimRepository.ListByTestRequirementRef port + index for trust queries. cmd/mnemos/trust.go:48-59 and cmd/mnemos/mcp.go:1118 (which_test_to_trust) call Claims.ListAll(ctx) and filter by TestRequirementRef in Go — O(n) scan over the full claim corpus per invocation, with all 30+ columns marshaled over the wire on Postgres/MySQL. Add `ListByTestRequirementRef(ctx, ref string) ([]Claim, error)` to ports.ClaimRepository. Implement across sqlite, postgres, mysql, memory, libsql. Add `CREATE INDEX idx_claims_test_requirement_ref ON claims(type, test_requirement_ref) WHERE test_requirement_ref != ''` (and dialect equivalents). Update both call sites. Acceptance: bench with 100k claims shows <50ms p95 vs current ListAll baseline.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -671,7 +671,7 @@
     {
       "id": "task-test-coverage-for-mnemos-trust-cli-and-which_test_to_trust-mcp-tool",
       "title": "Implement Test coverage for mnemos trust CLI and which_test_to_trust MCP tool",
-      "description": "Implement the feature: Test coverage for mnemos trust CLI and which_test_to_trust MCP tool. Newly-shipped surface in cmd/mnemos/trust.go:19-130 and cmd/mnemos/mcp.go:1108-1182 (mcpRunWhichTestToTrust) has zero tests — verdict thresholds (0.05 ambiguous), requirement_ref validation, empty-candidate path, sort stability, JSON shape all unverified. The resolver path (pickTestWinner) is covered, but the surface above it isn't. Add table-driven tests for mcpRunWhichTestToTrust covering: winner clear-margin / ambiguous (\u003c0.05 gap) / no_candidates / missing requirement_ref. Use openConn against memory backend. Mirror as a cmd/mnemos handler test patterned on existing audit_test.go. Effort: small.",
+      "description": "Implement the feature: Test coverage for mnemos trust CLI and which_test_to_trust MCP tool. Newly-shipped surface in cmd/mnemos/trust.go:19-130 and cmd/mnemos/mcp.go:1108-1182 (mcpRunWhichTestToTrust) has zero tests — verdict thresholds (0.05 ambiguous), requirement_ref validation, empty-candidate path, sort stability, JSON shape all unverified. The resolver path (pickTestWinner) is covered, but the surface above it isn't. Add table-driven tests for mcpRunWhichTestToTrust covering: winner clear-margin / ambiguous (<0.05 gap) / no_candidates / missing requirement_ref. Use openConn against memory backend. Mirror as a cmd/mnemos handler test patterned on existing audit_test.go. Effort: small.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -680,7 +680,7 @@
     {
       "id": "task-eval-ci-regression-gate-across-extraction,-causal,-relationship,-longmem,-locomo-suites",
       "title": "Implement Eval CI regression gate across extraction, causal, relationship, longmem, locomo suites",
-      "description": "Implement the feature: Eval CI regression gate across extraction, causal, relationship, longmem, locomo suites. .github/workflows/benchmarks.yml:67-83 runs only --suite contradiction_detection. data/eval/*.yaml has 102 cases across extraction (90), causal_detection, relationship_detection running through go test with no F1/precision/recall floor — an LLM prompt change that drops extraction F1 from 0.92 to 0.55 still passes CI. Add `eval-gate` job that runs `go test ./data/eval/... -json` and a small Go check (or Python equivalent) comparing per-suite F1/precision/recall against data/eval/baseline.json floors, failing on \u003e5% drop. Extend to LongMemEval/LoCoMo when adapters are wired. This is the single biggest oracle gap in the repo.",
+      "description": "Implement the feature: Eval CI regression gate across extraction, causal, relationship, longmem, locomo suites. .github/workflows/benchmarks.yml:67-83 runs only --suite contradiction_detection. data/eval/*.yaml has 102 cases across extraction (90), causal_detection, relationship_detection running through go test with no F1/precision/recall floor — an LLM prompt change that drops extraction F1 from 0.92 to 0.55 still passes CI. Add `eval-gate` job that runs `go test ./data/eval/... -json` and a small Go check (or Python equivalent) comparing per-suite F1/precision/recall against data/eval/baseline.json floors, failing on >5% drop. Extend to LongMemEval/LoCoMo when adapters are wired. This is the single biggest oracle gap in the repo.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -689,7 +689,7 @@
     {
       "id": "task-mutation-testing-on-internal/trust,-internal/relate,-internal/query",
       "title": "Implement Mutation testing on internal/trust, internal/relate, internal/query",
-      "description": "Implement the feature: Mutation testing on internal/trust, internal/relate, internal/query. Coverage is ~90%+ but mutation kill-rate is unknown — `\u003e` flipped to `\u003c` in trust scoring may pass current tests, giving coverage illusion. Add go-mutesting (or ooze) over internal/trust, internal/relate, internal/query. Wire as a separate non-blocking CI job that posts the kill-rate as a PR comment. Block merges when internal/trust/ kill-rate falls below 70%. Document the threshold + rationale in a docs/testing/mutation.md. Effort: medium.",
+      "description": "Implement the feature: Mutation testing on internal/trust, internal/relate, internal/query. Coverage is ~90%+ but mutation kill-rate is unknown — `>` flipped to `<` in trust scoring may pass current tests, giving coverage illusion. Add go-mutesting (or ooze) over internal/trust, internal/relate, internal/query. Wire as a separate non-blocking CI job that posts the kill-rate as a PR comment. Block merges when internal/trust/ kill-rate falls below 70%. Document the threshold + rationale in a docs/testing/mutation.md. Effort: medium.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -725,7 +725,7 @@
     {
       "id": "task-landing-positioning-+-demo-on-page-+-pricing-tiers-(gtm-unification)",
       "title": "Implement Landing positioning + demo-on-page + pricing tiers (GTM unification)",
-      "description": "Implement the feature: Landing positioning + demo-on-page + pricing tiers (GTM unification). Landing (cmd/mnemos/web/landing.html:6) sells \"Data Sovereignty \u0026 Compliance Platform\"; README.md:3 sells \"Self-hosted memory for AI apps.\" A GitHub visitor and a landing visitor get different products — category schizophrenia kills positioning. (1) Pick one lane: \"evidence layer for AI agents you actually own\" (where mem0/zep/letta compete); compliance becomes a wedge attribute, not the headline. Rewrite hero. (2) Add runnable code block / animated terminal showing `mnemos process --text \"...\"` → contradiction-detected JSON above the lead form. (3) Move README competitor comparison table onto landing as \"vs hosted memory services\" with one row per competitor. (4) Add 3-tier pricing strip: OSS (free, self-hosted) / Team (managed registry + SSO, waitlist) / Enterprise (audit, SLA, SOC2 — contact). (5) Replace adjective-soup social-proof section with real benchmark metrics linking to benchmarks/RESULTS.md. Effort: medium.",
+      "description": "Implement the feature: Landing positioning + demo-on-page + pricing tiers (GTM unification). Landing (cmd/mnemos/web/landing.html:6) sells \"Data Sovereignty & Compliance Platform\"; README.md:3 sells \"Self-hosted memory for AI apps.\" A GitHub visitor and a landing visitor get different products — category schizophrenia kills positioning. (1) Pick one lane: \"evidence layer for AI agents you actually own\" (where mem0/zep/letta compete); compliance becomes a wedge attribute, not the headline. Rewrite hero. (2) Add runnable code block / animated terminal showing `mnemos process --text \"...\"` → contradiction-detected JSON above the lead form. (3) Move README competitor comparison table onto landing as \"vs hosted memory services\" with one row per competitor. (4) Add 3-tier pricing strip: OSS (free, self-hosted) / Team (managed registry + SSO, waitlist) / Enterprise (audit, SLA, SOC2 — contact). (5) Replace adjective-soup social-proof section with real benchmark metrics linking to benchmarks/RESULTS.md. Effort: medium.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -761,7 +761,7 @@
     {
       "id": "task-request-id-+-red-metrics-+-slo-doc-+-supply-chain-attestation",
       "title": "Implement Request ID + RED metrics + SLO doc + supply-chain attestation",
-      "description": "Implement the feature: Request ID + RED metrics + SLO doc + supply-chain attestation. No correlation/request IDs across HTTP/MCP/pipeline (cmd/mnemos/serve_auth.go:173-188 boltAccessLog has no request_id/trace_id), making distributed tracing impossible. No /metrics Prometheus endpoint, no histogram of http_request_duration_seconds — operators cannot answer \"is mnemos healthy right now\" beyond /health. No SLO/error budget defined. Supply chain weak: .goreleaser.yaml has no SBOMs, no cosign signing, no SLSA provenance, dockers: only linux/amd64. Step 1 (small): add requestIDMiddleware (UUIDv7) injecting X-Request-ID into context; propagate to bolt log lines. Step 2 (medium): add prometheus/client_golang RED metrics on /internal/metrics; document SLO.md (p99\u003c250ms reads, 99.9% availability/30d). Step 3 (medium): add `sboms:`, `signs:` (cosign keyless), arm64+amd64 docker_manifests, slsa-framework/slsa-github-generator workflow.",
+      "description": "Implement the feature: Request ID + RED metrics + SLO doc + supply-chain attestation. No correlation/request IDs across HTTP/MCP/pipeline (cmd/mnemos/serve_auth.go:173-188 boltAccessLog has no request_id/trace_id), making distributed tracing impossible. No /metrics Prometheus endpoint, no histogram of http_request_duration_seconds — operators cannot answer \"is mnemos healthy right now\" beyond /health. No SLO/error budget defined. Supply chain weak: .goreleaser.yaml has no SBOMs, no cosign signing, no SLSA provenance, dockers: only linux/amd64. Step 1 (small): add requestIDMiddleware (UUIDv7) injecting X-Request-ID into context; propagate to bolt log lines. Step 2 (medium): add prometheus/client_golang RED metrics on /internal/metrics; document SLO.md (p99<250ms reads, 99.9% availability/30d). Step 3 (medium): add `sboms:`, `signs:` (cosign keyless), arm64+amd64 docker_manifests, slsa-framework/slsa-github-generator workflow.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [],
@@ -814,7 +814,7 @@
     {
       "id": "task-decision-audit-trail",
       "title": "Decision Audit Trail (Refuted Beliefs)",
-      "description": "Extend Decision model with RefutedBeliefs []string and FailedOutcomeID. Create query path: 'mnemos query --why-wrong \u003cservice\u003e' that finds decisions with refuted beliefs, traces decision → action → failed outcome, surfaces contradicting claims.",
+      "description": "Extend Decision model with RefutedBeliefs []string and FailedOutcomeID. Create query path: 'mnemos query --why-wrong <service>' that finds decisions with refuted beliefs, traces decision → action → failed outcome, surfaces contradicting claims.",
       "priority": "high",
       "estimate": "",
       "depends_on": [
@@ -867,8 +867,8 @@
     },
     {
       "id": "task-trust-query-api",
-      "title": "Provenance Query API \u0026 CLI (Why Trust This?)",
-      "description": "First-class query: 'why should I trust claim X?' Returns: trust score, top signals (citations, liveness, recency), conflicting evidence, and resolution rationale if conflicts exist. Expose via CLI (mnemos query --explain-trust \u003cclaim-id\u003e) and HTTP/gRPC.",
+      "title": "Provenance Query API & CLI (Why Trust This?)",
+      "description": "First-class query: 'why should I trust claim X?' Returns: trust score, top signals (citations, liveness, recency), conflicting evidence, and resolution rationale if conflicts exist. Expose via CLI (mnemos query --explain-trust <claim-id>) and HTTP/gRPC.",
       "priority": "medium",
       "estimate": "",
       "depends_on": [
@@ -935,8 +935,8 @@
     },
     {
       "id": "task-escalation-mechanism",
-      "title": "Escalation to Human (Confidence \u003c 0.7)",
-      "description": "Three escalation triggers: (1) Confidence \u003c 0.7, (2) Winner-loser margin \u003c 0.2 (too close to call), (3) Agent explicitly requests escalation. Add escalation_reason to Verdict. Wire to human notification (MCP tool, API response).",
+      "title": "Escalation to Human (Confidence < 0.7)",
+      "description": "Three escalation triggers: (1) Confidence < 0.7, (2) Winner-loser margin < 0.2 (too close to call), (3) Agent explicitly requests escalation. Add escalation_reason to Verdict. Wire to human notification (MCP tool, API response).",
       "priority": "medium",
       "estimate": "",
       "depends_on": [
@@ -946,7 +946,7 @@
     },
     {
       "id": "task-citation-graph-tracking",
-      "title": "Citation Graph \u0026 Link Density Tracking",
+      "title": "Citation Graph & Link Density Tracking",
       "description": "Track which sources reference/link to other sources. Build citation graph at ingest time. Store directed edges (source A cites source B). Enable queries for convergence: how many independent sources support a claim?",
       "priority": "high",
       "estimate": "",
@@ -991,7 +991,7 @@
     {
       "id": "task-anti-lesson-synthesis",
       "title": "Anti-Lesson Synthesis (Failed Patterns)",
-      "description": "Extend internal/synthesize/engine.go to emit Anti-Lessons from failed outcomes: when outcome.Result == Failure \u0026\u0026 corroboration \u003e= 3, emit anti-lesson with trigger, warning, failed_actions, root_cause_claim. Learn from failures, not just successes.",
+      "description": "Extend internal/synthesize/engine.go to emit Anti-Lessons from failed outcomes: when outcome.Result == Failure && corroboration >= 3, emit anti-lesson with trigger, warning, failed_actions, root_cause_claim. Learn from failures, not just successes.",
       "priority": "high",
       "estimate": "",
       "depends_on": [
@@ -1020,6 +1020,123 @@
         "task-claim-provenance-model"
       ],
       "feature_id": "epistemic-provenance-claim-trust-framework"
+    },
+    {
+      "id": "task-archive-olymp-repo",
+      "title": "Archive olymp repo",
+      "description": "Implement the feature: Archive olymp repo",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "archive-olymp-repo"
+    },
+    {
+      "id": "task-extract-decisionkit-library-from-nous",
+      "title": "Extract decisionkit library from nous",
+      "description": "Implement the feature: Extract decisionkit library from nous",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "extract-decisionkit-library-from-nous"
+    },
+    {
+      "id": "task-archive-nous-repo",
+      "title": "Archive nous repo",
+      "description": "Implement the feature: Archive nous repo",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "archive-nous-repo"
+    },
+    {
+      "id": "task-mnemos-root-library-package-and-mnemos.new-entry-point",
+      "title": "Mnemos root library package and mnemos.New entry point",
+      "description": "Implement the feature: Mnemos root library package and mnemos.New entry point",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "mnemos-root-library-package-and-mnemos.new-entry-point"
+    },
+    {
+      "id": "task-framework-neutral-provider-interfaces-(textgenerator-and-embedder)",
+      "title": "Framework-neutral provider interfaces (TextGenerator and Embedder)",
+      "description": "Implement the feature: Framework-neutral provider interfaces",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "framework-neutral-provider-interfaces-(textgenerator-and-embedder)"
+    },
+    {
+      "id": "task-three-mode-option-builders-(passive,-sharedprovider,-enhanced)",
+      "title": "Three-mode option builders (Passive, SharedProvider, Enhanced)",
+      "description": "Implement the feature: Three-mode option builders",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "three-mode-option-builders-(passive,-sharedprovider,-enhanced)"
+    },
+    {
+      "id": "task-chronos-bundling-—-embedded-by-default-inside-mnemos.new",
+      "title": "Chronos bundling — embedded by default inside mnemos.New",
+      "description": "Implement the feature: Chronos bundling",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "chronos-bundling-—-embedded-by-default-inside-mnemos.new"
+    },
+    {
+      "id": "task-temporal-mcp-tools-(remember_event,-timeline_query,-recall_at_time)",
+      "title": "Temporal MCP tools (remember_event, timeline_query, recall_at_time)",
+      "description": "Implement the feature: Temporal MCP tools",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "temporal-mcp-tools-(remember_event,-timeline_query,-recall_at_time)"
+    },
+    {
+      "id": "task-refactor-cmd/mnemos-to-route-through-new-library",
+      "title": "Refactor cmd/mnemos to route through new library",
+      "description": "Implement the feature: Refactor cmd/mnemos to route through new library",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "refactor-cmd/mnemos-to-route-through-new-library"
+    },
+    {
+      "id": "task-obvia-inline-migration-off-praxis",
+      "title": "Obvia inline migration off Praxis",
+      "description": "Implement the feature: Obvia inline migration off Praxis",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "obvia-inline-migration-off-praxis"
+    },
+    {
+      "id": "task-archive-praxis-repo",
+      "title": "Archive praxis repo",
+      "description": "Implement the feature: Archive praxis repo",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "archive-praxis-repo"
+    },
+    {
+      "id": "task-jwt-kid-header-+-key-id-driven-verification",
+      "title": "JWT kid header + key-id-driven verification",
+      "description": "Add a `kid` header to issued JWTs and route verification through a per-kid secret resolver so rotation can ship multiple active keys at once. Pre-existing roadmap item, not implemented.",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "jwt-kid-header-+-key-id-driven-verification"
+    },
+    {
+      "id": "task-supply-chain-attestation:-sbom,-cosign-signing,-slsa-provenance,-arm64-docker",
+      "title": "Supply-chain attestation: SBOM, cosign signing, SLSA provenance, arm64 docker",
+      "description": "Generate CycloneDX/SPDX SBOM at release, sign artifacts with cosign keyless, attach SLSA provenance, ship arm64 docker images. Pre-existing roadmap item, not implemented.",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "supply-chain-attestation:-sbom,-cosign-signing,-slsa-provenance,-arm64-docker"
     }
   ],
   "approval_status": "approved",
