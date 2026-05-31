@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/felixgeelhaar/chronos"
 	"github.com/felixgeelhaar/chronos/embed"
 	"github.com/felixgeelhaar/mnemos/internal/domain"
 	"github.com/felixgeelhaar/mnemos/internal/embedding"
@@ -21,7 +22,14 @@ import (
 	"github.com/felixgeelhaar/mnemos/internal/relate"
 	"github.com/felixgeelhaar/mnemos/internal/store"
 	"github.com/felixgeelhaar/mnemos/providers"
+	"github.com/google/uuid"
 )
+
+// chronosEventNamespace is the deterministic UUID namespace used when
+// hashing string ids (run id, event type) into uuid.UUID for Chronos
+// EntityState identifiers. Stable across processes so the same
+// (RunID, Type) tuple always maps to the same Chronos series.
+var chronosEventNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("mnemos://events"))
 
 // memory is the concrete implementation of [Memory] returned by [New].
 type memory struct {
@@ -220,9 +228,60 @@ func (m *memory) RememberEvent(ctx context.Context, e Event) error {
 	if err := m.conn.Events.Append(ctx, ev); err != nil {
 		return fmt.Errorf("mnemos: append event: %w", err)
 	}
-	// TODO(chronos): forward the event to the bundled Chronos engine
-	// for temporal pattern detection. Wiring lands in task 12.
+
+	// Forward the event to the bundled Chronos engine as a presence
+	// signal: each event maps to a single-feature EntityState at the
+	// event timestamp. This lets the detector see deployment / incident
+	// / decision bursts as recurrence + spike patterns over time.
+	//
+	// The mapping is deliberately minimal:
+	//   - EntityID  = NS-hash(event_type) so each type is its own series
+	//   - ScopeID   = NS-hash(run_id) so scopes match RememberEvent runs
+	//   - Features  = [1.0] presence indicator
+	//   - Labels    = ["event"]
+	//   - Meta      = event type + truncated content for explainability
+	//
+	// Chronos failures are non-fatal: the Mnemos event store is the
+	// source of truth and was already persisted above. Returning an
+	// error here would make a Chronos hiccup look like a Remember
+	// failure to the caller, which is wrong.
+	if m.chronos != nil {
+		_ = m.chronos.Process(ctx, m.eventToEntityState(e, id))
+	}
 	return nil
+}
+
+// eventToEntityState maps a public mnemos.Event into a chronos.EntityState
+// suitable for the bundled in-process engine. See [memory.RememberEvent]
+// for the mapping rationale.
+func (m *memory) eventToEntityState(e Event, eventID string) chronos.EntityState {
+	typ := strings.TrimSpace(e.Type)
+	if typ == "" {
+		typ = "untyped"
+	}
+	runID := e.RunID
+	if runID == "" {
+		runID = "default"
+	}
+	meta := map[string]string{
+		"mnemos_event_id": eventID,
+		"event_type":      typ,
+	}
+	if c := strings.TrimSpace(e.Content); c != "" {
+		if len(c) > 200 {
+			c = c[:200]
+		}
+		meta["content_preview"] = c
+	}
+	return chronos.EntityState{
+		ID:        uuid.New(),
+		EntityID:  uuid.NewSHA1(chronosEventNamespace, []byte(typ)),
+		ScopeID:   uuid.NewSHA1(chronosEventNamespace, []byte(runID)),
+		Timestamp: e.At.UTC(),
+		Features:  []float64{1.0},
+		Labels:    []string{"event"},
+		Meta:      meta,
+	}
 }
 
 // Timeline implements [Memory.Timeline].

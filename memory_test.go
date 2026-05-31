@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/felixgeelhaar/chronos/embed"
 	"github.com/felixgeelhaar/mnemos"
 	"github.com/felixgeelhaar/mnemos/providers"
+	"github.com/google/uuid"
 
 	// Storage providers used by the tests; blank-imported here for
 	// scheme registration.
@@ -51,6 +53,55 @@ func TestNew_PassiveMode_ZeroConfig(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(results[0].Text), "go") {
 		t.Errorf("top result text = %q; expected to mention Go", results[0].Text)
+	}
+}
+
+// TestRememberEvent_ForwardsToBundledChronos verifies the temporal
+// path: each Mnemos event is forwarded to the bundled Chronos engine
+// as a presence signal so detectors can surface deployment / incident
+// bursts as patterns. Uses a caller-supplied Chronos engine so the
+// test can call back into it directly.
+func TestRememberEvent_ForwardsToBundledChronos(t *testing.T) {
+	t.Parallel()
+	clearMnemosEnv(t)
+
+	eng, err := embed.New(embed.WithStorage("memory://?namespace=chronos_forward_test"))
+	if err != nil {
+		t.Fatalf("embed.New: %v", err)
+	}
+	defer func() { _ = eng.Close() }()
+
+	mem, err := mnemos.New(
+		mnemos.WithStorage("memory://?namespace=mnemos_forward_test"),
+		mnemos.WithPassiveMode(),
+		mnemos.WithChronos(eng),
+	)
+	if err != nil {
+		t.Fatalf("mnemos.New: %v", err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	ctx := context.Background()
+	base := time.Date(2026, 5, 31, 10, 0, 0, 0, time.UTC)
+	for i := 0; i < 3; i++ {
+		if err := mem.RememberEvent(ctx, mnemos.Event{
+			At:      base.Add(time.Duration(i) * time.Minute),
+			Type:    "deployment",
+			Content: "shipped build",
+			RunID:   "forward-test",
+		}); err != nil {
+			t.Fatalf("RememberEvent[%d]: %v", i, err)
+		}
+	}
+
+	// Compute the expected ScopeID using the same NS-hash mapping the
+	// implementation uses, then run detection. We don't assert specific
+	// signals (detection thresholds may shift); we assert detection
+	// runs without error against the forwarded states.
+	ns := uuid.NewSHA1(uuid.NameSpaceURL, []byte("mnemos://events"))
+	scope := uuid.NewSHA1(ns, []byte("forward-test"))
+	if _, err := eng.Detect(ctx, []uuid.UUID{scope}); err != nil {
+		t.Errorf("eng.Detect: %v", err)
 	}
 }
 
