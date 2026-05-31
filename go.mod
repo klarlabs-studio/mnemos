@@ -6,7 +6,7 @@ require (
 	github.com/felixgeelhaar/axi-go v1.2.0
 	github.com/felixgeelhaar/bolt v1.4.0
 	github.com/felixgeelhaar/fortify v1.4.0
-	github.com/felixgeelhaar/mcp-go v1.11.2
+	github.com/felixgeelhaar/mcp-go v1.13.0
 	github.com/felixgeelhaar/statekit v1.5.0
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -14,10 +14,10 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/tursodatabase/libsql-client-go v0.0.0-20251219100830-236aa1ff8acc
 	golang.org/x/time v0.15.0
-	google.golang.org/grpc v1.81.0
+	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.50.0
+	modernc.org/sqlite v1.50.1
 )
 
 require (
@@ -27,6 +27,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/felixgeelhaar/chronos v0.6.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/felixgeelhaar/chronos/embed"
 	"github.com/felixgeelhaar/mnemos/internal/domain"
 	"github.com/felixgeelhaar/mnemos/internal/embedding"
 	"github.com/felixgeelhaar/mnemos/internal/extract"
@@ -91,13 +92,30 @@ func New(opts ...Option) (Memory, error) {
 		q = q.WithIncidents(conn.Incidents)
 	}
 
+	// Chronos: use the supplied engine or boot a default in-memory one.
+	// The default engine lets RememberEvent / Timeline work out of the
+	// box; consumers wanting durable temporal patterns supply
+	// WithChronos() with their own configured engine.
+	chronosEngine := cfg.chronos
+	chronosOwned := false
+	if chronosEngine == nil {
+		chronosEngine, err = embed.New() // defaults to memory storage
+		if err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("mnemos: boot embedded chronos: %w", err)
+		}
+		chronosOwned = true
+	}
+
 	return &memory{
-		conn:      conn,
-		actorID:   cfg.actorID,
-		extractor: extractor,
-		relator:   relate.NewEngine(),
-		query:     q,
-		embedder:  embClient,
+		conn:         conn,
+		actorID:      cfg.actorID,
+		extractor:    extractor,
+		relator:      relate.NewEngine(),
+		query:        q,
+		embedder:     embClient,
+		chronos:      chronosEngine,
+		chronosOwned: chronosOwned,
 	}, nil
 }
 

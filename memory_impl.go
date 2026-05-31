@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/felixgeelhaar/chronos/embed"
 	"github.com/felixgeelhaar/mnemos/internal/domain"
 	"github.com/felixgeelhaar/mnemos/internal/embedding"
 	"github.com/felixgeelhaar/mnemos/internal/ingest"
@@ -30,6 +31,14 @@ type memory struct {
 	relator   relate.Engine
 	query     query.Engine
 	embedder  embedding.Client
+
+	// chronos is the bundled or user-supplied temporal engine. Always
+	// non-nil after a successful [New].
+	chronos *embed.Engine
+	// chronosOwned is true when [New] constructed the engine itself
+	// and is responsible for closing it. False when the caller
+	// supplied one via [WithChronos].
+	chronosOwned bool
 }
 
 var _ Memory = (*memory)(nil)
@@ -217,12 +226,20 @@ func (m *memory) Timeline(ctx context.Context, q TimelineQuery) ([]Event, error)
 
 // Close implements [Memory.Close].
 func (m *memory) Close() error {
-	if m.conn == nil {
-		return nil
+	var firstErr error
+	if m.conn != nil {
+		if err := m.conn.Close(); err != nil {
+			firstErr = err
+		}
+		m.conn = nil
 	}
-	err := m.conn.Close()
-	m.conn = nil
-	return err
+	if m.chronos != nil && m.chronosOwned {
+		if err := m.chronos.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	m.chronos = nil
+	return firstErr
 }
 
 // mergeMetadata produces the input metadata map for ingest.IngestText

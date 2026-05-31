@@ -1,6 +1,7 @@
 package mnemos
 
 import (
+	"github.com/felixgeelhaar/chronos/embed"
 	"github.com/felixgeelhaar/mnemos/providers"
 )
 
@@ -60,6 +61,15 @@ type config struct {
 	enhancedCfg ProviderConfig
 	storageDSN  string
 	actorID     string
+
+	// chronos, when non-nil, overrides the default embedded Chronos
+	// engine [New] boots. Supplied by [WithChronos]; ownership stays
+	// with the caller (Mnemos will not call its Close).
+	chronos *embed.Engine
+	// chronosOwned tracks whether [New] constructed the Chronos engine
+	// itself (true) or accepted one from the caller (false). Drives
+	// whether [Memory.Close] also closes the engine.
+	chronosOwned bool
 }
 
 type optionFunc func(*config)
@@ -135,5 +145,23 @@ func WithActor(userID string) Option {
 			return
 		}
 		c.actorID = userID
+	})
+}
+
+// WithChronos supplies an existing [embed.Engine] for Mnemos to use as
+// its temporal backend instead of booting a default one. Useful when:
+//
+//   - The host already runs Chronos for other purposes and wants to
+//     share the same engine + storage.
+//   - You need a non-default Chronos configuration (custom detector
+//     set, parallel detection, dedicated SQL storage).
+//
+// Ownership of the supplied engine stays with the caller; [Memory.Close]
+// will NOT call [embed.Engine.Close] on it. When this option is not
+// used, [New] constructs a default in-memory engine and owns it.
+func WithChronos(eng *embed.Engine) Option {
+	return optionFunc(func(c *config) {
+		c.chronos = eng
+		c.chronosOwned = false
 	})
 }
