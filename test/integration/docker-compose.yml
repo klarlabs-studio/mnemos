@@ -48,6 +48,12 @@ services:
       MNEMOS_DB_URL: "memory://?namespace=integration"
       MNEMOS_HTTP_HOST: "0.0.0.0"
       MNEMOS_HTTP_PORT: "7777"
+      # Fixed JWT secret for the smoke test so it can mint a wildcard-
+      # scope agent token client-side and POST authenticated writes
+      # without a real user/token provisioning pipeline. Not a
+      # security boundary: the stack only runs inside the CI runner
+      # for the duration of one job.
+      MNEMOS_JWT_SECRET: "integration-smoke-test-secret-do-not-use-anywhere-else"
     command: ["serve"]
     depends_on:
       - chronos

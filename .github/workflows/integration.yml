@@ -59,6 +59,10 @@ jobs:
         env:
           CHRONOS_INTEGRATION_URL: http://127.0.0.1:7778
           MNEMOS_INTEGRATION_URL: http://127.0.0.1:7777
+          # Same secret the mnemos service uses; the smoke test mints
+          # a wildcard-scope agent JWT against it for authenticated
+          # POSTs. Local-only; not a real credential.
+          MNEMOS_JWT_SECRET: "integration-smoke-test-secret-do-not-use-anywhere-else"
         run: go test -tags=integration -v -count=1 -timeout=2m ./test/integration/...
 
       - name: Compose logs (on failure)

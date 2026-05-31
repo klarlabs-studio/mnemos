@@ -20,8 +20,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/felixgeelhaar/mnemos/internal/auth"
+	"github.com/felixgeelhaar/mnemos/internal/domain"
 )
 
 func chronosBaseURL() string {
@@ -134,7 +138,17 @@ func waitForHealth(url string, total time.Duration) error {
 func postJSON(t *testing.T, url string, body any, expectStatus int) {
 	t.Helper()
 	buf, _ := json.Marshal(body)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(buf))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		t.Fatalf("build POST %s: %v", url, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if strings.HasPrefix(url, mnemosBaseURL()) {
+		if tok := mnemosIntegrationToken(t); tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
+		}
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST %s: %v", url, err)
 	}
@@ -143,6 +157,29 @@ func postJSON(t *testing.T, url string, body any, expectStatus int) {
 		raw, _ := io.ReadAll(resp.Body)
 		t.Fatalf("POST %s status = %d, want %d (body=%s)", url, resp.StatusCode, expectStatus, string(raw))
 	}
+}
+
+// mnemosIntegrationToken mints a wildcard-scope agent JWT against the
+// shared MNEMOS_JWT_SECRET the docker-compose stack uses, so the
+// smoke test can hit authenticated POST endpoints without standing up
+// a user + token issuance pipeline. Returns "" when the secret env
+// isn't set (smoke test reads stay unauthenticated either way).
+func mnemosIntegrationToken(t *testing.T) string {
+	t.Helper()
+	secret := os.Getenv("MNEMOS_JWT_SECRET")
+	if secret == "" {
+		return ""
+	}
+	issuer := auth.NewIssuer([]byte(secret))
+	tok, _, err := issuer.IssueAgentTokenWithScopes(
+		"integration-smoke",
+		[]string{domain.ScopeWildcard},
+		15*time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("mint integration token: %v", err)
+	}
+	return tok
 }
 
 func getJSON(t *testing.T, url string) map[string]any {
