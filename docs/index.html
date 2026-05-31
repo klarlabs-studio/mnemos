@@ -58,7 +58,7 @@
     <div><p><strong>Own your memory infrastructure</strong>Single Go binary, MIT license, and storage in your stack.</p></div>
     <div><p><strong>Reduce hallucination risk from memory drift</strong>Contradictions are first-class and surfaced before response generation.</p></div>
     <div><p><strong>Pass audits faster</strong>Every claim links to evidence and every correction carries a reason.</p></div>
-    <div><p><strong>Integrate with your current agent runtime</strong>Use HTTP, CLI, gRPC, or MCP with LangGraph, CrewAI, and custom systems.</p></div>
+    <div><p><strong>Integrate with your current agent runtime</strong>Use the in-process Go library (since v0.17), HTTP, CLI, gRPC, or MCP with Claude Code, Codex, Hermes, Nomi, LangGraph, CrewAI, and custom systems.</p></div>
   </div>
 </section>
 
@@ -283,7 +283,7 @@ $ mnemos query --at 2026-05-01 "What happened with the deployment?"
     <div class="pipe-band">
       <div class="row">
         <strong>Storage</strong><span>SQLite (default · pure-Go, no CGO) · Postgres · MySQL · libSQL/Turso · in-memory</span>
-        <strong>Surface</strong><span>CLI · HTTP · gRPC · MCP — pinned wire contract; all four speak the same domain types</span>
+        <strong>Surface</strong><span>Go library · CLI · HTTP · gRPC · MCP — pinned wire contract; all five speak the same domain types</span>
       </div>
     </div>
   </div>

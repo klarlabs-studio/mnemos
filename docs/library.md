@@ -1,7 +1,8 @@
 # Mnemos as a Go library
 
-> Available since v0.16.0. Marked `v0.x` until the public API has been
-> exercised by at least two external agent runtimes.
+> Available since v0.17.0; the agent-supplied-claim path (`RememberClaim`)
+> + bundled-Chronos forwarding ship in v0.17.1. Marked `v0.x` until the
+> public API has been exercised by at least two external agent runtimes.
 
 The root `mnemos` package is a small, framework-neutral Go API for
 embedding Mnemos in any agent runtime (Claude Code, Codex, Hermes,
