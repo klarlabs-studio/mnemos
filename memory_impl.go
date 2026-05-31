@@ -1,0 +1,315 @@
+package mnemos
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"maps"
+	"slices"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"github.com/felixgeelhaar/mnemos/internal/embedding"
+	"github.com/felixgeelhaar/mnemos/internal/ingest"
+	"github.com/felixgeelhaar/mnemos/internal/llm"
+	"github.com/felixgeelhaar/mnemos/internal/parser"
+	"github.com/felixgeelhaar/mnemos/internal/pipeline"
+	"github.com/felixgeelhaar/mnemos/internal/query"
+	"github.com/felixgeelhaar/mnemos/internal/relate"
+	"github.com/felixgeelhaar/mnemos/internal/store"
+	"github.com/felixgeelhaar/mnemos/providers"
+)
+
+// memory is the concrete implementation of [Memory] returned by [New].
+type memory struct {
+	conn      *store.Conn
+	actorID   string
+	extractor *pipeline.Extractor
+	relator   relate.Engine
+	query     query.Engine
+	embedder  embedding.Client
+}
+
+var _ Memory = (*memory)(nil)
+
+// Remember implements [Memory.Remember].
+func (m *memory) Remember(ctx context.Context, item Item) error {
+	if strings.TrimSpace(item.Content) == "" {
+		return errors.New("mnemos: Remember: Content is required")
+	}
+
+	svc := ingest.NewService()
+	in, content, err := svc.IngestText(item.Content, mergeMetadata(item))
+	if err != nil {
+		return fmt.Errorf("mnemos: ingest: %w", err)
+	}
+
+	events, err := parser.NewNormalizer().Normalize(in, content)
+	if err != nil {
+		return fmt.Errorf("mnemos: normalize: %w", err)
+	}
+	for i := range events {
+		if item.RunID != "" {
+			events[i].RunID = item.RunID
+		}
+		events[i].CreatedBy = m.actorID
+	}
+
+	claims, links, _, err := m.extractor.ExtractFn(events)
+	if err != nil {
+		return fmt.Errorf("mnemos: extract: %w", err)
+	}
+	for i := range claims {
+		claims[i].CreatedBy = m.actorID
+		if item.Type != "" {
+			claims[i].Type = domain.ClaimType(item.Type)
+		}
+	}
+
+	rels, err := m.relator.Detect(claims)
+	if err != nil {
+		return fmt.Errorf("mnemos: relate: %w", err)
+	}
+	existing, err := m.conn.Claims.ListAll(ctx)
+	if err == nil && len(existing) > 0 {
+		incremental, irelErr := m.relator.DetectIncremental(claims, existing)
+		if irelErr == nil {
+			rels = append(rels, incremental...)
+		}
+	}
+	for i := range rels {
+		rels[i].CreatedBy = m.actorID
+	}
+
+	if err := pipeline.PersistArtifacts(ctx, m.conn, events, claims, links, rels); err != nil {
+		return fmt.Errorf("mnemos: persist: %w", err)
+	}
+	return nil
+}
+
+// Recall implements [Memory.Recall].
+func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
+	if strings.TrimSpace(q.Text) == "" {
+		return nil, errors.New("mnemos: Recall: Text is required")
+	}
+
+	opts := query.AnswerOptions{
+		Hops:           q.Hops,
+		AsOf:           q.AsOf,
+		IncludeHistory: q.IncludeHistory,
+	}
+
+	var ans domain.Answer
+	var err error
+	if q.RunID != "" {
+		ans, err = m.query.AnswerForRunWithOptions(q.Text, q.RunID, opts)
+	} else {
+		ans, err = m.query.AnswerWithOptions(q.Text, opts)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("mnemos: answer: %w", err)
+	}
+
+	results := make([]Result, 0, len(ans.Claims))
+	for _, c := range ans.Claims {
+		results = append(results, Result{
+			ClaimID:     c.ID,
+			Text:        c.Text,
+			Type:        string(c.Type),
+			Confidence:  c.Confidence,
+			TrustScore:  c.TrustScore,
+			HopDistance: ans.ClaimHopDistance[c.ID],
+			Provenance:  ans.ClaimProvenance[c.ID],
+		})
+	}
+	if q.Limit > 0 && len(results) > q.Limit {
+		results = results[:q.Limit]
+	}
+	// Suppress unused-context: the underlying engine is sync today; ctx
+	// is reserved for future cancellation propagation through the
+	// query.Engine surface.
+	_ = ctx
+	return results, nil
+}
+
+// RememberEvent implements [Memory.RememberEvent].
+func (m *memory) RememberEvent(ctx context.Context, e Event) error {
+	if e.At.IsZero() {
+		return errors.New("mnemos: RememberEvent: At is required")
+	}
+	if strings.TrimSpace(e.Content) == "" {
+		return errors.New("mnemos: RememberEvent: Content is required")
+	}
+
+	id := strings.TrimSpace(e.ID)
+	if id == "" {
+		id = newEventID()
+	}
+	meta := map[string]string{}
+	maps.Copy(meta, e.Metadata)
+	if e.Type != "" {
+		meta["event_type"] = e.Type
+	}
+
+	ev := domain.Event{
+		ID:            id,
+		RunID:         e.RunID,
+		SchemaVersion: "1.0",
+		Content:       e.Content,
+		SourceInputID: "inline:" + id, // synthetic origin for direct API calls
+		Timestamp:     e.At.UTC(),
+		Metadata:      meta,
+		IngestedAt:    time.Now().UTC(),
+		CreatedBy:     m.actorID,
+	}
+	if err := m.conn.Events.Append(ctx, ev); err != nil {
+		return fmt.Errorf("mnemos: append event: %w", err)
+	}
+	// TODO(chronos): forward the event to the bundled Chronos engine
+	// for temporal pattern detection. Wiring lands in task 12.
+	return nil
+}
+
+// Timeline implements [Memory.Timeline].
+func (m *memory) Timeline(ctx context.Context, q TimelineQuery) ([]Event, error) {
+	var events []domain.Event
+	var err error
+	if q.RunID != "" {
+		events, err = m.conn.Events.ListByRunID(ctx, q.RunID)
+	} else {
+		events, err = m.conn.Events.ListAll(ctx)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("mnemos: list events: %w", err)
+	}
+
+	out := make([]Event, 0, len(events))
+	for _, ev := range events {
+		if !q.From.IsZero() && ev.Timestamp.Before(q.From) {
+			continue
+		}
+		if !q.To.IsZero() && ev.Timestamp.After(q.To) {
+			continue
+		}
+		typ := ev.Metadata["event_type"]
+		if len(q.Types) > 0 && !slices.Contains(q.Types, typ) {
+			continue
+		}
+		out = append(out, Event{
+			ID:       ev.ID,
+			At:       ev.Timestamp,
+			Type:     typ,
+			Content:  ev.Content,
+			Metadata: copyMetaWithout(ev.Metadata, "event_type"),
+			RunID:    ev.RunID,
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
+
+	if q.Limit > 0 && len(out) > q.Limit {
+		out = out[:q.Limit]
+	}
+	return out, nil
+}
+
+// Close implements [Memory.Close].
+func (m *memory) Close() error {
+	if m.conn == nil {
+		return nil
+	}
+	err := m.conn.Close()
+	m.conn = nil
+	return err
+}
+
+// mergeMetadata produces the input metadata map for ingest.IngestText
+// from an Item. The "source" key follows the same convention as the CLI
+// (defaults to "raw_text" when none supplied).
+func mergeMetadata(item Item) map[string]string {
+	out := map[string]string{}
+	maps.Copy(out, item.Metadata)
+	if item.Source != "" {
+		out["source"] = item.Source
+	}
+	return out
+}
+
+func copyMetaWithout(in map[string]string, skip string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if k == skip {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// newEventID returns a fresh event id. Mirrors internal/parser's id
+// strategy without exporting it.
+func newEventID() string {
+	return fmt.Sprintf("ev_%d", time.Now().UnixNano())
+}
+
+// textGenAdapter wraps a [providers.TextGenerator] to satisfy the
+// internal llm.Client contract Mnemos's engines consume.
+type textGenAdapter struct {
+	tg providers.TextGenerator
+}
+
+func newTextGenAdapter(tg providers.TextGenerator) llm.Client {
+	return &textGenAdapter{tg: tg}
+}
+
+// Complete satisfies llm.Client by translating between the internal
+// message shape and the public providers.TextGenerator surface.
+func (a *textGenAdapter) Complete(ctx context.Context, messages []llm.Message) (llm.Response, error) {
+	in := providers.GenerateTextInput{
+		Messages: make([]providers.Message, len(messages)),
+	}
+	for i, m := range messages {
+		in.Messages[i] = providers.Message{
+			Role:    providers.Role(string(m.Role)),
+			Content: m.Content,
+		}
+	}
+	out, err := a.tg.GenerateText(ctx, in)
+	if err != nil {
+		return llm.Response{}, err
+	}
+	return llm.Response{
+		Content:      out.Content,
+		Model:        out.Model,
+		InputTokens:  out.InputTokens,
+		OutputTokens: out.OutputTokens,
+	}, nil
+}
+
+// embedderAdapter wraps a [providers.Embedder] to satisfy the internal
+// embedding.Client contract.
+type embedderAdapter struct {
+	e providers.Embedder
+}
+
+func newEmbedderAdapter(e providers.Embedder) embedding.Client {
+	return &embedderAdapter{e: e}
+}
+
+// Embed satisfies embedding.Client by delegating to the public
+// providers.Embedder.
+func (a *embedderAdapter) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	out, err := a.e.Embed(ctx, providers.EmbedInput{Texts: texts})
+	if err != nil {
+		return nil, err
+	}
+	return out.Vectors, nil
+}
