@@ -29,7 +29,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "handleAgentHeal in cmd/mnemos/agents.go; dispatched via mnemos agent heal --claim \u003cid\u003e --statement \"\u003cnew truth\u003e\" [--reason \"...\"] [--json]; fetches claim, updates Text, UpsertWithReason, calls WhyTrustClaim for updated trust score; 3 tests in cmd/mnemos/agents_heal_test.go all pass; make check green."
+        "handleAgentHeal in cmd/mnemos/agents.go; dispatched via mnemos agent heal --claim <id> --statement \"<new truth>\" [--reason \"...\"] [--json]; fetches claim, updates Text, UpsertWithReason, calls WhyTrustClaim for updated trust score; 3 tests in cmd/mnemos/agents_heal_test.go all pass; make check green."
       ],
       "started_at": "2026-05-05T12:19:09.941991+02:00",
       "completed_at": "2026-05-05T12:19:17.24976+02:00",
@@ -249,7 +249,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "Pull stamps each remote event with metadata.pulled_from_registry=\u003curl\u003e and pulled_at=\u003cRFC3339\u003e (preserving any pre-existing origin from a chained pull). Query engine attributes each surfaced claim to its first non-local evidence event via the new ListEvidenceByClaimIDs port method. Answer.ClaimProvenance carries a {claimID -\u003e origin} map; buildAnswerText appends ' (from \u003curl\u003e)' suffixes per claim and a summary count. mcpQueryOutput exposes claim_provenance as a JSON map. Also fixed an evidence-transfer bug surfaced during live testing: GET /v1/claims now embeds the evidence array so pull recovers the link rows and the local query engine can JOIN claims back to events. Live-tested end to end: push from local, pull into a fresh project, query — answer reads 'We use LRU for cache eviction (from http://localhost:17782) ... (1 from a connected registry).' Tests added for stamping behaviour, query-engine provenance attribution, and override-protection on chained pulls."
+        "Pull stamps each remote event with metadata.pulled_from_registry=<url> and pulled_at=<RFC3339> (preserving any pre-existing origin from a chained pull). Query engine attributes each surfaced claim to its first non-local evidence event via the new ListEvidenceByClaimIDs port method. Answer.ClaimProvenance carries a {claimID -> origin} map; buildAnswerText appends ' (from <url>)' suffixes per claim and a summary count. mcpQueryOutput exposes claim_provenance as a JSON map. Also fixed an evidence-transfer bug surfaced during live testing: GET /v1/claims now embeds the evidence array so pull recovers the link rows and the local query engine can JOIN claims back to events. Live-tested end to end: push from local, pull into a fresh project, query — answer reads 'We use LRU for cache eviction (from http://localhost:17782) ... (1 from a connected registry).' Tests added for stamping behaviour, query-engine provenance attribution, and override-protection on chained pulls."
       ],
       "started_at": "2026-04-18T08:51:40.914879+02:00",
       "completed_at": "2026-04-18T09:03:24.310433+02:00",
@@ -343,12 +343,12 @@
       "completed_at": "2026-05-04T08:50:53.708063+02:00",
       "elapsed_minutes": 11
     },
-    "task-epistemic-provenance-\u0026-claim-trust-framework": {
+    "task-epistemic-provenance-&-claim-trust-framework": {
       "status": "done",
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "test-aware credibility signals (TestLastRunAt, TestPassCount/FailCount in CredibilityInputs); test-aware contradiction resolver (pickTestWinner uses recency + pass-ratio before generic confidence/trust path); CLI `mnemos trust --test=\u003cref\u003e` + MCP `which_test_to_trust` tool; new tests TestScoreCredibility_TestRecency_OverridesClaimTimestamps, TestScoreCredibility_TestDecisiveness_FlakyDeflates, TestScoreCredibility_NonTest_NoTestRationale, TestTestConflict_RecencyWins, TestTestConflict_PassRatioWins all green"
+        "test-aware credibility signals (TestLastRunAt, TestPassCount/FailCount in CredibilityInputs); test-aware contradiction resolver (pickTestWinner uses recency + pass-ratio before generic confidence/trust path); CLI `mnemos trust --test=<ref>` + MCP `which_test_to_trust` tool; new tests TestScoreCredibility_TestRecency_OverridesClaimTimestamps, TestScoreCredibility_TestDecisiveness_FlakyDeflates, TestScoreCredibility_NonTest_NoTestRationale, TestTestConflict_RecencyWins, TestTestConflict_PassRatioWins all green"
       ],
       "started_at": "2026-05-09T07:32:17.248648+02:00",
       "completed_at": "2026-05-09T07:44:54.250953+02:00",
@@ -414,7 +414,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "BFS hop expansion in internal/query/engine.go via expandClaimsByHops. New AnswerOptions{Hops int} (cap 5) plus AnswerWithOptions and AnswerForRunWithOptions; the existing Answer/AnswerForRun keep their signatures and delegate with zero-value opts. Two new repo methods land on ports.ClaimRepository and ports.RelationshipRepository: ListByIDs (load full claims by ID for hop materialization) and ListByClaimIDs (one round-trip per hop instead of N). domain.Answer gains ClaimHopDistance map[claimID]int (0=direct, N\u003e0=expanded N hops). buildAnswerText appends 'Expanded N additional claim(s) via supports/contradicts edges (up to N hop(s)).' when expansion happened. CLI: 'mnemos query --hops N' wired through parseQueryArgs; MCP: query_knowledge gains hops field (clamped 0-5) and exposes claim_hop_distance in the response. Test TestAnswer_HopExpansionWalksRelationshipGraph builds a 3-claim chain and verifies hops=0, 1, and 2 produce the expected expansion footprint and hop distances. Live-tested against the real Mnemos DB: hops=2 visibly widened the result set across contradiction edges."
+        "BFS hop expansion in internal/query/engine.go via expandClaimsByHops. New AnswerOptions{Hops int} (cap 5) plus AnswerWithOptions and AnswerForRunWithOptions; the existing Answer/AnswerForRun keep their signatures and delegate with zero-value opts. Two new repo methods land on ports.ClaimRepository and ports.RelationshipRepository: ListByIDs (load full claims by ID for hop materialization) and ListByClaimIDs (one round-trip per hop instead of N). domain.Answer gains ClaimHopDistance map[claimID]int (0=direct, N>0=expanded N hops). buildAnswerText appends 'Expanded N additional claim(s) via supports/contradicts edges (up to N hop(s)).' when expansion happened. CLI: 'mnemos query --hops N' wired through parseQueryArgs; MCP: query_knowledge gains hops field (clamped 0-5) and exposes claim_hop_distance in the response. Test TestAnswer_HopExpansionWalksRelationshipGraph builds a 3-claim chain and verifies hops=0, 1, and 2 produce the expected expansion footprint and hop distances. Live-tested against the real Mnemos DB: hops=2 visibly widened the result set across contradiction edges."
       ],
       "started_at": "2026-04-18T13:55:04.01134+02:00",
       "completed_at": "2026-04-18T14:13:17.732787+02:00",
@@ -787,7 +787,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "trust.BuildReport now returns (score, signals, rationale, prose); compact metric string preserved + new prose rationale generated by buildProseRationale (test recency bucket, decisiveness, liveness, authority, citations, agent-authority sentences). domain.ProvenanceReport gained ProseRationale field. WhyTrustClaim populates it. CLI mnemos trust --test=\u003cref\u003e emits prose_rationale alongside rationale per candidate + winner. MCP which_test_to_trust mirrors. trust.ScoreWithProse helper added for callers that only want score+prose. Tests TestBuildReport_ProseRationale_TestSignals (3 cases: fresh decisive, stale flaky, minimum) + parity test extended to assert prose populated. CLAUDE.md prompt v1.2 → v1.4 + LLM cache cap note. README.md: hybrid BM25+cosine note added at line 97."
+        "trust.BuildReport now returns (score, signals, rationale, prose); compact metric string preserved + new prose rationale generated by buildProseRationale (test recency bucket, decisiveness, liveness, authority, citations, agent-authority sentences). domain.ProvenanceReport gained ProseRationale field. WhyTrustClaim populates it. CLI mnemos trust --test=<ref> emits prose_rationale alongside rationale per candidate + winner. MCP which_test_to_trust mirrors. trust.ScoreWithProse helper added for callers that only want score+prose. Tests TestBuildReport_ProseRationale_TestSignals (3 cases: fresh decisive, stale flaky, minimum) + parity test extended to assert prose populated. CLAUDE.md prompt v1.2 → v1.4 + LLM cache cap note. README.md: hybrid BM25+cosine note added at line 97."
       ],
       "started_at": "2026-05-09T08:51:05.418089+02:00",
       "completed_at": "2026-05-09T08:56:43.202667+02:00",
@@ -875,7 +875,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "cmd/mnemos/registry.go and cmd/mnemos/registry_test.go. Three new CLI commands: 'mnemos registry connect \u003curl\u003e [--token T]' writes .mnemos/config.json; 'mnemos push' batches all local events/claims/relationships to the configured registry via the POST endpoints; 'mnemos pull' paginates through GET endpoints (limit=100/page) and INSERTs with ON CONFLICT DO NOTHING for idempotency. Resolution precedence CLI flag \u003e env (MNEMOS_REGISTRY_URL/TOKEN) \u003e config file. Live-tested: push 1 event/1 claim → pull into fresh DB recovers same content; second pull = 0/0/0. Embedding BLOBs intentionally not transferred (regenerable via mnemos process --embed after pull); documented as a known limit. Tests cover precedence rules, batch boundaries, evidence-on-first-batch heuristic, server-error propagation, auth-header passthrough, and pagination beyond a single page."
+        "cmd/mnemos/registry.go and cmd/mnemos/registry_test.go. Three new CLI commands: 'mnemos registry connect <url> [--token T]' writes .mnemos/config.json; 'mnemos push' batches all local events/claims/relationships to the configured registry via the POST endpoints; 'mnemos pull' paginates through GET endpoints (limit=100/page) and INSERTs with ON CONFLICT DO NOTHING for idempotency. Resolution precedence CLI flag > env (MNEMOS_REGISTRY_URL/TOKEN) > config file. Live-tested: push 1 event/1 claim → pull into fresh DB recovers same content; second pull = 0/0/0. Embedding BLOBs intentionally not transferred (regenerable via mnemos process --embed after pull); documented as a known limit. Tests cover precedence rules, batch boundaries, evidence-on-first-batch heuristic, server-error propagation, auth-header passthrough, and pagination beyond a single page."
       ],
       "started_at": "2026-04-18T01:38:25.30929+02:00",
       "completed_at": "2026-04-18T01:46:00.848245+02:00",
@@ -974,7 +974,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "Completed 5/5 sub-tasks: real-trace eval harness (recall 0.5→1.0), deterministic evidence fallback, confidence-calibrated answer policy (confidence field in Answer, computeConfidence()), memory-quality telemetry (ComputeMemoryQuality, handleQuality CLI), CI regression gates (baseline.json updated, check_baseline passes), rollout guardrails \u0026 SLOs (SLOThresholds, CheckSLOs()). All tests pass, make check green."
+        "Completed 5/5 sub-tasks: real-trace eval harness (recall 0.5→1.0), deterministic evidence fallback, confidence-calibrated answer policy (confidence field in Answer, computeConfidence()), memory-quality telemetry (ComputeMemoryQuality, handleQuality CLI), CI regression gates (baseline.json updated, check_baseline passes), rollout guardrails & SLOs (SLOThresholds, CheckSLOs()). All tests pass, make check green."
       ],
       "started_at": "2026-05-05T19:27:07.705278+02:00",
       "completed_at": "2026-05-06T10:10:46.079271+02:00",
@@ -1084,7 +1084,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "DetectTestConflicts wired into Engine.Detect + DetectIncremental; 6 new tests all green; make build \u0026\u0026 make test 30 packages pass"
+        "DetectTestConflicts wired into Engine.Detect + DetectIncremental; 6 new tests all green; make build && make test 30 packages pass"
       ],
       "started_at": "2026-05-04T16:22:56.933414+02:00",
       "completed_at": "2026-05-04T16:28:24.453995+02:00",
@@ -1095,7 +1095,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "Added cmd/mnemos/trust_test.go with 5 table-driven tests covering mcpRunWhichTestToTrust: PicksFreshHigherPassRatio (winner with clear margin), AmbiguousVerdictWhenMarginTight (gap \u003c 0.05), NoCandidates (empty result for unknown ref), RequiresRequirementRef (rejects empty input), FilterScopedToTestResultOnly (port filter ignores non-test claims). Tests use openConn against sqlite via t.Setenv MNEMOS_DB_URL temp path. All five pass."
+        "Added cmd/mnemos/trust_test.go with 5 table-driven tests covering mcpRunWhichTestToTrust: PicksFreshHigherPassRatio (winner with clear margin), AmbiguousVerdictWhenMarginTight (gap < 0.05), NoCandidates (empty result for unknown ref), RequiresRequirementRef (rejects empty input), FilterScopedToTestResultOnly (port filter ignores non-test claims). Tests use openConn against sqlite via t.Setenv MNEMOS_DB_URL temp path. All five pass."
       ],
       "started_at": "2026-05-09T08:36:10.818668+02:00",
       "completed_at": "2026-05-09T08:38:19.092279+02:00",
@@ -1106,7 +1106,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "ClaimTypeTestResult + 7 test provenance fields wired through schema v9, sqlcgen, claim_repository, HTTP handler, browse validation, ux icons. make build \u0026\u0026 make test green."
+        "ClaimTypeTestResult + 7 test provenance fields wired through schema v9, sqlcgen, claim_repository, HTTP handler, browse validation, ux icons. make build && make test green."
       ],
       "started_at": "2026-05-04T14:40:32.479767+02:00",
       "completed_at": "2026-05-04T16:21:50.517106+02:00",
@@ -1150,7 +1150,7 @@
       "path": "",
       "owner": "ai-agent",
       "evidence": [
-        "Single-page web UI embedded in the Go binary via //go:embed web/index.html. Served by mnemos serve at GET /. Calls the existing /v1/metrics, /v1/claims, and /v1/relationships endpoints — no new API surface, no build tooling, no external assets. Three sections: a metrics strip (events, claims, contested, relationships, contradictions, embeddings with warn styling when \u003e 0), a claims list with type and status filter dropdowns and pagination, and a contradictions list with left-border highlighting. Vanilla JS, CSS custom properties, ~280 lines including styles. Root handler does NOT catch-all so /v1/wrong still 404s. HEAD supported. Cache-Control: no-cache on the HTML so UI changes don't get stuck in browser caches across releases. Tests cover 200+text/html content-type at /, title substring match on the body, and 404 on unrelated paths. Live-tested against the production DB: page renders with live metrics and claims."
+        "Single-page web UI embedded in the Go binary via //go:embed web/index.html. Served by mnemos serve at GET /. Calls the existing /v1/metrics, /v1/claims, and /v1/relationships endpoints — no new API surface, no build tooling, no external assets. Three sections: a metrics strip (events, claims, contested, relationships, contradictions, embeddings with warn styling when > 0), a claims list with type and status filter dropdowns and pagination, and a contradictions list with left-border highlighting. Vanilla JS, CSS custom properties, ~280 lines including styles. Root handler does NOT catch-all so /v1/wrong still 404s. HEAD supported. Cache-Control: no-cache on the HTML so UI changes don't get stuck in browser caches across releases. Tests cover 200+text/html content-type at /, title substring match on the body, and 404 on unrelated paths. Live-tested against the production DB: page renders with live metrics and claims."
       ],
       "started_at": "2026-04-18T14:13:56.06459+02:00",
       "completed_at": "2026-04-18T15:07:14.72194+02:00",
@@ -1177,7 +1177,140 @@
       "started_at": "2026-05-05T09:18:04.425425+02:00",
       "completed_at": "2026-05-05T09:24:05.18248+02:00",
       "elapsed_minutes": 6
+    },
+    "task-archive-olymp-repo": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "olymp@v0.1.5-final archived; mnemos ADR 0003"
+      ],
+      "started_at": "2026-05-31T11:30:00Z",
+      "completed_at": "2026-05-31T12:00:00Z",
+      "elapsed_minutes": 30
+    },
+    "task-extract-decisionkit-library-from-nous": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "github.com/felixgeelhaar/decisionkit@v0.1.0 (87ec9fc)"
+      ],
+      "started_at": "2026-05-31T11:30:00Z",
+      "completed_at": "2026-05-31T12:10:00Z",
+      "elapsed_minutes": 40
+    },
+    "task-archive-nous-repo": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "nous@v0.3.1-final archived; mnemos ADR 0005"
+      ],
+      "started_at": "2026-05-31T12:10:00Z",
+      "completed_at": "2026-05-31T12:30:00Z",
+      "elapsed_minutes": 20
+    },
+    "task-mnemos-root-library-package-and-mnemos.new-entry-point": {
+      "status": "done",
+      "path": "memory.go,memory_impl.go,new.go,options.go",
+      "owner": "ai-agent",
+      "evidence": [
+        "mnemos#48 (b057f9f) feat: mnemos library API + 3 modes + Chronos bundling"
+      ],
+      "started_at": "2026-05-31T12:00:00Z",
+      "completed_at": "2026-05-31T13:30:00Z",
+      "elapsed_minutes": 90
+    },
+    "task-framework-neutral-provider-interfaces-(textgenerator-and-embedder)": {
+      "status": "done",
+      "path": "providers/text.go,providers/embedder.go",
+      "owner": "ai-agent",
+      "evidence": [
+        "mnemos#48 providers/ subpackage"
+      ],
+      "started_at": "2026-05-31T12:00:00Z",
+      "completed_at": "2026-05-31T12:30:00Z",
+      "elapsed_minutes": 30
+    },
+    "task-three-mode-option-builders-(passive,-sharedprovider,-enhanced)": {
+      "status": "done",
+      "path": "options.go",
+      "owner": "ai-agent",
+      "evidence": [
+        "mnemos#48 WithPassiveMode/WithSharedProvider/WithEnhancedMode"
+      ],
+      "started_at": "2026-05-31T12:00:00Z",
+      "completed_at": "2026-05-31T12:30:00Z",
+      "elapsed_minutes": 30
+    },
+    "task-chronos-bundling-—-embedded-by-default-inside-mnemos.new": {
+      "status": "done",
+      "path": "new.go,memory_impl.go",
+      "owner": "ai-agent",
+      "evidence": [
+        "chronos@v0.6.0 (embeddable Engine API) + mnemos#48 WithChronos + #55 forward RememberEvent"
+      ],
+      "started_at": "2026-05-31T12:30:00Z",
+      "completed_at": "2026-05-31T17:22:00Z",
+      "elapsed_minutes": 292
+    },
+    "task-temporal-mcp-tools-(remember_event,-timeline_query,-recall_at_time)": {
+      "status": "done",
+      "path": "cmd/mnemos/mcp_temporal.go",
+      "owner": "ai-agent",
+      "evidence": [
+        "mnemos#48 mcp_temporal.go (remember_event + timeline_query + recall_at_time)"
+      ],
+      "started_at": "2026-05-31T12:30:00Z",
+      "completed_at": "2026-05-31T13:00:00Z",
+      "elapsed_minutes": 30
+    },
+    "task-refactor-cmd/mnemos-to-route-through-new-library": {
+      "status": "done",
+      "path": "cmd/mnemos/library_bridge.go,cmd/mnemos/mcp_temporal.go",
+      "owner": "ai-agent",
+      "evidence": [
+        "mnemos#50 (cab0d39) route remember_event + timeline_query through library API"
+      ],
+      "started_at": "2026-05-31T13:30:00Z",
+      "completed_at": "2026-05-31T13:43:00Z",
+      "elapsed_minutes": 13
+    },
+    "task-obvia-inline-migration-off-praxis": {
+      "status": "done",
+      "path": "obvia/internal/application/remediation/",
+      "owner": "ai-agent",
+      "evidence": [
+        "obviahq/obvia#5 feat(remediation): inline executor; retire Praxis HTTP dependency"
+      ],
+      "started_at": "2026-05-31T12:30:00Z",
+      "completed_at": "2026-05-31T13:29:00Z",
+      "elapsed_minutes": 59
+    },
+    "task-archive-praxis-repo": {
+      "status": "done",
+      "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "praxis@v0.3.1-final archived; mnemos ADR 0006"
+      ],
+      "started_at": "2026-05-31T13:29:00Z",
+      "completed_at": "2026-05-31T13:35:00Z",
+      "elapsed_minutes": 6
+    },
+    "task-jwt-kid-header-+-key-id-driven-verification": {
+      "status": "pending",
+      "path": "",
+      "owner": "",
+      "evidence": []
+    },
+    "task-supply-chain-attestation:-sbom,-cosign-signing,-slsa-provenance,-arm64-docker": {
+      "status": "pending",
+      "path": "",
+      "owner": "",
+      "evidence": []
     }
   },
-  "updated_at": "2026-05-09T11:57:23.573853+02:00"
+  "updated_at": "2026-05-31T18:32:00Z"
 }
