@@ -26,12 +26,14 @@ services:
     ports:
       - "7778:7778"
     environment:
-      CHRONOS_DB_DSN: "sqlite:///data/chronos.db"
+      # In-memory backend: the smoke test asserts cross-service flow,
+      # not persistence. Avoids the named-volume + non-root-user
+      # permissions dance that previously made every nightly run fail
+      # with `sqlite: ping: unable to open database file (14)`.
+      CHRONOS_DB_DSN: "memory://?namespace=integration"
       CHRONOS_HTTP_HOST: "0.0.0.0"
       CHRONOS_HTTP_PORT: "7778"
     command: ["serve"]
-    volumes:
-      - chronos-data:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7778/health"]
       interval: 2s
@@ -44,12 +46,10 @@ services:
     ports:
       - "7777:7777"
     environment:
-      MNEMOS_DB_URL: "sqlite:///data/mnemos.db"
+      MNEMOS_DB_URL: "memory://?namespace=integration"
       MNEMOS_HTTP_HOST: "0.0.0.0"
       MNEMOS_HTTP_PORT: "7777"
     command: ["serve"]
-    volumes:
-      - mnemos-data:/data
     depends_on:
       chronos:
         condition: service_healthy
@@ -58,7 +58,3 @@ services:
       interval: 2s
       timeout: 1s
       retries: 30
-
-volumes:
-  chronos-data:
-  mnemos-data:
