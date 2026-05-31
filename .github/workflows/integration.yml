@@ -36,7 +36,24 @@ jobs:
           cache: true
 
       - name: Boot stack
-        run: docker compose -f test/integration/docker-compose.yml up -d --wait
+        # chronos + mnemos images are distroless (no shell, no wget),
+        # so docker compose's container-level healthchecks can't run.
+        # Boot detached, then poll /health from the runner host via
+        # curl until both services answer or we hit a 60s ceiling.
+        run: |
+          docker compose -f test/integration/docker-compose.yml up -d
+          deadline=$((SECONDS + 60))
+          while [ $SECONDS -lt $deadline ]; do
+            if curl -fsS http://127.0.0.1:7778/health >/dev/null \
+               && curl -fsS http://127.0.0.1:7777/health >/dev/null; then
+              echo "stack healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "stack did not become healthy in 60s"
+          docker compose -f test/integration/docker-compose.yml logs --no-color
+          exit 1
 
       - name: Smoke test
         env:

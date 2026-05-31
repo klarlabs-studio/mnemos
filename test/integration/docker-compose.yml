@@ -34,11 +34,10 @@ services:
       CHRONOS_HTTP_HOST: "0.0.0.0"
       CHRONOS_HTTP_PORT: "7778"
     command: ["serve"]
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7778/health"]
-      interval: 2s
-      timeout: 1s
-      retries: 30
+    # No container healthcheck: the chronos image is distroless (no
+    # shell, no wget, no curl), so the previous wget-based check was
+    # never going to succeed. The Boot stack step below polls /health
+    # from the runner host instead.
 
   mnemos:
     image: ${MNEMOS_IMAGE:-ghcr.io/felixgeelhaar/mnemos:latest}
@@ -51,10 +50,5 @@ services:
       MNEMOS_HTTP_PORT: "7777"
     command: ["serve"]
     depends_on:
-      chronos:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7777/health"]
-      interval: 2s
-      timeout: 1s
-      retries: 30
+      - chronos
+    # Same distroless caveat as chronos; runner-host poll covers it.
