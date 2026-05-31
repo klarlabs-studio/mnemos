@@ -6,6 +6,55 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ## [Unreleased]
 
+## [0.17.1] — 2026-05-31
+
+Patch release. One feature addition (Chronos forwarding closes the
+`TODO(chronos)` marker from v0.17.0) plus a sweep of CI / integration
+hygiene that had v0.17.0's first day of runs red.
+
+### Added
+- **`Memory.RememberEvent` forwards to bundled Chronos** as a presence
+  signal: each event maps to a `chronos.EntityState` with
+  `EntityID = NS-hash(type)`, `ScopeID = NS-hash(run_id)`, `Features = [1.0]`,
+  preserving the wall-clock `At`. Detectors now see deployment /
+  incident / decision bursts as recurrence + spike patterns without
+  consumers constructing numeric vectors. Chronos failures are
+  non-fatal — the Mnemos event store is the source of truth and is
+  persisted first. (#55)
+
+### Fixed
+- **CI on `main` was red since v0.17.0** because goreleaser v2.16+
+  treats deprecated `brews` / `dockers` blocks as fatal errors.
+  Pinned `goreleaser-action` to `~> v2.15` until a full migration to
+  `homebrew_casks` + `dockers_v2` lands separately. (#56)
+- **Nightly `integration` workflow was red for weeks** with three
+  cascading issues:
+  - `sqlite: ping: unable to open database file (14)` — chronos
+    container exited because the named docker volume was root-owned
+    and the distroless image runs as non-root. Switched both
+    services to the in-memory backend; smoke asserts cross-service
+    flow, not persistence. (#57)
+  - `dependency failed to start: container chronos-integration is
+    unhealthy` — distroless images have no shell, no `wget`, so the
+    container-level healthcheck could never succeed. Drop the
+    container healthcheck; poll `/health` from the runner host via
+    `curl` with a 60s ceiling instead. (#58)
+  - `401 missing bearer token` — mnemos serve enforces JWT auth on
+    POST; smoke test was unauthenticated. Shared
+    `MNEMOS_JWT_SECRET` between the mnemos container and the test
+    job; the smoke test mints a wildcard-scope agent JWT client-side
+    via `internal/auth.Issuer`. (#59)
+  - `MNEMOS_JWT_SECRET is not valid hex` — mnemos expects a
+    hex-encoded secret. Switched to a deterministic 64-char hex
+    value (sha256 of an integration-only label) and decode it in
+    the issuer so the signing bytes match what the server
+    verifies against. (#60)
+
+### Documentation
+- README + CLAUDE.md sweep that removed the last Olymp reference and
+  documented the in-process Go library as the leading SDK section.
+  (already in `v0.17.0` via PR #54, called out here for completeness.)
+
 ## [0.17.0] — 2026-05-31
 
 Cognitive-stack simplification + embeddable library release. Mnemos
