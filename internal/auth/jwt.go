@@ -99,33 +99,45 @@ func (c Claims) AllowsRun(runID string) bool {
 // Issuer mints new JWTs. It does not store anything — the resulting
 // token string is the only place the plaintext exists. Callers should
 // hand it back to the user once and never persist it server-side.
-type Issuer struct {
-	secret []byte
-}
-
-// Verifier parses + validates JWTs and consults the revocation denylist.
 //
-// Dual-key support: a `previous` secret may be supplied to support
-// zero-downtime rotation. New tokens always sign under the active
-// secret; tokens issued under the previous secret continue to verify
-// until they expire. Drop the previous secret once the longest-lived
-// outstanding token has expired.
-type Verifier struct {
-	secret         []byte
-	previousSecret []byte
-	revoked        ports.RevokedTokenRepository
+// Issuer signs tokens with the [Keyring]'s primary kid and writes
+// that kid into the JWT header so verifiers can look up the right
+// secret during rotation.
+type Issuer struct {
+	keyring *Keyring
 }
 
-// NewIssuer returns an Issuer signing tokens with the given secret. The
-// secret should be at least 32 bytes of random data; see GenerateSecret.
+// Verifier parses + validates JWTs and consults the revocation
+// denylist. The signing kid is read from the JWT header and looked up
+// in the [Keyring]; empty kid (tokens minted before this surface
+// existed) falls back to the primary secret for back-compat.
+type Verifier struct {
+	keyring *Keyring
+	revoked ports.RevokedTokenRepository
+}
+
+// NewIssuer returns an Issuer signing tokens with the given secret.
+// The secret becomes the primary entry of a one-key Keyring with kid
+// "primary". For multi-key rotation use [NewIssuerWithKeyring].
+//
+// Secret should be at least 32 bytes of random data; see GenerateSecret.
 func NewIssuer(secret []byte) *Issuer {
-	return &Issuer{secret: secret}
+	return &Issuer{keyring: newSingleKeyKeyring(secret)}
+}
+
+// NewIssuerWithKeyring returns an Issuer that signs tokens with the
+// Keyring's primary kid. Use this when the deployment is mid-rotation
+// and multiple kids are valid concurrently.
+func NewIssuerWithKeyring(keyring *Keyring) *Issuer {
+	return &Issuer{keyring: keyring}
 }
 
 // NewVerifier returns a Verifier that validates tokens against the
 // given secret and consults revoked for instant-revocation lookups.
+// Wraps the secret in a one-key Keyring; for multi-key rotation use
+// [NewVerifierWithKeyring].
 func NewVerifier(secret []byte, revoked ports.RevokedTokenRepository) *Verifier {
-	return &Verifier{secret: secret, revoked: revoked}
+	return &Verifier{keyring: newSingleKeyKeyring(secret), revoked: revoked}
 }
 
 // NewVerifierWithPrevious returns a dual-key Verifier. Tokens signed
@@ -133,8 +145,19 @@ func NewVerifier(secret []byte, revoked ports.RevokedTokenRepository) *Verifier 
 // [Issuer]) always sign under active. Pass nil/empty previous to
 // disable the rotation path — callers without a rotation in flight
 // should use [NewVerifier] instead.
+//
+// Implemented in terms of a 2-entry Keyring (kids "primary" +
+// "previous"). For N-way rotation prefer [NewVerifierWithKeyring].
 func NewVerifierWithPrevious(active, previous []byte, revoked ports.RevokedTokenRepository) *Verifier {
-	return &Verifier{secret: active, previousSecret: previous, revoked: revoked}
+	return &Verifier{keyring: newDualKeyKeyring(active, previous), revoked: revoked}
+}
+
+// NewVerifierWithKeyring returns a Verifier that selects the signing
+// secret per-request based on the JWT header's kid claim. Tokens with
+// no kid header fall back to the Keyring's primary secret to remain
+// compatible with the legacy single-secret + dual-key flows.
+func NewVerifierWithKeyring(keyring *Keyring, revoked ports.RevokedTokenRepository) *Verifier {
+	return &Verifier{keyring: keyring, revoked: revoked}
 }
 
 // IssueUserToken mints a JWT for a human user, valid for ttl.
@@ -205,7 +228,11 @@ func (i *Issuer) issue(subject string, kind TokenKind, scopes, runs []string, tt
 		},
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := tok.SignedString(i.secret)
+	// Set kid header so verifiers can pick the right secret during
+	// rotation. Tokens without a kid stay compatible (verifier falls
+	// back to the Keyring's primary entry).
+	tok.Header["kid"] = i.keyring.Primary()
+	signed, err := tok.SignedString(i.keyring.PrimarySecret())
 	if err != nil {
 		return "", "", fmt.Errorf("sign token: %w", err)
 	}
@@ -213,9 +240,19 @@ func (i *Issuer) issue(subject string, kind TokenKind, scopes, runs []string, tt
 }
 
 // ParseAndValidate parses tokenString, verifies its signature against
-// the configured secret, checks expiry, and consults the revocation
-// denylist. Returns the validated claims or an error explaining why
-// the token was rejected.
+// the keyring-resolved secret, checks expiry, and consults the
+// revocation denylist. Returns the validated claims or an error
+// explaining why the token was rejected.
+//
+// Kid resolution:
+//   - If the JWT header carries a kid, that kid MUST be present in the
+//     keyring; an unknown kid fails fast (no fallback to other secrets,
+//     since the issuer told us which key to use).
+//   - If the JWT header has no kid (legacy tokens minted before this
+//     surface existed), every registered key is tried in iteration
+//     order until one signature matches. This preserves the original
+//     dual-key fallback semantics for in-flight legacy tokens during
+//     the rotation transition.
 func (v *Verifier) ParseAndValidate(ctx context.Context, tokenString string) (*Claims, error) {
 	parseWith := func(secret []byte) (*jwt.Token, error) {
 		return jwt.ParseWithClaims(tokenString, &Claims{}, func(t *jwt.Token) (any, error) {
@@ -225,9 +262,36 @@ func (v *Verifier) ParseAndValidate(ctx context.Context, tokenString string) (*C
 			return secret, nil
 		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	}
-	parsed, err := parseWith(v.secret)
-	if err != nil && len(v.previousSecret) > 0 && isSignatureError(err) {
-		parsed, err = parseWith(v.previousSecret)
+
+	// Pick the starting secret from the kid header (if any) and fall
+	// back through every other registered kid on signature mismatch.
+	// The header is a hint, not a strict gate: tokens minted before
+	// the kid surface existed have no header, and tokens minted under
+	// a kid label that later gets renamed (or moved between "primary"
+	// and "previous" during dual-key rotation) still need to validate
+	// as long as one of the keyring's secrets matches the signature.
+	// Non-signature errors (expired token, malformed JWT, unknown
+	// alg) short-circuit immediately.
+	kid := extractKid(tokenString)
+	tryOrder := orderedKids(v.keyring, kid)
+	var (
+		parsed *jwt.Token
+		err    error
+	)
+	for _, k := range tryOrder {
+		secret, ok := v.keyring.Secret(k)
+		if !ok {
+			continue
+		}
+		parsed, err = parseWith(secret)
+		if err == nil {
+			break
+		}
+		if !isSignatureError(err) {
+			// Don't keep trying other secrets for non-signature errors;
+			// those are token-shape failures that won't recover.
+			return nil, fmt.Errorf("parse token: %w", err)
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("parse token: %w", err)
@@ -259,6 +323,57 @@ func (v *Verifier) ParseAndValidate(ctx context.Context, tokenString string) (*C
 func isSignatureError(err error) bool {
 	return errors.Is(err, jwt.ErrSignatureInvalid) ||
 		errors.Is(err, jwt.ErrTokenSignatureInvalid)
+}
+
+// orderedKids returns the kid order [Verifier.ParseAndValidate]
+// should try when verifying signatures. The header-supplied kid (if
+// recognised by the keyring) goes first; the primary kid is next;
+// every other registered kid follows. This makes the new-token path
+// (header kid → instant match) O(1) and the legacy / mid-rotation
+// fallback path O(N).
+func orderedKids(k *Keyring, headerKid string) []string {
+	all := k.Kids()
+	out := make([]string, 0, len(all)+1)
+	seen := make(map[string]struct{}, len(all))
+	add := func(kid string) {
+		if kid == "" {
+			return
+		}
+		if _, dup := seen[kid]; dup {
+			return
+		}
+		if _, ok := k.Secret(kid); !ok {
+			return
+		}
+		seen[kid] = struct{}{}
+		out = append(out, kid)
+	}
+	add(headerKid)
+	add(k.Primary())
+	for _, kid := range all {
+		add(kid)
+	}
+	return out
+}
+
+// extractKid pulls the `kid` header parameter from a JWT without
+// validating the signature. Used by [Verifier.ParseAndValidate] to
+// pick the right secret before parse-with-signature runs.
+//
+// On any decode error (malformed token, missing header, non-string
+// kid) returns "" — the caller treats that as the legacy "no kid
+// header" path and falls back to the primary secret.
+func extractKid(tokenString string) string {
+	// jwt.ParseUnverified parses the token without checking the
+	// signature, which is exactly what we need to read the header.
+	tok, _, err := new(jwt.Parser).ParseUnverified(tokenString, &Claims{})
+	if err != nil {
+		return ""
+	}
+	if kid, ok := tok.Header["kid"].(string); ok {
+		return kid
+	}
+	return ""
 }
 
 // GenerateSecret returns 32 bytes of cryptographically random data,
