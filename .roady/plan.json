@@ -1137,9 +1137,29 @@
       "estimate": "",
       "depends_on": [],
       "feature_id": "supply-chain-attestation:-sbom,-cosign-signing,-slsa-provenance,-arm64-docker"
+    },
+    {
+      "id": "task-axi-go-evidence-jsonl-sink",
+      "title": "axi-go evidence: JSONL sink for cross-session audit",
+      "description": "Persist axi-go domain events to a JSONL evidence log so cross-session audit doesn't depend on the in-process bolt buffer. Opt-in via MNEMOS_AXI_EVIDENCE_LOG; fan-out alongside bolt via a multi-publisher.",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "axi-go-evidence-jsonl-sink"
+    },
+    {
+      "id": "task-axi-go-evidence-followups",
+      "title": "axi-go evidence: token reporting + approval-flow exercise",
+      "description": "Two smaller follow-ups under the axi-go evidence umbrella. (a) Plumb LLM token usage (internal/llm.Response.{Input,Output}Tokens) through pipeline.Extractor up to mcpProcessTextOutput so axi MaxTokens budgets actually gate. (b) End-to-end test exercising kernel.Approve for an EffectWriteExternal capability once one exists. JSONL sink shipped under task-axi-go-evidence-jsonl-sink.",
+      "priority": "low",
+      "estimate": "",
+      "depends_on": [
+        "task-axi-go-evidence-jsonl-sink"
+      ],
+      "feature_id": "axi-go-evidence-followups"
     }
   ],
   "approval_status": "approved",
   "created_at": "2026-04-12T11:03:09.397775+02:00",
-  "updated_at": "2026-05-09T08:20:06.758776+02:00"
+  "updated_at": "2026-05-31T19:35:00Z"
 }

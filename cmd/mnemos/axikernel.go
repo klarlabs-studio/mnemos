@@ -77,9 +77,23 @@ func buildMCPKernel(logger *bolt.Logger, executors map[string]domain.ActionExecu
 		return nil, fmt.Errorf("build plugin: %w", err)
 	}
 
+	// Compose two publishers: bolt (line-protocol log every event) +
+	// optional JSONL sink (cross-session audit chain on disk; opt-in
+	// via MNEMOS_AXI_EVIDENCE_LOG). The multiplex publisher routes
+	// every event to both.
+	publishers := []domain.DomainEventPublisher{
+		boltAxiPublisher{logger: logger},
+	}
+	evidenceSink, evidenceErr := newAxiEvidenceSink("")
+	if evidenceErr != nil {
+		logger.Warn().Err(evidenceErr).Msg("axi evidence sink disabled")
+	} else if evidenceSink != nil {
+		publishers = append(publishers, evidenceSink)
+	}
+
 	kernel := axi.New().
 		WithLogger(boltAxiLogger{logger: logger}).
-		WithDomainEventPublisher(boltAxiPublisher{logger: logger}).
+		WithDomainEventPublisher(multiAxiPublisher(publishers)).
 		WithBudget(axiBudgetFromEnv())
 
 	for ref, exec := range executors {
