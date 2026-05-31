@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/felixgeelhaar/mnemos"
 	"github.com/felixgeelhaar/mnemos/internal/domain"
 	"github.com/felixgeelhaar/mnemos/internal/embedding"
 	"github.com/felixgeelhaar/mnemos/internal/llm"
@@ -65,10 +63,12 @@ type mcpRecallAtTimeInput struct {
 	Hops     int    `json:"hops,omitempty" jsonschema:"description=BFS hop expansion depth through supports/contradicts edges (0-5)"`
 }
 
-// mcpRunRememberEvent persists a temporal event into the Mnemos event
-// store. The bundled Chronos engine is updated in a follow-up commit
-// once a numeric feature mapping is defined; for now the source event
-// is recorded faithfully and recoverable via timeline_query.
+// mcpRunRememberEvent persists a temporal event via the public library
+// API. The handler routes through [mnemos.Memory.RememberEvent] rather
+// than reaching into internal/store directly — this is the proof-of-
+// concept that the public surface is sufficient for the temporal MCP
+// tools. Other MCP handlers still use internal/ because they need
+// flags / outputs the library doesn't expose.
 func mcpRunRememberEvent(ctx context.Context, actor string, input mcpRememberEventInput) (mcpRememberEventOutput, error) {
 	if strings.TrimSpace(input.Content) == "" {
 		return mcpRememberEventOutput{}, errors.New("content is required")
@@ -78,41 +78,34 @@ func mcpRunRememberEvent(ctx context.Context, actor string, input mcpRememberEve
 		return mcpRememberEventOutput{}, fmt.Errorf("invalid at timestamp: %w", err)
 	}
 
-	conn, err := openConn(ctx)
+	mem, err := newLibraryMemory(ctx, actor)
 	if err != nil {
 		return mcpRememberEventOutput{}, err
 	}
-	defer closeConn(conn)
+	defer func() { _ = mem.Close() }()
 
 	id := strings.TrimSpace(input.ID)
 	if id == "" {
 		id = fmt.Sprintf("ev_%d", time.Now().UnixNano())
 	}
-	meta := map[string]string{}
-	maps.Copy(meta, input.Metadata)
-	if input.Type != "" {
-		meta["event_type"] = input.Type
-	}
-
-	ev := domain.Event{
-		ID:            id,
-		RunID:         input.RunID,
-		SchemaVersion: "1.0",
-		Content:       input.Content,
-		SourceInputID: "inline:" + id,
-		Timestamp:     at.UTC(),
-		Metadata:      meta,
-		IngestedAt:    time.Now().UTC(),
-		CreatedBy:     actor,
-	}
-	if err := conn.Events.Append(ctx, ev); err != nil {
-		return mcpRememberEventOutput{}, fmt.Errorf("append event: %w", err)
+	if err := mem.RememberEvent(ctx, mnemos.Event{
+		ID:       id,
+		At:       at,
+		Type:     input.Type,
+		Content:  input.Content,
+		Metadata: input.Metadata,
+		RunID:    input.RunID,
+	}); err != nil {
+		return mcpRememberEventOutput{}, fmt.Errorf("remember event: %w", err)
 	}
 	return mcpRememberEventOutput{ID: id}, nil
 }
 
 // mcpRunTimelineQuery returns events filtered by time range, type, and
-// run, sorted by timestamp ascending.
+// run, sorted by timestamp ascending. Routes through the public
+// [mnemos.Memory.Timeline] surface (the library does the filtering +
+// sorting; the handler only marshals the result into the MCP wire
+// shape).
 func mcpRunTimelineQuery(ctx context.Context, input mcpTimelineQueryInput) (mcpTimelineQueryOutput, error) {
 	var from, to time.Time
 	var err error
@@ -127,48 +120,33 @@ func mcpRunTimelineQuery(ctx context.Context, input mcpTimelineQueryInput) (mcpT
 		}
 	}
 
-	conn, err := openConn(ctx)
+	mem, err := newLibraryMemory(ctx, "")
 	if err != nil {
 		return mcpTimelineQueryOutput{}, err
 	}
-	defer closeConn(conn)
+	defer func() { _ = mem.Close() }()
 
-	var events []domain.Event
-	if runID := strings.TrimSpace(input.RunID); runID != "" {
-		events, err = conn.Events.ListByRunID(ctx, runID)
-	} else {
-		events, err = conn.Events.ListAll(ctx)
-	}
+	events, err := mem.Timeline(ctx, mnemos.TimelineQuery{
+		From:  from,
+		To:    to,
+		Types: input.Types,
+		RunID: strings.TrimSpace(input.RunID),
+		Limit: input.Limit,
+	})
 	if err != nil {
-		return mcpTimelineQueryOutput{}, fmt.Errorf("list events: %w", err)
+		return mcpTimelineQueryOutput{}, fmt.Errorf("timeline: %w", err)
 	}
 
-	out := make([]mcpTimelineEvent, 0, len(events))
-	for _, ev := range events {
-		if !from.IsZero() && ev.Timestamp.Before(from) {
-			continue
-		}
-		if !to.IsZero() && ev.Timestamp.After(to) {
-			continue
-		}
-		typ := ev.Metadata["event_type"]
-		if len(input.Types) > 0 && !slices.Contains(input.Types, typ) {
-			continue
-		}
-		out = append(out, mcpTimelineEvent{
+	out := make([]mcpTimelineEvent, len(events))
+	for i, ev := range events {
+		out[i] = mcpTimelineEvent{
 			ID:       ev.ID,
-			At:       ev.Timestamp.UTC().Format(time.RFC3339),
-			Type:     typ,
+			At:       ev.At.UTC().Format(time.RFC3339),
+			Type:     ev.Type,
 			Content:  ev.Content,
-			Metadata: scrubMetaKey(ev.Metadata, "event_type"),
+			Metadata: ev.Metadata,
 			RunID:    ev.RunID,
-		})
-	}
-
-	sort.Slice(out, func(i, j int) bool { return out[i].At < out[j].At })
-
-	if input.Limit > 0 && len(out) > input.Limit {
-		out = out[:input.Limit]
+		}
 	}
 	return mcpTimelineQueryOutput{Events: out}, nil
 }
@@ -229,24 +207,4 @@ func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (mcpQue
 		ClaimProvenance:  answer.ClaimProvenance,
 		ClaimHopDistance: answer.ClaimHopDistance,
 	}, nil
-}
-
-// scrubMetaKey returns a copy of in without the named key. Used to
-// hide internal "event_type" from the metadata payload (it's already
-// surfaced as a top-level field).
-func scrubMetaKey(in map[string]string, skip string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		if k == skip {
-			continue
-		}
-		out[k] = v
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
