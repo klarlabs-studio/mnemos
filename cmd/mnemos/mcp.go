@@ -585,6 +585,38 @@ func handleMCP() {
 			return mcpRunSearchMemory(ctx, input)
 		})
 
+	srv.Tool("remember_event").
+		Description("Store a temporal event (deployment, incident, decision, ...) with a wall-clock timestamp.").
+		OutputSchema(mcpRememberEventOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpRememberEventInput) (mcpRememberEventOutput, error) {
+			if kernel != nil {
+				return dispatchAxiTool[mcpRememberEventOutput](ctx, kernel, nil, "remember_event", input)
+			}
+			return mcpRunRememberEvent(ctx, mcpActor, input)
+		})
+
+	srv.Tool("timeline_query").
+		Description("Return events filtered by time range, type, and run, sorted chronologically.").
+		OutputSchema(mcpTimelineQueryOutput{}).
+		Handler(func(ctx context.Context, input mcpTimelineQueryInput) (mcpTimelineQueryOutput, error) {
+			if kernel != nil {
+				return dispatchAxiTool[mcpTimelineQueryOutput](ctx, kernel, nil, "timeline_query", input)
+			}
+			return mcpRunTimelineQuery(ctx, input)
+		})
+
+	srv.Tool("recall_at_time").
+		Description("Answer a question against the state of the knowledge base at a historical instant.").
+		OutputSchema(mcpQueryOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpRecallAtTimeInput) (mcpQueryOutput, error) {
+			if kernel != nil {
+				return dispatchAxiTool[mcpQueryOutput](ctx, kernel, nil, "recall_at_time", input)
+			}
+			return mcpRunRecallAtTime(ctx, input)
+		})
+
 	// Wire signal handling so a SIGINT/SIGTERM cancels the parent
 	// context: ServeStdio observes the cancellation and returns,
 	// then we tear the watcher down. Without this, Ctrl+C would

@@ -134,6 +134,11 @@ var parityMatrix = []parityEntry{
 	{Capability: "ingest git log", MCPTool: "ingest_git_log", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "watch file", MCPTool: "watch_file", HTTPRoute: parityNA, GRPCMethod: parityNA},
 
+	// Temporal (MCP-only — bundled-Chronos surface).
+	{Capability: "remember temporal event", MCPTool: "remember_event", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "query timeline (range/type/run filter)", MCPTool: "timeline_query", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "recall knowledge at a historical instant", MCPTool: "recall_at_time", HTTPRoute: parityNA, GRPCMethod: parityNA},
+
 	// Phase 2 (action / outcome) — gRPC + MCP, no HTTP.
 	{Capability: "record action", MCPTool: "record_action", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "record outcome", MCPTool: "record_outcome", HTTPRoute: parityNA, GRPCMethod: parityNA},
