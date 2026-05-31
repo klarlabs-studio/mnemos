@@ -1330,13 +1330,16 @@
       "completed_at": "2026-05-31T19:35:00Z"
     },
     "task-axi-go-evidence-followups": {
-      "status": "pending",
-      "path": "",
-      "owner": "",
+      "status": "done",
+      "path": "internal/extract/llm_engine.go, internal/pipeline/pipeline.go, cmd/mnemos/mcp.go, cmd/mnemos/axikernel.go, cmd/mnemos/axi_approval_test.go",
+      "owner": "felixgeelhaar",
       "evidence": [
-        "Two smaller follow-ups remain under the axi-go evidence umbrella: (a) LLM token reporting from internal/llm.Response through pipeline.Extractor up to mcpProcessTextOutput so axi MaxTokens budgets actually gate; (b) end-to-end approval-flow exercise once a tool with EffectWriteExternal exists (kernel.Approve plumbing is in place)."
-      ]
+        "LLM token reporting: extract.LLMEngine.WithUsageSink → pipeline.Extractor.LastUsage → mcpProcessTextOutput.{Input,Output}Tokens → Kind=\"llm\" capability evidence record; MNEMOS_AXI_MAX_TOKENS env knob added to axiBudgetFromEnv",
+        "Approval-flow exercise: TestApprovalFlow_WriteExternalActionAwaitsThenApproves + TestApprovalFlow_WriteExternalActionCanBeRejected pin both legs of axi-go's gate against a synthetic EffectWriteExternal action"
+      ],
+      "started_at": "2026-05-31T19:35:00Z",
+      "completed_at": "2026-05-31T20:00:00Z"
     }
   },
-  "updated_at": "2026-05-31T19:35:00Z"
+  "updated_at": "2026-05-31T20:00:00Z"
 }

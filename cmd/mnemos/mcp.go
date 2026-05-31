@@ -89,6 +89,13 @@ type mcpProcessTextOutput struct {
 	Embeddings     int    `json:"embeddings"`
 	UsedLLM        bool   `json:"usedLlm"`
 	UsedEmbeddings bool   `json:"usedEmbeddings"`
+	// LLM token usage from the underlying extraction call. Zero when
+	// the rule-based engine ran or when the provider reported no
+	// usage. Sums to TokensUsed on the axi-go capability-evidence
+	// record so the kernel's MaxTokens budget can enforce.
+	InputTokens  int    `json:"inputTokens,omitempty"`
+	OutputTokens int    `json:"outputTokens,omitempty"`
+	LLMModel     string `json:"llmModel,omitempty"`
 }
 
 type mcpMetricsOutput struct {
@@ -968,6 +975,11 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 			Embeddings:     embeddingCount,
 			UsedLLM:        input.UseLLM,
 			UsedEmbeddings: input.UseEmbeddings,
+		}
+		if usage := ext.LastUsage(); usage != nil {
+			result.InputTokens = usage.InputTokens
+			result.OutputTokens = usage.OutputTokens
+			result.LLMModel = usage.Model
 		}
 		return nil
 	})

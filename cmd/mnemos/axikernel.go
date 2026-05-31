@@ -145,12 +145,14 @@ func newMnemosMCPPlugin() (mnemosMCPPlugin, error) {
 	return p, nil
 }
 
-// axiBudgetFromEnv reads MNEMOS_AXI_MAX_DURATION (Go duration string)
-// and MNEMOS_AXI_MAX_INVOCATIONS (positive int) and returns the
-// resulting budget. Unset / invalid values fall back to permissive
-// defaults: 5 minutes / 1000 invocations. Token budgets are not
-// enforced here yet — the LLM client doesn't report TokensUsed
-// through capabilities (would land in a follow-on slice).
+// axiBudgetFromEnv reads MNEMOS_AXI_MAX_DURATION (Go duration string),
+// MNEMOS_AXI_MAX_INVOCATIONS (positive int), and MNEMOS_AXI_MAX_TOKENS
+// (positive int64) and returns the resulting budget. Unset / invalid
+// values fall back to permissive defaults: 5 minutes / 1000
+// invocations / unlimited tokens. Token usage is reported on a
+// Kind="llm" evidence record per process_text call (input + output
+// tokens summed), so setting MaxTokens here actually engages the
+// kernel's per-session budget enforcer.
 func axiBudgetFromEnv() axi.Budget {
 	b := axi.Budget{
 		MaxDuration:              5 * time.Minute,
@@ -164,6 +166,11 @@ func axiBudgetFromEnv() axi.Budget {
 	if v := os.Getenv("MNEMOS_AXI_MAX_INVOCATIONS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			b.MaxCapabilityInvocations = n
+		}
+	}
+	if v := os.Getenv("MNEMOS_AXI_MAX_TOKENS"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			b.MaxTokens = n
 		}
 	}
 	return b
@@ -341,7 +348,7 @@ func processTextSummary(out mcpProcessTextOutput) string {
 }
 
 func processTextEvidence(out mcpProcessTextOutput) []domain.EvidenceRecord {
-	return []domain.EvidenceRecord{
+	records := []domain.EvidenceRecord{
 		{Kind: "mnemos.process_text", Source: "mnemos.mcp", Value: map[string]any{
 			"run_id":        out.RunID,
 			"events":        out.Events,
@@ -352,6 +359,30 @@ func processTextEvidence(out mcpProcessTextOutput) []domain.EvidenceRecord {
 			"used_embed":    out.UsedEmbeddings,
 		}},
 	}
+	// Emit a Kind="llm" evidence record so axi-go's MaxTokens budget
+	// sums real spend across the session. Skipped when no tokens were
+	// reported (rule-based path, cache hit, or provider that doesn't
+	// surface usage).
+	if out.InputTokens > 0 || out.OutputTokens > 0 {
+		source := out.LLMModel
+		if source == "" {
+			source = "unknown"
+		}
+		records = append(records, domain.EvidenceRecord{
+			Kind:   "llm",
+			Source: source,
+			Value: map[string]any{
+				"input_tokens":  out.InputTokens,
+				"output_tokens": out.OutputTokens,
+				"model":         out.LLMModel,
+			},
+			// axi-go ExecutionBudget.MaxTokens sums TokensUsed across
+			// every evidence record on the session. Total = input +
+			// output so a token budget covers both directions.
+			TokensUsed: int64(out.InputTokens + out.OutputTokens),
+		})
+	}
+	return records
 }
 
 func metricsSummary(out mcpMetricsOutput) string {

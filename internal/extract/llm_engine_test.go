@@ -250,6 +250,59 @@ func TestLLMEngineUsesPersistentCache(t *testing.T) {
 	}
 }
 
+// TestLLMEngineUsageSinkFires verifies WithUsageSink receives the
+// token counts from the underlying provider on a successful call. The
+// pipeline layer relies on this to surface tokens as axi-go capability
+// evidence; without it, MaxTokens budgets silently never engage.
+func TestLLMEngineUsageSinkFires(t *testing.T) {
+	claims := []llmClaim{{Text: "Revenue grew 15%", Type: "fact", Confidence: 0.9}}
+	responseJSON, _ := json.Marshal(claims)
+	client := &mockLLMClient{response: string(responseJSON)}
+
+	var got TokenUsage
+	var hits int
+	engine := newTestLLMEngine(client).WithUsageSink(func(u TokenUsage) {
+		got = u
+		hits++
+	})
+
+	events := []domain.Event{{ID: "ev_1", Content: "Revenue grew 15%."}}
+	if _, _, _, err := engine.ExtractWithEntities(events); err != nil {
+		t.Fatalf("ExtractWithEntities: %v", err)
+	}
+
+	if hits != 1 {
+		t.Fatalf("sink invocations = %d, want 1", hits)
+	}
+	if got.InputTokens != 10 || got.OutputTokens != 5 {
+		t.Errorf("usage = %+v, want {Input:10 Output:5}", got)
+	}
+	if got.Model != "test-model" {
+		t.Errorf("model = %q, want test-model", got.Model)
+	}
+}
+
+// TestLLMEngineUsageSinkSkippedOnFallback verifies the sink does NOT
+// fire when the LLM call errors and the rule-based fallback runs.
+// Pinning this behaviour keeps the token-evidence path honest: zero
+// tokens reported means zero tokens actually consumed.
+func TestLLMEngineUsageSinkSkippedOnFallback(t *testing.T) {
+	client := &mockLLMClient{err: fmt.Errorf("provider down")}
+	var hits int
+	engine := newTestLLMEngine(client).WithUsageSink(func(_ TokenUsage) {
+		hits++
+	})
+
+	events := []domain.Event{{ID: "ev_1", Content: "We will use React for the frontend"}}
+	if _, _, _, err := engine.ExtractWithEntities(events); err != nil {
+		t.Fatalf("ExtractWithEntities: %v", err)
+	}
+
+	if hits != 0 {
+		t.Errorf("sink invocations = %d, want 0 on fallback", hits)
+	}
+}
+
 // newTestLLMEngine creates an LLMEngine with deterministic IDs and clock.
 func newTestLLMEngine(client llm.Client) LLMEngine {
 	seq := 0

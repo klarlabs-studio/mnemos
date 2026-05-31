@@ -25,8 +25,28 @@ import (
 // keyed by claim id and may be nil when the rule-based fallback runs
 // (rule-based extraction does not tag entities). Callers should treat a
 // nil map as "no entities to materialise", not as an error.
+//
+// After each ExtractFn call, callers may consult LastUsage for the
+// token counts the underlying LLM call reported (nil when the
+// rule-based engine ran or when the provider reported no usage). It
+// is the canonical bridge into axi-go capability evidence so the
+// kernel's MaxTokens budget can sum spend across a session.
 type Extractor struct {
 	ExtractFn func([]domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error)
+
+	lastUsage *extract.TokenUsage
+}
+
+// LastUsage returns the token usage from the most recent ExtractFn
+// call, or nil when the call ran through the rule-based fallback or
+// when the provider reported zero tokens. Resets on every ExtractFn
+// invocation — callers should read it immediately after extracting,
+// before issuing another extract call on the same Extractor.
+func (e *Extractor) LastUsage() *extract.TokenUsage {
+	if e == nil {
+		return nil
+	}
+	return e.lastUsage
 }
 
 // NewExtractor builds the appropriate extraction engine based on useLLM.
@@ -62,8 +82,18 @@ func NewExtractor(useLLM bool) (*Extractor, error) {
 		return nil, fmt.Errorf("failed to create LLM client: %w", err)
 	}
 
-	engine := extract.NewLLMEngine(client)
-	return &Extractor{ExtractFn: engine.ExtractWithEntities}, nil
+	ext := &Extractor{}
+	engine := extract.NewLLMEngine(client).WithUsageSink(func(u extract.TokenUsage) {
+		// Copy the value so the pointer the engine stack-allocated
+		// doesn't escape into our field unintentionally.
+		usage := u
+		ext.lastUsage = &usage
+	})
+	ext.ExtractFn = func(events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error) {
+		ext.lastUsage = nil
+		return engine.ExtractWithEntities(events)
+	}
+	return ext, nil
 }
 
 // PersistArtifacts writes events, claims, evidence links, and

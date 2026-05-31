@@ -19,6 +19,15 @@ import (
 	"github.com/felixgeelhaar/mnemos/internal/llm"
 )
 
+// TokenUsage reports the input/output token counts a successful LLM
+// call consumed. Plumbed up to capability-evidence sinks so axi-go's
+// MaxTokens budget enforcer sees the real spend.
+type TokenUsage struct {
+	InputTokens  int
+	OutputTokens int
+	Model        string
+}
+
 // LLMEngine extracts claims using an LLM provider. It falls back to the
 // rule-based Engine if the LLM call fails.
 type LLMEngine struct {
@@ -27,6 +36,7 @@ type LLMEngine struct {
 	now      func() time.Time
 	nextID   func() (string, error)
 	cacheDir string
+	onUsage  func(TokenUsage)
 }
 
 // NewLLMEngine creates an LLM-powered extraction engine with rule-based
@@ -39,6 +49,16 @@ func NewLLMEngine(client llm.Client) LLMEngine {
 		nextID:   newClaimID,
 		cacheDir: filepath.Join("data", "cache", "llm-extraction"),
 	}
+}
+
+// WithUsageSink registers a callback the engine invokes after a
+// successful LLM call, reporting the token counts the provider
+// returned. Used by the pipeline layer to surface token usage as
+// capability evidence so axi-go's MaxTokens budget engages. Nil sink
+// (the default) is a no-op.
+func (e LLMEngine) WithUsageSink(fn func(TokenUsage)) LLMEngine {
+	e.onUsage = fn
+	return e
 }
 
 // llmClaim is the JSON structure returned by the LLM. Entities is
@@ -140,6 +160,14 @@ func (e LLMEngine) ExtractWithEntities(events []domain.Event) ([]domain.Claim, [
 		// entities, hence the nil third return.
 		c, l, ferr := e.fallback.Extract(events)
 		return c, l, nil, ferr
+	}
+
+	if e.onUsage != nil && (resp.InputTokens > 0 || resp.OutputTokens > 0) {
+		e.onUsage(TokenUsage{
+			InputTokens:  resp.InputTokens,
+			OutputTokens: resp.OutputTokens,
+			Model:        resp.Model,
+		})
 	}
 
 	rawClaims, err := parseLLMResponse(resp.Content)

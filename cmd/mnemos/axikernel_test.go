@@ -121,3 +121,59 @@ func TestKernel_ProcessTextEvidenceChainIntact(t *testing.T) {
 		t.Error("expected at least one evidence record from process_text")
 	}
 }
+
+// TestProcessTextEvidence_IncludesLLMTokens verifies the
+// processTextEvidence projection emits a Kind="llm" record carrying
+// TokensUsed = input + output when the output reports token usage.
+// This is the bridge that lets axi-go's ExecutionBudget.MaxTokens sum
+// real spend across a session.
+func TestProcessTextEvidence_IncludesLLMTokens(t *testing.T) {
+	t.Parallel()
+	out := mcpProcessTextOutput{
+		RunID:        "run-1",
+		Events:       1,
+		Claims:       2,
+		UsedLLM:      true,
+		InputTokens:  120,
+		OutputTokens: 80,
+		LLMModel:     "claude-sonnet-4-6",
+	}
+	records := processTextEvidence(out)
+
+	if len(records) != 2 {
+		t.Fatalf("len(records) = %d, want 2 (process_text + llm)", len(records))
+	}
+	llm := records[1]
+	if llm.Kind != "llm" {
+		t.Errorf("records[1].Kind = %q, want llm", llm.Kind)
+	}
+	if llm.Source != "claude-sonnet-4-6" {
+		t.Errorf("records[1].Source = %q, want claude-sonnet-4-6", llm.Source)
+	}
+	if llm.TokensUsed != 200 {
+		t.Errorf("records[1].TokensUsed = %d, want 200 (120+80)", llm.TokensUsed)
+	}
+}
+
+// TestProcessTextEvidence_SkipsLLMRecordWhenNoTokens verifies the
+// llm-evidence record is omitted when the run reports zero tokens
+// (rule-based path, cache hit, or provider that doesn't surface
+// usage). The kernel's budget enforcer then only counts spend from
+// runs that actually called out to a model.
+func TestProcessTextEvidence_SkipsLLMRecordWhenNoTokens(t *testing.T) {
+	t.Parallel()
+	out := mcpProcessTextOutput{
+		RunID:   "run-2",
+		Events:  1,
+		Claims:  0,
+		UsedLLM: false,
+	}
+	records := processTextEvidence(out)
+
+	if len(records) != 1 {
+		t.Fatalf("len(records) = %d, want 1 (process_text only)", len(records))
+	}
+	if records[0].Kind != "mnemos.process_text" {
+		t.Errorf("records[0].Kind = %q, want mnemos.process_text", records[0].Kind)
+	}
+}
