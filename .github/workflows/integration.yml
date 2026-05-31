@@ -61,8 +61,9 @@ jobs:
           MNEMOS_INTEGRATION_URL: http://127.0.0.1:7777
           # Same secret the mnemos service uses; the smoke test mints
           # a wildcard-scope agent JWT against it for authenticated
-          # POSTs. Local-only; not a real credential.
-          MNEMOS_JWT_SECRET: "integration-smoke-test-secret-do-not-use-anywhere-else"
+          # POSTs. mnemos expects hex-encoded; this matches the value
+          # in docker-compose.yml. Local-only; not a real credential.
+          MNEMOS_JWT_SECRET: "21201b428a0b19d5fb348947b4a98455ece9ccd6230d65b27fe178596f082ce1"
         run: go test -tags=integration -v -count=1 -timeout=2m ./test/integration/...
 
       - name: Compose logs (on failure)

@@ -15,6 +15,7 @@ package integration
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -164,13 +165,21 @@ func postJSON(t *testing.T, url string, body any, expectStatus int) {
 // smoke test can hit authenticated POST endpoints without standing up
 // a user + token issuance pipeline. Returns "" when the secret env
 // isn't set (smoke test reads stay unauthenticated either way).
+//
+// mnemos serve loads MNEMOS_JWT_SECRET as a hex-encoded byte string;
+// the smoke test decodes here so the issuer signs with the same raw
+// bytes the server verifies against.
 func mnemosIntegrationToken(t *testing.T) string {
 	t.Helper()
-	secret := os.Getenv("MNEMOS_JWT_SECRET")
-	if secret == "" {
+	secretHex := os.Getenv("MNEMOS_JWT_SECRET")
+	if secretHex == "" {
 		return ""
 	}
-	issuer := auth.NewIssuer([]byte(secret))
+	secret, err := hex.DecodeString(secretHex)
+	if err != nil {
+		t.Fatalf("MNEMOS_JWT_SECRET must be hex: %v", err)
+	}
+	issuer := auth.NewIssuer(secret)
 	tok, _, err := issuer.IssueAgentTokenWithScopes(
 		"integration-smoke",
 		[]string{domain.ScopeWildcard},
