@@ -1300,17 +1300,43 @@
       "elapsed_minutes": 6
     },
     "task-jwt-kid-header-+-key-id-driven-verification": {
-      "status": "pending",
-      "path": "",
-      "owner": "",
-      "evidence": []
+      "status": "done",
+      "path": "internal/auth/keyring.go, internal/auth/jwt.go, internal/auth/keyring_test.go",
+      "owner": "felixgeelhaar",
+      "evidence": [
+        "PR #66 — N-key Keyring + kid header in issued tokens; verifier selects key by header kid with legacy fallback; rotation + post-rotation cleanup covered by tests"
+      ],
+      "started_at": "2026-05-31T17:00:00Z",
+      "completed_at": "2026-05-31T18:55:00Z"
     },
     "task-supply-chain-attestation:-sbom,-cosign-signing,-slsa-provenance,-arm64-docker": {
+      "status": "done",
+      "path": ".goreleaser.yaml, .github/workflows/release.yml",
+      "owner": "felixgeelhaar",
+      "evidence": [
+        "PR #65 — CycloneDX + SPDX SBOMs via nox; cosign keyless for archives + docker manifests; SLSA L3 via slsa-github-generator; multi-arch docker linux/amd64+arm64; artifact attestations"
+      ],
+      "started_at": "2026-05-31T15:00:00Z",
+      "completed_at": "2026-05-31T17:00:00Z"
+    },
+    "task-axi-go-evidence-jsonl-sink": {
+      "status": "done",
+      "path": "cmd/mnemos/axi_evidence_sink.go, cmd/mnemos/axikernel.go",
+      "owner": "felixgeelhaar",
+      "evidence": [
+        "PR #67 — JSONL evidence sink + multiAxiPublisher fan-out; opt-in via MNEMOS_AXI_EVIDENCE_LOG; tests cover happy-path, disabled-by-default, env-resolution, fan-out"
+      ],
+      "started_at": "2026-05-31T18:55:00Z",
+      "completed_at": "2026-05-31T19:35:00Z"
+    },
+    "task-axi-go-evidence-followups": {
       "status": "pending",
       "path": "",
       "owner": "",
-      "evidence": []
+      "evidence": [
+        "Two smaller follow-ups remain under the axi-go evidence umbrella: (a) LLM token reporting from internal/llm.Response through pipeline.Extractor up to mcpProcessTextOutput so axi MaxTokens budgets actually gate; (b) end-to-end approval-flow exercise once a tool with EffectWriteExternal exists (kernel.Approve plumbing is in place)."
+      ]
     }
   },
-  "updated_at": "2026-05-31T18:32:00Z"
+  "updated_at": "2026-05-31T19:35:00Z"
 }
