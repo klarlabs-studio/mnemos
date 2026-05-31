@@ -289,9 +289,43 @@ Full HTTP schema: [`api/openapi.yaml`](api/openapi.yaml).
 
 ### Integrating Mnemos in your app
 
-The HTTP API at `mnemos serve` is the integration surface. Three flavors:
+The HTTP API at `mnemos serve` is one integration surface; for Go apps you
+can also embed Mnemos in-process via the root package. Pick whichever
+matches your runtime.
 
-**Go (typed client)** — `import "github.com/felixgeelhaar/mnemos/client"`:
+**Go (in-process library, v0.17+)** — `import "github.com/felixgeelhaar/mnemos"`:
+
+```go
+import (
+    "github.com/felixgeelhaar/mnemos"
+    _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+)
+
+mem, err := mnemos.New() // passive mode, XDG storage, bundled Chronos
+if err != nil { panic(err) }
+defer mem.Close()
+
+_ = mem.Remember(ctx, mnemos.Item{
+    Type:    "decision",
+    Content: "Adopted Postgres for the new service.",
+})
+
+results, _ := mem.Recall(ctx, mnemos.Query{Text: "Postgres decision"})
+```
+
+Three modes: `WithPassiveMode()` (no LLM), `WithSharedProvider(tg, emb)`
+(agent runtime supplies the model), `WithEnhancedMode(cfg)` (dedicated
+provider). Chronos is bundled in-process by default; supply your own with
+`WithChronos(eng)`. See [`docs/library.md`](docs/library.md) for full
+3-mode walkthroughs + godoc examples.
+
+The HTTP API and MCP transport remain available for non-Go consumers; both
+route through the same internals.
+
+**Go (HTTP client)** — `import "github.com/felixgeelhaar/mnemos/client"`:
+
+When you do want HTTP from Go (different process, or non-Go consumer over
+HTTP that needs a typed client):
 
 ```go
 c := client.New("http://localhost:7777",
@@ -598,7 +632,7 @@ Mnemos has shipped a self-learning loop on top of the evidence layer:
 - **Causal edges** — `causes`, `caused_by`, `action_of`, `outcome_of`, `validates`, `refutes`, `derived_from` extend the relationship graph beyond logical agreement. `relate.DetectCausal` infers these from event-time + shared-entity signals; the optional `relate.DetectCausalLLM` augments borderline pairs via LLM disambiguation.
 - **Action + Outcome recording** — `mnemos action record` / `mnemos outcome record` capture operational changes and their observed metrics. The Prometheus pull adapter (`internal/adapters/outcomes/prometheus.go`) scrapes metrics and produces Outcomes automatically.
 - **Lessons synthesis** — `mnemos synthesize` clusters action→outcome chains into validated Lessons (confidence = corroboration × consistency × recency).
-- **Playbooks** — `mnemos playbook synthesize` derives steps-only operational intelligence from Lesson clusters; Praxis (or any execution layer) consumes them.
+- **Playbooks** — `mnemos playbook synthesize` derives steps-only operational intelligence from Lesson clusters. Consumers run them through whatever execution layer they own (an agent runtime, an in-process executor, a programmatic system).
 - **Decisions** — `mnemos decision record` audits agent reasoning with belief claims, alternatives, and risk level; outcomes attach later via `decision attach-outcome`.
 - **Temporal hardening** — per-claim `last_verified`, `verify_count`, `half_life_days`. `mnemos verify` re-confirms a claim; `Answer.StaleClaimIDs` surfaces decay below the trust floor.
 - **Multi-tenant scope** — `Scope{Service, Env, Team}` on Claims, Lessons, Decisions, Playbooks; `mnemos query --service X --env prod` filters the answer.

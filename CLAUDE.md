@@ -49,7 +49,7 @@ All implementations are behind these interfaces, enabling clean testing and prov
 - **Outcome** — observed result of an Action (action_id, result, metrics map, source push|pull:*)
 - **Lesson** — synthesised operational truth (statement, scope, evidence []ActionID, confidence, trigger, kind, source synthesize|human)
 - **Decision** — agent decision audit record (statement, plan, reasoning, risk_level, beliefs []ClaimID, alternatives, outcome_id)
-- **Playbook** — Praxis-ready response (trigger, scope, steps []PlaybookStep, derived_from_lessons, confidence)
+- **Playbook** — Agent-ready response (trigger, scope, steps []PlaybookStep, derived_from_lessons, confidence). Consumers run them through whatever execution layer they own.
 - **Scope** — multi-tenant filter primitive: {Service, Env, Team} (LessonScope is an alias kept for back-compat)
 - **Answer** — query result bundling claims, contradictions, timeline, hop distances, claim provenance, and `StaleClaimIDs`
 

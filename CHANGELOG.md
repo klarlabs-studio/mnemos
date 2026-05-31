@@ -6,6 +6,77 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-05-31
+
+Cognitive-stack simplification + embeddable library release. Mnemos
+becomes a first-class in-process Go library while keeping the CLI /
+MCP / HTTP surfaces unchanged. Chronos is bundled by default so
+temporal memory works out of the box. Four ADRs land that close the
+loop on retiring the dedicated reasoning / action / orchestration
+repos (nous / praxis / olymp) in favour of agent runtimes plus a
+small `decisionkit` library.
+
+### Added
+- **Root `mnemos` package** — `mnemos.New(opts...)` returns a
+  `Memory` interface with `Remember(ctx, Item)`, `Recall(ctx, Query)`,
+  `RememberEvent(ctx, Event)`, `Timeline(ctx, TimelineQuery)`, and
+  `Close()`. Additive: every existing CLI / MCP / HTTP surface is
+  unaffected. See [`docs/library.md`](docs/library.md).
+- **`mnemos/providers/` subpackage** — framework-neutral
+  `TextGenerator` and `Embedder` interfaces. Agent runtimes (Claude
+  Code, Codex, Hermes, Nomi, OpenClaw, NanoClaw, ...) implement these
+  as thin adapters around their own provider clients. Internal
+  `llm.Client` / `embedding.Client` are wrapped behind the public
+  surface.
+- **Three operating modes via Option builders** —
+  `WithPassiveMode()` (no LLM, rule-based extraction + token-overlap
+  ranking, zero env vars), `WithSharedProvider(tg, embedder)` (agent
+  runtime supplies the model), `WithEnhancedMode(cfg)` (dedicated
+  provider config).
+- **Chronos bundled by default** — `mnemos.New()` boots an in-process
+  Chronos engine (memory storage) so `RememberEvent` + `Timeline`
+  work out of the box. Power users supply their own configured
+  engine via `WithChronos(*embed.Engine)` for durable storage / custom
+  detectors. Requires `github.com/felixgeelhaar/chronos v0.6.0+`.
+- **Temporal MCP tools** — `remember_event`, `timeline_query`, and
+  `recall_at_time` (`query.AnswerOptions.AsOf`) join the existing
+  MCP surface; documented in the API parity matrix as MCP-only.
+- **Storage option** — `WithStorage(dsn)` overrides DSN resolution
+  for callers that don't want the default `MNEMOS_DB_URL > project
+  .mnemos > XDG default` precedence.
+- **Actor option** — `WithActor(userID)` overrides the actor stamp
+  on writes (default reads `MNEMOS_USER_ID` env, falls back to
+  `domain.SystemUser`).
+- **Godoc examples** — `Example_passive`, `Example_sharedProvider`,
+  `Example_enhanced`, `Example_withChronos` in `example_test.go`.
+
+### Documentation
+- **ADR 0003 — Archive Olymp** (zero Go importers; orchestration patterns
+  preserved at the `v0.1.5-final` tag).
+- **ADR 0004 — Extract decisionkit** (risk + intervention engines lifted
+  from `nous/internal/` into a standalone
+  [decisionkit](https://github.com/felixgeelhaar/decisionkit) module at
+  v0.1.0; Obvia and future programmatic consumers depend on it directly).
+- **ADR 0005 — Archive Nous** (only consumer was Olymp; LLM extraction
+  moves to agent runtimes; risk + intervention survive in decisionkit).
+- **ADR 0006 — Archive Praxis** (vendor handlers are the wrong shape for
+  agent-driven workflows; Obvia inlines orchestration primitives;
+  agents reach vendors via MCP).
+- **`docs/library.md`** — three-mode walkthrough with copy-pasteable
+  examples + Chronos bundling notes + storage backend matrix.
+
+### Changed
+- **README** — added an in-process Go library section above the HTTP
+  client section; refreshed the Playbook description (no longer
+  references Praxis as the executor since Praxis is archived).
+- **CLAUDE.md** — same Playbook refresh; Playbook is now described as
+  an "agent-ready response" consumers run through whatever execution
+  layer they own.
+
+### Removed
+- Nothing user-visible. The library is fully additive over v0.16.x;
+  CLI / MCP / HTTP surfaces are unchanged.
+
 ## [0.16.0] — 2026-05-24
 
 Agent-memory release. Eleven issues land that turn mnemos from a
