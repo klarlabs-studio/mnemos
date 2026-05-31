@@ -122,6 +122,63 @@ mem, _ := mnemos.New(
 Useful when you want background enrichment on a separate (cheaper /
 specialised) model, or to separate billing.
 
+## Three input modes (passive / LLM-driven / agent-supplied)
+
+Mnemos has three orthogonal paths for getting knowledge into the store.
+They cover different consumer needs and can be mixed freely.
+
+### Mode 1 — passive text ingestion (no LLM)
+
+```go
+mem.Remember(ctx, mnemos.Item{
+    Type:    "fact",
+    Content: "The deployment succeeded in production.",
+})
+```
+
+Mnemos runs its built-in rule-based extractor; one or more `Claim`s are
+derived from the text and linked to a synthetic source event. No model
+call, no per-call cost. Best for tests, smoke demos, or environments
+where you don't want any external dependency.
+
+### Mode 2 — LLM-driven text ingestion (shared or enhanced)
+
+Same `Remember` call as Mode 1; the difference is the construction
+option:
+
+```go
+mem, _ := mnemos.New(mnemos.WithSharedProvider(myTextGen, myEmbedder))
+mem.Remember(ctx, mnemos.Item{
+    Type:    "fact",
+    Content: "Long document with many implicit assertions ...",
+})
+```
+
+The configured `TextGenerator` runs structured extraction; claims are
+typed (fact / hypothesis / decision) with calibrated confidence. Best
+for ingesting prose, meeting notes, design docs.
+
+### Mode 3 — agent-supplied claims (no extraction)
+
+When the agent runtime has *already* derived structured assertions
+(with its own model, from parsed structured data, from a function-call
+result), it can hand them to Mnemos directly:
+
+```go
+claimID, _ := mem.RememberClaim(ctx, mnemos.ClaimItem{
+    Text:       "User prefers Go for backend work.",
+    Type:       "fact",
+    Confidence: 0.95,
+    EventIDs:   []string{"evt-source-1"}, // link to events you persisted
+    RunID:      "session-A",
+})
+```
+
+No extraction runs; Mnemos persists the claim verbatim. Recommended
+pattern: call `RememberEvent` first to anchor the claim, then
+`RememberClaim` with the event id in `EventIDs`. Claims without
+evidence skip the corroboration + freshness ranking factors.
+
 ## Temporal memory: events + Chronos
 
 Mnemos bundles [Chronos](https://github.com/felixgeelhaar/chronos) as an

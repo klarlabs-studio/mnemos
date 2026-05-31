@@ -81,6 +81,42 @@ func ExampleNew_sharedProvider() {
 	// Output:
 }
 
+// ExampleMemory_rememberClaim shows the third input mode: an agent
+// runtime hands a pre-built claim to Mnemos directly, bypassing the
+// extraction pipeline. Useful when the agent has already derived a
+// structured assertion with its own model or from parsed structured
+// data.
+func ExampleMemory_rememberClaim() {
+	mem, _ := mnemos.New(
+		mnemos.WithStorage("memory://?namespace=example_remember_claim"),
+		mnemos.WithPassiveMode(),
+	)
+	defer func() { _ = mem.Close() }()
+
+	ctx := context.Background()
+
+	// Step 1: anchor the claim to a source event the agent observed.
+	_ = mem.RememberEvent(ctx, mnemos.Event{
+		ID:      "evt-obs-1",
+		At:      time.Now(),
+		Type:    "observation",
+		Content: "User said: I prefer Go for backend.",
+		RunID:   "session-A",
+	})
+
+	// Step 2: the agent has already extracted a structured claim from
+	// the event using its own reasoning. Hand it to Mnemos verbatim.
+	claimID, _ := mem.RememberClaim(ctx, mnemos.ClaimItem{
+		Text:       "User prefers Go for backend work.",
+		Type:       "fact",
+		Confidence: 0.95,
+		EventIDs:   []string{"evt-obs-1"},
+		RunID:      "session-A",
+	})
+	_ = claimID
+	// Output:
+}
+
 // ExampleNew_withChronos shows supplying a custom Chronos engine for
 // durable temporal storage. The default mnemos.New() boots an
 // in-memory Chronos automatically; pass WithChronos when you want

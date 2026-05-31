@@ -51,6 +51,60 @@ import (
 	"time"
 )
 
+// ClaimItem is a pre-built claim an agent runtime can hand to Mnemos
+// directly, bypassing the extraction pipeline. Use this when the
+// agent has already derived structured assertions (with its own model,
+// from parsed structured data, or through any other path) and wants
+// Mnemos to persist them as-is.
+//
+// This is the third of Mnemos's three input modes:
+//
+//  1. [Item] + [Memory.Remember] → rule-based extraction (passive mode)
+//     or LLM-driven extraction (shared / enhanced mode).
+//  2. Same Item path with WithSharedProvider / WithEnhancedMode →
+//     extraction uses the configured language model.
+//  3. ClaimItem + [Memory.RememberClaim] → no extraction at all;
+//     Mnemos stores the supplied claim verbatim and (optionally) links
+//     it to source events the caller has already persisted via
+//     [Memory.RememberEvent].
+type ClaimItem struct {
+	// Text is the claim content. Required.
+	Text string
+
+	// Type classifies the claim. Mnemos recognises "fact",
+	// "hypothesis", "decision", and "test_result" natively. Defaults
+	// to "fact" when empty.
+	Type string
+
+	// Confidence is the agent's confidence in [0, 1]. Defaults to 1.0
+	// when zero (the agent is asserting the claim with full
+	// confidence). Mnemos will recompute the trust score from this
+	// confidence × corroboration × freshness at query time.
+	Confidence float64
+
+	// EventIDs links the claim back to source events. Optional but
+	// strongly recommended: claims without evidence cannot be ranked
+	// by corroboration and skip the freshness factor. Each id must
+	// already exist in the event store (use [Memory.RememberEvent] to
+	// add them first).
+	EventIDs []string
+
+	// ValidFrom is when the claim's content first became true. Zero
+	// value means "valid since before the system started tracking";
+	// for fresh claims, set this to time.Now() or the time the agent
+	// observed the fact.
+	ValidFrom time.Time
+
+	// ValidUntil is when the claim stopped being true (a successor
+	// claim took its place). Zero value means "currently valid".
+	ValidUntil time.Time
+
+	// RunID groups related claims together for scoped recall.
+	// Optional; matches the RunID used on the linked events when
+	// present.
+	RunID string
+}
+
 // Item is a single piece of knowledge to remember. Type and Content are
 // the only required fields; everything else is optional.
 type Item struct {
@@ -195,6 +249,18 @@ type Memory interface {
 	// any derived claims with full evidence links back to the source
 	// event.
 	Remember(ctx context.Context, item Item) error
+
+	// RememberClaim stores a pre-built claim directly, without running
+	// extraction. Use this when an agent runtime has already derived a
+	// structured assertion (with its own model, parsed structured data,
+	// etc.) and wants Mnemos to persist it verbatim. Linked source
+	// events (referenced via [ClaimItem.EventIDs]) must already exist
+	// in the event store — add them with [Memory.RememberEvent] first
+	// when they're new.
+	//
+	// Returns the generated claim ID so the caller can reference the
+	// claim in future relationship edges or evidence links.
+	RememberClaim(ctx context.Context, claim ClaimItem) (string, error)
 
 	// Recall answers a query against the stored knowledge. The result
 	// is ranked by trust score (or token overlap in passive mode when

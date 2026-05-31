@@ -6,6 +6,15 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ## [Unreleased]
 
+### Added
+- **`Memory.RememberClaim(ClaimItem)`** — third input mode for the
+  library API. Agent runtimes that have already derived structured
+  claims (with their own model or from parsed structured data) can
+  hand them to Mnemos verbatim, bypassing the extraction pipeline.
+  Companions to the existing rule-based and LLM-driven text-ingestion
+  paths. See [`docs/library.md`](docs/library.md) "Three input modes"
+  + `ExampleMemory_rememberClaim` in `example_test.go`.
+
 ## [0.17.0] — 2026-05-31
 
 Cognitive-stack simplification + embeddable library release. Mnemos

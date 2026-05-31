@@ -98,6 +98,50 @@ func (m *memory) Remember(ctx context.Context, item Item) error {
 	return nil
 }
 
+// RememberClaim implements [Memory.RememberClaim].
+func (m *memory) RememberClaim(ctx context.Context, item ClaimItem) (string, error) {
+	if strings.TrimSpace(item.Text) == "" {
+		return "", errors.New("mnemos: RememberClaim: Text is required")
+	}
+
+	claimType := domain.ClaimType(item.Type)
+	if claimType == "" {
+		claimType = domain.ClaimTypeFact
+	}
+	confidence := item.Confidence
+	if confidence == 0 {
+		confidence = 1.0
+	}
+
+	id := fmt.Sprintf("cl_%d", time.Now().UnixNano())
+	claim := domain.Claim{
+		ID:         id,
+		Text:       item.Text,
+		Type:       claimType,
+		Confidence: confidence,
+		Status:     domain.ClaimStatusActive,
+		CreatedAt:  time.Now().UTC(),
+		CreatedBy:  m.actorID,
+		ValidFrom:  item.ValidFrom,
+		ValidTo:    item.ValidUntil,
+	}
+
+	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {
+		return "", fmt.Errorf("mnemos: upsert claim: %w", err)
+	}
+
+	if len(item.EventIDs) > 0 {
+		links := make([]domain.ClaimEvidence, len(item.EventIDs))
+		for i, eid := range item.EventIDs {
+			links[i] = domain.ClaimEvidence{ClaimID: id, EventID: eid}
+		}
+		if err := m.conn.Claims.UpsertEvidence(ctx, links); err != nil {
+			return "", fmt.Errorf("mnemos: link evidence: %w", err)
+		}
+	}
+	return id, nil
+}
+
 // Recall implements [Memory.Recall].
 func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
 	if strings.TrimSpace(q.Text) == "" {

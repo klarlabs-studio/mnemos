@@ -54,6 +54,151 @@ func TestNew_PassiveMode_ZeroConfig(t *testing.T) {
 	}
 }
 
+// TestRememberClaim_BypassesExtraction verifies the third input mode:
+// an agent runtime hands a pre-built claim to Mnemos and Mnemos
+// persists it verbatim, without running text extraction. This is the
+// path agent runtimes use when they've already derived structured
+// claims (own model, parsed data, etc.).
+func TestRememberClaim_BypassesExtraction(t *testing.T) {
+	t.Parallel()
+	clearMnemosEnv(t)
+
+	mem, err := mnemos.New(
+		mnemos.WithStorage("memory://?namespace=mnemos_remember_claim_test"),
+		mnemos.WithPassiveMode(),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	ctx := context.Background()
+
+	// First seed a source event the claim will reference. Skipping
+	// this is allowed (EventIDs is optional) but exercises the
+	// evidence-link path.
+	eventAt := time.Date(2026, 5, 31, 10, 0, 0, 0, time.UTC)
+	if err := mem.RememberEvent(ctx, mnemos.Event{
+		ID:      "evt-source-1",
+		At:      eventAt,
+		Type:    "observation",
+		Content: "User said they prefer Go for backend work.",
+		RunID:   "claim-test",
+	}); err != nil {
+		t.Fatalf("RememberEvent: %v", err)
+	}
+
+	claimID, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
+		Text:       "User prefers Go for backend work.",
+		Type:       "fact",
+		Confidence: 0.95,
+		EventIDs:   []string{"evt-source-1"},
+		ValidFrom:  eventAt,
+		RunID:      "claim-test",
+	})
+	if err != nil {
+		t.Fatalf("RememberClaim: %v", err)
+	}
+	if claimID == "" {
+		t.Fatal("RememberClaim returned empty ID")
+	}
+
+	// Now query — the claim should surface even though no extraction
+	// pipeline ran (the rule-based extractor would not have produced
+	// this exact text from the event content).
+	results, err := mem.Recall(ctx, mnemos.Query{Text: "user prefers Go backend"})
+	if err != nil {
+		t.Fatalf("Recall: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatalf("Recall returned 0 results after RememberClaim")
+	}
+	if results[0].ClaimID != claimID {
+		t.Errorf("top result ID = %q, want %q", results[0].ClaimID, claimID)
+	}
+	if results[0].Confidence != 0.95 {
+		t.Errorf("Confidence = %v, want 0.95", results[0].Confidence)
+	}
+}
+
+// TestRememberClaim_DefaultsTypeAndConfidence verifies the empty-field
+// defaults: Type defaults to "fact", Confidence defaults to 1.0.
+func TestRememberClaim_DefaultsTypeAndConfidence(t *testing.T) {
+	t.Parallel()
+	clearMnemosEnv(t)
+
+	mem, err := mnemos.New(
+		mnemos.WithStorage("memory://?namespace=mnemos_remember_claim_defaults_test"),
+		mnemos.WithPassiveMode(),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	// Anchor the claim to an event so the recall path can find it
+	// (claims without evidence don't surface through the standard
+	// retrieval pipeline).
+	ctx := context.Background()
+	if err := mem.RememberEvent(ctx, mnemos.Event{
+		ID:      "evt-defaults-1",
+		At:      time.Now(),
+		Type:    "observation",
+		Content: "default shape note",
+		RunID:   "defaults",
+	}); err != nil {
+		t.Fatalf("RememberEvent: %v", err)
+	}
+
+	id, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
+		Text:     "default shape claim with no type or confidence supplied",
+		EventIDs: []string{"evt-defaults-1"},
+		RunID:    "defaults",
+	})
+	if err != nil {
+		t.Fatalf("RememberClaim: %v", err)
+	}
+
+	results, err := mem.Recall(ctx, mnemos.Query{Text: "default shape claim"})
+	if err != nil {
+		t.Fatalf("Recall: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatalf("Recall returned 0 results")
+	}
+	if results[0].ClaimID != id {
+		t.Errorf("ClaimID = %q, want %q", results[0].ClaimID, id)
+	}
+	if results[0].Type != "fact" {
+		t.Errorf("Type = %q, want %q (default)", results[0].Type, "fact")
+	}
+	if results[0].Confidence != 1.0 {
+		t.Errorf("Confidence = %v, want 1.0 (default)", results[0].Confidence)
+	}
+}
+
+// TestRememberClaim_RejectsEmptyText verifies validation.
+func TestRememberClaim_RejectsEmptyText(t *testing.T) {
+	t.Parallel()
+	clearMnemosEnv(t)
+
+	mem, err := mnemos.New(
+		mnemos.WithStorage("memory://?namespace=mnemos_remember_claim_validation_test"),
+		mnemos.WithPassiveMode(),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	_, err = mem.RememberClaim(context.Background(), mnemos.ClaimItem{
+		Text: "  ", // whitespace-only
+	})
+	if err == nil {
+		t.Fatal("RememberClaim with empty Text returned nil error; expected validation error")
+	}
+}
+
 // TestRememberEvent_Timeline verifies temporal recall works without
 // Chronos wired up (raw event-store path). Chronos integration lands in
 // task 12; this test pins the storage-side contract.
