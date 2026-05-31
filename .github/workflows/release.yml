@@ -54,14 +54,29 @@ jobs:
       # picks them up via `release.extra_files` and attaches them to
       # the GitHub release alongside the archives.
       - name: Install nox
+        env:
+          NOX_VERSION: 0.10.1
         run: |
-          if ! command -v nox >/dev/null 2>&1; then
-            curl -fsSL "https://raw.githubusercontent.com/felixgeelhaar/nox/main/install.sh" \
-              | bash -s -- -b "$HOME/.local/bin" v0.10.1 || \
-              brew install felixgeelhaar/tap/nox
-            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          set -euo pipefail
+          if command -v nox >/dev/null 2>&1; then
+            nox version
+            exit 0
           fi
-          nox version
+          arch="$(uname -m)"
+          case "$arch" in
+            x86_64) goarch=amd64 ;;
+            aarch64|arm64) goarch=arm64 ;;
+            *) echo "unsupported arch: $arch"; exit 1 ;;
+          esac
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          url="https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_${os}_${goarch}.tar.gz"
+          mkdir -p "$HOME/.local/bin"
+          tmp="$(mktemp -d)"
+          curl -fsSL "$url" -o "$tmp/nox.tgz"
+          tar -xzf "$tmp/nox.tgz" -C "$tmp"
+          install -m 0755 "$tmp/nox" "$HOME/.local/bin/nox"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/nox" version
       - name: Generate SBOM (nox)
         run: |
           mkdir -p sbom-out
