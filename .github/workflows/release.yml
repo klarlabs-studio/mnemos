@@ -78,9 +78,17 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/nox" version
       - name: Generate SBOM (nox)
+        # The scan also reports findings; SBOM generation is the purpose
+        # here. Gating happens in the security workflow with the full
+        # baseline (which is gitignored and machine-local). Soft-fail so
+        # a non-zero finding count doesn't gate the release — sbom.cdx /
+        # sbom.spdx still land in sbom-out/ either way.
         run: |
           mkdir -p sbom-out
-          nox scan . -format all -output ./sbom-out -baseline ./.nox/baseline.json
+          nox scan . -format all -output ./sbom-out || true
+          ls -la sbom-out/
+          test -s sbom-out/sbom.cdx.json
+          test -s sbom-out/sbom.spdx.json
 
       - name: Run GoReleaser
         id: goreleaser
