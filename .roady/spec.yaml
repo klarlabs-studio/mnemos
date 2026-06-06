@@ -505,7 +505,7 @@ features:
       requirements: []
     - id: mnemos-root-library-package-and-mnemos.new-entry-point
       title: Mnemos root library package and mnemos.New entry point
-      description: Add a root-level public library API so external consumers (Hermes, Nomi, OpenClaw, NanoClaw, Claude Code via MCP, agent runtimes) can do `import "github.com/felixgeelhaar/mnemos"` and call `mnemos.New(opts...)`. Today mnemos is CLI/MCP/HTTP service only — no in-process library face exists. Create mnemos/memory.go with Memory interface (Remember, Recall, RememberEvent, Timeline), mnemos/new.go wiring internal/store + internal/pipeline + internal/query through the public surface, and mnemos/memory_impl.go binding methods. Touch nothing under internal/. Mark v0.x until 90 days of consumer feedback.
+      description: Add a root-level public library API so external consumers (Hermes, Nomi, OpenClaw, NanoClaw, Claude Code via MCP, agent runtimes) can do `import "go.klarlabs.de/mnemos"` and call `mnemos.New(opts...)`. Today mnemos is CLI/MCP/HTTP service only — no in-process library face exists. Create mnemos/memory.go with Memory interface (Remember, Recall, RememberEvent, Timeline), mnemos/new.go wiring internal/store + internal/pipeline + internal/query through the public surface, and mnemos/memory_impl.go binding methods. Touch nothing under internal/. Mark v0.x until 90 days of consumer feedback.
       requirements: []
     - id: framework-neutral-provider-interfaces-(textgenerator-and-embedder)
       title: Framework-neutral provider interfaces (TextGenerator and Embedder)

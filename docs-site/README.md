@@ -2,7 +2,7 @@
 
 Source for the technical reference docs at [docs.mnemos.dev](https://docs.mnemos.dev/).
 
-The marketing landing page (https://felixgeelhaar.github.io/mnemos/) lives in
+The marketing landing page (https://klarlabs-studio.github.io/mnemos/) lives in
 `/docs/index.html` on `main` — different content, different audience, different
 build pipeline. This directory is the mkdocs-material site for the
 SDK / API / benchmark reference.

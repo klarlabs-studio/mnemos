@@ -11,11 +11,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/extract"
-	"github.com/felixgeelhaar/mnemos/internal/pipeline"
-	"github.com/felixgeelhaar/mnemos/internal/relate"
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/extract"
+	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 const (

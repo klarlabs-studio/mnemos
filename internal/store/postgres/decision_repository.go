@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // DecisionRepository persists recorded decisions in the configured

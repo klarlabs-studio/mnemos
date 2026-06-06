@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // ActionRepository is the in-memory implementation of

@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 )
 
 // LessonRepository persists synthesised lessons in the MySQL backend.

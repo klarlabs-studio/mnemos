@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 var errEmptyContent = errors.New("input content must not be empty")

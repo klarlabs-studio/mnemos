@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/store"
 
-	_ "github.com/felixgeelhaar/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/memory"
 )
 
 func openTestStore(t *testing.T) *store.Conn {

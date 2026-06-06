@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/internal/workflow"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/workflow"
 )
 
 // telemetry handles the workspace North Star metric and the optional

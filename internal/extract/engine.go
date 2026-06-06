@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // Engine extracts claims from domain events using heuristic NLP.

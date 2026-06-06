@@ -5,17 +5,17 @@ Mnemos ships two Go surfaces. Pick whichever matches your deployment.
 ## In-process library (v0.17+)
 
 ```bash
-go get github.com/felixgeelhaar/mnemos@latest
+go get go.klarlabs.de/mnemos@latest
 ```
 
-Lives at `github.com/felixgeelhaar/mnemos` (the module root). Embed Mnemos
+Lives at `go.klarlabs.de/mnemos` (the module root). Embed Mnemos
 directly in a Go agent runtime — Claude Code, Codex, Hermes, Nomi,
 OpenClaw, NanoClaw, or your own — without standing up the HTTP server.
 
 ```go
 import (
-    "github.com/felixgeelhaar/mnemos"
-    _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+    "go.klarlabs.de/mnemos"
+    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 mem, err := mnemos.New() // passive mode, XDG storage, bundled Chronos
@@ -63,7 +63,7 @@ results, _ := mem.Recall(ctx, mnemos.Query{Text: "Postgres decision", Hops: 1})
 ### Framework-neutral provider interfaces
 
 ```go
-import "github.com/felixgeelhaar/mnemos/providers"
+import "go.klarlabs.de/mnemos/providers"
 
 type myAdapter struct{ client *anthropic.Client }
 
@@ -87,18 +87,18 @@ defer eng.Close()
 mem, _ := mnemos.New(mnemos.WithChronos(eng))
 ```
 
-See [`docs/library.md`](https://github.com/felixgeelhaar/mnemos/blob/main/docs/library.md)
+See [`docs/library.md`](https://github.com/klarlabs-studio/mnemos/blob/main/docs/library.md)
 in the repository for the full three-mode walkthrough.
 
 ## HTTP client
 
-Lives in-tree at `github.com/felixgeelhaar/mnemos/client`. Same package as
+Lives in-tree at `go.klarlabs.de/mnemos/client`. Same package as
 the Mnemos server itself, so it tracks the wire format precisely. Use
 when you want HTTP from Go (different process, registry topology, or you
 just don't want the in-process dependency on the storage drivers).
 
 ```go
-import "github.com/felixgeelhaar/mnemos/client"
+import "go.klarlabs.de/mnemos/client"
 
 c := client.New("http://localhost:7777", client.WithToken(os.Getenv("MNEMOS_JWT")))
 
@@ -122,7 +122,7 @@ block, err := c.Context(ctx, "chat-session-1", client.ContextOptions{})
 | `c.Search(ctx, query, opts)` | `GET /v1/search` |
 | `c.Context(ctx, runID, opts)` | `GET /v1/context` |
 
-Source: [github.com/felixgeelhaar/mnemos/tree/main/client](https://github.com/felixgeelhaar/mnemos/tree/main/client).
+Source: [go.klarlabs.de/mnemos/tree/main/client](https://github.com/klarlabs-studio/mnemos/tree/main/client).
 
 ## Picking between them
 

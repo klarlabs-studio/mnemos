@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 func TestDetectFindsSupportAndContradiction(t *testing.T) {

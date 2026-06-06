@@ -39,4 +39,4 @@ const block = await m.context(run.runId);
 | `m.context(runId, opts)` | `GET /v1/context` |
 | `m.health()` | `GET /health` |
 
-Source + tests: [github.com/felixgeelhaar/mnemos-ts](https://github.com/felixgeelhaar/mnemos-ts).
+Source + tests: [github.com/klarlabs-studio/mnemos-ts](https://github.com/klarlabs-studio/mnemos-ts).

@@ -495,7 +495,7 @@ After decisionkit ships, tag nous final, replace README with redirect to decisio
 
 ## Mnemos root library package and mnemos.New entry point
 
-Add a root-level public library API so external consumers (Hermes, Nomi, OpenClaw, NanoClaw, Claude Code via MCP, agent runtimes) can do `import "github.com/felixgeelhaar/mnemos"` and call `mnemos.New(opts...)`. Today mnemos is CLI/MCP/HTTP service only — no in-process library face exists. Create mnemos/memory.go with Memory interface (Remember, Recall, RememberEvent, Timeline), mnemos/new.go wiring internal/store + internal/pipeline + internal/query through the public surface, and mnemos/memory_impl.go binding methods. Touch nothing under internal/. Mark v0.x until 90 days of consumer feedback.
+Add a root-level public library API so external consumers (Hermes, Nomi, OpenClaw, NanoClaw, Claude Code via MCP, agent runtimes) can do `import "go.klarlabs.de/mnemos"` and call `mnemos.New(opts...)`. Today mnemos is CLI/MCP/HTTP service only — no in-process library face exists. Create mnemos/memory.go with Memory interface (Remember, Recall, RememberEvent, Timeline), mnemos/new.go wiring internal/store + internal/pipeline + internal/query through the public surface, and mnemos/memory_impl.go binding methods. Touch nothing under internal/. Mark v0.x until 90 days of consumer feedback.
 
 ---
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // Engine detects relationships between claims using token-overlap heuristics.

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 func TestBuildAuditExport_IncludesAllResourcesByDefault(t *testing.T) {

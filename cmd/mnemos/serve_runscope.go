@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // checkEventRunsAllowed returns ("", nil) when every supplied event

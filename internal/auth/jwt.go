@@ -21,8 +21,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 )
 
 // TokenKind distinguishes a human-issued token from an agent-issued one.

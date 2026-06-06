@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/libsql"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/store"
+	_ "go.klarlabs.de/mnemos/internal/store/libsql"
 )
 
 func TestSupportedSchemes_IncludesLibSQL(t *testing.T) {

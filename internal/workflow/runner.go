@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/felixgeelhaar/bolt"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/statekit"
+	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/statekit"
 )
 
 type jobStore interface {

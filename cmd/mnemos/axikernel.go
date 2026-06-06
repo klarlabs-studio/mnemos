@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/axi-go"
-	"github.com/felixgeelhaar/axi-go/domain"
-	"github.com/felixgeelhaar/bolt"
+	"go.klarlabs.de/axi"
+	"go.klarlabs.de/axi/domain"
+	"go.klarlabs.de/bolt"
 )
 
 // axiActionPrefix is the axi-go action name corresponding to each MCP

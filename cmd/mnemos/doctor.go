@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/auth"
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // handleDoctor implements `mnemos doctor [--json]`. Surfaces every

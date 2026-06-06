@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/autoedge"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/autoedge"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // handleDecision routes `mnemos decision <subcommand> ...`.

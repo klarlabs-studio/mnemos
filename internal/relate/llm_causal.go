@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/llm"
 )
 
 // DetectCausalLLM augments DetectCausal with an LLM disambiguation

@@ -17,7 +17,7 @@ and now routes through the same library internally.
 ## Install
 
 ```bash
-go get github.com/felixgeelhaar/mnemos@latest
+go get go.klarlabs.de/mnemos@latest
 ```
 
 Blank-import the storage providers you need (the in-memory provider is
@@ -25,8 +25,8 @@ useful for tests; SQLite is the right default for most callers):
 
 ```go
 import (
-    _ "github.com/felixgeelhaar/mnemos/internal/store/memory"
-    _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+    _ "go.klarlabs.de/mnemos/internal/store/memory"
+    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
     // Postgres / MySQL / libSQL providers also available; import only
     // what your binary needs.
 )
@@ -40,8 +40,8 @@ package main
 import (
     "context"
 
-    "github.com/felixgeelhaar/mnemos"
-    _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+    "go.klarlabs.de/mnemos"
+    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 func main() {
@@ -89,7 +89,7 @@ content return nothing. Documented openly so adopters can decide.
 ### Shared — agent runtime supplies the provider
 
 ```go
-import "github.com/felixgeelhaar/mnemos/providers"
+import "go.klarlabs.de/mnemos/providers"
 
 type myTextGen struct{ client *anthropic.Client }
 
@@ -246,11 +246,11 @@ resolve. Common imports:
 
 ```go
 import (
-    _ "github.com/felixgeelhaar/mnemos/internal/store/memory"   // memory://
-    _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"   // sqlite://
-    _ "github.com/felixgeelhaar/mnemos/internal/store/postgres" // postgres:// (also CockroachDB, YugabyteDB, Neon, ...)
-    _ "github.com/felixgeelhaar/mnemos/internal/store/mysql"    // mysql:// (also PlanetScale, TiDB, MariaDB, Vitess)
-    _ "github.com/felixgeelhaar/mnemos/internal/store/libsql"   // libsql:// (Turso remote or local file)
+    _ "go.klarlabs.de/mnemos/internal/store/memory"   // memory://
+    _ "go.klarlabs.de/mnemos/internal/store/sqlite"   // sqlite://
+    _ "go.klarlabs.de/mnemos/internal/store/postgres" // postgres:// (also CockroachDB, YugabyteDB, Neon, ...)
+    _ "go.klarlabs.de/mnemos/internal/store/mysql"    // mysql:// (also PlanetScale, TiDB, MariaDB, Vitess)
+    _ "go.klarlabs.de/mnemos/internal/store/libsql"   // libsql:// (Turso remote or local file)
 )
 ```
 

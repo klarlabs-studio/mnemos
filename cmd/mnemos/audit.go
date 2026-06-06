@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // auditExport is the on-the-wire shape of `mnemos audit`. Top-level fields

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // UserRepository persists human identities. scopes are stored as

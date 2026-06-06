@@ -47,13 +47,13 @@ That's the whole API for the simple case. For richer memory — typed claims, co
 brew tap felixgeelhaar/tap && brew install mnemos
 
 # Go (any platform with Go 1.26+)
-go install github.com/felixgeelhaar/mnemos/cmd/mnemos@latest
+go install go.klarlabs.de/mnemos/cmd/mnemos@latest
 
 # Docker
-docker run --rm ghcr.io/felixgeelhaar/mnemos --version
+docker run --rm ghcr.io/klarlabs-studio/mnemos --version
 
 # From source
-git clone https://github.com/felixgeelhaar/mnemos.git && cd mnemos && make install
+git clone https://github.com/klarlabs-studio/mnemos.git && cd mnemos && make install
 ```
 
 ### 2. Process text — extract claims and detect contradictions
@@ -293,12 +293,12 @@ The HTTP API at `mnemos serve` is one integration surface; for Go apps you
 can also embed Mnemos in-process via the root package. Pick whichever
 matches your runtime.
 
-**Go (in-process library, v0.17+)** — `import "github.com/felixgeelhaar/mnemos"`:
+**Go (in-process library, v0.17+)** — `import "go.klarlabs.de/mnemos"`:
 
 ```go
 import (
-    "github.com/felixgeelhaar/mnemos"
-    _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+    "go.klarlabs.de/mnemos"
+    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 mem, err := mnemos.New() // passive mode, XDG storage, bundled Chronos
@@ -322,7 +322,7 @@ provider). Chronos is bundled in-process by default; supply your own with
 The HTTP API and MCP transport remain available for non-Go consumers; both
 route through the same internals.
 
-**Go (HTTP client)** — `import "github.com/felixgeelhaar/mnemos/client"`:
+**Go (HTTP client)** — `import "go.klarlabs.de/mnemos/client"`:
 
 When you do want HTTP from Go (different process, or non-Go consumer over
 HTTP that needs a typed client):

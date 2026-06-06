@@ -3,7 +3,7 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 func TestMatchByContainment_FindsExistingPersonByPrefix(t *testing.T) {

@@ -12,17 +12,17 @@ import (
 
 	"github.com/felixgeelhaar/chronos"
 	"github.com/felixgeelhaar/chronos/embed"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/embedding"
-	"github.com/felixgeelhaar/mnemos/internal/ingest"
-	"github.com/felixgeelhaar/mnemos/internal/llm"
-	"github.com/felixgeelhaar/mnemos/internal/parser"
-	"github.com/felixgeelhaar/mnemos/internal/pipeline"
-	"github.com/felixgeelhaar/mnemos/internal/query"
-	"github.com/felixgeelhaar/mnemos/internal/relate"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/providers"
 	"github.com/google/uuid"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/ingest"
+	"go.klarlabs.de/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos/internal/parser"
+	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/query"
+	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/providers"
 )
 
 // chronosEventNamespace is the deterministic UUID namespace used when

@@ -9,11 +9,11 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/felixgeelhaar/bolt"
-	"github.com/felixgeelhaar/mnemos/internal/auth"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	mnemosv1 "github.com/felixgeelhaar/mnemos/proto/gen/mnemos/v1"
+	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/store"
+	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

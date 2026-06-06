@@ -13,22 +13,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/felixgeelhaar/bolt"
-	mcp "github.com/felixgeelhaar/mcp-go"
-	"github.com/felixgeelhaar/mnemos/internal/autoedge"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/embedding"
-	"github.com/felixgeelhaar/mnemos/internal/ingest"
-	"github.com/felixgeelhaar/mnemos/internal/llm"
-	"github.com/felixgeelhaar/mnemos/internal/parser"
-	"github.com/felixgeelhaar/mnemos/internal/pipeline"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
-	"github.com/felixgeelhaar/mnemos/internal/query"
-	"github.com/felixgeelhaar/mnemos/internal/relate"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/internal/synthesize"
-	"github.com/felixgeelhaar/mnemos/internal/trust"
-	"github.com/felixgeelhaar/mnemos/internal/workflow"
+	"go.klarlabs.de/bolt"
+	mcp "go.klarlabs.de/mcp"
+	"go.klarlabs.de/mnemos/internal/autoedge"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/ingest"
+	"go.klarlabs.de/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos/internal/parser"
+	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/query"
+	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/synthesize"
+	"go.klarlabs.de/mnemos/internal/trust"
+	"go.klarlabs.de/mnemos/internal/workflow"
 )
 
 type mcpBoltLogger struct {
@@ -300,7 +300,7 @@ func handleMCP() {
 	},
 		mcp.WithTitle("Mnemos MCP Server"),
 		mcp.WithDescription("Query and update evidence-backed local knowledge with Mnemos."),
-		mcp.WithWebsiteURL("https://github.com/felixgeelhaar/mnemos"),
+		mcp.WithWebsiteURL("https://github.com/klarlabs-studio/mnemos"),
 		mcp.WithBuildInfo(commit, buildDate),
 		mcp.WithInstructions("Use query_knowledge to read the knowledge base, process_text to ingest raw text, and watch_file to keep a specific file's claims fresh as it changes. Prefer process_text before querying when no knowledge exists yet."),
 	)

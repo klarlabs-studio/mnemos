@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/ports"
 )
 
 // SearchByText runs an FTS5 BM25 query against the events_fts index

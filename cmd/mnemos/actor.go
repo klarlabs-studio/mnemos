@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 )
 
 // resolveActor returns the actor id to stamp on CLI-initiated writes,

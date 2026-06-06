@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/store"
 
 	// Register the memory provider for the smoke test.
-	_ "github.com/felixgeelhaar/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/memory"
 )
 
 // openMemory is a tiny helper that runs every behaviour test through

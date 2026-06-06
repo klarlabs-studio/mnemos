@@ -2,7 +2,7 @@ package mnemos
 
 import (
 	"github.com/felixgeelhaar/chronos/embed"
-	"github.com/felixgeelhaar/mnemos/providers"
+	"go.klarlabs.de/mnemos/providers"
 )
 
 // Option configures [New]. Options are constructed by the With* helpers

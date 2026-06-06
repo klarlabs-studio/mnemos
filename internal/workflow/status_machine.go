@@ -1,6 +1,6 @@
 package workflow
 
-import "github.com/felixgeelhaar/statekit"
+import "go.klarlabs.de/statekit"
 
 // newStatusMachine returns the workflow state machine used to validate job
 // status transitions.

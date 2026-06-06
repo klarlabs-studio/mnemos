@@ -3,7 +3,7 @@ package pipeline
 import (
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // DedupeAgainstExisting collapses newly-extracted claims that match

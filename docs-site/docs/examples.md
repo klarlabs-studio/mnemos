@@ -1,6 +1,6 @@
 # Examples
 
-Two examples ship in-tree under [`examples/`](https://github.com/felixgeelhaar/mnemos/tree/main/examples).
+Two examples ship in-tree under [`examples/`](https://github.com/klarlabs-studio/mnemos/tree/main/examples).
 
 ## Quickstart chatbot (~30 LOC)
 
@@ -9,7 +9,7 @@ A minimal chatbot that remembers facts across turns. Two HTTP calls do the whole
 - `POST /v1/events` to remember
 - `GET /v1/events?run_id=…` to recall
 
-Source: [`examples/quickstart_chatbot/`](https://github.com/felixgeelhaar/mnemos/tree/main/examples/quickstart_chatbot)
+Source: [`examples/quickstart_chatbot/`](https://github.com/klarlabs-studio/mnemos/tree/main/examples/quickstart_chatbot)
 
 ```bash
 mnemos serve &
@@ -22,7 +22,7 @@ python chatbot.py
 
 A 4-node LangGraph agent (`fetch_history → score_risk → decide → execute`) that emits one Mnemos event per node, all keyed to one `run_id`. Replays the full reasoning chain via `GET /v1/events?run_id=<run-id>`.
 
-Source: [`examples/refund_triage_langgraph/`](https://github.com/felixgeelhaar/mnemos/tree/main/examples/refund_triage_langgraph)
+Source: [`examples/refund_triage_langgraph/`](https://github.com/klarlabs-studio/mnemos/tree/main/examples/refund_triage_langgraph)
 
 ```bash
 mnemos serve &

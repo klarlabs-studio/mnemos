@@ -3,7 +3,7 @@ package memory
 import (
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // Stored records are the in-memory analogues of the SQLite rows.

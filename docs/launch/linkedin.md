@@ -20,8 +20,8 @@ There's no SDK to install. The whole simple-case memory API is 5 lines of raw HT
 
 Stack: Go (single binary), MIT licensed. SQLite by default; Postgres, MySQL, libSQL, in-memory all supported.
 
-Live: https://felixgeelhaar.github.io/mnemos
-Repo: https://github.com/felixgeelhaar/mnemos
+Live: https://klarlabs-studio.github.io/mnemos
+Repo: https://github.com/klarlabs-studio/mnemos
 
 Looking for design partners running AI agents in regulated environments — DM if that's you.
 

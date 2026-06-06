@@ -22,7 +22,7 @@
       <a href="#vs">Where it fits</a>
       <a href="#architecture">Architecture</a>
       <a href="#run">Run it</a>
-      <a href="https://github.com/felixgeelhaar/mnemos">GitHub</a>
+      <a href="https://github.com/klarlabs-studio/mnemos">GitHub</a>
     </nav>
   </div>
 </header>
@@ -40,7 +40,7 @@
   </p>
   <div class="cta-row">
     <a class="cta primary" href="#run">Run demo now</a>
-    <a class="cta" href="https://github.com/felixgeelhaar/mnemos" aria-label="View Mnemos on GitHub">View on GitHub</a>
+    <a class="cta" href="https://github.com/klarlabs-studio/mnemos" aria-label="View Mnemos on GitHub">View on GitHub</a>
     <a class="cta ghost" href="#architecture">See architecture</a>
   </div>
 
@@ -160,7 +160,7 @@ events = httpx.get(f"{m}/v1/events", params={"run_id": run}).json()</code></pre>
       <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
       <span class="label">$ mnemos · contradiction demo</span>
     </div>
-<pre><code>$ go install github.com/felixgeelhaar/mnemos/cmd/mnemos@latest
+<pre><code>$ go install go.klarlabs.de/mnemos/cmd/mnemos@latest
 
 $ mnemos process --text "The deployment succeeded in production.
 The deployment did not succeed in production. Response times averaged 45ms."
@@ -298,7 +298,7 @@ $ mnemos query --at 2026-05-01 "What happened with the deployment?"
   <p class="kicker">Run it</p>
   <h2 id="run-heading">From install to trust signal in under five minutes.</h2>
   <pre><code>brew install felixgeelhaar/tap/mnemos
-# or: go install github.com/felixgeelhaar/mnemos/cmd/mnemos@latest
+# or: go install go.klarlabs.de/mnemos/cmd/mnemos@latest
 
 mnemos process --text "The deployment succeeded in production.
 The deployment did not succeed in production."
@@ -338,7 +338,7 @@ curl -s "http://localhost:7777/v1/events?run_id=&lt;run-id&gt;" | jq</code></pre
   <p class="dim">
     The example wires raw HTTP, no SDK — four lines per node get you a
     defensible audit trail. Source:
-    <a href="https://github.com/felixgeelhaar/mnemos/tree/main/examples/refund_triage_langgraph"><code>examples/refund_triage_langgraph/</code></a>.
+    <a href="https://github.com/klarlabs-studio/mnemos/tree/main/examples/refund_triage_langgraph"><code>examples/refund_triage_langgraph/</code></a>.
   </p>
 </section>
 
@@ -376,16 +376,16 @@ curl -s "http://localhost:7777/v1/events?run_id=&lt;run-id&gt;" | jq</code></pre
     <div>
       <h4>Project</h4>
       <ul>
-        <li><a href="https://github.com/felixgeelhaar/mnemos">GitHub repo</a></li>
-        <li><a href="https://github.com/felixgeelhaar/mnemos/blob/main/Roadmap.md">Roadmap</a></li>
-        <li><a href="https://github.com/felixgeelhaar/mnemos/blob/main/Vision.md">Vision</a></li>
+        <li><a href="https://github.com/klarlabs-studio/mnemos">GitHub repo</a></li>
+        <li><a href="https://github.com/klarlabs-studio/mnemos/blob/main/Roadmap.md">Roadmap</a></li>
+        <li><a href="https://github.com/klarlabs-studio/mnemos/blob/main/Vision.md">Vision</a></li>
       </ul>
     </div>
     <div>
       <h4>Contact</h4>
       <ul>
-        <li><a href="https://github.com/felixgeelhaar/mnemos/discussions">Discussions</a></li>
-        <li><a href="https://github.com/felixgeelhaar/mnemos/issues">Issues</a></li>
+        <li><a href="https://github.com/klarlabs-studio/mnemos/discussions">Discussions</a></li>
+        <li><a href="https://github.com/klarlabs-studio/mnemos/issues">Issues</a></li>
         <li><a href="mailto:felix@felixgeelhaar.de?subject=Mnemos%20Team%20waitlist">Team waitlist</a></li>
         <li><a href="mailto:felix@felixgeelhaar.de?subject=Mnemos%20Enterprise%20enquiry">Enterprise enquiry</a></li>
       </ul>

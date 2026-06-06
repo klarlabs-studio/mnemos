@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/bolt"
-	"github.com/felixgeelhaar/fortify/retry"
+	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/fortify/retry"
 )
 
 // Client is a typed Go client for the Mnemos registry HTTP API. It is

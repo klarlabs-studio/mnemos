@@ -7,12 +7,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/extract"
-	"github.com/felixgeelhaar/mnemos/internal/pipeline"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/internal/workflow"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/extract"
+	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/workflow"
 )
 
 // handleEntities is the dispatcher for `mnemos entities <subcommand>`.

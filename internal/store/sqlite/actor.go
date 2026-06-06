@@ -1,6 +1,6 @@
 package sqlite
 
-import "github.com/felixgeelhaar/mnemos/internal/domain"
+import "go.klarlabs.de/mnemos/internal/domain"
 
 // actorOr returns s if non-empty, otherwise the SystemUser sentinel.
 // Lets callers leave domain.X.CreatedBy unset on internal write paths

@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 
 	"github.com/felixgeelhaar/chronos/embed"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/embedding"
-	"github.com/felixgeelhaar/mnemos/internal/extract"
-	"github.com/felixgeelhaar/mnemos/internal/llm"
-	"github.com/felixgeelhaar/mnemos/internal/pipeline"
-	"github.com/felixgeelhaar/mnemos/internal/query"
-	"github.com/felixgeelhaar/mnemos/internal/relate"
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/extract"
+	"go.klarlabs.de/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/query"
+	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // New constructs a [Memory] from the supplied options. When no mode
@@ -27,7 +27,7 @@ import (
 // The caller is responsible for blank-importing the storage providers
 // it needs. The simplest pattern:
 //
-//	import _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+//	import _ "go.klarlabs.de/mnemos/internal/store/sqlite"
 //
 // will let the default DSN resolve. For Postgres, MySQL, libSQL, or
 // in-memory storage, blank-import the corresponding sub-package.

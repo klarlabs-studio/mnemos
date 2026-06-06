@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // IncidentRepository provides SQLite-backed storage for incidents.

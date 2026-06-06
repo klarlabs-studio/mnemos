@@ -10,7 +10,7 @@
 //     a SQLite file.
 //
 // The provider implements every port-typed repository in
-// [github.com/felixgeelhaar/mnemos/internal/ports] so a `Conn` opened
+// [go.klarlabs.de/mnemos/internal/ports] so a `Conn` opened
 // here is a drop-in replacement for the SQLite Conn from a port-typed
 // caller's perspective. Provider-specific extras (sql.DB raw handle,
 // FTS5, sqlite-vss) are intentionally absent — callers that need
@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // Register the memory provider with the top-level store factory.

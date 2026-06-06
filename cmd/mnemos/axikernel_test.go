@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/felixgeelhaar/axi-go"
-	"github.com/felixgeelhaar/axi-go/domain"
-	"github.com/felixgeelhaar/bolt"
+	"go.klarlabs.de/axi"
+	"go.klarlabs.de/axi/domain"
+	"go.klarlabs.de/bolt"
 )
 
 func TestBuildMCPKernel_RegistersAllMCPTools(t *testing.T) {

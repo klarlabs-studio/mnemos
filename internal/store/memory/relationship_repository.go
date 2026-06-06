@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // RelationshipRepository is the in-memory implementation of

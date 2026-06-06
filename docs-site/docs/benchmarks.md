@@ -1,6 +1,6 @@
 # Benchmarks
 
-Honest, reproducible cross-product comparisons. Source: [`benchmarks/`](https://github.com/felixgeelhaar/mnemos/tree/main/benchmarks).
+Honest, reproducible cross-product comparisons. Source: [`benchmarks/`](https://github.com/klarlabs-studio/mnemos/tree/main/benchmarks).
 
 ## Suites
 

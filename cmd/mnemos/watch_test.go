@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+	"go.klarlabs.de/mnemos/internal/store"
+	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 func newTestWatcher(t *testing.T) *Watcher {

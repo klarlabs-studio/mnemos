@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/felixgeelhaar/chronos/embed"
-	"github.com/felixgeelhaar/mnemos"
-	"github.com/felixgeelhaar/mnemos/providers"
 	"github.com/google/uuid"
+	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/providers"
 
 	// Storage providers used by the tests; blank-imported here for
 	// scheme registration.
-	_ "github.com/felixgeelhaar/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/memory"
 )
 
 // TestNew_PassiveMode_ZeroConfig verifies a fresh consumer can construct

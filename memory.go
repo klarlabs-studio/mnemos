@@ -36,9 +36,9 @@
 // consuming program:
 //
 //	import (
-//	    _ "github.com/felixgeelhaar/mnemos/internal/store/memory"
-//	    _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
-//	    _ "github.com/felixgeelhaar/mnemos/internal/store/postgres"
+//	    _ "go.klarlabs.de/mnemos/internal/store/memory"
+//	    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+//	    _ "go.klarlabs.de/mnemos/internal/store/postgres"
 //	)
 //
 // Without at least one provider blank-imported, [New] cannot open the

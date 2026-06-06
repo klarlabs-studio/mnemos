@@ -1,6 +1,6 @@
 # API reference
 
-The HTTP API is the source of truth — every SDK wraps the same endpoints. Full machine-readable spec: [`api/openapi.yaml`](https://github.com/felixgeelhaar/mnemos/blob/main/api/openapi.yaml).
+The HTTP API is the source of truth — every SDK wraps the same endpoints. Full machine-readable spec: [`api/openapi.yaml`](https://github.com/klarlabs-studio/mnemos/blob/main/api/openapi.yaml).
 
 ## Endpoints (summary)
 

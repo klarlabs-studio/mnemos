@@ -11,18 +11,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/embedding"
-	"github.com/felixgeelhaar/mnemos/internal/extract"
-	"github.com/felixgeelhaar/mnemos/internal/ingest"
-	"github.com/felixgeelhaar/mnemos/internal/llm"
-	"github.com/felixgeelhaar/mnemos/internal/parser"
-	"github.com/felixgeelhaar/mnemos/internal/pipeline"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
-	"github.com/felixgeelhaar/mnemos/internal/query"
-	"github.com/felixgeelhaar/mnemos/internal/relate"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/internal/workflow"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/extract"
+	"go.klarlabs.de/mnemos/internal/ingest"
+	"go.klarlabs.de/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos/internal/parser"
+	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/query"
+	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/workflow"
 
 	// Register storage providers with the top-level store registry so
 	// resolveDSN()/openConn() can dispatch on URL scheme. Side-effect
@@ -30,11 +30,11 @@ import (
 	// registers the scheme and parses DSNs but Open returns
 	// ErrNotImplemented; including it here means operators get a clear
 	// error rather than "unknown provider postgres".
-	_ "github.com/felixgeelhaar/mnemos/internal/store/libsql"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/memory"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/mysql"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/postgres"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+	_ "go.klarlabs.de/mnemos/internal/store/libsql"
+	_ "go.klarlabs.de/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/mysql"
+	_ "go.klarlabs.de/mnemos/internal/store/postgres"
+	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 // resolveDBPath returns the SQLite file path used when MNEMOS_DB_URL

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package mnemos.v1;
 
-option go_package = "github.com/felixgeelhaar/mnemos/proto/gen/mnemos/v1;mnemosv1";
+option go_package = "go.klarlabs.de/mnemos/proto/gen/mnemos/v1;mnemosv1";
 
 import "google/protobuf/timestamp.proto";
 

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/autoedge"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/autoedge"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // handleAction routes `mnemos action <subcommand> ...`. Today only

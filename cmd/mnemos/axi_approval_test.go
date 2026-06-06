@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/felixgeelhaar/axi-go"
-	"github.com/felixgeelhaar/axi-go/domain"
-	"github.com/felixgeelhaar/bolt"
+	"go.klarlabs.de/axi"
+	"go.klarlabs.de/axi/domain"
+	"go.klarlabs.de/bolt"
 )
 
 // TestApprovalFlow_WriteExternalActionAwaitsThenApproves exercises

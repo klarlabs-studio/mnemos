@@ -30,8 +30,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store/sqlite"
 
 	// libsql-client-go registers the "libsql" sql.DB driver in init().
 	_ "github.com/tursodatabase/libsql-client-go/libsql"

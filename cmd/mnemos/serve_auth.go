@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/bolt"
-	"github.com/felixgeelhaar/mnemos/internal/auth"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // actorContextKey tags the resolved user id on a request's context so

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 func claimTypePriority(t domain.ClaimType) int {
@@ -52,7 +52,7 @@ func printWelcome() {
 	fmt.Println("    mnemos process --text \"Your text here\"")
 	fmt.Println("    mnemos query \"Your question\"")
 	fmt.Println("")
-	fmt.Println("  Documentation: https://github.com/felixgeelhaar/mnemos")
+	fmt.Println("  Documentation: https://github.com/klarlabs-studio/mnemos")
 	fmt.Println("")
 }
 

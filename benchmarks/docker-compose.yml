@@ -29,7 +29,7 @@ services:
       retries: 10
 
   mnemos:
-    image: ghcr.io/felixgeelhaar/mnemos:${MNEMOS_TAG:-0.13.0}
+    image: ghcr.io/klarlabs-studio/mnemos:${MNEMOS_TAG:-0.13.0}
     environment:
       MNEMOS_DB_URL: "postgres://mnemos:mnemos@mnemos-postgres:5432/mnemos?sslmode=disable"
       MNEMOS_SERVE_PORT: "7777"

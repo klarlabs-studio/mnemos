@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // handleIncident routes `mnemos incident <subcommand> ...`.

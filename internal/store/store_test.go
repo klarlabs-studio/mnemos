@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store"
 
 	// Register every provider for the smoke tests.
 	// Real binaries do the same blank imports in cmd/mnemos.
-	_ "github.com/felixgeelhaar/mnemos/internal/store/memory"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/postgres"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+	_ "go.klarlabs.de/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/postgres"
+	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 // TestOpen_SQLite_PopulatesAllRepositories is the Phase 1a smoke

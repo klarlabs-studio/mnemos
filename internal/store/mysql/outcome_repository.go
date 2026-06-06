@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // OutcomeRepository implements ports.OutcomeRepository against MySQL.

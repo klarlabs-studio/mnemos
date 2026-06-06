@@ -22,7 +22,7 @@ import (
 
 	"database/sql"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store"
 
 	// pgx-stdlib registers the "pgx" sql.DB driver in init().
 	_ "github.com/jackc/pgx/v5/stdlib"

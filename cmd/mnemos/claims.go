@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos"
+	"go.klarlabs.de/mnemos"
 )
 
 // handleClaim routes `mnemos claim <subcommand> ...`.

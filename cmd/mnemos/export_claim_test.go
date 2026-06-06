@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/markdown"
-	"github.com/felixgeelhaar/mnemos/internal/query"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/markdown"
+	"go.klarlabs.de/mnemos/internal/query"
 )
 
 // ---------------------------------------------------------------------------

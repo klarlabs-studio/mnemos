@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // CredibilityInputs contains provenance signals for source credibility scoring.

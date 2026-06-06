@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/trust"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/trust"
 )
 
 // handleTrust routes `mnemos trust --test=<requirement-ref>`.

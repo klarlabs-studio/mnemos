@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store/sqlite"
 
 	// Register the sqlite provider so store.Open("sqlite://...") works.
-	_ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
+	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 // openDedupeDB opens a fresh SQLite-backed Conn at a temp path for

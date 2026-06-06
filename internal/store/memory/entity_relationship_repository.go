@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // EntityRelationshipRepository is the in-memory polymorphic-edge

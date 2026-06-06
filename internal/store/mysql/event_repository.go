@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // EventRepository implements ports.EventRepository against MySQL.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // auditWhoExport is the on-the-wire shape of `mnemos audit who`.

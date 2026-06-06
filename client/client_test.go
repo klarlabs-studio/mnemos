@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/bolt"
-	"github.com/felixgeelhaar/fortify/retry"
-	"github.com/felixgeelhaar/mnemos/client"
+	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/fortify/retry"
+	"go.klarlabs.de/mnemos/client"
 )
 
 // fakeRegistry stands in for `mnemos serve` end-to-end. Self-contained

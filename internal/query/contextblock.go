@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // ContextBlockOptions tunes a Context Block build. Zero values are

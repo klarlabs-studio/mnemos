@@ -25,7 +25,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store"
 
 	// go-sql-driver/mysql registers the "mysql" sql.DB driver in init().
 	_ "github.com/go-sql-driver/mysql"

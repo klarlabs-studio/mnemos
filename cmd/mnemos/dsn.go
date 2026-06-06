@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // resolveDSN returns the canonical store DSN for this process. It is

@@ -19,7 +19,7 @@
 
 services:
   mnemos:
-    image: ghcr.io/felixgeelhaar/mnemos:${MNEMOS_TAG:-0.13.0}
+    image: ghcr.io/klarlabs-studio/mnemos:${MNEMOS_TAG:-0.13.0}
     environment:
       MNEMOS_DB_URL: "memory://playground"
       MNEMOS_SERVE_PORT: "7777"
@@ -40,7 +40,7 @@ services:
   # volume so nginx can serve it from /token. Token rotates on
   # container restart (i.e., daily if you scheduled a restart).
   token-mint:
-    image: ghcr.io/felixgeelhaar/mnemos:${MNEMOS_TAG:-0.13.0}
+    image: ghcr.io/klarlabs-studio/mnemos:${MNEMOS_TAG:-0.13.0}
     depends_on:
       mnemos:
         condition: service_healthy

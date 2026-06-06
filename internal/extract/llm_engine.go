@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/fortify/retry"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/llm"
+	"go.klarlabs.de/fortify/retry"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/llm"
 )
 
 // TokenUsage reports the input/output token counts a successful LLM

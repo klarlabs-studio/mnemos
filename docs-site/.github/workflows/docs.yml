@@ -30,6 +30,6 @@ jobs:
           path: docs-site/_site
   # Deploy step is intentionally separate. To publish to a docs subdomain
   # (e.g. docs.mnemos.dev), wire `peaceiris/actions-gh-pages@v3` here
-  # against a dedicated branch — the existing felixgeelhaar.github.io/mnemos
+  # against a dedicated branch — the existing klarlabs-studio.github.io/mnemos
   # path keeps the marketing landing page (docs/index.html), which lives
   # in main:/docs and is unrelated to this build.

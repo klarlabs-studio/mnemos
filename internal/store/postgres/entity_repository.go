@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // EntityRepository persists canonicalised entities and the

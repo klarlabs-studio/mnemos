@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/felixgeelhaar/mnemos/providers"
+	"go.klarlabs.de/mnemos/providers"
 )
 
 // stubTextGenerator demonstrates the minimal adapter pattern for an

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/felixgeelhaar/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/ports"
 )
 
 // OpenFunc is the provider-side factory signature. Each provider
@@ -111,7 +111,7 @@ func Register(scheme string, fn OpenFunc) {
 //	memory://?namespace=mnemos
 //
 // The matching provider must have been blank-imported by the binary
-// (e.g. _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite") so
+// (e.g. _ "go.klarlabs.de/mnemos/internal/store/sqlite") so
 // that its init() runs before Open is called.
 func Open(ctx context.Context, dsn string) (*Conn, error) {
 	scheme, _, ok := strings.Cut(dsn, "://")

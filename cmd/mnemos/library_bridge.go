@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/felixgeelhaar/mnemos"
-	"github.com/felixgeelhaar/mnemos/internal/embedding"
-	"github.com/felixgeelhaar/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/llm"
 )
 
 // newLibraryMemory constructs a [mnemos.Memory] mirroring the env-driven

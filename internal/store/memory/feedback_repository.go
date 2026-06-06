@@ -3,7 +3,7 @@ package memory
 import (
 	"context"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // FeedbackRepository is the in-memory implementation of

@@ -77,7 +77,7 @@ with:
 
 ```bash
 cosign verify-blob \
-  --certificate-identity-regexp 'https://github.com/felixgeelhaar/mnemos/.+' \
+  --certificate-identity-regexp 'https://github.com/klarlabs-studio/mnemos/.+' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --signature mnemos_0.18.0_linux_amd64.tar.gz.sig \
   --certificate mnemos_0.18.0_linux_amd64.tar.gz.pem \

@@ -1,8 +1,8 @@
 site_name: Mnemos
 site_description: Self-hosted memory for AI apps. No vendor cloud, no per-call billing, no SDK to install.
 site_url: https://docs.mnemos.dev/
-repo_url: https://github.com/felixgeelhaar/mnemos
-repo_name: felixgeelhaar/mnemos
+repo_url: https://github.com/klarlabs-studio/mnemos
+repo_name: klarlabs-studio/mnemos
 edit_uri: edit/main/docs-site/docs/
 
 theme:
@@ -65,4 +65,4 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/felixgeelhaar/mnemos
+      link: https://github.com/klarlabs-studio/mnemos

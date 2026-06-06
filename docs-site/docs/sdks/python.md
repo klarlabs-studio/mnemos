@@ -37,7 +37,7 @@ with Mnemos(base_url="http://localhost:7777") as m:
 | `m.context(run_id, query?, max_tokens?)` | `GET /v1/context` |
 | `m.health()` | `GET /health` |
 
-Source + tests: [github.com/felixgeelhaar/mnemos-py](https://github.com/felixgeelhaar/mnemos-py).
+Source + tests: [github.com/klarlabs-studio/mnemos-py](https://github.com/klarlabs-studio/mnemos-py).
 
 ## Auth
 

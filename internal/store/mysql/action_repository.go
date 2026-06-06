@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // ActionRepository implements ports.ActionRepository against MySQL.

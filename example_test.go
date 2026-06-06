@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/felixgeelhaar/chronos/embed"
-	"github.com/felixgeelhaar/mnemos"
-	"github.com/felixgeelhaar/mnemos/providers"
+	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/providers"
 
 	// Tests use the in-memory storage provider.
-	_ "github.com/felixgeelhaar/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/memory"
 )
 
 // ExampleNew demonstrates the simplest possible Mnemos usage: zero

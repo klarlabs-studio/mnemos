@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // Register the SQLite provider with the top-level store factory. Both

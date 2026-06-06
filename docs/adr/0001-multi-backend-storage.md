@@ -95,9 +95,9 @@ and the wanted providers as blank-imported side effects in `cmd/mnemos`:
 
 ```go
 import (
-    _ "github.com/felixgeelhaar/mnemos/internal/store/memory"
-    _ "github.com/felixgeelhaar/mnemos/internal/store/sqlite"
-    _ "github.com/felixgeelhaar/mnemos/internal/store/postgres"
+    _ "go.klarlabs.de/mnemos/internal/store/memory"
+    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+    _ "go.klarlabs.de/mnemos/internal/store/postgres"
 )
 ```
 

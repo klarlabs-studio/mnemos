@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/felixgeelhaar/mnemos/internal/synthesize"
+	"go.klarlabs.de/mnemos/internal/synthesize"
 )
 
 // handleSynthesize routes `mnemos synthesize ...`. Runs one full

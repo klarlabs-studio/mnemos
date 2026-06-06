@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/internal/store/postgres"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store/postgres"
 )
 
 func TestParseDSN_DefaultsNamespaceToMnemos(t *testing.T) {

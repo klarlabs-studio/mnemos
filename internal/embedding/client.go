@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/felixgeelhaar/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos/internal/llm"
 )
 
 // Client generates vector embeddings from text.

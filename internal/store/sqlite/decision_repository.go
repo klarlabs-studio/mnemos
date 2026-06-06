@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/store/sqlite/sqlcgen"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/store/sqlite/sqlcgen"
 )
 
 // DecisionRepository provides SQLite-backed storage for recorded

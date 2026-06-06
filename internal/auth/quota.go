@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // ErrQuotaExceeded is returned when an agent's rolling-window quota

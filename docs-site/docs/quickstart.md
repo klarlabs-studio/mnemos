@@ -11,7 +11,7 @@
 === "Go"
 
     ```bash
-    go install github.com/felixgeelhaar/mnemos/cmd/mnemos@latest
+    go install go.klarlabs.de/mnemos/cmd/mnemos@latest
     ```
 
 === "Docker"
@@ -20,7 +20,7 @@
     docker run -d --rm -p 7777:7777 \
       -e MNEMOS_DB_URL=memory://demo \
       -e MNEMOS_JWT_SECRET=$(openssl rand -hex 32) \
-      ghcr.io/felixgeelhaar/mnemos serve
+      ghcr.io/klarlabs-studio/mnemos serve
     ```
 
 ## 2. Try the rule-based path (no LLM key required)
@@ -53,7 +53,7 @@ mnemos query --llm "What decisions were made?"
 
 ## 5. Wrap an agent for audit + replay
 
-The [refund-triage example](https://github.com/felixgeelhaar/mnemos/tree/main/examples/refund_triage_langgraph) shows a 4-node LangGraph agent that emits one event per node, all keyed to one `run_id`. Replay any decision from one HTTP call:
+The [refund-triage example](https://github.com/klarlabs-studio/mnemos/tree/main/examples/refund_triage_langgraph) shows a 4-node LangGraph agent that emits one event per node, all keyed to one `run_id`. Replay any decision from one HTTP call:
 
 ```bash
 curl "http://localhost:7777/v1/events?run_id=<run-id>" | jq

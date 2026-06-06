@@ -20,7 +20,7 @@ Set `MNEMOS_DB_URL` to one of:
 docker run -d --rm -p 7777:7777 \
   -e MNEMOS_DB_URL="postgres://mnemos:mnemos@host:5432/mnemos?sslmode=disable" \
   -e MNEMOS_JWT_SECRET=$(openssl rand -hex 32) \
-  ghcr.io/felixgeelhaar/mnemos serve
+  ghcr.io/klarlabs-studio/mnemos serve
 ```
 
 ## Auth
@@ -34,7 +34,7 @@ Reads are open. Writes require `Authorization: Bearer <token>`.
 
 ## Compose templates
 
-Production-shape compose files live under [`deploy/`](https://github.com/felixgeelhaar/mnemos/tree/main/deploy):
+Production-shape compose files live under [`deploy/`](https://github.com/klarlabs-studio/mnemos/tree/main/deploy):
 
 - `deploy/playground/` — public sandbox, in-memory backend, nginx rate limit
 - The benchmarks stack at `benchmarks/docker-compose.yml` is also a viable starting point

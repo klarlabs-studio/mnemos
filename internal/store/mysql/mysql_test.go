@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	"github.com/felixgeelhaar/mnemos/internal/store/mysql"
+	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/store/mysql"
 )
 
 func TestParseDSN_DefaultsNamespaceFromPath(t *testing.T) {

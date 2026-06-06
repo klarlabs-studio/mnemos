@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/mysql"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/store"
+	_ "go.klarlabs.de/mnemos/internal/store/mysql"
 )
 
 // requireLiveDSN gates every test in this file on TEST_MYSQL_DSN.

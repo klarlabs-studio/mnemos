@@ -12,7 +12,7 @@ Pick one. A is the sharpest claim, B is the most concrete, C is the most contrar
 
 ## URL
 
-https://felixgeelhaar.github.io/mnemos/
+https://klarlabs-studio.github.io/mnemos/
 
 ## Body (HN's optional comment field — first comment of the thread)
 
@@ -36,7 +36,7 @@ There's a 30-line quickstart chatbot example showing the basic memory loop, and 
 
 Stack: Go (single binary), MIT licensed, GHCR image, gRPC alongside HTTP, MCP server for Claude Code / Cursor / Cline.
 
-Repo: https://github.com/felixgeelhaar/mnemos
+Repo: https://github.com/klarlabs-studio/mnemos
 
 Honest about scope: Mnemos doesn't host anything for you. It's a binary you run. If "easiest possible onboarding to managed memory" is what you need, hosted services do that better than I can. If you want substrate you own, this is for you.
 

@@ -14,8 +14,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	mnemosv1 "github.com/felixgeelhaar/mnemos/proto/gen/mnemos/v1"
+	"go.klarlabs.de/mnemos/internal/domain"
+	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
 )
 
 // ---------------------------------------------------------------------------

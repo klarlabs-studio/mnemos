@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/felixgeelhaar/mnemos"
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/embedding"
-	"github.com/felixgeelhaar/mnemos/internal/llm"
-	"github.com/felixgeelhaar/mnemos/internal/query"
+	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos/internal/query"
 )
 
 // mcpRememberEventInput is the MCP-side input shape for the

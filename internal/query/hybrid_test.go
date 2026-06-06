@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
-	"github.com/felixgeelhaar/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 )
 
 // fakeTextSearcher returns the canned hits regardless of query, so

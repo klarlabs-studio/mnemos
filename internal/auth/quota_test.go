@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/felixgeelhaar/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 func TestQuotaTracker_NoLimitsAllowsEverything(t *testing.T) {

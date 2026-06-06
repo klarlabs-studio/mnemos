@@ -43,7 +43,7 @@ docker run --read-only \
   -e MNEMOS_JWT_SECRET=<hex-32-bytes> \
   # MNEMOS_REGISTRY_TOKEN is for client-side push/pull; not needed for inbound auth.
   -p 7777:7777 \
-  ghcr.io/felixgeelhaar/mnemos serve --grpc-port 7778
+  ghcr.io/klarlabs-studio/mnemos serve --grpc-port 7778
 ```
 
 Pin the base image to a digest before deploying to production:

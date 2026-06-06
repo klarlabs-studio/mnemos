@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/felixgeelhaar/mnemos/internal/ports"
-	"github.com/felixgeelhaar/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/store"
 
-	_ "github.com/felixgeelhaar/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/memory"
 )
 
 func openSim(t *testing.T) *store.Conn {

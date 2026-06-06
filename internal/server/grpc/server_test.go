@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/felixgeelhaar/bolt"
-	mnemosgrpc "github.com/felixgeelhaar/mnemos/internal/server/grpc"
-	"github.com/felixgeelhaar/mnemos/internal/store"
-	_ "github.com/felixgeelhaar/mnemos/internal/store/memory"
-	mnemosv1 "github.com/felixgeelhaar/mnemos/proto/gen/mnemos/v1"
+	"go.klarlabs.de/bolt"
+	mnemosgrpc "go.klarlabs.de/mnemos/internal/server/grpc"
+	"go.klarlabs.de/mnemos/internal/store"
+	_ "go.klarlabs.de/mnemos/internal/store/memory"
+	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
 
 	grpclib "google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
