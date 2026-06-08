@@ -267,14 +267,14 @@ func sendTelemetry(ctx context.Context, m WorkspaceMetrics) (sent bool, err erro
 	}
 	// Endpoint is operator-supplied via MNEMOS_TELEMETRY_ENDPOINT and gated
 	// by an explicit opt-in marker; gosec G107/G104 are accepted here.
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body)) //nolint:gosec
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return false, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "mnemos-cli/"+mnemosVersion())
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req) //nolint:gosec
+	resp, err := client.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("post: %w", err)
 	}

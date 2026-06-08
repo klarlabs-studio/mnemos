@@ -50,11 +50,11 @@ func envDuration(envVar string, def time.Duration) time.Duration {
 	d, err := time.ParseDuration(raw)
 	if err != nil {
 		// %q quotes and escapes; envVar is hard-coded by callers.
-		log.Printf("invalid %s=%q (want a Go duration like 60s or 2m): %v; using %s", envVar, sanitizeForLog(raw), err, def) //nolint:gosec // value is %q-quoted and length-bounded
+		log.Printf("invalid %s=%q (want a Go duration like 60s or 2m): %v; using %s", envVar, sanitizeForLog(raw), err, def)
 		return def
 	}
 	if d <= 0 {
-		log.Printf("invalid %s=%q (must be > 0); using %s", envVar, sanitizeForLog(raw), def) //nolint:gosec // value is %q-quoted and length-bounded
+		log.Printf("invalid %s=%q (must be > 0); using %s", envVar, sanitizeForLog(raw), def)
 		return def
 	}
 	return d

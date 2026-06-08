@@ -101,7 +101,7 @@ func (r UserRepository) UpdateScopes(ctx context.Context, id string, scopes []st
 // scanOne satisfies the corresponding ports method.
 func (r UserRepository) scanOne(ctx context.Context, where string, args ...any) (domain.User, error) {
 	row := r.db.QueryRowContext(ctx, fmt.Sprintf(`
-SELECT id, name, email, status, scopes_json::text, created_at FROM %s `+where, qualify(r.ns, "users")), args...) //nolint:gosec // G202: where is one of two literal constants
+SELECT id, name, email, status, scopes_json::text, created_at FROM %s `+where, qualify(r.ns, "users")), args...)
 	var (
 		u         domain.User
 		statusStr string

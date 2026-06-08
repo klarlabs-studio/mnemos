@@ -2458,7 +2458,7 @@ func makeClaimMarkdownExportHandler(conn *store.Conn, claimID string) http.Handl
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.md"`, claimID))
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(rendered)) //nolint:gosec // G705: rendered is produced by our own markdown.ExportClaim, not from user input
+		_, _ = w.Write([]byte(rendered))
 	}
 }
 

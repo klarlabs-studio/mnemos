@@ -36,7 +36,7 @@ func (s Service) IngestFile(path string) (domain.Input, string, error) {
 		return domain.Input{}, "", errors.New("path is required")
 	}
 
-	contentBytes, err := os.ReadFile(path) //nolint:gosec // G304: CLI tool reads user-specified files by design
+	contentBytes, err := os.ReadFile(path)
 	if err != nil {
 		return domain.Input{}, "", fmt.Errorf("read input file: %w", err)
 	}

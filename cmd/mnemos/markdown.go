@@ -87,7 +87,7 @@ func handleExport(args []string, _ Flags) {
 		fmt.Print(rendered)
 		return
 	}
-	if err := os.WriteFile(out, []byte(rendered), 0o600); err != nil { //nolint:gosec // G304: --out path is the operator's choice
+	if err := os.WriteFile(out, []byte(rendered), 0o600); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "write file"))
 		return
 	}
@@ -131,7 +131,7 @@ func handleImport(args []string, _ Flags) {
 		return
 	}
 	path := args[0]
-	data, err := os.ReadFile(path) //nolint:gosec // G304: caller-supplied path is the operator's choice
+	data, err := os.ReadFile(path)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "read file"))
 		return

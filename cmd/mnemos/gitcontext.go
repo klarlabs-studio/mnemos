@@ -76,7 +76,7 @@ func runGitLog(ctx context.Context, repoRoot string, limit int, since string) ([
 		args = append(args, "--since="+strings.TrimSpace(since))
 	}
 
-	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // G204: git args are constructed from validated inputs
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {

@@ -177,7 +177,7 @@ func (w *Watcher) tick(ctx context.Context) (changed, removed int) {
 
 // hashFile returns the hex-encoded sha256 of the file at path.
 func hashFile(path string) (string, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // G304: watcher reads user-registered files by design
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", path, err)
 	}

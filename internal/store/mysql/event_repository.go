@@ -64,7 +64,6 @@ func (r EventRepository) ListByIDs(ctx context.Context, ids []string) ([]domain.
 		return []domain.Event{}, nil
 	}
 	placeholders, args := inPlaceholders(ids)
-	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
 	q := `SELECT id, run_id, schema_version, content, source_input_id, timestamp, metadata_json, ingested_at, created_by
 FROM events WHERE id IN (` + placeholders + `)`
 	rows, err := r.db.QueryContext(ctx, q, args...)

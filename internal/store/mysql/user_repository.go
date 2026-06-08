@@ -95,7 +95,6 @@ func (r UserRepository) UpdateScopes(ctx context.Context, id string, scopes []st
 }
 
 func (r UserRepository) scanOne(ctx context.Context, where string, args ...any) (domain.User, error) {
-	//nolint:gosec // G202: where is one of two literal constants from internal callers, never user input
 	row := r.db.QueryRowContext(ctx, `SELECT id, name, email, status, scopes_json, created_at FROM users `+where, args...)
 	var (
 		u         domain.User

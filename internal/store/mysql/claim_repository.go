@@ -130,7 +130,6 @@ func (r ClaimRepository) ListByEventIDs(ctx context.Context, eventIDs []string) 
 		return []domain.Claim{}, nil
 	}
 	placeholders, args := inPlaceholders(eventIDs)
-	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
 	q := `
 SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to
 FROM claims c
@@ -151,7 +150,6 @@ func (r ClaimRepository) ListEvidenceByClaimIDs(ctx context.Context, claimIDs []
 		return []domain.ClaimEvidence{}, nil
 	}
 	placeholders, args := inPlaceholders(claimIDs)
-	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
 	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id FROM claim_evidence WHERE claim_id IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list evidence by claim ids: %w", err)
@@ -174,7 +172,6 @@ func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]do
 		return []domain.Claim{}, nil
 	}
 	placeholders, args := inPlaceholders(claimIDs)
-	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
 	rows, err := r.db.QueryContext(ctx, `
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to
 FROM claims WHERE id IN (`+placeholders+`)`, args...)

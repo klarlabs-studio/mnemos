@@ -174,7 +174,6 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 	placeholders, args := inPlaceholders(claimIDs)
 	// Same args twice for from_claim_id and to_claim_id IN clauses.
 	args2 := append(append([]any{}, args...), args...)
-	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
 	q := `
 SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
 FROM relationships

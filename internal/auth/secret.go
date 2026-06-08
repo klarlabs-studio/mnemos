@@ -34,7 +34,7 @@ func LoadOrCreateSecret(path string) ([]byte, bool, error) {
 		return nil, false, errors.New("no secret path provided and MNEMOS_JWT_SECRET unset")
 	}
 
-	if data, err := os.ReadFile(path); err == nil { //nolint:gosec // G304: server-resolved path
+	if data, err := os.ReadFile(path); err == nil {
 		decoded, err := hex.DecodeString(strings.TrimSpace(string(data)))
 		if err != nil {
 			return nil, false, fmt.Errorf("read %s: not hex-encoded: %w", path, err)
@@ -83,7 +83,7 @@ func LoadPreviousSecret(activePath string) ([]byte, error) {
 		return nil, nil
 	}
 	prevPath := activePath + ".previous"
-	data, err := os.ReadFile(prevPath) //nolint:gosec // G304: server-resolved path
+	data, err := os.ReadFile(prevPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil

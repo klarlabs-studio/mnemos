@@ -60,7 +60,7 @@ func runGhPRs(ctx context.Context, repoRoot string, limit int) ([]prRecord, erro
 		limit = maxGitPRLimit
 	}
 
-	cmd := exec.CommandContext(ctx, "gh", //nolint:gosec // G204: args constructed from validated inputs
+	cmd := exec.CommandContext(ctx, "gh",
 		"pr", "list",
 		"--state", "merged",
 		"--limit", strconv.Itoa(limit),

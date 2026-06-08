@@ -222,7 +222,7 @@ SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.cr
 FROM claims c
 JOIN claim_evidence ce ON ce.claim_id = c.id
 WHERE ce.event_id IN (%s)
-ORDER BY c.created_at ASC`, strings.Join(placeholders, ",")) //nolint:gosec // G201: placeholders are literal "?" strings, not user input
+ORDER BY c.created_at ASC`, strings.Join(placeholders, ","))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -309,7 +309,7 @@ func (r ClaimRepository) ListEvidenceByClaimIDs(ctx context.Context, claimIDs []
 	query := fmt.Sprintf(`
 SELECT claim_id, event_id
 FROM claim_evidence
-WHERE claim_id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201: placeholders are literal "?" strings, not user input
+WHERE claim_id IN (%s)`, strings.Join(placeholders, ","))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -351,7 +351,7 @@ func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]do
 	query := fmt.Sprintf(`
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, last_verified, verify_count, half_life_days, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components
 FROM claims
-WHERE id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201: placeholders are literal "?" strings, not user input
+WHERE id IN (%s)`, strings.Join(placeholders, ","))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {

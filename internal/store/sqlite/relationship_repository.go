@@ -230,7 +230,6 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 	}
 	in := strings.Join(placeholders, ",")
 
-	//nolint:gosec // G201: placeholders are literal "?", IDs flow through ? bindings
 	q := "SELECT id, type, from_claim_id, to_claim_id, created_at, created_by FROM relationships WHERE from_claim_id IN (" + in + ") OR to_claim_id IN (" + in + ")"
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {

@@ -88,7 +88,7 @@ func (r EventRepository) ListByIDs(ctx context.Context, ids []string) ([]domain.
 	query := fmt.Sprintf(`
 SELECT id, run_id, schema_version, content, source_input_id, timestamp, metadata_json, ingested_at, created_by
 FROM events
-WHERE id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201: placeholders are literal "?" strings, not user input
+WHERE id IN (%s)`, strings.Join(placeholders, ","))
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
