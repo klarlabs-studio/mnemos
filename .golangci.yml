@@ -5,8 +5,9 @@ run:
 
 linters:
   # Org engineering bar (klarlabs-studio golangci.reference.yml) merged with
-  # mnemos-specific opt-ins. gocritic + gosec are part of the shared gate and
-  # must stay enabled. revive is a repo-specific opt-in (exported-symbol docs).
+  # mnemos-specific opt-ins. gocritic is part of the shared gate and must stay
+  # enabled; code-level security is owned by nox (taint-analysis + core
+  # ruleset), not gosec. revive is a repo-specific opt-in (exported-symbol docs).
   default: standard
   enable:
     - errcheck
@@ -18,7 +19,6 @@ linters:
     - unconvert
     - unparam
     - gocritic     # org engineering bar — do not drop
-    - gosec
     - revive       # repo-specific: enforce exported-symbol documentation
 
   settings:
@@ -28,10 +28,6 @@ linters:
           severity: warning
           arguments:
             - checkPrivateReceivers
-    gosec:
-      excludes:
-        - G115 # integer overflow conversion — not applicable in this codebase
-        - G703 # path traversal — operator-supplied config paths, not user input
     gocritic:
       disabled-checks:
         # `unlambda` flags trivial wrapper closures that document the
@@ -48,19 +44,10 @@ linters:
 
   exclusions:
     rules:
-      # Tests legitimately ignore encode errors (test handlers) and use
-      # math/rand for deterministic fixtures. gosec does not apply to test code.
-      - linters: [gosec]
-        path: _test\.go
       # Test helpers keep constant-valued params and symmetric return
       # values for readability and future fixtures; unparam is noise here.
       - linters: [unparam]
         path: _test\.go
-      # Ignore gosec inline nolint directives
-      - linters: [gosec]
-        text: "G201"
-      - linters: [gosec]
-        text: "G304"
     paths:
       - data/eval
 
