@@ -34,6 +34,12 @@ import (
 //
 // Returned [Memory] holds an open storage handle; the caller MUST call
 // [Memory.Close] when finished.
+//
+// The returned Memory is safe for concurrent use by multiple goroutines:
+// concurrent Remember / RememberClaim / RememberEvent calls each run as
+// an independent governed session, and [Memory.LastWriteSession] reflects
+// whichever write finished last. See the [Memory] documentation for the
+// full concurrency contract.
 func New(opts ...Option) (Memory, error) {
 	cfg := config{
 		mode:    modePassive,
@@ -118,16 +124,22 @@ func New(opts ...Option) (Memory, error) {
 		chronosOwned: chronosOwned,
 	}
 
+	// The cumulative token budget (WithTokenBudget) is enforced at the
+	// Mnemos layer across writes: a pre-execution gate rejects writes once
+	// it's exhausted, and the threshold-crossing write reports post-hoc.
+	// See governed_writes.go. It is distinct from axi's per-write MaxTokens
+	// (env-driven), which caps a single session's spend.
+	if cfg.tokenBudgetSet {
+		m.tokenBudget = cfg.tokenBudget
+	}
+
 	// Build the in-process axi kernel every public write routes through.
 	// This is unconditional: there is no direct-write fallback, so the
 	// spec non-negotiable ("every write passes through axi-go") holds by
-	// construction. The default budget is permissive (env-derived,
+	// construction. The per-write budget is permissive (env-derived,
 	// itself defaulting to unlimited tokens) so existing flows don't
 	// break.
 	budget := kernel.BudgetFromEnv()
-	if cfg.tokenBudgetSet {
-		budget.MaxTokens = cfg.tokenBudget
-	}
 	wkernel, err := buildWriteKernel(m, budget, cfg.evidenceLog)
 	if err != nil {
 		_ = conn.Close()

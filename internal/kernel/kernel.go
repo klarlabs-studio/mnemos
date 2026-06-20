@@ -68,19 +68,62 @@ func ExecutorRef(bare string) string {
 	return "exec." + bare
 }
 
-// Build assembles an axi.Kernel pre-registered with every supplied
+// Governed wraps an axi.Kernel with the Mnemos-specific session-capture
+// seam. It embeds *axi.Kernel so Execute, GetSession, ListActions,
+// Approve, and the rest of axi's surface promote through unchanged; the
+// added value is [Governed.LastSession], which surfaces the session even
+// on a hard-error path where axi.Kernel.Execute returns (nil, err) and
+// the caller has no res.SessionID to look it up by.
+type Governed struct {
+	*axi.Kernel
+	repo *capturingSessionRepo
+	sink *evidenceSink
+}
+
+// LastSession returns the most-recently-saved execution session, or nil
+// if no write has run yet. axi Save()s the session on every terminal
+// path — success, business failure, budget failure, and the hard-error
+// path (executor-not-found, ctx-cancel mid-execution) — so this is the
+// honest way to recover the session for an auditable trail when Execute
+// returns (nil, err) and there is no result to read SessionID from.
+//
+// The genuinely session-less failures are the pre-execution ones: an
+// invalid action name or input that fails validation before
+// NewExecutionSession runs. Those never reach Save, so LastSession keeps
+// returning the prior write's session (or nil).
+func (g *Governed) LastSession() *domain.ExecutionSession {
+	if g == nil || g.repo == nil {
+		return nil
+	}
+	return g.repo.lastSaved()
+}
+
+// Close releases the kernel's durable evidence sink (the JSONL audit
+// log), if one was opened. Safe on a nil sink and idempotent.
+func (g *Governed) Close() error {
+	if g == nil {
+		return nil
+	}
+	return g.sink.Close()
+}
+
+// Build assembles a [Governed] kernel pre-registered with every supplied
 // action and its executor. The plugin contributes the static action
 // definitions; executors are passed in by the caller (keyed by
 // [ExecutorRef]) so they can carry runtime state.
 //
 // The kernel logs every domain event through the bolt logger and, when
-// evidenceLogPath (or MNEMOS_AXI_EVIDENCE_LOG) is set, also appends a
-// JSONL audit line per event. The budget governs token / invocation /
-// duration spend per session.
+// evidenceLogPath (or MNEMOS_AXI_EVIDENCE_LOG) is set, persists the full
+// tamper-evident evidence chain of every completed session to a JSONL
+// audit log. The budget governs token / invocation / duration spend per
+// session.
+//
+// Session ids are UUIDv4 (not axi's default sequential ids) so the audit
+// log is collision-free across sessions and processes.
 //
 // logger may be nil; a discarding logger is substituted so library
 // consumers that don't want axi chatter on stderr pay nothing.
-func Build(logger *bolt.Logger, actions []Action, executors map[string]domain.ActionExecutor, budget axi.Budget, evidenceLogPath string) (*axi.Kernel, error) {
+func Build(logger *bolt.Logger, actions []Action, executors map[string]domain.ActionExecutor, budget axi.Budget, evidenceLogPath string) (*Governed, error) {
 	if logger == nil {
 		logger = bolt.New(bolt.NewJSONHandler(noopWriter{}))
 	}
@@ -93,16 +136,23 @@ func Build(logger *bolt.Logger, actions []Action, executors map[string]domain.Ac
 	publishers := []domain.DomainEventPublisher{
 		boltPublisher{logger: logger},
 	}
+	repo := newCapturingSessionRepo()
 	sink, sinkErr := newEvidenceSink(evidenceLogPath)
 	if sinkErr != nil {
 		logger.Warn().Err(sinkErr).Msg("axi evidence sink disabled")
 	} else if sink != nil {
-		publishers = append(publishers, sink)
+		// The sink persists the full evidence chain from the complete
+		// session on each terminal Save — the only seam that carries
+		// Value/Source/PreviousHash. It is driven by the repo, not the
+		// domain-event publisher.
+		repo.sink = sink
 	}
 
 	k := axi.New().
 		WithLogger(boltLogger{logger: logger}).
 		WithDomainEventPublisher(multiPublisher(publishers)).
+		WithSessionRepository(repo).
+		WithIDGenerator(idGenerator{}).
 		WithBudget(budget)
 
 	for ref, exec := range executors {
@@ -111,7 +161,7 @@ func Build(logger *bolt.Logger, actions []Action, executors map[string]domain.Ac
 	if err := k.RegisterPlugin(plugin); err != nil {
 		return nil, fmt.Errorf("kernel: register plugin: %w", err)
 	}
-	return k, nil
+	return &Governed{Kernel: k, repo: repo, sink: sink}, nil
 }
 
 // plugin is the static axi plugin describing every Mnemos action. It

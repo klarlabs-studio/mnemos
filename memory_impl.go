@@ -9,16 +9,16 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
+	"sync/atomic"
 
 	"github.com/felixgeelhaar/chronos"
 	"github.com/felixgeelhaar/chronos/embed"
 	"github.com/google/uuid"
-	"go.klarlabs.de/axi"
 	axidomain "go.klarlabs.de/axi/domain"
 	"go.klarlabs.de/bolt"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/kernel"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/query"
@@ -50,11 +50,11 @@ type memory struct {
 	// supplied one via [WithChronos].
 	chronosOwned bool
 
-	// wkernel is the in-process axi kernel every public write routes
-	// through. Built unconditionally by [New] — there is no
+	// wkernel is the in-process governed axi kernel every public write
+	// routes through. Built unconditionally by [New] — there is no
 	// direct-write fallback, so no write can bypass the evidence chain
 	// + budget. See governed_writes.go.
-	wkernel *axi.Kernel
+	wkernel *kernel.Governed
 	// logger backs the kernel's domain-event log. Nil keeps axi chatter
 	// off stderr (the library default); cmd/mnemos can supply its own.
 	logger *bolt.Logger
@@ -64,6 +64,15 @@ type memory struct {
 	// sessionMu for concurrent writers.
 	sessionMu   sync.RWMutex
 	lastSession *axidomain.ExecutionSession
+
+	// tokenBudget is the cumulative language-model token budget across all
+	// writes on this Memory (set via [WithTokenBudget]). Zero means no
+	// cumulative cap. tokensSpent accumulates the per-write token spend
+	// reported on each session's "llm" evidence record; once it reaches
+	// the budget, further writes are rejected pre-execution. Atomic so
+	// concurrent writers account safely.
+	tokenBudget int64
+	tokensSpent atomic.Int64
 }
 
 var _ Memory = (*memory)(nil)
@@ -266,6 +275,13 @@ func (m *memory) Close() error {
 		}
 	}
 	m.chronos = nil
+	// Flush + close the kernel's durable evidence log (no-op when no
+	// MNEMOS_AXI_EVIDENCE_LOG / WithEvidenceLog path was configured).
+	if m.wkernel != nil {
+		if err := m.wkernel.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
 	return firstErr
 }
 
@@ -298,10 +314,18 @@ func copyMetaWithout(in map[string]string, skip string) map[string]string {
 	return out
 }
 
-// newEventID returns a fresh event id. Mirrors internal/parser's id
-// strategy without exporting it.
+// newEventID returns a fresh, collision-resistant event id. Uses a
+// random UUID rather than a timestamp so concurrent writes can't mint the
+// same id (the same scheme internal/parser uses for its event ids).
 func newEventID() string {
-	return fmt.Sprintf("ev_%d", time.Now().UnixNano())
+	return "ev_" + uuid.NewString()
+}
+
+// newClaimID returns a fresh, collision-resistant claim id. UUID-based
+// for the same reason as [newEventID]: a UnixNano timestamp collides when
+// two goroutines call RememberClaim within the same nanosecond.
+func newClaimID() string {
+	return "cl_" + uuid.NewString()
 }
 
 // textGenAdapter wraps a [providers.TextGenerator] to satisfy the

@@ -144,7 +144,7 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		confidence = 1.0
 	}
 
-	id := fmt.Sprintf("cl_%d", time.Now().UnixNano())
+	id := newClaimID()
 	claim := domain.Claim{
 		ID:         id,
 		Text:       item.Text,

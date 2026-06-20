@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"go.klarlabs.de/axi"
 	"go.klarlabs.de/axi/domain"
@@ -155,12 +156,34 @@ func TestBudgetFromEnv_Defaults(t *testing.T) {
 func TestBudgetFromEnv_Overrides(t *testing.T) {
 	t.Setenv("MNEMOS_AXI_MAX_TOKENS", "42")
 	t.Setenv("MNEMOS_AXI_MAX_INVOCATIONS", "7")
+	t.Setenv("MNEMOS_AXI_MAX_DURATION", "30s")
 	b := kernel.BudgetFromEnv()
 	if b.MaxTokens != 42 {
 		t.Errorf("MaxTokens = %d, want 42", b.MaxTokens)
 	}
 	if b.MaxCapabilityInvocations != 7 {
 		t.Errorf("MaxCapabilityInvocations = %d, want 7", b.MaxCapabilityInvocations)
+	}
+	if b.MaxDuration != 30*time.Second {
+		t.Errorf("MaxDuration = %s, want 30s", b.MaxDuration)
+	}
+}
+
+// TestBudgetFromEnv_InvalidValuesIgnored confirms malformed env values
+// fall back to the permissive defaults rather than erroring.
+func TestBudgetFromEnv_InvalidValuesIgnored(t *testing.T) {
+	t.Setenv("MNEMOS_AXI_MAX_DURATION", "not-a-duration")
+	t.Setenv("MNEMOS_AXI_MAX_INVOCATIONS", "-5")
+	t.Setenv("MNEMOS_AXI_MAX_TOKENS", "abc")
+	b := kernel.BudgetFromEnv()
+	if b.MaxDuration != 5*time.Minute {
+		t.Errorf("MaxDuration = %s, want default 5m", b.MaxDuration)
+	}
+	if b.MaxCapabilityInvocations != 1000 {
+		t.Errorf("MaxCapabilityInvocations = %d, want default 1000", b.MaxCapabilityInvocations)
+	}
+	if b.MaxTokens != 0 {
+		t.Errorf("MaxTokens = %d, want default 0", b.MaxTokens)
 	}
 }
 

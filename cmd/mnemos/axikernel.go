@@ -54,7 +54,7 @@ func axiActionName(mcpName string) string {
 // publisher, the opt-in JSONL evidence sink via MNEMOS_AXI_EVIDENCE_LOG,
 // and the env-driven budget). Executors are passed in by the caller
 // because each tool's implementation has different shape.
-func buildMCPKernel(logger *bolt.Logger, executors map[string]domain.ActionExecutor) (*axi.Kernel, error) {
+func buildMCPKernel(logger *bolt.Logger, executors map[string]domain.ActionExecutor) (*kernel.Governed, error) {
 	return kernel.Build(logger, mcpTools(), executors, kernel.BudgetFromEnv(), "")
 }
 
@@ -277,13 +277,13 @@ func watchFileSummary(out mcpWatchFileOutput) string {
 // The unused db parameter is reserved: future enrichment (auditing
 // invocations into a mcp_invocations table from the same DB) will
 // thread it through without changing call sites.
-func dispatchAxiTool[Out any](ctx context.Context, kernel *axi.Kernel, _ *sql.DB, mcpName string, input any) (Out, error) {
+func dispatchAxiTool[Out any](ctx context.Context, k *kernel.Governed, _ *sql.DB, mcpName string, input any) (Out, error) {
 	var zero Out
 	payload, err := toInputMap(input)
 	if err != nil {
 		return zero, fmt.Errorf("encode %s input: %w", mcpName, err)
 	}
-	res, err := kernel.Execute(ctx, axi.Invocation{
+	res, err := k.Execute(ctx, axi.Invocation{
 		Action: axiActionName(mcpName),
 		Input:  payload,
 	})
