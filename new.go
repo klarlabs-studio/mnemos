@@ -122,6 +122,10 @@ func New(opts ...Option) (Memory, error) {
 		embedder:     embClient,
 		chronos:      chronosEngine,
 		chronosOwned: chronosOwned,
+		// logger backs the governed-write kernel's domain-event log. Nil
+		// (the default) keeps axi chatter off stderr; WithLogger injects
+		// a caller-supplied sink.
+		logger: cfg.logger,
 	}
 
 	// The cumulative token budget (WithTokenBudget) is enforced at the

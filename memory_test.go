@@ -1,21 +1,25 @@
 package mnemos_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/felixgeelhaar/chronos/embed"
 	"github.com/google/uuid"
+	"go.klarlabs.de/bolt"
 	"go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/providers"
 
 	// Storage providers used by the tests; blank-imported here for
 	// scheme registration.
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 // TestNew_PassiveMode_ZeroConfig verifies a fresh consumer can construct
@@ -247,6 +251,84 @@ func TestRememberClaim_RejectsEmptyText(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("RememberClaim with empty Text returned nil error; expected validation error")
+	}
+}
+
+// TestWithLogger_InjectsKernelLogger verifies a caller-supplied bolt
+// logger receives the governed-write kernel's domain-event log instead of
+// the silent default. A write should emit at least one structured line to
+// the injected sink.
+func TestWithLogger_InjectsKernelLogger(t *testing.T) {
+	clearMnemosEnv(t)
+
+	var buf bytes.Buffer
+	logger := bolt.New(bolt.NewJSONHandler(&buf))
+
+	mem, err := mnemos.New(
+		mnemos.WithStorage("memory://?namespace=mnemos_with_logger_test"),
+		mnemos.WithPassiveMode(),
+		mnemos.WithLogger(logger),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	if err := mem.Remember(context.Background(), mnemos.Item{
+		Type:    "fact",
+		Content: "Logger injection smoke fact.",
+	}); err != nil {
+		t.Fatalf("Remember: %v", err)
+	}
+
+	if buf.Len() == 0 {
+		t.Error("WithLogger sink received no output after a governed write")
+	}
+}
+
+// TestWithSQLite_BuildsDSN verifies the WithSQLite convenience alias
+// resolves to a working sqlite-backed Memory.
+func TestWithSQLite_BuildsDSN(t *testing.T) {
+	clearMnemosEnv(t)
+
+	dir := t.TempDir()
+	mem, err := mnemos.New(
+		mnemos.WithSQLite(filepath.Join(dir, "mnemos.db")),
+		mnemos.WithPassiveMode(),
+	)
+	if err != nil {
+		t.Fatalf("New with WithSQLite: %v", err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	if err := mem.Remember(context.Background(), mnemos.Item{
+		Type:    "fact",
+		Content: "WithSQLite smoke fact.",
+	}); err != nil {
+		t.Fatalf("Remember: %v", err)
+	}
+}
+
+// TestWithLogger_NilIsNoop ensures passing a nil logger does not panic and
+// behaves like the silent default.
+func TestWithLogger_NilIsNoop(t *testing.T) {
+	clearMnemosEnv(t)
+
+	mem, err := mnemos.New(
+		mnemos.WithStorage("memory://?namespace=mnemos_with_logger_nil_test"),
+		mnemos.WithPassiveMode(),
+		mnemos.WithLogger(nil),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = mem.Close() }()
+
+	if err := mem.Remember(context.Background(), mnemos.Item{
+		Type:    "fact",
+		Content: "Nil logger smoke fact.",
+	}); err != nil {
+		t.Fatalf("Remember: %v", err)
 	}
 }
 

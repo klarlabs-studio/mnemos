@@ -2,6 +2,7 @@ package mnemos
 
 import (
 	"github.com/felixgeelhaar/chronos/embed"
+	"go.klarlabs.de/bolt"
 	"go.klarlabs.de/mnemos/providers"
 )
 
@@ -84,6 +85,11 @@ type config struct {
 	// means "use MNEMOS_AXI_EVIDENCE_LOG" (itself defaulting to
 	// disabled). Set via [WithEvidenceLog].
 	evidenceLog string
+
+	// logger, when non-nil, backs the governed-write kernel's
+	// domain-event log. Nil (the default) keeps axi chatter off stderr.
+	// Set via [WithLogger].
+	logger *bolt.Logger
 }
 
 type optionFunc func(*config)
@@ -232,5 +238,39 @@ func WithChronos(eng *embed.Engine) Option {
 	return optionFunc(func(c *config) {
 		c.chronos = eng
 		c.chronosOwned = false
+	})
+}
+
+// WithLogger injects a [bolt.Logger] for the governed-write kernel's
+// structured domain-event log. By default Mnemos keeps the kernel silent
+// (nil logger); supply one when you want governed-write events on your own
+// sink. bolt's slog bridge ([bolt.NewSlogHandler]) lets you route a
+// standard library *slog.Logger here too.
+//
+// Passing nil is a no-op (keeps the silent default).
+func WithLogger(logger *bolt.Logger) Option {
+	return optionFunc(func(c *config) {
+		if logger == nil {
+			return
+		}
+		c.logger = logger
+	})
+}
+
+// WithSQLite is a convenience alias for [WithStorage] that builds a
+// "sqlite://<path>" DSN from a filesystem path. The sqlite provider
+// package must be blank-imported by the consuming program for the scheme
+// to be registered:
+//
+//	import _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+//
+// Equivalent to WithStorage("sqlite://" + path). Passing an empty path is
+// a no-op (the default DSN resolution applies).
+func WithSQLite(path string) Option {
+	return optionFunc(func(c *config) {
+		if path == "" {
+			return
+		}
+		c.storageDSN = "sqlite://" + path
 	})
 }
