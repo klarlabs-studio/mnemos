@@ -386,3 +386,14 @@ type Memory interface {
 	// than once. Returns the first error encountered.
 	Close() error
 }
+
+// Store is the spec's name for the stable, embeddable core API. It is a
+// type alias for [Memory] — mnemos keeps the richer Memory surface
+// (Remember / RememberClaim / RememberEvent / Recall / Get / Scan /
+// Timeline / LastWriteSession) as its single source of truth, and Store
+// exists so spec-facing code and the delivery adapters (mcp / http / cli)
+// can refer to the core port by its spec name. The spec's mandated
+// capabilities — Assert (Remember/RememberClaim), Recall, Get, Scan,
+// LastWriteSession, evidence-required writes, and the bitemporal
+// RecordedAsOf axis — are all present on this surface.
+type Store = Memory
