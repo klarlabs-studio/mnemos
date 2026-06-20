@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/providers"
 
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
 )
@@ -204,6 +206,167 @@ func TestNoBypass_EveryWriteLeavesASession(t *testing.T) {
 	}
 	if err := afterEvent.VerifyEvidenceChain(); err != nil {
 		t.Errorf("final session chain broken: %v", err)
+	}
+}
+
+// countingTextGen reports a fixed token spend per call and a unique
+// claim each time so the on-disk extraction cache never short-circuits
+// the model call.
+type countingTextGen struct {
+	calls  int
+	tokens int
+}
+
+func (g *countingTextGen) GenerateText(_ context.Context, _ providers.GenerateTextInput) (providers.GenerateTextOutput, error) {
+	g.calls++
+	return providers.GenerateTextOutput{
+		Content:      fmt.Sprintf(`[{"text":"adopted tech %d","type":"fact","confidence":0.9}]`, g.calls),
+		Model:        "stub-v1",
+		InputTokens:  g.tokens / 2,
+		OutputTokens: g.tokens - g.tokens/2,
+	}, nil
+}
+
+// rememberClaims returns the number of claims currently recallable, used
+// to assert whether a write persisted.
+func recallCount(t *testing.T, mem mnemos.Memory, text string) int {
+	t.Helper()
+	res, err := mem.Recall(context.Background(), mnemos.Query{Text: text, Limit: 100})
+	if err != nil {
+		t.Fatalf("Recall: %v", err)
+	}
+	return len(res)
+}
+
+// TestTokenBudget_PreGateBlocksAlreadyExhausted proves the cumulative
+// token budget's PRE-execution gate: once the budget is exhausted, the
+// next write is rejected BEFORE the executor persists (no orphaned data),
+// while the single write that crosses the threshold still persists and
+// reports post-hoc. This pins both halves of the WithTokenBudget
+// contract.
+func TestTokenBudget_PreGateBlocksAlreadyExhausted(t *testing.T) {
+	clearMnemosEnv(t)
+
+	// Per-write spend = 40 tokens. Cumulative budget = 50.
+	gen := &countingTextGen{tokens: 40}
+	mem, err := mnemos.New(
+		mnemos.WithStorage("memory://?namespace=gov_pregate"),
+		mnemos.WithSharedProvider(gen, nil),
+		mnemos.WithTokenBudget(50),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = mem.Close() })
+	ctx := context.Background()
+
+	// Unique nonce defeats the on-disk LLM extraction cache so the model
+	// (and thus the token report) actually runs on every write.
+	nonce := time.Now().UnixNano()
+
+	// Write 1: cumulative 0 -> 40, under the 50 cap. Persists, no error.
+	if err := mem.Remember(ctx, mnemos.Item{Type: "fact", Content: fmt.Sprintf("first adopted tech %d", nonce)}); err != nil {
+		t.Fatalf("write 1 should succeed under budget: %v", err)
+	}
+	afterFirst := recallCount(t, mem, "adopted tech")
+	if afterFirst == 0 {
+		t.Fatal("write 1 did not persist")
+	}
+
+	// Write 2 crosses the threshold (cumulative 40 -> 80 >= 50): it
+	// still PERSISTS (its cost wasn't known until the model ran) and
+	// REPORTS the budget breach post-hoc.
+	err = mem.Remember(ctx, mnemos.Item{Type: "fact", Content: fmt.Sprintf("second adopted tech %d", nonce)})
+	if err == nil {
+		t.Fatal("threshold-crossing write should report a budget error post-hoc")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "budget") {
+		t.Errorf("crossing write error %q does not mention budget", err)
+	}
+	afterSecond := recallCount(t, mem, "adopted tech")
+	if afterSecond <= afterFirst {
+		t.Errorf("threshold-crossing write did not persist (count %d -> %d)", afterFirst, afterSecond)
+	}
+
+	callsBeforeThird := gen.calls
+
+	// Write 3: budget is ALREADY exhausted (cumulative 80 >= 50). It must
+	// be rejected PRE-execution — the model must NOT run and nothing must
+	// persist (no orphaned data).
+	err = mem.Remember(ctx, mnemos.Item{Type: "fact", Content: fmt.Sprintf("third adopted tech %d", nonce)})
+	if err == nil {
+		t.Fatal("already-exhausted write should be rejected")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "budget") {
+		t.Errorf("pre-gate error %q does not mention budget", err)
+	}
+	if gen.calls != callsBeforeThird {
+		t.Errorf("pre-gate did not run before the executor: model invoked %d extra times", gen.calls-callsBeforeThird)
+	}
+	afterThird := recallCount(t, mem, "adopted tech")
+	if afterThird != afterSecond {
+		t.Errorf("already-exhausted write persisted orphaned data (count %d -> %d)", afterSecond, afterThird)
+	}
+}
+
+// TestRemember_CtxCanceledLeavesSession verifies that cancelling the
+// context still leaves a retrievable governance session — the truthful
+// behaviour for the hard-error path — and surfaces an error.
+func TestRemember_CtxCanceledLeavesSession(t *testing.T) {
+	mem := newGovernedMemory(t, "gov_ctx_cancel")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := mem.Remember(ctx, mnemos.Item{Type: "fact", Content: "cancelled write"})
+	if err == nil {
+		t.Fatal("expected error when context is cancelled before the write completes")
+	}
+	// The session must still be recoverable so the failed write isn't
+	// trail-less.
+	if ws := mem.LastWriteSession(); ws == nil || ws.ID() == "" {
+		t.Error("cancelled write left no auditable session")
+	}
+}
+
+// TestConcurrentWrites_EachLeavesVerifiableSession exercises the
+// documented concurrency contract: a single Memory is safe for
+// concurrent writes, each producing its own verifiable evidence chain,
+// and LastWriteSession reflects some completed write.
+func TestConcurrentWrites_EachLeavesVerifiableSession(t *testing.T) {
+	mem := newGovernedMemory(t, "gov_concurrent")
+	ctx := context.Background()
+
+	const n = 16
+	var wg sync.WaitGroup
+	errs := make(chan error, n*3)
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if err := mem.Remember(ctx, mnemos.Item{Type: "fact", Content: fmt.Sprintf("concurrent fact %d", i)}); err != nil {
+				errs <- err
+			}
+			if _, err := mem.RememberClaim(ctx, mnemos.ClaimItem{Text: fmt.Sprintf("concurrent claim %d", i)}); err != nil {
+				errs <- err
+			}
+			if err := mem.RememberEvent(ctx, mnemos.Event{At: time.Now(), Type: "note", Content: fmt.Sprintf("concurrent event %d", i)}); err != nil {
+				errs <- err
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("concurrent write failed: %v", err)
+	}
+
+	ws := mem.LastWriteSession()
+	if ws == nil || ws.ID() == "" {
+		t.Fatal("no session recorded after concurrent writes")
+	}
+	if err := ws.VerifyEvidenceChain(); err != nil {
+		t.Errorf("last session chain broken: %v", err)
 	}
 }
 

@@ -162,17 +162,34 @@ func WithActor(userID string) Option {
 	})
 }
 
-// WithTokenBudget caps the number of language-model tokens a single
-// governed write may spend before the kernel fails it with a budget
-// error. The cap is enforced per write (per axi session): a write whose
-// extraction reports more tokens than the cap is rejected and its error
-// mentions the budget.
+// WithTokenBudget sets a cumulative language-model token budget across
+// all governed writes on the returned [Memory]. The budget is enforced
+// in two complementary places, because a write's true model cost is only
+// known after the extraction runs:
 //
-// Zero selects an unlimited token budget, overriding any value derived
-// from MNEMOS_AXI_MAX_TOKENS. When this option is not used, Mnemos reads
-// the env var (which itself defaults to unlimited so existing flows
-// don't break). The duration and invocation caps remain env-driven via
+//   - PRE-execution gate: when the budget is already exhausted (the
+//     accumulated spend has reached maxTokens), the next write is
+//     rejected BEFORE its executor runs. The model is not called and
+//     nothing is persisted — no orphaned data. The error mentions the
+//     budget.
+//
+//   - Post-hoc report: the single write that CROSSES the threshold (spend
+//     was under budget at the start, over it after) still persists, then
+//     returns a budget error reporting the breach. Its tokens weren't
+//     knowable until the work ran, so blocking it pre-execution is
+//     impossible; this is inherent, not a workaround. Subsequent writes
+//     hit the pre-execution gate above.
+//
+// The budget is cumulative for the lifetime of the Memory handle and
+// counts the per-write "llm" token spend reported on each write's
+// evidence chain (rule-based / cached writes report zero and never
+// advance it). It is independent of axi's per-write MaxTokens cap, which
+// is env-driven (MNEMOS_AXI_MAX_TOKENS) and bounds a single session's
+// spend. The duration and invocation caps remain env-driven via
 // MNEMOS_AXI_MAX_DURATION / MNEMOS_AXI_MAX_INVOCATIONS.
+//
+// Zero selects an unlimited cumulative budget. A negative value is
+// clamped to zero.
 func WithTokenBudget(maxTokens int64) Option {
 	return optionFunc(func(c *config) {
 		if maxTokens < 0 {
