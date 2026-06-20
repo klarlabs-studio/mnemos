@@ -12,9 +12,9 @@ require (
 	github.com/tursodatabase/libsql-client-go v0.0.0-20251219100830-236aa1ff8acc
 	go.klarlabs.de/axi v1.4.0
 	go.klarlabs.de/bolt v1.5.2
-	go.klarlabs.de/fortify v1.6.0
+	go.klarlabs.de/fortify v1.7.0
 	go.klarlabs.de/mcp v1.15.0
-	go.klarlabs.de/statekit v1.8.0
+	go.klarlabs.de/statekit v1.9.0
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
