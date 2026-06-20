@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"go.klarlabs.de/axi"
 	"go.klarlabs.de/axi/domain"
-	"go.klarlabs.de/bolt"
 )
 
 // TestApprovalFlow_WriteExternalActionAwaitsThenApproves exercises
@@ -113,16 +111,15 @@ func TestApprovalFlow_WriteExternalActionCanBeRejected(t *testing.T) {
 // executor. The action is contributed via a tiny inline plugin so the
 // real mnemos plugin tree isn't disturbed.
 func buildApprovalTestKernel(_ *testing.T, calls *int) (*axi.Kernel, string, error) {
-	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
-
 	plugin, err := newApprovalTestPlugin()
 	if err != nil {
 		return nil, "", err
 	}
 
+	// The approval-gate semantics under test don't depend on the bolt
+	// logger/publisher wiring (exercised in internal/kernel); a bare
+	// kernel with a budget keeps this test focused on the gate.
 	kernel := axi.New().
-		WithLogger(boltAxiLogger{logger: logger}).
-		WithDomainEventPublisher(boltAxiPublisher{logger: logger}).
 		WithBudget(axi.Budget{MaxCapabilityInvocations: 10})
 
 	kernel.RegisterActionExecutor("exec.send_webhook", approvalTestExecutor{calls: calls})
