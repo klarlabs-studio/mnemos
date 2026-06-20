@@ -1,0 +1,74 @@
+name: Recall Gate
+
+# Python real-trace recall benchmark gate. Split out of ci.yml when mnemos
+# adopted the shared reusable Go CI workflow (which covers Go unit/lint/build/
+# security only). Triggers are preserved from the old ci.yml (push + PR to
+# main, docs-only changes ignored). The old `needs: [check]` dependency is
+# dropped because `check` now lives in the shared caller; this job builds the
+# binary itself, so it runs independently.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recall-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recall-gate:
+    name: Recall Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install benchmark Python dependencies
+        run: pip install -r benchmarks/requirements.txt
+
+      - name: Build
+        run: make build
+
+      - name: Run real-trace recall benchmark (holdout)
+        env:
+          MNEMOS_BIN: bin/mnemos
+          # CI runners have no LLM provider configured; force rule-based
+          # extraction so the harness exercises Mnemos's deterministic path.
+          MNEMOS_BENCH_LLM: "0"
+        run: |
+          python3 -m benchmarks.run \
+            --provider mnemos \
+            --suite real_trace_recall \
+            --split holdout
+
+      - name: Enforce benchmark baseline gate
+        env:
+          # Same flag the run step uses; the gate honours it to skip
+          # confidence_avg_min for runs that legitimately produced no
+          # LLM-derived confidence.
+          MNEMOS_BENCH_LLM: "0"
+        run: |
+          python3 benchmarks/check_baseline.py \
+            --results-dir benchmarks/results \
+            --allow-missing contradiction_detection

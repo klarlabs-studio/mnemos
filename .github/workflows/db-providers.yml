@@ -1,0 +1,78 @@
+name: DB Providers
+
+# Postgres + MySQL integration tests. Split out of ci.yml when mnemos
+# adopted the shared reusable Go CI workflow (the shared bar covers pure-Go
+# unit/lint/build/security only). Triggers are preserved from the old ci.yml
+# (push + PR to main) but narrowed with a path filter: these service-container
+# tests only need to run when store/DB code or dependencies change.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "internal/store/**"
+      - "sql/**"
+      - "sqlc.yaml"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/db-providers.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "internal/store/**"
+      - "sql/**"
+      - "sqlc.yaml"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/db-providers.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-providers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database-providers:
+    name: Postgres + MySQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mnemos
+          POSTGRES_PASSWORD: mnemos
+          POSTGRES_DB: mnemos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mnemos"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: mnemos
+          MYSQL_DATABASE: mnemos
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Postgres + MySQL integration tests
+        env:
+          TEST_POSTGRES_DSN: postgres://mnemos:mnemos@127.0.0.1:5432/mnemos?sslmode=disable
+          TEST_MYSQL_DSN: mysql://root:mnemos@127.0.0.1:3306/
+        run: go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/

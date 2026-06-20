@@ -135,7 +135,7 @@ func handleServe(args []string, _ Flags) {
 
 	var grpcSrv *grpc.Server
 	if grpcPort > 0 {
-		grpcSrv = startGRPCServer(grpcPort, conn, dsn)
+		grpcSrv = startGRPCServer(grpcPort, conn)
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -191,7 +191,7 @@ func handleServe(args []string, _ Flags) {
 
 // startGRPCServer creates and starts a gRPC server on the given port.
 // It shares the store.Conn and auth verifier with the HTTP surface.
-func startGRPCServer(port int, conn *store.Conn, dsn string) *grpc.Server {
+func startGRPCServer(port int, conn *store.Conn) *grpc.Server {
 	_, projectRoot, _ := findProjectDB()
 	secretPath := auth.DefaultSecretPath(projectRoot)
 	secret, _, err := auth.LoadOrCreateSecret(secretPath)

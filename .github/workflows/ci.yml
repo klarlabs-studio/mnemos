@@ -1,164 +1,43 @@
+# Thin caller for the shared klarlabs-studio Go CI bar. All core gate logic
+# (format, golangci-lint w/ gocritic, race + coverage tests, coverctl gate,
+# nox security scan w/ pinned+sha256 binary) lives in the reusable workflow —
+# bump versions / add jobs there, once, org-wide.
+#
+# mnemos-specific jobs that the shared bar does NOT cover live in their own
+# workflows: db-providers.yml (Postgres + MySQL), recall-gate.yml (Python
+# benchmark gate), integration.yml (docker-compose smoke), release.yml
+# (multi-arch docker / goreleaser / SLSA).
 name: CI
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-permissions:
-  contents: read
+    paths-ignore: ["**.md", "docs/**", "LICENSE"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: Build & Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Format check
-        run: |
-          go fmt ./...
-          git diff --exit-code
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.11
-
-      - name: Test
-        run: go test -race -count=1 -coverprofile=coverage.out ./...
-
-      - name: Install coverctl
-        run: go install go.klarlabs.de/coverctl@v1.17.0
-
-      - name: Enforce coverage policy
-        run: coverctl check --profile ./coverage.out --from-profile -o json
-
-      # nox security baseline is wired locally via `make nox-scan` and
-      # findings.json is committed in-tree; CI integration deferred
-      # until the install path is reachable from the runner without
-      # interactive auth.
-
-      - name: Build
-        run: make build
-
-      - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          install-only: true
-          version: '~> v2.15'
-
-      - name: Validate GoReleaser config
-        run: goreleaser check
-
-  recall-gate:
-    name: Recall Gate
-    runs-on: ubuntu-latest
-    needs: [check]
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install benchmark Python dependencies
-        run: pip install -r benchmarks/requirements.txt
-
-      - name: Build
-        run: make build
-
-      - name: Run real-trace recall benchmark (holdout)
-        env:
-          MNEMOS_BIN: bin/mnemos
-          # CI runners have no LLM provider configured; force rule-based
-          # extraction so the harness exercises Mnemos's deterministic path.
-          MNEMOS_BENCH_LLM: "0"
-        run: |
-          python3 -m benchmarks.run \
-            --provider mnemos \
-            --suite real_trace_recall \
-            --split holdout
-
-      - name: Enforce benchmark baseline gate
-        env:
-          # Same flag the run step uses; the gate honours it to skip
-          # confidence_avg_min for runs that legitimately produced no
-          # LLM-derived confidence.
-          MNEMOS_BENCH_LLM: "0"
-        run: |
-          python3 benchmarks/check_baseline.py \
-            --results-dir benchmarks/results \
-            --allow-missing contradiction_detection
-
-  database-providers:
-    name: Postgres + MySQL integration
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: mnemos
-          POSTGRES_PASSWORD: mnemos
-          POSTGRES_DB: mnemos
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U mnemos"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-      mysql:
-        image: mysql:8
-        env:
-          MYSQL_ROOT_PASSWORD: mnemos
-          MYSQL_DATABASE: mnemos
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Run Postgres + MySQL integration tests
-        env:
-          TEST_POSTGRES_DSN: postgres://mnemos:mnemos@127.0.0.1:5432/mnemos?sslmode=disable
-          TEST_MYSQL_DSN: mysql://root:mnemos@127.0.0.1:3306/
-        run: go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/
+  ci:
+    uses: klarlabs-studio/.github/.github/workflows/go-ci.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write   # shared security job posts nox annotations on PRs
+    secrets: inherit
+    with:
+      # go.mod requires >= 1.26.2; setup-go pins GOTOOLCHAIN=local, so the
+      # shared default (1.25) can't auto-download a newer toolchain.
+      go-version: "1.26"
+      # The org-pinned golangci-lint v2.7.2 release binary is built with
+      # go1.25 and refuses to lint a go1.26.2 module ("build Go version is
+      # lower than the targeted Go version"). v2.12.2 is built with go1.26.2.
+      # TODO(org): bump the shared go-ci.yml golangci default for go1.26 repos.
+      golangci-version: "v2.12.2"
+      # mnemos enforces coverctl check already; pure-Go core runs fine on ubuntu.
+      coverage: true
+      cross-platform: false

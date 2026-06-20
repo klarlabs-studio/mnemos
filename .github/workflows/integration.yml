@@ -5,14 +5,16 @@ name: integration
 # test/integration/. Runs on:
 #
 #   - workflow_dispatch (manual trigger from the Actions tab)
-#   - schedule (nightly, so version-skew bugs surface within 24h)
+#   - schedule (weekly, so dependency / version-skew bugs surface within
+#     7 days; downgraded from nightly per the CI audit — 52 vs 365 runs/yr
+#     still catches skew, repository_dispatch covers fresh-main re-tests)
 #   - repository_dispatch (the mnemos repo fires this when its main
 #     advances; the chronos workflow re-tests against the new image)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 4 * * *"   # 04:00 UTC nightly
+    - cron: "0 4 * * 1"   # 04:00 UTC every Monday (weekly)
   repository_dispatch:
     types: [chronos-main-advanced]
 

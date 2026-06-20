@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/store"
+	// The named import below also registers the sqlite provider via its
+	// init(), so store.Open("sqlite://...") works without a blank import.
 	"go.klarlabs.de/mnemos/internal/store/sqlite"
-
-	// Register the sqlite provider so store.Open("sqlite://...") works.
-	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 // openDedupeDB opens a fresh SQLite-backed Conn at a temp path for

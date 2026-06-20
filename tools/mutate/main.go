@@ -133,7 +133,7 @@ func main() {
 	if verbose {
 		fmt.Fprintf(os.Stderr, "baseline test run for %s\n", pkgFlag)
 	}
-	if rc, _ := goTest(pkgFlag, ""); rc != 0 {
+	if rc := goTest(pkgFlag, ""); rc != 0 {
 		fatal(fmt.Errorf("baseline tests fail (rc=%d) — fix before mutating", rc))
 	}
 
@@ -166,7 +166,7 @@ func main() {
 				fatal(err)
 			}
 			t0 := time.Now()
-			rc, _ := goTest(pkgFlag, ovPath)
+			rc := goTest(pkgFlag, ovPath)
 			d := time.Since(t0)
 			r := result{
 				File:     relPath(c.File),
@@ -296,18 +296,20 @@ func collectGoFiles(dir string) ([]string, error) {
 	return out, err
 }
 
-func goTest(pkg, overlay string) (int, []byte) {
+func goTest(pkg, overlay string) int {
 	args := []string{"test", "-count=1", "-timeout=60s"}
 	if overlay != "" {
 		args = append(args, "-overlay="+overlay)
 	}
 	args = append(args, pkg)
 	cmd := exec.Command("go", args...)
-	out, _ := cmd.CombinedOutput()
+	// Output is intentionally discarded; only the exit code drives the
+	// mutation kill/survive decision.
+	_ = cmd.Run()
 	if cmd.ProcessState == nil {
-		return 1, out
+		return 1
 	}
-	return cmd.ProcessState.ExitCode(), out
+	return cmd.ProcessState.ExitCode()
 }
 
 func relPath(p string) string {

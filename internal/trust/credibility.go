@@ -213,7 +213,7 @@ func BuildReport(in CredibilityInputs) (score float64, signals []domain.Provenan
 		)
 	}
 
-	prose = buildProseRationale(in, ref, now, recencySignal, agentFactor, testDecisiveness)
+	prose = buildProseRationale(in, ref, now, agentFactor, testDecisiveness)
 
 	return score, signals, rationale, prose
 }
@@ -222,7 +222,7 @@ func BuildReport(in CredibilityInputs) (score float64, signals []domain.Provenan
 // credibility decision suitable for non-technical operators. Each
 // sentence corresponds to one signal so a reader can map the prose
 // back to the structured breakdown without learning the weights.
-func buildProseRationale(in CredibilityInputs, ref, now time.Time, recencySignal, agentFactor, testDecisiveness float64) string {
+func buildProseRationale(in CredibilityInputs, ref, now time.Time, agentFactor, testDecisiveness float64) string {
 	var parts []string
 
 	if in.IsTest && !in.TestLastRunAt.IsZero() {
