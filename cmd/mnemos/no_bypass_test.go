@@ -82,20 +82,6 @@ var bypassExceptions = map[string]string{
 	"cmd/mnemos/mcp.go:Outcomes.Append":            "MCP outcome log: no Memory equivalent. TODO #governed-surface",
 	"cmd/mnemos/mcp.go:Events.Append":              "MCP event add: pre-built event; TODO route via Memory.RememberEvent",
 	"cmd/mnemos/mcp.go:Claims.UpsertEvidence":      "MCP claim evidence links: no Memory equivalent for standalone link",
-
-	// --- internal/server/grpc: the gRPC daemon mirrors the HTTP/CLI
-	// surface. Same rationale per repository.
-	"internal/server/grpc/server.go:Events.Append":              "gRPC AddEvent: pre-built event; TODO route via Memory.RememberEvent",
-	"internal/server/grpc/server.go:Claims.Upsert":              "gRPC AddClaims: bulk; TODO route via Memory.RememberClaim",
-	"internal/server/grpc/server.go:Claims.UpsertEvidence":      "gRPC claim evidence links",
-	"internal/server/grpc/server.go:Relationships.Upsert":       "gRPC relationship upsert: no governed equivalent",
-	"internal/server/grpc/server.go:Embeddings.Upsert":          "gRPC embedding upsert (derived state)",
-	"internal/server/grpc/server_phase2_7.go:Actions.Append":    "gRPC action log: no Memory equivalent. TODO #governed-surface",
-	"internal/server/grpc/server_phase2_7.go:Outcomes.Append":   "gRPC outcome log: no Memory equivalent. TODO #governed-surface",
-	"internal/server/grpc/server_phase2_7.go:Lessons.Append":    "gRPC lesson log: no Memory equivalent. TODO #governed-surface",
-	"internal/server/grpc/server_phase2_7.go:Decisions.Append":  "gRPC decision log: no Memory equivalent. TODO #governed-surface",
-	"internal/server/grpc/server_phase2_7.go:Playbooks.Append":  "gRPC playbook log: no Memory equivalent. TODO #governed-surface",
-	"internal/server/grpc/server_phase2_7.go:EntityRels.Upsert": "gRPC entity-rel upsert: no Memory equivalent. TODO #governed-surface",
 }
 
 // foundWrite is a discovered direct storage write.
