@@ -57,6 +57,7 @@ func newWriteSession(session *axidomain.ExecutionSession) *writeSession {
 	return &writeSession{session: session}
 }
 
+// ID returns the underlying axi session id, or "" when no session exists.
 func (w *writeSession) ID() string {
 	if w == nil || w.session == nil {
 		return ""
@@ -64,6 +65,8 @@ func (w *writeSession) ID() string {
 	return string(w.session.ID())
 }
 
+// Evidence returns the session's evidence records projected into public
+// Evidence values, or nil when no session exists.
 func (w *writeSession) Evidence() []Evidence {
 	if w == nil || w.session == nil {
 		return nil
@@ -81,6 +84,7 @@ func (w *writeSession) Evidence() []Evidence {
 	return out
 }
 
+// VerifyEvidenceChain verifies the session's tamper-evident evidence chain.
 func (w *writeSession) VerifyEvidenceChain() error {
 	if w == nil || w.session == nil {
 		return nil

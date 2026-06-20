@@ -12,9 +12,16 @@ import (
 // rest of the host process.
 type boltLogger struct{ logger *bolt.Logger }
 
+// Debug logs at debug level through the wrapped bolt logger.
 func (l boltLogger) Debug(msg string, fields ...domain.Field) { l.emit(l.logger.Debug(), msg, fields) }
-func (l boltLogger) Info(msg string, fields ...domain.Field)  { l.emit(l.logger.Info(), msg, fields) }
-func (l boltLogger) Warn(msg string, fields ...domain.Field)  { l.emit(l.logger.Warn(), msg, fields) }
+
+// Info logs at info level through the wrapped bolt logger.
+func (l boltLogger) Info(msg string, fields ...domain.Field) { l.emit(l.logger.Info(), msg, fields) }
+
+// Warn logs at warn level through the wrapped bolt logger.
+func (l boltLogger) Warn(msg string, fields ...domain.Field) { l.emit(l.logger.Warn(), msg, fields) }
+
+// Error logs at error level through the wrapped bolt logger.
 func (l boltLogger) Error(msg string, fields ...domain.Field) { l.emit(l.logger.Error(), msg, fields) }
 
 func (l boltLogger) emit(ev *bolt.Event, msg string, fields []domain.Field) {
@@ -29,6 +36,7 @@ func (l boltLogger) emit(ev *bolt.Event, msg string, fields []domain.Field) {
 // path beyond a single JSON encode.
 type boltPublisher struct{ logger *bolt.Logger }
 
+// Publish writes the domain event to bolt as a structured "axi_event" line.
 func (p boltPublisher) Publish(e domain.DomainEvent) {
 	p.logger.Info().
 		Str("event_type", e.EventType()).

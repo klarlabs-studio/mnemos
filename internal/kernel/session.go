@@ -15,6 +15,7 @@ import (
 // session id is globally unique, mirroring the event-id scheme.
 type idGenerator struct{}
 
+// GenerateSessionID returns a globally-unique session id (UUIDv4-based).
 func (idGenerator) GenerateSessionID() domain.ExecutionSessionID {
 	return domain.ExecutionSessionID("session-" + uuid.NewString())
 }
@@ -50,6 +51,8 @@ func newCapturingSessionRepo() *capturingSessionRepo {
 	return &capturingSessionRepo{inner: inmemory.NewExecutionSessionRepository()}
 }
 
+// Save records the session as most-recent, persists it to the inner
+// repository, and feeds the durable evidence sink.
 func (r *capturingSessionRepo) Save(session *domain.ExecutionSession) error {
 	r.mu.Lock()
 	r.last = session
@@ -61,6 +64,7 @@ func (r *capturingSessionRepo) Save(session *domain.ExecutionSession) error {
 	return err
 }
 
+// Get retrieves a session by id from the inner repository.
 func (r *capturingSessionRepo) Get(id domain.ExecutionSessionID) (*domain.ExecutionSession, error) {
 	return r.inner.Get(id)
 }
