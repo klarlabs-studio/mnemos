@@ -116,6 +116,13 @@ func (m *memory) RememberClaim(ctx context.Context, item ClaimItem) (string, err
 	if strings.TrimSpace(item.Text) == "" {
 		return "", errors.New("mnemos: RememberClaim: Text is required")
 	}
+	// Spec non-negotiable: "Claims require evidence. An assertion without
+	// evidence is rejected." Fail-closed here, before the governed write
+	// runs, so no evidence-less claim is ever persisted. Blank ids do not
+	// count as evidence.
+	if !hasEvidence(item.EventIDs) {
+		return "", errors.New("mnemos: RememberClaim: at least one evidence EventID is required (claims require evidence)")
+	}
 	out, err := dispatchWrite[rememberClaimOutput](ctx, m, actionRememberClaim, rememberClaimInput{Claim: item})
 	if err != nil {
 		return "", err
@@ -319,6 +326,25 @@ func copyMetaWithout(in map[string]string, skip string) map[string]string {
 // same id (the same scheme internal/parser uses for its event ids).
 func newEventID() string {
 	return "ev_" + uuid.NewString()
+}
+
+// hasEvidence reports whether eventIDs contains at least one non-blank
+// evidence reference. Whitespace-only ids do not count — the spec
+// requires every stored claim to reference real backing evidence.
+func hasEvidence(eventIDs []string) bool {
+	return len(nonBlank(eventIDs)) > 0
+}
+
+// nonBlank returns the trimmed, non-empty entries of in, preserving order.
+// Used to normalise evidence EventIDs before persistence.
+func nonBlank(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if t := strings.TrimSpace(s); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // newClaimID returns a fresh, collision-resistant claim id. UUID-based

@@ -82,11 +82,11 @@ type ClaimItem struct {
 	// confidence × corroboration × freshness at query time.
 	Confidence float64
 
-	// EventIDs links the claim back to source events. Optional but
-	// strongly recommended: claims without evidence cannot be ranked
-	// by corroboration and skip the freshness factor. Each id must
-	// already exist in the event store (use [Memory.RememberEvent] to
-	// add them first).
+	// EventIDs links the claim back to source events. REQUIRED: claims
+	// require evidence, so [Memory.RememberClaim] rejects a ClaimItem
+	// whose EventIDs is empty (or contains only blank ids) before any
+	// write runs. Each id must already exist in the event store (use
+	// [Memory.RememberEvent] to add them first).
 	EventIDs []string
 
 	// ValidFrom is when the claim's content first became true. Zero
@@ -271,6 +271,9 @@ type Memory interface {
 	// events (referenced via [ClaimItem.EventIDs]) must already exist
 	// in the event store — add them with [Memory.RememberEvent] first
 	// when they're new.
+	//
+	// Claims require evidence: a ClaimItem with no (non-blank) EventIDs
+	// is rejected before any write runs, and nothing is persisted.
 	//
 	// Returns the generated claim ID so the caller can reference the
 	// claim in future relationship edges or evidence links.
