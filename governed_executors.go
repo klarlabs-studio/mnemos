@@ -135,6 +135,16 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 	m := e.m
 	item := in.Claim
 
+	// Defense-in-depth for the spec non-negotiable "claims require
+	// evidence". The public RememberClaim already rejects evidence-less
+	// claims, but the executor is the single persistence chokepoint, so it
+	// enforces the invariant too — no internal path can upsert a claim
+	// without backing evidence.
+	evidenceIDs := nonBlank(item.EventIDs)
+	if len(evidenceIDs) == 0 {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("remember_claim: claims require evidence (no valid EventIDs)")
+	}
+
 	claimType := domain.ClaimType(item.Type)
 	if claimType == "" {
 		claimType = domain.ClaimTypeFact
@@ -161,17 +171,14 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert claim: %w", err)
 	}
 
-	linkCount := 0
-	if len(item.EventIDs) > 0 {
-		links := make([]domain.ClaimEvidence, len(item.EventIDs))
-		for i, eid := range item.EventIDs {
-			links[i] = domain.ClaimEvidence{ClaimID: id, EventID: eid}
-		}
-		if err := m.conn.Claims.UpsertEvidence(ctx, links); err != nil {
-			return axidomain.ExecutionResult{}, nil, fmt.Errorf("link evidence: %w", err)
-		}
-		linkCount = len(links)
+	links := make([]domain.ClaimEvidence, len(evidenceIDs))
+	for i, eid := range evidenceIDs {
+		links[i] = domain.ClaimEvidence{ClaimID: id, EventID: eid}
 	}
+	if err := m.conn.Claims.UpsertEvidence(ctx, links); err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("link evidence: %w", err)
+	}
+	linkCount := len(links)
 
 	records := []axidomain.EvidenceRecord{
 		{Kind: "mnemos.remember_claim", Source: evidenceSourceLibrary, Value: map[string]any{

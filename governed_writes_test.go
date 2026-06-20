@@ -70,9 +70,20 @@ func TestRememberClaim_RoutesThroughKernel(t *testing.T) {
 	mem := newGovernedMemory(t, "gov_remember_claim")
 	ctx := context.Background()
 
+	// Claims require evidence: persist a source event first and link it.
+	if err := mem.RememberEvent(ctx, mnemos.Event{
+		ID:      "ev-gov-claim-src",
+		At:      time.Now(),
+		Type:    "observation",
+		Content: "CI config references GitHub Actions.",
+	}); err != nil {
+		t.Fatalf("RememberEvent: %v", err)
+	}
+
 	id, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
-		Text: "The deploy pipeline runs on GitHub Actions.",
-		Type: "fact",
+		Text:     "The deploy pipeline runs on GitHub Actions.",
+		Type:     "fact",
+		EventIDs: []string{"ev-gov-claim-src"},
 	})
 	if err != nil {
 		t.Fatalf("RememberClaim: %v", err)
@@ -103,6 +114,51 @@ func TestRememberClaim_RoutesThroughKernel(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("claim id %q not found in evidence records", id)
+	}
+}
+
+// TestRememberClaim_RejectsClaimWithoutEvidence enforces the spec
+// non-negotiable "Claims require evidence. An assertion without evidence
+// is rejected." A ClaimItem with no EventIDs must fail-closed: no claim
+// is persisted and an error is returned.
+func TestRememberClaim_RejectsClaimWithoutEvidence(t *testing.T) {
+	mem := newGovernedMemory(t, "gov_remember_claim_no_evidence")
+	ctx := context.Background()
+
+	id, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
+		Text: "The customer prefers async communication.",
+		Type: "fact",
+		// EventIDs deliberately empty.
+	})
+	if err == nil {
+		t.Fatal("RememberClaim with no evidence returned nil error; expected rejection")
+	}
+	if id != "" {
+		t.Errorf("RememberClaim returned non-empty id %q on rejection", id)
+	}
+
+	// Fail-closed: nothing was persisted, so a recall finds nothing.
+	results, rerr := mem.Recall(ctx, mnemos.Query{Text: "async communication"})
+	if rerr != nil {
+		t.Fatalf("Recall: %v", rerr)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected no persisted claim after evidence-less rejection, got %d", len(results))
+	}
+}
+
+// TestRememberClaim_RejectsBlankEvidenceIDs ensures whitespace-only
+// EventIDs do not satisfy the evidence requirement.
+func TestRememberClaim_RejectsBlankEvidenceIDs(t *testing.T) {
+	mem := newGovernedMemory(t, "gov_remember_claim_blank_evidence")
+	ctx := context.Background()
+
+	_, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
+		Text:     "Blank evidence should not count.",
+		EventIDs: []string{"  ", ""},
+	})
+	if err == nil {
+		t.Fatal("RememberClaim with blank EventIDs returned nil error; expected rejection")
 	}
 }
 
@@ -183,7 +239,10 @@ func TestNoBypass_EveryWriteLeavesASession(t *testing.T) {
 		t.Fatal("Remember left no session")
 	}
 
-	if _, err := mem.RememberClaim(ctx, mnemos.ClaimItem{Text: "Beta claim."}); err != nil {
+	if err := mem.RememberEvent(ctx, mnemos.Event{ID: "ev-nobypass-src", At: time.Now(), Type: "observation", Content: "Beta source."}); err != nil {
+		t.Fatalf("RememberEvent (source): %v", err)
+	}
+	if _, err := mem.RememberClaim(ctx, mnemos.ClaimItem{Text: "Beta claim.", EventIDs: []string{"ev-nobypass-src"}}); err != nil {
 		t.Fatalf("RememberClaim: %v", err)
 	}
 	afterClaim := mem.LastWriteSession()
@@ -347,7 +406,12 @@ func TestConcurrentWrites_EachLeavesVerifiableSession(t *testing.T) {
 			if err := mem.Remember(ctx, mnemos.Item{Type: "fact", Content: fmt.Sprintf("concurrent fact %d", i)}); err != nil {
 				errs <- err
 			}
-			if _, err := mem.RememberClaim(ctx, mnemos.ClaimItem{Text: fmt.Sprintf("concurrent claim %d", i)}); err != nil {
+			// Claims require evidence: persist a source event and link it.
+			srcID := fmt.Sprintf("ev-concurrent-src-%d", i)
+			if err := mem.RememberEvent(ctx, mnemos.Event{ID: srcID, At: time.Now(), Type: "observation", Content: fmt.Sprintf("source %d", i)}); err != nil {
+				errs <- err
+			}
+			if _, err := mem.RememberClaim(ctx, mnemos.ClaimItem{Text: fmt.Sprintf("concurrent claim %d", i), EventIDs: []string{srcID}}); err != nil {
 				errs <- err
 			}
 			if err := mem.RememberEvent(ctx, mnemos.Event{At: time.Now(), Type: "note", Content: fmt.Sprintf("concurrent event %d", i)}); err != nil {

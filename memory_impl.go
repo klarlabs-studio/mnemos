@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/felixgeelhaar/chronos"
 	"github.com/felixgeelhaar/chronos/embed"
@@ -116,6 +117,13 @@ func (m *memory) RememberClaim(ctx context.Context, item ClaimItem) (string, err
 	if strings.TrimSpace(item.Text) == "" {
 		return "", errors.New("mnemos: RememberClaim: Text is required")
 	}
+	// Spec non-negotiable: "Claims require evidence. An assertion without
+	// evidence is rejected." Fail-closed here, before the governed write
+	// runs, so no evidence-less claim is ever persisted. Blank ids do not
+	// count as evidence.
+	if !hasEvidence(item.EventIDs) {
+		return "", errors.New("mnemos: RememberClaim: at least one evidence EventID is required (claims require evidence)")
+	}
 	out, err := dispatchWrite[rememberClaimOutput](ctx, m, actionRememberClaim, rememberClaimInput{Claim: item})
 	if err != nil {
 		return "", err
@@ -132,6 +140,7 @@ func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
 	opts := query.AnswerOptions{
 		Hops:           q.Hops,
 		AsOf:           q.AsOf,
+		RecordedAsOf:   q.RecordedAsOf,
 		IncludeHistory: q.IncludeHistory,
 	}
 
@@ -166,6 +175,83 @@ func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
 	// query.Engine surface.
 	_ = ctx
 	return results, nil
+}
+
+// Get implements [Memory.Get]. Exact lookup by claim id. Returns a
+// not-found error when the id is unknown.
+func (m *memory) Get(ctx context.Context, claimID string) (Claim, error) {
+	id := strings.TrimSpace(claimID)
+	if id == "" {
+		return Claim{}, errors.New("mnemos: Get: claimID is required")
+	}
+	claims, err := m.conn.Claims.ListByIDs(ctx, []string{id})
+	if err != nil {
+		return Claim{}, fmt.Errorf("mnemos: Get: %w", err)
+	}
+	for _, c := range claims {
+		if c.ID == id {
+			return toPublicClaim(c), nil
+		}
+	}
+	return Claim{}, fmt.Errorf("mnemos: Get: claim %q not found", id)
+}
+
+// Scan implements [Memory.Scan]. Returns claims whose valid-time interval
+// overlaps the [ScanQuery] window, ordered by ValidFrom, honouring Limit.
+func (m *memory) Scan(ctx context.Context, q ScanQuery) ([]Claim, error) {
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("mnemos: Scan: %w", err)
+	}
+	out := make([]Claim, 0, len(all))
+	for _, c := range all {
+		if !claimOverlapsWindow(c, q.ValidFrom, q.ValidUntil) {
+			continue
+		}
+		out = append(out, toPublicClaim(c))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ValidFrom.Before(out[j].ValidFrom) })
+	if q.Limit > 0 && len(out) > q.Limit {
+		out = out[:q.Limit]
+	}
+	return out, nil
+}
+
+// claimOverlapsWindow reports whether a claim's valid-time interval
+// [ValidFrom, ValidTo) overlaps the [from, until) window. Zero bounds on
+// either side act as open (unbounded) edges. A claim with a zero ValidFrom
+// is treated as "valid since before tracking began" (negative infinity);
+// a zero ValidTo means "still valid" (positive infinity).
+func claimOverlapsWindow(c domain.Claim, from, until time.Time) bool {
+	// Claim ends before the window starts → no overlap.
+	if !from.IsZero() && !c.ValidTo.IsZero() && !c.ValidTo.After(from) {
+		return false
+	}
+	// Claim starts at/after the window ends → no overlap.
+	if !until.IsZero() && !c.ValidFrom.IsZero() && !c.ValidFrom.Before(until) {
+		return false
+	}
+	return true
+}
+
+// toPublicClaim projects an internal domain.Claim into the stable public
+// [Claim] read shape. ValidTo's zero value ("still valid") maps to a nil
+// ValidUntil; CreatedAt maps to the transaction-time RecordedAt.
+func toPublicClaim(c domain.Claim) Claim {
+	out := Claim{
+		ID:         c.ID,
+		Statement:  c.Text,
+		Type:       string(c.Type),
+		Confidence: c.Confidence,
+		TrustScore: c.TrustScore,
+		ValidFrom:  c.ValidFrom,
+		RecordedAt: c.CreatedAt,
+	}
+	if !c.ValidTo.IsZero() {
+		vt := c.ValidTo
+		out.ValidUntil = &vt
+	}
+	return out
 }
 
 // RememberEvent implements [Memory.RememberEvent]. The write routes
@@ -319,6 +405,25 @@ func copyMetaWithout(in map[string]string, skip string) map[string]string {
 // same id (the same scheme internal/parser uses for its event ids).
 func newEventID() string {
 	return "ev_" + uuid.NewString()
+}
+
+// hasEvidence reports whether eventIDs contains at least one non-blank
+// evidence reference. Whitespace-only ids do not count — the spec
+// requires every stored claim to reference real backing evidence.
+func hasEvidence(eventIDs []string) bool {
+	return len(nonBlank(eventIDs)) > 0
+}
+
+// nonBlank returns the trimmed, non-empty entries of in, preserving order.
+// Used to normalise evidence EventIDs before persistence.
+func nonBlank(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if t := strings.TrimSpace(s); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // newClaimID returns a fresh, collision-resistant claim id. UUID-based

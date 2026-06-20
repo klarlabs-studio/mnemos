@@ -21,9 +21,61 @@ type EmbedOutput struct {
 // embeddings (event embeddings, claim embeddings, query reranking).
 // Consumers implement this interface around their own embedding clients.
 //
+// Embedder is the canonical, batch-shaped interface: it embeds a slice of
+// texts in one call so adapters can issue a single provider request rather
+// than N round-trips. Consumers who only have a single-text embedding
+// function can implement [SingleEmbedder] instead and wrap it with
+// [EmbedderFromSingle].
+//
 // Implementations MUST be safe for concurrent use. Vector dimension MUST
 // be constant for a given Embedder instance — Mnemos relies on this for
 // cosine-similarity ranking.
 type Embedder interface {
 	Embed(ctx context.Context, in EmbedInput) (EmbedOutput, error)
+}
+
+// SingleEmbedder is the simple, single-text embedding signature: embed one
+// string, get one vector. It is provided for callers whose embedding
+// client only exposes a per-text call. Wrap it with [EmbedderFromSingle]
+// to obtain the batch [Embedder] Mnemos consumes.
+//
+// Prefer implementing [Embedder] directly when your provider supports
+// batching — a single batched request is materially cheaper than one
+// request per text.
+type SingleEmbedder interface {
+	Embed(ctx context.Context, text string) ([]float32, error)
+}
+
+// EmbedderFromSingle adapts a [SingleEmbedder] into the batch [Embedder]
+// Mnemos consumes. It calls the underlying single-text Embed once per
+// input string, preserving order. Returns nil when s is nil.
+//
+// The reported Model is left empty (a single-text embedder does not
+// surface a model name); ranking does not depend on it. The vector
+// dimension must still be constant across calls, per the [Embedder]
+// contract.
+func EmbedderFromSingle(s SingleEmbedder) Embedder {
+	if s == nil {
+		return nil
+	}
+	return singleEmbedderAdapter{single: s}
+}
+
+// singleEmbedderAdapter bridges a SingleEmbedder to the batch Embedder.
+type singleEmbedderAdapter struct {
+	single SingleEmbedder
+}
+
+// Embed satisfies [Embedder] by invoking the wrapped single-text embedder
+// once per input, short-circuiting on the first error.
+func (a singleEmbedderAdapter) Embed(ctx context.Context, in EmbedInput) (EmbedOutput, error) {
+	vectors := make([][]float32, len(in.Texts))
+	for i, text := range in.Texts {
+		v, err := a.single.Embed(ctx, text)
+		if err != nil {
+			return EmbedOutput{}, err
+		}
+		vectors[i] = v
+	}
+	return EmbedOutput{Vectors: vectors}, nil
 }

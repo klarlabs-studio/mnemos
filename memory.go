@@ -82,11 +82,11 @@ type ClaimItem struct {
 	// confidence × corroboration × freshness at query time.
 	Confidence float64
 
-	// EventIDs links the claim back to source events. Optional but
-	// strongly recommended: claims without evidence cannot be ranked
-	// by corroboration and skip the freshness factor. Each id must
-	// already exist in the event store (use [Memory.RememberEvent] to
-	// add them first).
+	// EventIDs links the claim back to source events. REQUIRED: claims
+	// require evidence, so [Memory.RememberClaim] rejects a ClaimItem
+	// whose EventIDs is empty (or contains only blank ids) before any
+	// write runs. Each id must already exist in the event store (use
+	// [Memory.RememberEvent] to add them first).
 	EventIDs []string
 
 	// ValidFrom is when the claim's content first became true. Zero
@@ -151,13 +151,76 @@ type Query struct {
 	Limit int
 
 	// AsOf, when set, returns the answer as it would have been at that
-	// instant in time. Useful for incident timelines and audits. Zero
-	// value disables the filter (the common case).
+	// instant in time. This is the VALID-TIME axis: only claims that were
+	// in force in the world at that instant are returned. Zero value
+	// disables the filter (the common case).
 	AsOf time.Time
+
+	// RecordedAsOf, when set, returns the answer as the store KNEW it at
+	// that instant. This is the TRANSACTION-TIME axis (the second axis of
+	// the bitemporal model): claims recorded after RecordedAsOf are
+	// excluded, so a query can ask "what did the agent believe at time T
+	// about facts from period P" by pairing RecordedAsOf (when believed)
+	// with AsOf (valid time of the facts). Zero value disables the filter
+	// (the common case — "use the latest knowledge").
+	RecordedAsOf time.Time
 
 	// IncludeHistory makes the engine also return superseded claim
 	// versions for the items that match. False by default.
 	IncludeHistory bool
+}
+
+// Claim is the stable, read-only projection of a stored claim returned by
+// [Memory.Get] and [Memory.Scan]. It mirrors the spec's Claim shape:
+// Statement is the asserted fact, ValidFrom/ValidUntil are the valid-time
+// bounds (when the fact was true in the world), and RecordedAt is the
+// transaction time (when mnemos stored the claim). Unlike the write-side
+// [ClaimItem], it carries the assigned ID and derived TrustScore.
+type Claim struct {
+	// ID is the stable identifier of the claim.
+	ID string
+
+	// Statement is the asserted fact in natural language.
+	Statement string
+
+	// Type classifies the claim ("fact", "hypothesis", "decision",
+	// "test_result", or a custom string).
+	Type string
+
+	// Confidence is the [0, 1] confidence recorded with the claim.
+	Confidence float64
+
+	// TrustScore is the [0, 1] composite score (confidence ×
+	// corroboration × freshness) computed by mnemos. Zero when the claim
+	// has not been scored.
+	TrustScore float64
+
+	// ValidFrom is when the claim's content became true in the world.
+	ValidFrom time.Time
+
+	// ValidUntil is when the claim stopped being true (a successor
+	// superseded it). Nil means "still valid".
+	ValidUntil *time.Time
+
+	// RecordedAt is the transaction time: when mnemos stored the claim.
+	RecordedAt time.Time
+}
+
+// ScanQuery selects claims by valid-time range for [Memory.Scan]. A claim
+// is returned when its valid-time interval [ValidFrom, ValidUntil) overlaps
+// the requested window. Both bounds are optional: a zero ValidFrom means
+// "no lower bound", a zero ValidUntil means "no upper bound".
+type ScanQuery struct {
+	// ValidFrom bounds the window below (inclusive). Zero means no lower
+	// bound.
+	ValidFrom time.Time
+
+	// ValidUntil bounds the window above (exclusive). Zero means no upper
+	// bound.
+	ValidUntil time.Time
+
+	// Limit caps the number of claims returned. 0 means "no limit".
+	Limit int
 }
 
 // Result is one item Mnemos returned for a [Query].
@@ -272,6 +335,9 @@ type Memory interface {
 	// in the event store — add them with [Memory.RememberEvent] first
 	// when they're new.
 	//
+	// Claims require evidence: a ClaimItem with no (non-blank) EventIDs
+	// is rejected before any write runs, and nothing is persisted.
+	//
 	// Returns the generated claim ID so the caller can reference the
 	// claim in future relationship edges or evidence links.
 	RememberClaim(ctx context.Context, claim ClaimItem) (string, error)
@@ -281,6 +347,17 @@ type Memory interface {
 	// no embeddings are configured) and may include claims reached by
 	// graph expansion when [Query.Hops] > 0.
 	Recall(ctx context.Context, q Query) ([]Result, error)
+
+	// Get returns the stored claim with the given id. It is the stable
+	// exact-lookup read on the API surface. Returns a non-nil error when
+	// no claim with that id exists.
+	Get(ctx context.Context, claimID string) (Claim, error)
+
+	// Scan returns the claims whose valid-time interval overlaps the
+	// window described by the [ScanQuery], ordered by ValidFrom. It is the
+	// stable time-range read on the API surface, complementing the
+	// similarity-ranked [Memory.Recall] and the exact [Memory.Get].
+	Scan(ctx context.Context, q ScanQuery) ([]Claim, error)
 
 	// RememberEvent stores a temporal event. The event is appended to
 	// the Mnemos event log and forwarded to the bundled Chronos engine
@@ -309,3 +386,14 @@ type Memory interface {
 	// than once. Returns the first error encountered.
 	Close() error
 }
+
+// Store is the spec's name for the stable, embeddable core API. It is a
+// type alias for [Memory] — mnemos keeps the richer Memory surface
+// (Remember / RememberClaim / RememberEvent / Recall / Get / Scan /
+// Timeline / LastWriteSession) as its single source of truth, and Store
+// exists so spec-facing code and the delivery adapters (mcp / http / cli)
+// can refer to the core port by its spec name. The spec's mandated
+// capabilities — Assert (Remember/RememberClaim), Recall, Get, Scan,
+// LastWriteSession, evidence-required writes, and the bitemporal
+// RecordedAsOf axis — are all present on this surface.
+type Store = Memory

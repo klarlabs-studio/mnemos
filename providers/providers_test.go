@@ -69,6 +69,52 @@ func TestTextGenerator_Adapter_Satisfies_Interface(t *testing.T) {
 	}
 }
 
+// stubSingleEmbedder implements the spec-shaped single-text
+// SingleEmbedder signature: Embed(ctx, text) ([]float32, error).
+type stubSingleEmbedder struct {
+	dim   int
+	calls int
+}
+
+func (e *stubSingleEmbedder) Embed(_ context.Context, text string) ([]float32, error) {
+	e.calls++
+	v := make([]float32, e.dim)
+	for j := range v {
+		v[j] = float32((len(text) + j) % 7)
+	}
+	return v, nil
+}
+
+// TestSingleEmbedder_AsEmbedder verifies a single-text embedder (the
+// spec's Embed(ctx, text string) ([]float32, error) signature) can be
+// adapted into the batch providers.Embedder Mnemos consumes, with one
+// call per input text and order preserved.
+func TestSingleEmbedder_AsEmbedder(t *testing.T) {
+	t.Parallel()
+	single := &stubSingleEmbedder{dim: 3}
+
+	// EmbedderFromSingle returns providers.Embedder, so this also proves
+	// the adapter satisfies the batch interface at compile time.
+	emb := providers.EmbedderFromSingle(single)
+	out, err := emb.Embed(context.Background(), providers.EmbedInput{
+		Texts: []string{"alpha", "beta", "gamma"},
+	})
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if len(out.Vectors) != 3 {
+		t.Fatalf("len(Vectors) = %d, want 3", len(out.Vectors))
+	}
+	for i, v := range out.Vectors {
+		if len(v) != 3 {
+			t.Errorf("Vectors[%d] dim = %d, want 3", i, len(v))
+		}
+	}
+	if single.calls != 3 {
+		t.Errorf("single embedder called %d times, want 3 (one per text)", single.calls)
+	}
+}
+
 func TestEmbedder_Adapter_Satisfies_Interface(t *testing.T) {
 	t.Parallel()
 	var emb providers.Embedder = &stubEmbedder{dim: 4}
