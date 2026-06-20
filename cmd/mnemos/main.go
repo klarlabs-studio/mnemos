@@ -14,6 +14,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/extract"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ingest"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/parser"
@@ -21,7 +22,6 @@ import (
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/relate"
-	"go.klarlabs.de/mnemos/internal/store"
 	"go.klarlabs.de/mnemos/internal/workflow"
 
 	// Register storage providers with the top-level store registry so
@@ -282,7 +282,8 @@ func handleIngest(args []string, f Flags) {
 		}
 
 		contentArg := strings.Join(args[1:], " ")
-		err := runJob("ingest", map[string]string{"source": "raw_text"}, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+		err := runJob("ingest", map[string]string{"source": "raw_text"}, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+			conn := w.Conn()
 			actor, err := resolveActor(ctx, conn.Users, f.Actor)
 			if err != nil {
 				return err
@@ -308,11 +309,8 @@ func handleIngest(args []string, f Flags) {
 			if err := job.SetStatus("saving", ""); err != nil {
 				return err
 			}
-			repo := conn.Events
-			for _, event := range events {
-				if err := repo.Append(ctx, event); err != nil {
-					return NewSystemError(err, "failed to persist event %s", event.ID)
-				}
+			if _, err := w.Events(ctx, events); err != nil {
+				return NewSystemError(err, "failed to persist events")
 			}
 			fmt.Printf("run_id=%s input=%s type=%s format=%s bytes=%d events=%d db=%s source=%s\n", job.ID(), input.ID, input.Type, input.Format, len(content), len(events), resolveDBPath(), input.Metadata["source"])
 			printIngestHint(job.ID())
@@ -329,7 +327,8 @@ func handleIngest(args []string, f Flags) {
 	}
 
 	path := args[0]
-	err := runJob("ingest", map[string]string{"path": path}, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+	err := runJob("ingest", map[string]string{"path": path}, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
 		actor, err := resolveActor(ctx, conn.Users, f.Actor)
 		if err != nil {
 			return err
@@ -355,11 +354,8 @@ func handleIngest(args []string, f Flags) {
 		if err := job.SetStatus("saving", ""); err != nil {
 			return err
 		}
-		repo := conn.Events
-		for _, event := range events {
-			if err := repo.Append(ctx, event); err != nil {
-				return NewSystemError(err, "failed to persist event %s", event.ID)
-			}
+		if _, err := w.Events(ctx, events); err != nil {
+			return NewSystemError(err, "failed to persist events")
 		}
 		fmt.Printf("run_id=%s input=%s type=%s format=%s bytes=%d events=%d db=%s source=%s\n", job.ID(), input.ID, input.Type, input.Format, len(content), len(events), resolveDBPath(), input.Metadata["source_path"])
 		printIngestHint(job.ID())
@@ -396,7 +392,8 @@ func handleQuery(args []string, f Flags) {
 		scope["why_wrong"] = "true"
 	}
 
-	err = runJob("query", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+	err = runJob("query", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
 		if err := job.SetStatus("loading", ""); err != nil {
 			return err
 		}
@@ -790,7 +787,8 @@ func handleExtract(args []string, f Flags) {
 		scope["event_ids"] = strings.Join(eventIDs, ",")
 	}
 
-	err := runJob("extract", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+	err := runJob("extract", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
 		actor, actorErr := resolveActor(ctx, conn.Users, f.Actor)
 		if actorErr != nil {
 			return actorErr
@@ -840,11 +838,10 @@ func handleExtract(args []string, f Flags) {
 			return err
 		}
 		stampClaimActor(claims, actor)
-		claimRepo := conn.Claims
-		if err := claimRepo.Upsert(ctx, claims); err != nil {
+		if _, err := w.Claims(ctx, claims, govwrite.ClaimReason{}); err != nil {
 			return NewSystemError(err, "failed to persist claims")
 		}
-		if err := claimRepo.UpsertEvidence(ctx, links); err != nil {
+		if _, err := w.EvidenceLinks(ctx, links); err != nil {
 			return NewSystemError(err, "failed to persist claim evidence links")
 		}
 
@@ -865,7 +862,8 @@ func handleExtract(args []string, f Flags) {
 }
 
 func handleRelate(args []string, f Flags) {
-	err := runJob("relate", map[string]string{"event_ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+	err := runJob("relate", map[string]string{"event_ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
 		actor, actorErr := resolveActor(ctx, conn.Users, f.Actor)
 		if actorErr != nil {
 			return actorErr
@@ -874,7 +872,6 @@ func handleRelate(args []string, f Flags) {
 			return err
 		}
 		claimRepo := conn.Claims
-		relRepo := conn.Relationships
 
 		var claims []domain.Claim
 		var err error
@@ -906,7 +903,7 @@ func handleRelate(args []string, f Flags) {
 			return err
 		}
 		stampRelationshipActor(rels, actor)
-		if err := relRepo.Upsert(ctx, rels); err != nil {
+		if _, err := w.Relationships(ctx, rels); err != nil {
 			return NewSystemError(err, "failed to persist relationships")
 		}
 
@@ -932,7 +929,8 @@ func handleProcess(args []string, f Flags) {
 		scope = map[string]string{"source": "raw_text"}
 	}
 
-	err := runJob("process", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+	err := runJob("process", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
 		actor, actorErr := resolveActor(ctx, conn.Users, f.Actor)
 		if actorErr != nil {
 			return actorErr
@@ -1042,7 +1040,7 @@ func handleProcess(args []string, f Flags) {
 		stampEventActor(events, actor)
 		stampClaimActor(claims, actor)
 		stampRelationshipActor(rels, actor)
-		if err := pipeline.PersistArtifacts(ctx, conn, events, claims, links, rels); err != nil {
+		if _, err := w.Artifacts(ctx, events, claims, links, rels); err != nil {
 			return err
 		}
 
@@ -1094,7 +1092,8 @@ func handleProcess(args []string, f Flags) {
 }
 
 func handleQuality(f Flags) {
-	err := runJob("quality", map[string]string{}, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+	err := runJob("quality", map[string]string{}, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
 		if err := job.SetStatus("computing", ""); err != nil {
 			return err
 		}
@@ -1166,7 +1165,8 @@ func handleMetrics(args []string, f Flags) {
 		handleWorkspaceMetrics(send, f)
 		return
 	}
-	err := runJob("metrics", map[string]string{}, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+	err := runJob("metrics", map[string]string{}, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
 		if err := job.SetStatus("loading", ""); err != nil {
 			return err
 		}
@@ -1649,7 +1649,7 @@ func jobTimeout() time.Duration {
 	return d
 }
 
-func runJob(kind string, scope map[string]string, verbose bool, fn func(context.Context, *workflow.Job, *store.Conn) error) error {
+func runJob(kind string, scope map[string]string, verbose bool, fn func(context.Context, *workflow.Job, *govwrite.Writer) error) error {
 	// First-run detection still uses the resolved file path (a
 	// SQLite-only convenience — checking whether the DB file is
 	// newly created on disk). With non-SQLite DSNs the path is
@@ -1661,19 +1661,22 @@ func runJob(kind string, scope map[string]string, verbose bool, fn func(context.
 		printFirstRunHints()
 	}
 
-	conn, err := openConn(context.Background())
+	// Every job runs against a governed daemon-writer so any durable
+	// write inside the job's closure routes through the axi kernel.
+	// The writer owns the store connection (opened here, closed below).
+	w, err := openWriter(context.Background())
 	if err != nil {
 		return NewSystemError(err, "failed to open database at %q", resolveDSN())
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 
-	runner := workflow.NewRunner(conn.Jobs)
+	runner := workflow.NewRunner(w.Conn().Jobs)
 	runner.Timeout = jobTimeout()
 	runner.MaxRetries = 1
 	runner.Verbose = verbose
 
 	jobErr := runner.Run(kind, scope, func(ctx context.Context, job *workflow.Job) error {
-		return fn(ctx, job, conn)
+		return fn(ctx, job, w)
 	})
 	return jobErr
 }

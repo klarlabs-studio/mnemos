@@ -12,6 +12,7 @@ import (
 	"go.klarlabs.de/bolt"
 	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
 	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
 
@@ -27,6 +28,7 @@ type Server struct {
 	mnemosv1.UnimplementedMnemosServiceServer
 
 	conn     *store.Conn
+	writer   *govwrite.Writer
 	verifier *auth.Verifier
 	logger   *bolt.Logger
 	version  string
@@ -35,8 +37,21 @@ type Server struct {
 // NewServer returns a gRPC server backed by the given store Conn.
 // If verifier is non-nil, write RPCs require a valid bearer token in
 // the "authorization" metadata.
+//
+// Every durable write the server performs routes through the governed
+// govwrite.Writer (built over the borrowed conn) so the spec
+// non-negotiable holds: no delivery adapter reaches a repository
+// directly. The Writer borrows the conn — the caller keeps ownership and
+// its existing close discipline.
 func NewServer(conn *store.Conn, verifier *auth.Verifier, logger *bolt.Logger, version string) *Server {
-	return &Server{conn: conn, verifier: verifier, logger: logger, version: version}
+	w, err := govwrite.Wrap(conn, logger)
+	if err != nil {
+		// Wrap fails only on a nil conn or a static plugin-registration
+		// bug — both programming errors that must surface loudly rather
+		// than silently degrade to an ungoverned write path.
+		panic(fmt.Sprintf("grpc: build governed writer: %v", err))
+	}
+	return &Server{conn: conn, writer: w, verifier: verifier, logger: logger, version: version}
 }
 
 // Register registers the Mnemos service on the provided gRPC server.
@@ -292,12 +307,9 @@ func (s *Server) AppendEvents(ctx context.Context, req *mnemosv1.AppendEventsReq
 		})
 	}
 
-	accepted := 0
-	for _, ev := range events {
-		if err := s.conn.Events.Append(ctx, ev); err != nil {
-			return nil, status.Errorf(codes.Internal, "append event %s: %v", ev.ID, err)
-		}
-		accepted++
+	accepted, err := s.writer.Events(ctx, events)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "append events: %v", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(accepted)}, nil
 }
@@ -481,7 +493,7 @@ func (s *Server) AppendClaims(ctx context.Context, req *mnemosv1.AppendClaimsReq
 		return nil, status.Errorf(codes.Unimplemented, "run-scoped evidence validation not yet implemented for gRPC")
 	}
 
-	if err := s.conn.Claims.Upsert(ctx, claims); err != nil {
+	if _, err := s.writer.Claims(ctx, claims, govwrite.ClaimReason{}); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert claims: %v", err)
 	}
 
@@ -490,7 +502,7 @@ func (s *Server) AppendClaims(ctx context.Context, req *mnemosv1.AppendClaimsReq
 		for _, e := range req.Evidence {
 			links = append(links, domain.ClaimEvidence{ClaimID: e.ClaimId, EventID: e.EventId})
 		}
-		if err := s.conn.Claims.UpsertEvidence(ctx, links); err != nil {
+		if _, err := s.writer.EvidenceLinks(ctx, links); err != nil {
 			return nil, status.Errorf(codes.Internal, "upsert evidence: %v", err)
 		}
 	}
@@ -575,7 +587,7 @@ func (s *Server) AppendRelationships(ctx context.Context, req *mnemosv1.AppendRe
 		})
 	}
 
-	if err := s.conn.Relationships.Upsert(ctx, rels); err != nil {
+	if _, err := s.writer.Relationships(ctx, rels); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert relationships: %v", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(len(rels))}, nil
@@ -642,7 +654,7 @@ func (s *Server) AppendEmbeddings(ctx context.Context, req *mnemosv1.AppendEmbed
 		if e.Dimensions != 0 && int(e.Dimensions) != len(e.Vector) {
 			return nil, status.Errorf(codes.InvalidArgument, "embeddings[%d]: dimensions=%d but vector length=%d", i, e.Dimensions, len(e.Vector))
 		}
-		if err := s.conn.Embeddings.Upsert(ctx, e.EntityId, e.EntityType, e.Vector, e.Model, actor); err != nil {
+		if err := s.writer.Embedding(ctx, e.EntityId, e.EntityType, e.Vector, e.Model, actor); err != nil {
 			return nil, status.Errorf(codes.Internal, "upsert embedding: %v", err)
 		}
 		accepted++

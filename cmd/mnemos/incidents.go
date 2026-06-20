@@ -97,13 +97,13 @@ func handleIncidentOpen(args []string) {
 		CreatedBy:        createdBy,
 	}
 	ctx := context.Background()
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer closeConn(conn)
-	if err := conn.Incidents.Upsert(ctx, inc); err != nil {
+	defer closeWriter(w)
+	if _, err := w.Incident(ctx, inc); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "upsert incident"))
 		return
 	}
@@ -122,13 +122,13 @@ func handleIncidentClose(args []string) {
 		return
 	}
 	ctx := context.Background()
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer closeConn(conn)
-	if err := conn.Incidents.Resolve(ctx, args[0], time.Now().UTC()); err != nil {
+	defer closeWriter(w)
+	if err := w.ResolveIncident(ctx, args[0], time.Now().UTC()); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "resolve incident"))
 		return
 	}

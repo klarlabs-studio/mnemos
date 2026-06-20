@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -251,12 +252,12 @@ func handlePull(args []string, _ Flags) {
 	ctx, cancel := context.WithTimeout(context.Background(), registryHTTPTimeout*5)
 	defer cancel()
 
-	conn, err := openConn(ctx)
+	gw, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open database"))
 		return
 	}
-	defer closeConn(conn)
+	defer closeWriter(gw)
 
 	client := &http.Client{Timeout: registryHTTPTimeout}
 
@@ -277,17 +278,17 @@ func handlePull(args []string, _ Flags) {
 		return
 	}
 
-	insertedEvents, err := persistPulledEvents(ctx, conn, events)
+	insertedEvents, err := persistPulledEvents(ctx, gw, events)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "persist events"))
 		return
 	}
-	insertedClaims, err := persistPulledClaims(ctx, conn, claims, evidence)
+	insertedClaims, err := persistPulledClaims(ctx, gw, claims, evidence)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "persist claims"))
 		return
 	}
-	insertedRels, err := persistPulledRelationships(ctx, conn, rels)
+	insertedRels, err := persistPulledRelationships(ctx, gw, rels)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "persist relationships"))
 		return
@@ -297,7 +298,7 @@ func handlePull(args []string, _ Flags) {
 		exitWithMnemosError(false, NewSystemError(err, "pull embeddings"))
 		return
 	}
-	insertedEmbeddings, err := persistPulledEmbeddings(ctx, conn, embeddings)
+	insertedEmbeddings, err := persistPulledEmbeddings(ctx, gw, embeddings)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "persist embeddings"))
 		return
@@ -576,11 +577,13 @@ func fetchPage(ctx context.Context, client *http.Client, endpoint, token string)
 // locally. Append on every backend is idempotent on (id), so we
 // take a CountAll snapshot before and after to derive the
 // "newly inserted" delta. Backend-agnostic.
-func persistPulledEvents(ctx context.Context, conn *store.Conn, events []eventDTO) (int, error) {
+func persistPulledEvents(ctx context.Context, gw *govwrite.Writer, events []eventDTO) (int, error) {
+	conn := gw.Conn()
 	before, err := conn.Events.CountAll(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("count events before pull: %w", err)
 	}
+	domEvents := make([]domain.Event, 0, len(events))
 	for _, e := range events {
 		ts, err := time.Parse(time.RFC3339, e.Timestamp)
 		if err != nil {
@@ -590,7 +593,7 @@ func persistPulledEvents(ctx context.Context, conn *store.Conn, events []eventDT
 		if err != nil {
 			return 0, fmt.Errorf("parse event ingested_at %s: %w", e.ID, err)
 		}
-		ev := domain.Event{
+		domEvents = append(domEvents, domain.Event{
 			ID:            e.ID,
 			RunID:         e.RunID,
 			SchemaVersion: e.SchemaVersion,
@@ -599,10 +602,10 @@ func persistPulledEvents(ctx context.Context, conn *store.Conn, events []eventDT
 			Timestamp:     ts,
 			Metadata:      e.Metadata,
 			IngestedAt:    ingested,
-		}
-		if err := conn.Events.Append(ctx, ev); err != nil {
-			return 0, fmt.Errorf("insert event %s: %w", e.ID, err)
-		}
+		})
+	}
+	if _, err := gw.Events(ctx, domEvents); err != nil {
+		return 0, fmt.Errorf("insert events: %w", err)
 	}
 	after, err := conn.Events.CountAll(ctx)
 	if err != nil {
@@ -614,7 +617,8 @@ func persistPulledEvents(ctx context.Context, conn *store.Conn, events []eventDT
 // persistPulledClaims is the analogous backend-agnostic path for
 // claims and their evidence links. As above, the "inserted" count
 // is the CountAll delta — Upsert collapses duplicates silently.
-func persistPulledClaims(ctx context.Context, conn *store.Conn, claims []claimDTO, evidence []claimEvidenceItem) (int, error) {
+func persistPulledClaims(ctx context.Context, gw *govwrite.Writer, claims []claimDTO, evidence []claimEvidenceItem) (int, error) {
+	conn := gw.Conn()
 	before, err := conn.Claims.CountAll(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("count claims before pull: %w", err)
@@ -634,14 +638,14 @@ func persistPulledClaims(ctx context.Context, conn *store.Conn, claims []claimDT
 			CreatedAt:  ts,
 		})
 	}
-	if err := conn.Claims.Upsert(ctx, domClaims); err != nil {
+	if _, err := gw.Claims(ctx, domClaims, govwrite.ClaimReason{}); err != nil {
 		return 0, fmt.Errorf("upsert claims: %w", err)
 	}
 	links := make([]domain.ClaimEvidence, 0, len(evidence))
 	for _, e := range evidence {
 		links = append(links, domain.ClaimEvidence{ClaimID: e.ClaimID, EventID: e.EventID})
 	}
-	if err := conn.Claims.UpsertEvidence(ctx, links); err != nil {
+	if _, err := gw.EvidenceLinks(ctx, links); err != nil {
 		return 0, fmt.Errorf("upsert claim evidence: %w", err)
 	}
 	after, err := conn.Claims.CountAll(ctx)
@@ -726,16 +730,17 @@ func pullEmbeddings(ctx context.Context, client *http.Client, regURL, token stri
 // persistPulledEmbeddings upserts pulled embeddings via the port
 // repo. Embeddings are derived data — last write wins is the right
 // semantic, so the count is just len(records).
-func persistPulledEmbeddings(ctx context.Context, conn *store.Conn, records []embeddingDTO) (int, error) {
+func persistPulledEmbeddings(ctx context.Context, gw *govwrite.Writer, records []embeddingDTO) (int, error) {
 	for _, e := range records {
-		if err := conn.Embeddings.Upsert(ctx, e.EntityID, e.EntityType, e.Vector, e.Model, ""); err != nil {
+		if err := gw.Embedding(ctx, e.EntityID, e.EntityType, e.Vector, e.Model, ""); err != nil {
 			return 0, fmt.Errorf("upsert embedding %s/%s: %w", e.EntityID, e.EntityType, err)
 		}
 	}
 	return len(records), nil
 }
 
-func persistPulledRelationships(ctx context.Context, conn *store.Conn, rels []relationshipDTO) (int, error) {
+func persistPulledRelationships(ctx context.Context, gw *govwrite.Writer, rels []relationshipDTO) (int, error) {
+	conn := gw.Conn()
 	before, err := conn.Relationships.CountAll(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("count relationships before pull: %w", err)
@@ -754,7 +759,7 @@ func persistPulledRelationships(ctx context.Context, conn *store.Conn, rels []re
 			CreatedAt:   ts,
 		})
 	}
-	if err := conn.Relationships.Upsert(ctx, domRels); err != nil {
+	if _, err := gw.Relationships(ctx, domRels); err != nil {
 		return 0, fmt.Errorf("upsert relationships: %w", err)
 	}
 	after, err := conn.Relationships.CountAll(ctx)

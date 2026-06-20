@@ -55,6 +55,14 @@ policy:
       match:
         - ./internal/extract/...
       min: 80
+    - name: govwrite
+      match:
+        - ./internal/govwrite/...
+      # Governed daemon-write surface (closes the daemon's direct-storage
+      # bypass). Every write kind has an executor test asserting both
+      # persistence and a verifiable evidence record (actual 74.2%). Floor
+      # sits ~2pp below actual per the repo convention.
+      min: 72
     - name: ingest
       match:
         - ./internal/ingest/...

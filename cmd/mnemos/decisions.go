@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"go.klarlabs.de/mnemos/internal/autoedge"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -119,13 +118,13 @@ func handleDecisionRecord(args []string) {
 		ChosenAt:     ra.chosenAt,
 	}
 	ctx := context.Background()
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer closeConn(conn)
-	if err := conn.Decisions.Append(ctx, d); err != nil {
+	defer closeWriter(w)
+	if _, err := w.Decision(ctx, d); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "append decision"))
 		return
 	}
@@ -190,18 +189,17 @@ func handleDecisionAttachOutcome(args []string) {
 		return
 	}
 	ctx := context.Background()
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer closeConn(conn)
-	if err := conn.Decisions.AttachOutcome(ctx, args[0], args[1]); err != nil {
+	defer closeWriter(w)
+	// The governed AttachOutcome both links the outcome and fires the
+	// validates/refutes edges, replacing the prior inline AttachOutcome +
+	// autoedge.OnDecisionOutcomeAttached pair.
+	if err := w.AttachOutcome(ctx, args[0], args[1], ""); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "attach outcome"))
-		return
-	}
-	if err := autoedge.OnDecisionOutcomeAttached(ctx, conn.Decisions, conn.Outcomes, conn.EntityRels, args[0], args[1], ""); err != nil {
-		exitWithMnemosError(false, NewSystemError(err, "auto-link validates/refutes edges"))
 		return
 	}
 	emitJSON(map[string]string{"decision_id": args[0], "outcome_id": args[1]})

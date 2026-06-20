@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"go.klarlabs.de/mnemos/internal/autoedge"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -156,13 +155,13 @@ func handleActionRecord(args []string) {
 		CreatedBy: ra.actor,
 	}
 	ctx := context.Background()
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer closeConn(conn)
-	if err := conn.Actions.Append(ctx, action); err != nil {
+	defer closeWriter(w)
+	if _, err := w.Action(ctx, action); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "append action"))
 		return
 	}
@@ -319,18 +318,17 @@ func handleOutcomeRecord(args []string) {
 		Source:     ra.source,
 	}
 	ctx := context.Background()
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer closeConn(conn)
-	if err := conn.Outcomes.Append(ctx, outcome); err != nil {
+	defer closeWriter(w)
+	// autoEdge=true: the governed executor appends the outcome AND fires
+	// the action_of/outcome_of edges, replacing the prior inline
+	// autoedge.OnOutcomeAppended call.
+	if _, err := w.Outcome(ctx, outcome, true); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "append outcome"))
-		return
-	}
-	if err := autoedge.OnOutcomeAppended(ctx, conn.EntityRels, outcome, outcome.CreatedBy); err != nil {
-		exitWithMnemosError(false, NewSystemError(err, "auto-link action_of edges"))
 		return
 	}
 	emitJSON(map[string]string{"id": outcome.ID, "action_id": outcome.ActionID, "result": string(outcome.Result)})

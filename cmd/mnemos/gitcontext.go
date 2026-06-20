@@ -15,9 +15,8 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
-	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/relate"
-	"go.klarlabs.de/mnemos/internal/store"
 )
 
 const (
@@ -166,7 +165,8 @@ func existingGitCommitSHAs(ctx context.Context, db *sql.DB) (map[string]struct{}
 // extract+relate so commit subjects/bodies become queryable claims. Returns
 // counts and never fails fatally — per-commit errors are logged and
 // skipped.
-func ingestGitLog(ctx context.Context, conn *store.Conn, repoRoot string, limit int, since, actor string) (ingested, skipped int, err error) {
+func ingestGitLog(ctx context.Context, w *govwrite.Writer, repoRoot string, limit int, since, actor string) (ingested, skipped int, err error) {
+	conn := w.Conn()
 	commits, err := runGitLog(ctx, repoRoot, limit, since)
 	if err != nil {
 		return 0, 0, err
@@ -232,7 +232,7 @@ func ingestGitLog(ctx context.Context, conn *store.Conn, repoRoot string, limit 
 	stampEventActor(newEvents, actor)
 	stampClaimActor(newClaims, actor)
 	stampRelationshipActor(rels, actor)
-	if persistErr := pipeline.PersistArtifacts(ctx, conn, newEvents, newClaims, newLinks, rels); persistErr != nil {
+	if _, persistErr := w.Artifacts(ctx, newEvents, newClaims, newLinks, rels); persistErr != nil {
 		return 0, skipped, fmt.Errorf("persist commits: %w", persistErr)
 	}
 	generateEmbeddingsBestEffort(ctx, conn, newEvents, newClaims)

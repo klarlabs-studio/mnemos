@@ -76,7 +76,7 @@ func (s *Server) AppendActions(ctx context.Context, req *mnemosv1.AppendActionsR
 			Metadata:  a.Metadata,
 			CreatedBy: firstNonEmptyStr(a.CreatedBy, actor),
 		}
-		if err := s.conn.Actions.Append(ctx, action); err != nil {
+		if _, err := s.writer.Action(ctx, action); err != nil {
 			return nil, status.Errorf(codes.Internal, "append action %s: %v", action.ID, err)
 		}
 		accepted++
@@ -140,7 +140,10 @@ func (s *Server) AppendOutcomes(ctx context.Context, req *mnemosv1.AppendOutcome
 			Source:     o.Source,
 			CreatedBy:  firstNonEmptyStr(o.CreatedBy, actor),
 		}
-		if err := s.conn.Outcomes.Append(ctx, outcome); err != nil {
+		// autoEdge=false: the grpc surface intentionally does NOT fire
+		// action_of/outcome_of edges (see the godoc above); that wiring
+		// lives in the CLI/MCP layer.
+		if _, err := s.writer.Outcome(ctx, outcome, false); err != nil {
 			return nil, status.Errorf(codes.Internal, "append outcome %s: %v", outcome.ID, err)
 		}
 		accepted++
@@ -209,7 +212,7 @@ func (s *Server) AppendLessons(ctx context.Context, req *mnemosv1.AppendLessonsR
 			Source:       l.Source,
 			CreatedBy:    firstNonEmptyStr(l.CreatedBy, actor),
 		}
-		if err := s.conn.Lessons.Append(ctx, lesson); err != nil {
+		if _, err := s.writer.Lesson(ctx, lesson); err != nil {
 			return nil, status.Errorf(codes.Internal, "append lesson %s: %v", lesson.ID, err)
 		}
 		accepted++
@@ -274,7 +277,7 @@ func (s *Server) AppendDecisions(ctx context.Context, req *mnemosv1.AppendDecisi
 			ChosenAt:     chosen,
 			CreatedBy:    firstNonEmptyStr(d.CreatedBy, actor),
 		}
-		if err := s.conn.Decisions.Append(ctx, decision); err != nil {
+		if _, err := s.writer.Decision(ctx, decision); err != nil {
 			return nil, status.Errorf(codes.Internal, "append decision %s: %v", decision.ID, err)
 		}
 		accepted++
@@ -351,7 +354,7 @@ func (s *Server) AppendPlaybooks(ctx context.Context, req *mnemosv1.AppendPlaybo
 			Source:             p.Source,
 			CreatedBy:          firstNonEmptyStr(p.CreatedBy, actor),
 		}
-		if err := s.conn.Playbooks.Append(ctx, playbook); err != nil {
+		if _, err := s.writer.Playbook(ctx, playbook); err != nil {
 			return nil, status.Errorf(codes.Internal, "append playbook %s: %v", playbook.ID, err)
 		}
 		accepted++
@@ -417,7 +420,7 @@ func (s *Server) AppendEntityRelationships(ctx context.Context, req *mnemosv1.Ap
 			CreatedBy: firstNonEmptyStr(e.CreatedBy, actor),
 		})
 	}
-	if err := s.conn.EntityRels.Upsert(ctx, edges); err != nil {
+	if _, err := s.writer.EntityRels(ctx, edges); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert entity_relationships: %v", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(len(edges))}, nil

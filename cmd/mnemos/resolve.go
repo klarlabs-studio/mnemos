@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
-	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 )
 
 // handleResolve implements two operator-driven primitives for the
@@ -88,23 +88,23 @@ func handleResolve(args []string, f Flags) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open database"))
 		return
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 
 	if supersededID != "" {
-		runSupersession(ctx, conn, primaryID, supersededID, reason, f.Actor)
+		runSupersession(ctx, w, primaryID, supersededID, reason, f.Actor)
 		return
 	}
-	runContradictionResolution(ctx, conn, primaryID, loserID, reason, f.Actor)
+	runContradictionResolution(ctx, w, primaryID, loserID, reason, f.Actor)
 }
 
 // runContradictionResolution preserves the v0.6 `--over` behavior:
 // pick a winner, mark the other deprecated, audit the transition.
-func runContradictionResolution(ctx context.Context, conn *store.Conn, winnerID, loserID, reason, actorFlag string) {
+func runContradictionResolution(ctx context.Context, w *govwrite.Writer, winnerID, loserID, reason, actorFlag string) {
 	if winnerID == loserID {
 		exitWithMnemosError(false, NewUserError("winner and loser must be different claims"))
 		return
@@ -112,6 +112,7 @@ func runContradictionResolution(ctx context.Context, conn *store.Conn, winnerID,
 	if reason == "" {
 		reason = "operator resolution via mnemos resolve"
 	}
+	conn := w.Conn()
 	claimRepo := conn.Claims
 	found, err := claimRepo.ListByIDs(ctx, []string{winnerID, loserID})
 	if err != nil {
@@ -142,7 +143,7 @@ func runContradictionResolution(ctx context.Context, conn *store.Conn, winnerID,
 	winner.Status = domain.ClaimStatusResolved
 	loser.Status = domain.ClaimStatusDeprecated
 
-	if err := claimRepo.UpsertWithReasonAs(ctx, []domain.Claim{winner, loser}, reason, actor); err != nil {
+	if _, err := w.Claims(ctx, []domain.Claim{winner, loser}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "persist resolution"))
 		return
 	}
@@ -158,7 +159,7 @@ func runContradictionResolution(ctx context.Context, conn *store.Conn, winnerID,
 // only valid_to changes. The audit trail goes via
 // claim_status_history with the provided reason so reviewers can
 // see who said "this superseded that and when".
-func runSupersession(ctx context.Context, conn *store.Conn, newID, oldID, reason, actorFlag string) {
+func runSupersession(ctx context.Context, w *govwrite.Writer, newID, oldID, reason, actorFlag string) {
 	if newID == oldID {
 		exitWithMnemosError(false, NewUserError("new and old must be different claims"))
 		return
@@ -166,6 +167,7 @@ func runSupersession(ctx context.Context, conn *store.Conn, newID, oldID, reason
 	if reason == "" {
 		reason = "operator supersession via mnemos resolve"
 	}
+	conn := w.Conn()
 	claimRepo := conn.Claims
 	found, err := claimRepo.ListByIDs(ctx, []string{newID, oldID})
 	if err != nil {
@@ -201,7 +203,7 @@ func runSupersession(ctx context.Context, conn *store.Conn, newID, oldID, reason
 		cutoff = time.Now().UTC()
 	}
 
-	if err := claimRepo.SetValidity(ctx, oldClaim.ID, cutoff); err != nil {
+	if err := w.SetValidity(ctx, oldClaim.ID, cutoff); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "set valid_to on superseded claim"))
 		return
 	}
@@ -209,7 +211,7 @@ func runSupersession(ctx context.Context, conn *store.Conn, newID, oldID, reason
 	// status itself doesn't change, so the audit trail records who
 	// performed the supersession. We re-upsert the same status with
 	// the reason to trigger the history insert in upsertWithReason.
-	if err := claimRepo.UpsertWithReasonAs(ctx, []domain.Claim{oldClaim}, reason, actor); err != nil {
+	if _, err := w.Claims(ctx, []domain.Claim{oldClaim}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 		// Non-fatal: the supersession itself succeeded. Surface as a
 		// warning so the operator knows the audit row didn't land.
 		warn := icon("⚠️", "(!)")

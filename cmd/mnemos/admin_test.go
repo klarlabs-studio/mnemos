@@ -6,8 +6,9 @@ import (
 	"time"
 )
 
-func TestResetStore_WipesEverything(t *testing.T) {
+func TestReset_WipesEverything(t *testing.T) {
 	_, conn := openTestStore(t)
+	w := wrapTestWriter(t, conn)
 
 	now := time.Now().UTC()
 	seedEventConn(t, conn, "ev1", "r", "content", "in1", `{}`, now)
@@ -16,7 +17,7 @@ func TestResetStore_WipesEverything(t *testing.T) {
 	seedRelationshipConn(t, conn, "rl1", "supports", "cl1", "cl2", now)
 
 	ctx := context.Background()
-	counts, err := resetStore(ctx, conn, false)
+	counts, err := w.Reset(ctx, false)
 	if err != nil {
 		t.Fatalf("reset: %v", err)
 	}
@@ -34,15 +35,16 @@ func TestResetStore_WipesEverything(t *testing.T) {
 	}
 }
 
-func TestResetStore_KeepEvents(t *testing.T) {
+func TestReset_KeepEvents(t *testing.T) {
 	_, conn := openTestStore(t)
+	w := wrapTestWriter(t, conn)
 
 	now := time.Now().UTC()
 	seedEventConn(t, conn, "ev1", "r", "content", "in1", `{}`, now)
 	seedClaimConn(t, conn, "cl1", "x", "fact", "active", 0.8, now)
 
 	ctx := context.Background()
-	if _, err := resetStore(ctx, conn, true); err != nil {
+	if _, err := w.Reset(ctx, true); err != nil {
 		t.Fatalf("reset: %v", err)
 	}
 
@@ -56,12 +58,14 @@ func TestResetStore_KeepEvents(t *testing.T) {
 	}
 }
 
-// TestDeleteClaim_RemovesDerivedRows exercises the cross-port
-// orchestration that handleDeleteClaim performs: relationships ->
-// embedding -> claim cascade. Done at this layer rather than via
-// CLI dispatch so the assertion stays focused on storage semantics.
-func TestDeleteClaim_RemovesDerivedRows(t *testing.T) {
+// TestDeleteClaimCascade_RemovesDerivedRows exercises the governed
+// cascade that handleDeleteClaim now performs: a single
+// DeleteClaimCascade action drops relationships -> embedding -> claim
+// cascade. Routed through the governed Writer so the assertion stays
+// focused on storage semantics while still going through the kernel.
+func TestDeleteClaimCascade_RemovesDerivedRows(t *testing.T) {
 	_, conn := openTestStore(t)
+	w := wrapTestWriter(t, conn)
 
 	now := time.Now().UTC()
 	seedEventConn(t, conn, "ev1", "r", "content", "in1", `{}`, now)
@@ -70,14 +74,8 @@ func TestDeleteClaim_RemovesDerivedRows(t *testing.T) {
 	seedRelationshipConn(t, conn, "rl1", "supports", "cl1", "cl2", now)
 
 	ctx := context.Background()
-	if err := conn.Relationships.DeleteByClaim(ctx, "cl1"); err != nil {
-		t.Fatalf("delete relationships: %v", err)
-	}
-	if err := conn.Embeddings.Delete(ctx, "cl1", "claim"); err != nil {
-		t.Fatalf("delete embedding: %v", err)
-	}
-	if err := conn.Claims.DeleteCascade(ctx, "cl1"); err != nil {
-		t.Fatalf("delete claim: %v", err)
+	if err := w.DeleteClaimCascade(ctx, "cl1"); err != nil {
+		t.Fatalf("delete claim cascade: %v", err)
 	}
 
 	claims, _ := conn.Claims.ListAll(ctx)
