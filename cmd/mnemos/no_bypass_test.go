@@ -33,41 +33,22 @@ var adapterDirs = []string{
 	"internal/server/grpc",
 }
 
-// bypassException is a documented, deliberately-allowed direct storage
-// write that has no governed Memory equivalent today. Each carries a
-// rationale and a TODO so the debt is visible and tracked rather than
-// silently tolerated. The key is "<relpath>:<method>" with the repo
-// receiver, e.g. "internal/server/grpc/server.go:Actions.Append".
+// bypassExceptions is the documented allow-list of direct storage
+// writes that do NOT flow through the governed kernel path. It is
+// EMPTY: the daemon-write bypass is closed. Every durable write the
+// delivery adapters (cmd/mnemos, internal/server/grpc) perform now
+// routes through the governed surface — the public library kernel
+// (mnemos.Memory) or the internal/govwrite daemon writer — so the
+// spec's non-negotiable holds with zero exceptions.
 //
-// Routable Event/Claim/Relationship writes are NOT listed here — those
-// belong on the governed path and the test fails if a new one appears.
-//
-// The non-routable repositories (Actions, Outcomes, Lessons, Decisions,
-// Playbooks, EntityRels, Incidents, Feedback, Embeddings, Users, Agents,
-// Entities, Jobs, RevokedTokens) have no mnemos.Memory method and no
-// kernel action today; routing them requires first extending the
-// governed surface (TODO #governed-surface). Until then they are flagged
-// here so the bypass set is explicit and locked: adding a NEW direct
-// write — or a new Event/Claim/Relationship bypass — fails this test.
-var bypassExceptions = map[string]string{
-	// --- cmd/mnemos: free-text / structured ingestion with custom
-	// event-id + dedup semantics the public Memory surface doesn't
-	// expose (e.g. ev_git_<sha>, SHA-dedup, PR ids). TODO: extend the
-	// governed surface with an ingest action that accepts pre-built
-	// events so these route through the kernel.
-	"cmd/mnemos/serve.go:Events.Append":            "HTTP POST /v1/events: pre-built event; TODO route via Memory.RememberEvent",
-	"cmd/mnemos/serve.go:Claims.Upsert":            "HTTP POST /v1/claims: bulk; TODO route via Memory.RememberClaim",
-	"cmd/mnemos/serve.go:Claims.UpsertEvidence":    "HTTP claim evidence links; pairs with serve Claims.Upsert",
-	"cmd/mnemos/serve.go:Relationships.Upsert":     "HTTP relationship upsert: no governed equivalent",
-	"cmd/mnemos/serve.go:Embeddings.Upsert":        "HTTP embedding upsert: no governed equivalent (embeddings are derived state)",
-	"cmd/mnemos/serve.go:Feedback.Upsert":          "HTTP feedback state: side table, no governed equivalent",
-	"cmd/mnemos/serve.go:Incidents.Upsert":         "HTTP incident upsert: no governed equivalent",
-	"cmd/mnemos/registry.go:Events.Append":         "federation import: remote-sourced events; no governed equivalent",
-	"cmd/mnemos/registry.go:Claims.Upsert":         "federation import: remote-sourced claims; no governed equivalent",
-	"cmd/mnemos/registry.go:Claims.UpsertEvidence": "federation import evidence links",
-	"cmd/mnemos/registry.go:Embeddings.Upsert":     "federation import embeddings (derived state)",
-	"cmd/mnemos/registry.go:Relationships.Upsert":  "federation import relationships",
-}
+// The key format, if an entry ever has to be added back, is
+// "<relpath>:<method>" with the repo receiver, e.g.
+// "internal/server/grpc/server.go:Actions.Append". Any NEW direct
+// storage write fails this test: route it through the kernel
+// (govwrite.Writer / mnemos.Memory) or, only if genuinely impossible,
+// add a precisely-justified entry here. Stale entries also fail, so the
+// list cannot rot.
+var bypassExceptions = map[string]string{}
 
 // foundWrite is a discovered direct storage write.
 type foundWrite struct {

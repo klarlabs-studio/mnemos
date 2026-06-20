@@ -178,18 +178,18 @@ func TestPushPull_RoundTripsAllResources(t *testing.T) {
 		t.Fatalf("pull relationships: %v", err)
 	}
 
-	if n, _ := persistPulledEvents(ctx, pullConn, pulledEvents); n != 1 {
+	if n, _ := persistPulledEvents(ctx, wrapTestWriter(t, pullConn), pulledEvents); n != 1 {
 		t.Errorf("inserted events = %d, want 1", n)
 	}
-	if n, _ := persistPulledClaims(ctx, pullConn, pulledClaims, pulledEvidence); n != 2 {
+	if n, _ := persistPulledClaims(ctx, wrapTestWriter(t, pullConn), pulledClaims, pulledEvidence); n != 2 {
 		t.Errorf("inserted claims = %d, want 2", n)
 	}
-	if n, _ := persistPulledRelationships(ctx, pullConn, pulledRels); n != 1 {
+	if n, _ := persistPulledRelationships(ctx, wrapTestWriter(t, pullConn), pulledRels); n != 1 {
 		t.Errorf("inserted relationships = %d, want 1", n)
 	}
 
 	// Second pull is a no-op (idempotent).
-	if n, _ := persistPulledEvents(ctx, pullConn, pulledEvents); n != 0 {
+	if n, _ := persistPulledEvents(ctx, wrapTestWriter(t, pullConn), pulledEvents); n != 0 {
 		t.Errorf("second pull inserted events = %d, want 0 (idempotent)", n)
 	}
 }
@@ -303,7 +303,7 @@ func TestPushPull_EmbeddingsRoundTripBitExact(t *testing.T) {
 	if len(pulled) != 2 {
 		t.Fatalf("pulled %d, want 2", len(pulled))
 	}
-	if n, err := persistPulledEmbeddings(ctx, pullConn, pulled); err != nil || n != 2 {
+	if n, err := persistPulledEmbeddings(ctx, wrapTestWriter(t, pullConn), pulled); err != nil || n != 2 {
 		t.Fatalf("persist n=%d err=%v", n, err)
 	}
 

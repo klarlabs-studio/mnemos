@@ -24,6 +24,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	markdownpkg "go.klarlabs.de/mnemos/internal/markdown"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
@@ -274,23 +275,33 @@ func newServerMux(conn *store.Conn) http.Handler {
 	}
 	verifier := auth.NewVerifierWithPrevious(secret, prev, conn.RevokedTokens)
 
+	// Every durable write the HTTP surface performs routes through this
+	// governed daemon-writer (it borrows the long-lived conn — the
+	// server keeps ownership). Building it fails only on a programming
+	// error (nil conn / static plugin bug), which must surface loudly.
+	gw, err := govwrite.Wrap(conn, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "serve: build governed writer: %v\n", err)
+		os.Exit(int(ExitError))
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleLanding)
 	mux.HandleFunc("/app", handleWebRoot)
 	mux.HandleFunc("/health", makeHealthHandler(conn))
 	leadsLogger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 	mux.Handle("/v1/leads", leadsRateLimitMiddleware(makeLeadsHandler(leadsLogger)))
-	mux.HandleFunc("/v1/events", makeEventsHandler(conn))
-	mux.HandleFunc("/v1/claims", makeClaimsHandler(conn))
-	mux.HandleFunc("/v1/relationships", makeRelationshipsHandler(conn))
-	mux.HandleFunc("/v1/embeddings", makeEmbeddingsHandler(conn))
+	mux.HandleFunc("/v1/events", makeEventsHandler(conn, gw))
+	mux.HandleFunc("/v1/claims", makeClaimsHandler(conn, gw))
+	mux.HandleFunc("/v1/relationships", makeRelationshipsHandler(conn, gw))
+	mux.HandleFunc("/v1/embeddings", makeEmbeddingsHandler(conn, gw))
 	mux.HandleFunc("/v1/metrics", makeMetricsHandler(conn))
 	mux.HandleFunc("/v1/context", makeContextHandler(conn))
 	mux.HandleFunc("/v1/search", makeSearchHandler(conn))
-	mux.HandleFunc("/v1/claims/", makeClaimSubresourceHandler(conn))
-	mux.HandleFunc("/v1/incidents", makeIncidentsHandler(conn))
+	mux.HandleFunc("/v1/claims/", makeClaimSubresourceHandler(conn, gw))
+	mux.HandleFunc("/v1/incidents", makeIncidentsHandler(conn, gw))
 	mux.HandleFunc("/v1/federation/export", makeFederationExportHandler(conn))
-	mux.HandleFunc("/v1/incidents/", makeIncidentSubresourceHandler(conn))
+	mux.HandleFunc("/v1/incidents/", makeIncidentSubresourceHandler(conn, gw))
 	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
@@ -534,13 +545,13 @@ type eventDTO struct {
 	IngestedAt    string            `json:"ingested_at"`
 }
 
-func makeEventsHandler(conn *store.Conn) http.HandlerFunc {
+func makeEventsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			listEventsHandler(conn, w, r)
 		case http.MethodPost:
-			appendEventsHandler(conn, w, r)
+			appendEventsHandler(gw, w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -667,13 +678,13 @@ type claimDTO struct {
 	ConfidenceComponents map[string]float64 `json:"confidence_components,omitempty"`
 }
 
-func makeClaimsHandler(conn *store.Conn) http.HandlerFunc {
+func makeClaimsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			listClaimsHandler(conn, w, r)
 		case http.MethodPost:
-			appendClaimsHandler(conn, w, r)
+			appendClaimsHandler(conn, gw, w, r)
 		case http.MethodDelete:
 			deleteClaimsHandler(conn, w, r)
 		default:
@@ -1026,13 +1037,13 @@ type verdictDTO struct {
 	EscalationReason string  `json:"escalation_reason,omitempty"`
 }
 
-func makeRelationshipsHandler(conn *store.Conn) http.HandlerFunc {
+func makeRelationshipsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			listRelationshipsHandler(conn, w, r)
 		case http.MethodPost:
-			appendRelationshipsHandler(conn, w, r)
+			appendRelationshipsHandler(conn, gw, w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -1159,7 +1170,7 @@ func parseTimeFlexible(s string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unrecognized time format %q (want RFC3339)", s)
 }
 
-func appendEventsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
+func appendEventsHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
 	if !requireScope(w, r, domain.ScopeEventsWrite) {
 		return
 	}
@@ -1195,7 +1206,7 @@ func appendEventsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	actor := actorFromContext(ctx)
 	now := time.Now().UTC()
-	accepted := 0
+	events := make([]domain.Event, 0, len(req.Events))
 	for i, e := range req.Events {
 		ts, err := parseTimeFlexible(e.Timestamp)
 		if err != nil {
@@ -1210,7 +1221,7 @@ func appendEventsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 		if ingested.IsZero() {
 			ingested = now
 		}
-		event := domain.Event{
+		events = append(events, domain.Event{
 			ID:            e.ID,
 			RunID:         e.RunID,
 			SchemaVersion: e.SchemaVersion,
@@ -1220,12 +1231,12 @@ func appendEventsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 			Metadata:      e.Metadata,
 			IngestedAt:    ingested,
 			CreatedBy:     actor,
-		}
-		if err := conn.Events.Append(ctx, event); err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("events[%d]: %v", i, err))
-			return
-		}
-		accepted++
+		})
+	}
+	accepted, err := gw.Events(ctx, events)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("append events: %v", err))
+		return
 	}
 	writeJSON(w, http.StatusCreated, appendResponse{Accepted: accepted})
 }
@@ -1366,7 +1377,7 @@ func deleteClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func appendClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
+func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
 	if !requireScope(w, r, domain.ScopeClaimsWrite) {
 		return
 	}
@@ -1467,7 +1478,7 @@ func appendClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	if err := conn.Claims.Upsert(ctx, claims); err != nil {
+	if _, err := gw.Claims(ctx, claims, govwrite.ClaimReason{}); err != nil {
 		writeInternalError(w, "upsert claims", err)
 		return
 	}
@@ -1477,7 +1488,7 @@ func appendClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 		for _, e := range req.Evidence {
 			links = append(links, domain.ClaimEvidence{ClaimID: e.ClaimID, EventID: e.EventID})
 		}
-		if err := conn.Claims.UpsertEvidence(ctx, links); err != nil {
+		if _, err := gw.EvidenceLinks(ctx, links); err != nil {
 			writeInternalError(w, "upsert evidence", err)
 			return
 		}
@@ -1489,7 +1500,7 @@ type appendRelationshipsRequest struct {
 	Relationships []relationshipDTO `json:"relationships"`
 }
 
-func appendRelationshipsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
+func appendRelationshipsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
 	if !requireScope(w, r, domain.ScopeRelationshipsWrite) {
 		return
 	}
@@ -1562,7 +1573,7 @@ func appendRelationshipsHandler(conn *store.Conn, w http.ResponseWriter, r *http
 		}
 	}
 
-	if err := conn.Relationships.Upsert(r.Context(), rels); err != nil {
+	if _, err := gw.Relationships(r.Context(), rels); err != nil {
 		writeInternalError(w, "upsert relationships", err)
 		return
 	}
@@ -1592,13 +1603,13 @@ type appendEmbeddingsRequest struct {
 	Embeddings []embeddingDTO `json:"embeddings"`
 }
 
-func makeEmbeddingsHandler(conn *store.Conn) http.HandlerFunc {
+func makeEmbeddingsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			listEmbeddingsHandler(conn, w, r)
 		case http.MethodPost:
-			appendEmbeddingsHandler(conn, w, r)
+			appendEmbeddingsHandler(conn, gw, w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -1645,7 +1656,7 @@ func listEmbeddingsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, embeddingsResponse{Embeddings: out, Total: total, Limit: limit, Offset: offset})
 }
 
-func appendEmbeddingsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
+func appendEmbeddingsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
 	if !requireScope(w, r, domain.ScopeEmbeddingsWrite) {
 		return
 	}
@@ -1713,7 +1724,7 @@ func appendEmbeddingsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Re
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("embeddings[%d]: dimensions=%d but vector length=%d", i, e.Dimensions, len(e.Vector)))
 			return
 		}
-		if err := conn.Embeddings.Upsert(ctx, e.EntityID, e.EntityType, e.Vector, e.Model, actor); err != nil {
+		if err := gw.Embedding(ctx, e.EntityID, e.EntityType, e.Vector, e.Model, actor); err != nil {
 			writeInternalError(w, "upsert embedding", err)
 			return
 		}
@@ -2166,7 +2177,7 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 //
 //	GET /v1/claims/<id>/provenance  → trust provenance report for the claim
 //	GET /v1/claims/<id>/export.md   → human-readable markdown export with provenance annotations
-func makeClaimSubresourceHandler(conn *store.Conn) http.HandlerFunc {
+func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// path: /v1/claims/<id>/<subresource>
 		// Strip the prefix so we can parse id + subresource.
@@ -2184,7 +2195,7 @@ func makeClaimSubresourceHandler(conn *store.Conn) http.HandlerFunc {
 		case "export.md":
 			makeClaimMarkdownExportHandler(conn, claimID)(w, r)
 		case "feedback":
-			makeFeedbackHandler(conn, claimID)(w, r)
+			makeFeedbackHandler(conn, gw, claimID)(w, r)
 		case "history":
 			makeClaimHistoryHandler(conn, claimID)(w, r)
 		default:
@@ -2291,7 +2302,7 @@ func feedbackAutoContestThreshold() int {
 // helpful/not-helpful signal (confidence decay on negative, streak
 // reset on positive), auto-transitions to "contested" when the
 // negative streak crosses the threshold, persists both rows.
-func makeFeedbackHandler(conn *store.Conn, claimID string) http.HandlerFunc {
+func makeFeedbackHandler(conn *store.Conn, gw *govwrite.Writer, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -2356,11 +2367,11 @@ func makeFeedbackHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 		if !req.Helpful {
 			reason = "agent-feedback-negative"
 		}
-		if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{claim}, reason, actor); err != nil {
+		if _, err := gw.Claims(ctx, []domain.Claim{claim}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 			writeInternalError(w, "update claim", err)
 			return
 		}
-		if err := conn.Feedback.Upsert(ctx, state); err != nil {
+		if _, err := gw.Feedback(ctx, state); err != nil {
 			writeInternalError(w, "store feedback", err)
 			return
 		}
@@ -2476,11 +2487,11 @@ type incidentRequest struct {
 //
 //	POST /v1/incidents  → open a new incident
 //	GET  /v1/incidents  → list all incidents (supports ?severity=<s> and ?status=<s>)
-func makeIncidentsHandler(conn *store.Conn) http.HandlerFunc {
+func makeIncidentsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
-			openIncidentHandler(conn, w, r)
+			openIncidentHandler(gw, w, r)
 		case http.MethodGet:
 			listIncidentsHandler(conn, w, r)
 		default:
@@ -2489,7 +2500,7 @@ func makeIncidentsHandler(conn *store.Conn) http.HandlerFunc {
 	}
 }
 
-func openIncidentHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
+func openIncidentHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
 	var req incidentRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid body: %v", err))
@@ -2523,7 +2534,7 @@ func openIncidentHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 		CreatedBy:        req.CreatedBy,
 	}
 	ctx := r.Context()
-	if err := conn.Incidents.Upsert(ctx, inc); err != nil {
+	if _, err := gw.Incident(ctx, inc); err != nil {
 		writeInternalError(w, "upsert incident", err)
 		return
 	}
@@ -2558,7 +2569,7 @@ func listIncidentsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reque
 //	GET /v1/incidents/<id>              → fetch incident by ID
 //	POST /v1/incidents/<id>/resolve     → mark incident resolved
 //	GET  /v1/incidents/<id>/why-wrong   → WhyWereWeWrong analysis
-func makeIncidentSubresourceHandler(conn *store.Conn) http.HandlerFunc {
+func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Strip "/v1/incidents/" prefix and split remainder.
 		prefix := "/v1/incidents/"
@@ -2589,7 +2600,7 @@ func makeIncidentSubresourceHandler(conn *store.Conn) http.HandlerFunc {
 			writeJSON(w, http.StatusOK, inc)
 
 		case sub == "resolve" && r.Method == http.MethodPost:
-			if err := conn.Incidents.Resolve(ctx, id, time.Now().UTC()); err != nil {
+			if err := gw.ResolveIncident(ctx, id, time.Now().UTC()); err != nil {
 				writeInternalError(w, "resolve incident", err)
 				return
 			}
