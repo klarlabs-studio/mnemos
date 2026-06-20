@@ -55,11 +55,7 @@ var bypassExceptions = map[string]string{
 	// expose (e.g. ev_git_<sha>, SHA-dedup, PR ids). TODO: extend the
 	// governed surface with an ingest action that accepts pre-built
 	// events so these route through the kernel.
-	"cmd/mnemos/gitcontext.go:PersistArtifacts":    "git-log ingestor: custom ev_git_<sha> ids + SHA dedup; no governed equivalent. TODO #governed-ingest",
-	"cmd/mnemos/prcontext.go:PersistArtifacts":     "PR ingestor: custom pr-context ids + dedup; no governed equivalent. TODO #governed-ingest",
-	"cmd/mnemos/autoingest.go:PersistArtifacts":    "autoingest: watch-driven batch with own ids; no governed equivalent. TODO #governed-ingest",
 	"cmd/mnemos/main.go:PersistArtifacts":          "process_text CLI path: pre-kernel ingestion; TODO route through Memory.Remember",
-	"cmd/mnemos/mcp.go:PersistArtifacts":           "process_text MCP tool: governed via its own MCP kernel action, persists after kernel dispatch. TODO converge with library executors",
 	"cmd/mnemos/main.go:Events.Append":             "CLI event add: pre-built event with explicit id; TODO route via Memory.RememberEvent",
 	"cmd/mnemos/main.go:Claims.Upsert":             "CLI claim import: bulk import; TODO route via Memory.RememberClaim",
 	"cmd/mnemos/main.go:Claims.UpsertEvidence":     "CLI claim import evidence links; pairs with Claims.Upsert above",
@@ -77,11 +73,6 @@ var bypassExceptions = map[string]string{
 	"cmd/mnemos/registry.go:Embeddings.Upsert":     "federation import embeddings (derived state)",
 	"cmd/mnemos/registry.go:Relationships.Upsert":  "federation import relationships",
 	"cmd/mnemos/admin.go:Embeddings.Upsert":        "admin re-embed: derived state, no governed equivalent",
-	"cmd/mnemos/mcp.go:Actions.Append":             "MCP action log: no Memory equivalent. TODO #governed-surface",
-	"cmd/mnemos/mcp.go:Decisions.Append":           "MCP decision log: no Memory equivalent. TODO #governed-surface",
-	"cmd/mnemos/mcp.go:Outcomes.Append":            "MCP outcome log: no Memory equivalent. TODO #governed-surface",
-	"cmd/mnemos/mcp.go:Events.Append":              "MCP event add: pre-built event; TODO route via Memory.RememberEvent",
-	"cmd/mnemos/mcp.go:Claims.UpsertEvidence":      "MCP claim evidence links: no Memory equivalent for standalone link",
 }
 
 // foundWrite is a discovered direct storage write.

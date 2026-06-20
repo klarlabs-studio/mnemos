@@ -12,6 +12,7 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ingest"
 	"go.klarlabs.de/mnemos/internal/parser"
 	"go.klarlabs.de/mnemos/internal/pipeline"
@@ -191,8 +192,9 @@ func (r AutoIngestReport) HasFailures() bool {
 // (one bad file shouldn't block the rest of the project), but
 // preflight errors that affect all docs (extractor build failure,
 // dedupe lookup failure) are surfaced rather than silently skipped.
-func autoIngestProjectDocs(ctx context.Context, conn *store.Conn, root, actor string) AutoIngestReport {
+func autoIngestProjectDocs(ctx context.Context, w *govwrite.Writer, root, actor string) AutoIngestReport {
 	report := AutoIngestReport{PerFileErrors: map[string]error{}}
+	conn := w.Conn()
 
 	docs := discoverProjectDocs(root)
 	if len(docs) == 0 {
@@ -229,7 +231,7 @@ func autoIngestProjectDocs(ctx context.Context, conn *store.Conn, root, actor st
 			report.Skipped++
 			continue
 		}
-		if err := ingestSingleDoc(ctx, conn, service, normalizer, extractor, relEngine, runID, path, actor); err != nil {
+		if err := ingestSingleDoc(ctx, w, service, normalizer, extractor, relEngine, runID, path, actor); err != nil {
 			fmt.Fprintf(os.Stderr, "auto-ingest: %s: %v\n", path, err)
 			report.PerFileErrors[path] = err
 			continue
@@ -255,7 +257,7 @@ func existingSourcePathsFromConn(ctx context.Context, conn *store.Conn) (map[str
 
 func ingestSingleDoc(
 	ctx context.Context,
-	conn *store.Conn,
+	w *govwrite.Writer,
 	service ingest.Service,
 	normalizer parser.Normalizer,
 	extractor *pipeline.Extractor,
@@ -264,6 +266,7 @@ func ingestSingleDoc(
 	path string,
 	actor string,
 ) error {
+	conn := w.Conn()
 	input, content, err := service.IngestFile(path)
 	if err != nil {
 		return fmt.Errorf("ingest: %w", err)
@@ -299,7 +302,7 @@ func ingestSingleDoc(
 	stampEventActor(events, actor)
 	stampClaimActor(claims, actor)
 	stampRelationshipActor(rels, actor)
-	if err := pipeline.PersistArtifacts(ctx, conn, events, claims, links, rels); err != nil {
+	if _, err := w.Artifacts(ctx, events, claims, links, rels); err != nil {
 		return fmt.Errorf("persist: %w", err)
 	}
 	// Best-effort entity materialisation. Auto-ingest runs in a

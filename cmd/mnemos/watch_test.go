@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
@@ -20,7 +21,12 @@ func newTestWatcher(t *testing.T) *Watcher {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	w := NewWatcher(conn, "")
+	gw, err := govwrite.Wrap(conn, nil)
+	if err != nil {
+		t.Fatalf("wrap governed writer: %v", err)
+	}
+	t.Cleanup(func() { _ = gw.Close() })
+	w := NewWatcher(gw, "")
 	t.Cleanup(w.Stop)
 	return w
 }
@@ -29,7 +35,7 @@ func newTestWatcher(t *testing.T) *Watcher {
 // can issue raw SQL probes against the persisted state.
 func rawDB(t *testing.T, w *Watcher) *sql.DB {
 	t.Helper()
-	db, ok := w.conn.Raw.(*sql.DB)
+	db, ok := w.writer.Conn().Raw.(*sql.DB)
 	if !ok || db == nil {
 		t.Fatal("watcher conn has no *sql.DB raw handle")
 	}

@@ -9,8 +9,23 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
 )
+
+// wrapTestWriter wraps a borrowed *store.Conn in a governed daemon
+// writer for tests that exercise the ingest helpers (which now take a
+// *govwrite.Writer). The writer borrows the conn, so the conn's own
+// Close (registered by openTestStore) still owns teardown.
+func wrapTestWriter(t *testing.T, conn *store.Conn) *govwrite.Writer {
+	t.Helper()
+	w, err := govwrite.Wrap(conn, nil)
+	if err != nil {
+		t.Fatalf("wrap governed writer: %v", err)
+	}
+	t.Cleanup(func() { _ = w.Close() })
+	return w
+}
 
 // openTestStore opens a fresh SQLite-backed Conn at a temp path,
 // returning the *sql.DB raw handle alongside so tests that still

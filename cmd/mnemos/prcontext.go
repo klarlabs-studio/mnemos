@@ -13,9 +13,8 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
-	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/relate"
-	"go.klarlabs.de/mnemos/internal/store"
 )
 
 const (
@@ -118,7 +117,8 @@ func existingGitPRNumbers(ctx context.Context, db *sql.DB) (map[string]struct{},
 // ingestGhPRs persists each merged PR as an event (deduped by PR number)
 // and runs extract+relate so PR bodies become queryable claims. Returns
 // counts and never fails fatally — per-PR errors are logged and skipped.
-func ingestGhPRs(ctx context.Context, conn *store.Conn, repoRoot string, limit int, actor string) (ingested, skipped int, err error) {
+func ingestGhPRs(ctx context.Context, w *govwrite.Writer, repoRoot string, limit int, actor string) (ingested, skipped int, err error) {
+	conn := w.Conn()
 	prs, err := runGhPRs(ctx, repoRoot, limit)
 	if err != nil {
 		return 0, 0, err
@@ -185,7 +185,7 @@ func ingestGhPRs(ctx context.Context, conn *store.Conn, repoRoot string, limit i
 	stampEventActor(newEvents, actor)
 	stampClaimActor(newClaims, actor)
 	stampRelationshipActor(rels, actor)
-	if persistErr := pipeline.PersistArtifacts(ctx, conn, newEvents, newClaims, newLinks, rels); persistErr != nil {
+	if _, persistErr := w.Artifacts(ctx, newEvents, newClaims, newLinks, rels); persistErr != nil {
 		return 0, skipped, fmt.Errorf("persist PRs: %w", persistErr)
 	}
 	generateEmbeddingsBestEffort(ctx, conn, newEvents, newClaims)

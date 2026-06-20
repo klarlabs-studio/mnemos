@@ -136,7 +136,7 @@ func TestAutoIngestProjectDocs_IngestsThenDedupesOnSecondRun(t *testing.T) {
 
 	ctx := context.Background()
 
-	first := autoIngestProjectDocs(ctx, conn, root, "")
+	first := autoIngestProjectDocs(ctx, wrapTestWriter(t, conn), root, "")
 	if first.Ingested != 2 || first.Skipped != 0 || first.HasFailures() {
 		t.Fatalf("first run: %+v, want ingested=2 skipped=0 no failures", first)
 	}
@@ -149,7 +149,7 @@ func TestAutoIngestProjectDocs_IngestsThenDedupesOnSecondRun(t *testing.T) {
 		t.Fatal("expected events persisted, got 0")
 	}
 
-	second := autoIngestProjectDocs(ctx, conn, root, "")
+	second := autoIngestProjectDocs(ctx, wrapTestWriter(t, conn), root, "")
 	if second.Ingested != 0 || second.Skipped != 2 || second.HasFailures() {
 		t.Fatalf("second run: %+v, want ingested=0 skipped=2 no failures", second)
 	}
@@ -167,7 +167,7 @@ func TestAutoIngestProjectDocs_NoDocsReturnsZero(t *testing.T) {
 	root := t.TempDir() // empty
 	_, conn := openTestStore(t)
 
-	r := autoIngestProjectDocs(context.Background(), conn, root, "")
+	r := autoIngestProjectDocs(context.Background(), wrapTestWriter(t, conn), root, "")
 	if r.Ingested != 0 || r.Skipped != 0 || r.HasFailures() {
 		t.Fatalf("empty-root report = %+v, want ingested=0 skipped=0 no failures", r)
 	}
@@ -191,7 +191,7 @@ func TestAutoIngestProjectDocs_DedupeFailureDoesNotSilentlyDuplicate(t *testing.
 		t.Fatalf("drop events: %v", err)
 	}
 
-	r := autoIngestProjectDocs(context.Background(), conn, root, "")
+	r := autoIngestProjectDocs(context.Background(), wrapTestWriter(t, conn), root, "")
 	if !r.DedupeFailed {
 		t.Errorf("expected DedupeFailed=true when events table missing, got %+v", r)
 	}
@@ -212,7 +212,7 @@ func TestAutoIngestProjectDocs_StampsActorOnEventsAndClaims(t *testing.T) {
 
 	db, conn := openTestStore(t)
 
-	r := autoIngestProjectDocs(context.Background(), conn, root, "usr_auditor")
+	r := autoIngestProjectDocs(context.Background(), wrapTestWriter(t, conn), root, "usr_auditor")
 	if r.Ingested == 0 {
 		t.Fatal("expected ingested > 0")
 	}

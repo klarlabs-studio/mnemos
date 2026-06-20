@@ -15,9 +15,9 @@ import (
 
 	"go.klarlabs.de/bolt"
 	mcp "go.klarlabs.de/mcp"
-	"go.klarlabs.de/mnemos/internal/autoedge"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ingest"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/parser"
@@ -329,7 +329,15 @@ func handleMCP() {
 				return
 			}
 			watcherConn = conn
-			watcher = NewWatcher(conn, mcpActor)
+			// Wrap the long-lived conn in a governed writer so the
+			// watcher's re-ingest writes route through the kernel. The
+			// writer borrows the conn; closeConn below still owns it.
+			gw, gwErr := govwrite.Wrap(conn, logger)
+			if gwErr != nil {
+				watcherErr = gwErr
+				return
+			}
+			watcher = NewWatcher(gw, mcpActor)
 		})
 		return watcher, watcherErr
 	}
@@ -663,14 +671,14 @@ func runGitContextIngest(projectRoot, actor string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "git: failed to open DB: %v\n", err)
 		return
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 
-	ingested, skipped, err := ingestGitLog(ctx, conn, projectRoot, defaultGitLogLimit, "", actor)
+	ingested, skipped, err := ingestGitLog(ctx, w, projectRoot, defaultGitLogLimit, "", actor)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "git: %v\n", err)
 		return
@@ -690,14 +698,14 @@ func runPRContextIngest(projectRoot, actor string) {
 		return
 	}
 
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "git-prs: failed to open DB: %v\n", err)
 		return
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 
-	ingested, skipped, err := ingestGhPRs(ctx, conn, projectRoot, defaultGitPRLimit, actor)
+	ingested, skipped, err := ingestGhPRs(ctx, w, projectRoot, defaultGitPRLimit, actor)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "git-prs: %v\n", err)
 		return
@@ -715,13 +723,13 @@ func mcpRunIngestGitPRs(ctx context.Context, actor string, input mcpIngestGitPRs
 	if !ghAvailable(ctx) {
 		return mcpIngestGitPRsOutput{}, fmt.Errorf("gh CLI not installed or not authenticated for github.com")
 	}
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		return mcpIngestGitPRsOutput{}, err
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 
-	ingested, skipped, err := ingestGhPRs(ctx, conn, projectRoot, input.Limit, actor)
+	ingested, skipped, err := ingestGhPRs(ctx, w, projectRoot, input.Limit, actor)
 	if err != nil {
 		return mcpIngestGitPRsOutput{}, err
 	}
@@ -736,13 +744,13 @@ func mcpRunIngestGitLog(ctx context.Context, actor string, input mcpIngestGitLog
 	if !repoIsGit(projectRoot) {
 		return mcpIngestGitLogOutput{}, fmt.Errorf("project root %s is not a git repository", projectRoot)
 	}
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		return mcpIngestGitLogOutput{}, err
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 
-	ingested, skipped, err := ingestGitLog(ctx, conn, projectRoot, input.Limit, input.Since, actor)
+	ingested, skipped, err := ingestGitLog(ctx, w, projectRoot, input.Limit, input.Since, actor)
 	if err != nil {
 		return mcpIngestGitLogOutput{}, err
 	}
@@ -753,14 +761,14 @@ func runAutoIngest(projectRoot, actor string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "auto-ingest: failed to open DB: %v\n", err)
 		return
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 
-	report := autoIngestProjectDocs(ctx, conn, projectRoot, actor)
+	report := autoIngestProjectDocs(ctx, w, projectRoot, actor)
 	if report.Ingested > 0 || report.Skipped > 0 || report.HasFailures() {
 		fmt.Fprintf(os.Stderr, "auto-ingest: ingested=%d skipped=%d failed=%d root=%s\n",
 			report.Ingested, report.Skipped, len(report.PerFileErrors), projectRoot)
@@ -861,11 +869,12 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 	normalizer := parser.NewNormalizer()
 	progress := mcp.ProgressFromContext(ctx)
 
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		return mcpProcessTextOutput{}, err
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
+	conn := w.Conn()
 
 	runner := workflow.NewRunner(conn.Jobs)
 	runner.Timeout = 30 * time.Second
@@ -939,7 +948,7 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 		stampEventActor(events, actor)
 		stampClaimActor(claims, actor)
 		stampRelationshipActor(rels, actor)
-		if err := pipeline.PersistArtifacts(ctx, conn, events, claims, links, rels); err != nil {
+		if _, err := w.Artifacts(ctx, events, claims, links, rels); err != nil {
 			return err
 		}
 		// Best-effort entity materialisation; failures are logged
@@ -1065,12 +1074,12 @@ func mcpRunRecordAction(ctx context.Context, actor string, input mcpRecordAction
 		Metadata:  input.Metadata,
 		CreatedBy: actor,
 	}
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		return mcpRecordActionOutput{}, err
 	}
-	defer closeConn(conn)
-	if err := conn.Actions.Append(ctx, action); err != nil {
+	defer closeWriter(w)
+	if _, err := w.Action(ctx, action); err != nil {
 		return mcpRecordActionOutput{}, err
 	}
 	return mcpRecordActionOutput{ID: action.ID, Kind: string(action.Kind), Subject: action.Subject}, nil
@@ -1101,12 +1110,12 @@ func mcpRunRecordDecision(ctx context.Context, actor string, input mcpRecordDeci
 		ChosenAt:     chosenAt,
 		CreatedBy:    actor,
 	}
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		return mcpRecordDecisionOutput{}, err
 	}
-	defer closeConn(conn)
-	if err := conn.Decisions.Append(ctx, d); err != nil {
+	defer closeWriter(w)
+	if _, err := w.Decision(ctx, d); err != nil {
 		return mcpRecordDecisionOutput{}, err
 	}
 	return mcpRecordDecisionOutput{ID: d.ID, Statement: d.Statement, RiskLevel: string(d.RiskLevel)}, nil
@@ -1320,15 +1329,15 @@ func mcpRunRecordOutcome(ctx context.Context, actor string, input mcpRecordOutco
 		Source:     source,
 		CreatedBy:  actor,
 	}
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		return mcpRecordOutcomeOutput{}, err
 	}
-	defer closeConn(conn)
-	if err := conn.Outcomes.Append(ctx, outcome); err != nil {
-		return mcpRecordOutcomeOutput{}, err
-	}
-	if err := autoedge.OnOutcomeAppended(ctx, conn.EntityRels, outcome, actor); err != nil {
+	defer closeWriter(w)
+	// autoEdge=true: the governed executor appends the outcome and fires
+	// the action_of/outcome_of edges, replacing the inline
+	// autoedge.OnOutcomeAppended call.
+	if _, err := w.Outcome(ctx, outcome, true); err != nil {
 		return mcpRecordOutcomeOutput{}, err
 	}
 	return mcpRecordOutcomeOutput{ID: outcome.ID, ActionID: outcome.ActionID, Result: string(outcome.Result)}, nil
@@ -1626,11 +1635,11 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 		validTo = t.UTC()
 	}
 
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		return mcpRememberOutput{}, err
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 
 	now := time.Now().UTC()
 	eventID := fmt.Sprintf("ev_remember_%d", now.UnixNano())
@@ -1646,7 +1655,7 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 		IngestedAt:    now,
 		CreatedBy:     actor,
 	}
-	if err := conn.Events.Append(ctx, event); err != nil {
+	if _, err := w.Events(ctx, []domain.Event{event}); err != nil {
 		return mcpRememberOutput{}, fmt.Errorf("append event: %w", err)
 	}
 
@@ -1661,8 +1670,7 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 		ValidFrom:  now,
 		ValidTo:    validTo,
 	}
-	reason := "agent-remember"
-	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{claim}, reason, actor); err != nil {
+	if _, err := w.Claims(ctx, []domain.Claim{claim}, govwrite.ClaimReason{Reason: "agent-remember", ChangedBy: actor}); err != nil {
 		return mcpRememberOutput{}, fmt.Errorf("append claim: %w", err)
 	}
 	// ValidTo lives on a separate write path (SetValidity) because
@@ -1670,11 +1678,11 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 	// than on every upsert. Apply it post-insert when the caller set
 	// an explicit TTL.
 	if !validTo.IsZero() {
-		if err := conn.Claims.SetValidity(ctx, claimID, validTo); err != nil {
+		if err := w.Conn().Claims.SetValidity(ctx, claimID, validTo); err != nil {
 			return mcpRememberOutput{}, fmt.Errorf("set valid_to: %w", err)
 		}
 	}
-	if err := conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{
+	if _, err := w.EvidenceLinks(ctx, []domain.ClaimEvidence{
 		{ClaimID: claimID, EventID: eventID},
 	}); err != nil {
 		return mcpRememberOutput{}, fmt.Errorf("link evidence: %w", err)
