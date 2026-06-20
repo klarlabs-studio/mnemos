@@ -235,7 +235,12 @@ func classifyWrite(rel string, sel *ast.SelectorExpr, aliases map[string]string)
 		return "", false
 	}
 	// Operational/auth repos are out of scope by the memory-vs-operational
-	// decision; never flag them.
+	// decision; never flag them. The explicit operationalRepos lookup
+	// documents the exclusion at the point of use (rather than relying on
+	// "absent from memoryRepos") so the scope decision is auditable here.
+	if operationalRepos[repo] {
+		return "", false
+	}
 	if !memoryRepos[repo] {
 		return "", false
 	}

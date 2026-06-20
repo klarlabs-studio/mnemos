@@ -30,6 +30,7 @@ type markVerifiedInput struct {
 
 type markVerifiedExecutor struct{ conn *store.Conn }
 
+// Execute bumps the claim's verification and records an evidence row.
 func (e markVerifiedExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[markVerifiedInput](input)
 	if !ok {
@@ -65,6 +66,7 @@ type setValidityInput struct {
 
 type setValidityExecutor struct{ conn *store.Conn }
 
+// Execute closes the claim's validity interval and records an evidence row.
 func (e setValidityExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[setValidityInput](input)
 	if !ok {
@@ -99,6 +101,7 @@ type mergeEntitiesInput struct {
 
 type mergeEntitiesExecutor struct{ conn *store.Conn }
 
+// Execute merges the loser entity into the winner and records an evidence row.
 func (e mergeEntitiesExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[mergeEntitiesInput](input)
 	if !ok {
@@ -226,6 +229,7 @@ type deleteEventInput struct{ EventID string }
 
 type deleteEventExecutor struct{ conn *store.Conn }
 
+// Execute deletes a single event row and records an evidence row.
 func (e deleteEventExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[deleteEventInput](input)
 	if !ok {

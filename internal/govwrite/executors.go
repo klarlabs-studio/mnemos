@@ -36,6 +36,7 @@ type eventsInput struct{ Events []domain.Event }
 
 type eventsExecutor struct{ conn *store.Conn }
 
+// Execute appends the pre-built events and records an evidence row.
 func (e eventsExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[eventsInput](input)
 	if !ok {
@@ -81,6 +82,7 @@ type claimsInput struct {
 
 type claimsExecutor struct{ conn *store.Conn }
 
+// Execute upserts the claims (optionally with an audit reason) and records an evidence row.
 func (e claimsExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[claimsInput](input)
 	if !ok {
@@ -125,6 +127,7 @@ type evidenceLinksInput struct{ Links []domain.ClaimEvidence }
 
 type evidenceLinksExecutor struct{ conn *store.Conn }
 
+// Execute upserts the claim→event evidence links and records an evidence row.
 func (e evidenceLinksExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[evidenceLinksInput](input)
 	if !ok {
@@ -152,6 +155,7 @@ type relationshipsInput struct{ Relationships []domain.Relationship }
 
 type relationshipsExecutor struct{ conn *store.Conn }
 
+// Execute upserts the relationships and records an evidence row.
 func (e relationshipsExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[relationshipsInput](input)
 	if !ok {
@@ -185,6 +189,7 @@ type embeddingInput struct {
 
 type embeddingExecutor struct{ conn *store.Conn }
 
+// Execute upserts the embedding and records an evidence row.
 func (e embeddingExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[embeddingInput](input)
 	if !ok {
@@ -218,6 +223,7 @@ type actionInput struct{ Action domain.Action }
 
 type actionExecutor struct{ conn *store.Conn }
 
+// Execute appends the action and records an evidence row.
 func (e actionExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[actionInput](input)
 	if !ok {
@@ -248,6 +254,7 @@ type outcomeInput struct {
 
 type outcomeExecutor struct{ conn *store.Conn }
 
+// Execute appends the outcome (and optional auto-edges) and records an evidence row.
 func (e outcomeExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[outcomeInput](input)
 	if !ok {
@@ -287,6 +294,7 @@ type lessonInput struct{ Lesson domain.Lesson }
 
 type lessonExecutor struct{ conn *store.Conn }
 
+// Execute upserts the lesson and records an evidence row.
 func (e lessonExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[lessonInput](input)
 	if !ok {
@@ -314,6 +322,7 @@ type decisionInput struct{ Decision domain.Decision }
 
 type decisionExecutor struct{ conn *store.Conn }
 
+// Execute upserts the decision and records an evidence row.
 func (e decisionExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[decisionInput](input)
 	if !ok {
@@ -341,6 +350,7 @@ type playbookInput struct{ Playbook domain.Playbook }
 
 type playbookExecutor struct{ conn *store.Conn }
 
+// Execute upserts the playbook and records an evidence row.
 func (e playbookExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[playbookInput](input)
 	if !ok {
@@ -368,6 +378,7 @@ type entityRelsInput struct{ Edges []domain.EntityRelationship }
 
 type entityRelsExecutor struct{ conn *store.Conn }
 
+// Execute upserts the cross-entity edges and records an evidence row.
 func (e entityRelsExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[entityRelsInput](input)
 	if !ok {
@@ -395,6 +406,7 @@ type incidentInput struct{ Incident domain.Incident }
 
 type incidentExecutor struct{ conn *store.Conn }
 
+// Execute upserts the incident and records an evidence row.
 func (e incidentExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[incidentInput](input)
 	if !ok {
@@ -423,6 +435,7 @@ type feedbackInput struct{ State domain.ClaimFeedback }
 
 type feedbackExecutor struct{ conn *store.Conn }
 
+// Execute upserts the per-claim feedback state and records an evidence row.
 func (e feedbackExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[feedbackInput](input)
 	if !ok {
@@ -455,6 +468,7 @@ type artifactsInput struct {
 
 type artifactsExecutor struct{ conn *store.Conn }
 
+// Execute persists the full ingest batch and records an evidence row.
 func (e artifactsExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[artifactsInput](input)
 	if !ok {
@@ -494,6 +508,7 @@ type attachOutcomeInput struct {
 
 type attachOutcomeExecutor struct{ conn *store.Conn }
 
+// Execute attaches the outcome to the decision and records an evidence row.
 func (e attachOutcomeExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[attachOutcomeInput](input)
 	if !ok {
@@ -531,6 +546,7 @@ type resolveIncidentInput struct {
 
 type resolveIncidentExecutor struct{ conn *store.Conn }
 
+// Execute marks the incident resolved and records an evidence row.
 func (e resolveIncidentExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[resolveIncidentInput](input)
 	if !ok {
