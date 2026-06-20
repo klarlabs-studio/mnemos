@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -48,5 +49,25 @@ func openConn(ctx context.Context) (*store.Conn, error) {
 func closeConn(conn *store.Conn) {
 	if err := conn.Close(); err != nil {
 		log.Printf("close store conn: %v", err)
+	}
+}
+
+// openWriter opens a governed daemon-writer over a fresh store
+// connection (which it owns). CLI commands that mutate durable state
+// use this instead of openConn so every write routes through the axi
+// kernel — the spec non-negotiable that no delivery adapter reaches a
+// repository directly. Reads are still available via w.Conn().
+//
+//	w, err := openWriter(ctx)
+//	defer closeWriter(w)
+func openWriter(ctx context.Context) (*govwrite.Writer, error) {
+	return govwrite.New(ctx, resolveDSN(), nil)
+}
+
+// closeWriter closes a *govwrite.Writer (and the store connection it
+// owns), logging any error. Use as: defer closeWriter(w)
+func closeWriter(w *govwrite.Writer) {
+	if err := w.Close(); err != nil {
+		log.Printf("close governed writer: %v", err)
 	}
 }

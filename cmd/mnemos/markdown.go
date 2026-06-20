@@ -142,17 +142,17 @@ func handleImport(args []string, _ Flags) {
 		return
 	}
 	ctx := context.Background()
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 	switch doc.Kind {
 	case "lesson":
 		l := *doc.Lesson
 		ensureMarkdownDefaults(&l, nil)
-		if err := conn.Lessons.Append(ctx, l); err != nil {
+		if _, err := w.Lesson(ctx, l); err != nil {
 			exitWithMnemosError(false, NewSystemError(err, "append lesson"))
 			return
 		}
@@ -160,7 +160,7 @@ func handleImport(args []string, _ Flags) {
 	case "playbook":
 		p := *doc.Playbook
 		ensureMarkdownDefaults(nil, &p)
-		if err := conn.Playbooks.Append(ctx, p); err != nil {
+		if _, err := w.Playbook(ctx, p); err != nil {
 			exitWithMnemosError(false, NewSystemError(err, "append playbook"))
 			return
 		}
