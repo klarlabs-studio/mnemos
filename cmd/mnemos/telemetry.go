@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
 	"go.klarlabs.de/mnemos/internal/workflow"
 )
@@ -315,7 +316,8 @@ func mnemosVersion() string {
 // posting it when --telemetry-send is passed AND opt-in + endpoint
 // gates are open.
 func handleWorkspaceMetrics(send bool, f Flags) {
-	err := runJob("metrics-workspace", map[string]string{}, f.Verbose, func(ctx context.Context, job *workflow.Job, conn *store.Conn) error {
+	err := runJob("metrics-workspace", map[string]string{}, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
 		if err := job.SetStatus("loading", ""); err != nil {
 			return err
 		}

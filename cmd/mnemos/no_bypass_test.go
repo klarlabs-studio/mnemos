@@ -55,11 +55,6 @@ var bypassExceptions = map[string]string{
 	// expose (e.g. ev_git_<sha>, SHA-dedup, PR ids). TODO: extend the
 	// governed surface with an ingest action that accepts pre-built
 	// events so these route through the kernel.
-	"cmd/mnemos/main.go:PersistArtifacts":          "process_text CLI path: pre-kernel ingestion; TODO route through Memory.Remember",
-	"cmd/mnemos/main.go:Events.Append":             "CLI event add: pre-built event with explicit id; TODO route via Memory.RememberEvent",
-	"cmd/mnemos/main.go:Claims.Upsert":             "CLI claim import: bulk import; TODO route via Memory.RememberClaim",
-	"cmd/mnemos/main.go:Claims.UpsertEvidence":     "CLI claim import evidence links; pairs with Claims.Upsert above",
-	"cmd/mnemos/main.go:Relationships.Upsert":      "CLI relationship import: no governed equivalent",
 	"cmd/mnemos/serve.go:Events.Append":            "HTTP POST /v1/events: pre-built event; TODO route via Memory.RememberEvent",
 	"cmd/mnemos/serve.go:Claims.Upsert":            "HTTP POST /v1/claims: bulk; TODO route via Memory.RememberClaim",
 	"cmd/mnemos/serve.go:Claims.UpsertEvidence":    "HTTP claim evidence links; pairs with serve Claims.Upsert",
@@ -72,7 +67,6 @@ var bypassExceptions = map[string]string{
 	"cmd/mnemos/registry.go:Claims.UpsertEvidence": "federation import evidence links",
 	"cmd/mnemos/registry.go:Embeddings.Upsert":     "federation import embeddings (derived state)",
 	"cmd/mnemos/registry.go:Relationships.Upsert":  "federation import relationships",
-	"cmd/mnemos/admin.go:Embeddings.Upsert":        "admin re-embed: derived state, no governed equivalent",
 }
 
 // foundWrite is a discovered direct storage write.
