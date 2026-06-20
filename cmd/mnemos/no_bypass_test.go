@@ -11,18 +11,53 @@ import (
 	"testing"
 )
 
-// storageWriteMethods are the repository methods that mutate durable
-// storage. A delivery adapter (cmd/mnemos, internal/server/grpc) calling
-// any of these reaches into storage directly and therefore bypasses the
-// governed write path (axi evidence + token budget). The spec's
-// non-negotiable is that every write flows through the governed library
-// API (mnemos.Memory) or the shared kernel; the Store interface is the
-// stable API, and delivery adapters are packaging conveniences that must
+// The no-bypass guard FAILS CLOSED. Rather than allow-listing a handful
+// of known write method names (the previous design, which silently let
+// new mutators — MarkVerified, SetValidity, DeleteCascade, Merge, … —
+// ship below its sight line), it treats EVERY exported method on a
+// governed memory repository as a write UNLESS that method is on the
+// explicit read-only allow-list below. A newly-added mutator therefore
+// fails the guard by default; the author must either route it through
+// the governed Writer or, deliberately, add it to storageReadMethods
+// with a rationale. The spec's non-negotiable is that every MEMORY write
+// flows through the governed surface (mnemos.Memory or internal/govwrite);
+// the Store interface is the stable API and delivery adapters
+// (cmd/mnemos, internal/server/grpc) are packaging conveniences that must
 // not reach past it.
-var storageWriteMethods = map[string]bool{
-	"Append":           true,
-	"Upsert":           true,
-	"UpsertEvidence":   true,
+//
+// storageReadMethods is the curated set of NON-mutating repository
+// methods — gets, lists, counts, and read-only searches/scorers across
+// every port interface in internal/ports. Anything NOT here, called on a
+// memory repo, is treated as a write. Keep this list honest: adding a
+// real mutator here to dodge the guard defeats the point.
+var storageReadMethods = map[string]bool{
+	// Single-row / by-key reads.
+	"GetByID": true, "GetByEmail": true, "Get": true, "IsRevoked": true,
+	"FindByName": true,
+	// List / enumeration reads.
+	"List": true, "ListAll": true, "ListByIDs": true, "ListByEventIDs": true,
+	"ListEvidenceByClaimIDs": true, "ListByRunID": true, "ListBySubject": true,
+	"ListByActionID": true, "ListByClaim": true, "ListByClaimIDs": true,
+	"ListByEntity": true, "ListByKind": true, "ListByService": true,
+	"ListByTrigger": true, "ListByRiskLevel": true, "ListByStatus": true,
+	"ListBySeverity": true, "ListByType": true, "ListByTestRequirementRef": true,
+	"ListStatusHistoryByClaimID": true, "ListAllEvidence": true,
+	"ListAllStatusHistory": true, "ListEvidence": true, "ListBeliefs": true,
+	"ListLessons": true, "ListVersions": true, "ListClaimsForEntity": true,
+	"ListEntitiesForClaim": true, "ListByEntityType": true,
+	"ListIDsMissingEmbedding": true, "ClaimIDsMissingEntityLinks": true,
+	// Counts.
+	"CountAll": true, "CountByType": true, "Count": true,
+	"CountClaimsBelowTrust": true,
+	// Read-only searches / scorers (no row mutation).
+	"SearchByText": true, "SearchClaimsByVector": true, "AverageTrust": true,
+}
+
+// pipelineWriteFuncs are package-level pipeline functions that persist
+// artifacts directly. They are not method calls on a repo field, so they
+// are matched by name + receiver package rather than by the read-only
+// classification above.
+var pipelineWriteFuncs = map[string]bool{
 	"PersistArtifacts": true,
 }
 
@@ -33,21 +68,27 @@ var adapterDirs = []string{
 	"internal/server/grpc",
 }
 
-// bypassExceptions is the documented allow-list of direct storage
-// writes that do NOT flow through the governed kernel path. It is
-// EMPTY: the daemon-write bypass is closed. Every durable write the
-// delivery adapters (cmd/mnemos, internal/server/grpc) perform now
-// routes through the governed surface — the public library kernel
-// (mnemos.Memory) or the internal/govwrite daemon writer — so the
-// spec's non-negotiable holds with zero exceptions.
+// bypassExceptions is the documented allow-list of direct MEMORY writes
+// that do NOT flow through the governed kernel path. It is EMPTY: the
+// daemon-write bypass is closed for every memory repository. Each memory
+// mutation the delivery adapters (cmd/mnemos, internal/server/grpc)
+// perform now routes through the governed surface — the public library
+// kernel (mnemos.Memory) or the internal/govwrite daemon writer — so the
+// spec's non-negotiable (EVERY memory write through axi) holds with zero
+// exceptions.
+//
+// This is honest emptiness, not omission: the guard fails CLOSED (see
+// storageReadMethods) so a newly-added mutator is flagged by default, and
+// the only writes deliberately left out of scope are the operational/auth
+// repos, excluded by REPO NAME with a written rationale (see the SCOPE
+// DECISION on memoryRepos) — never by quietly dropping method names.
 //
 // The key format, if an entry ever has to be added back, is
-// "<relpath>:<method>" with the repo receiver, e.g.
-// "internal/server/grpc/server.go:Actions.Append". Any NEW direct
-// storage write fails this test: route it through the kernel
-// (govwrite.Writer / mnemos.Memory) or, only if genuinely impossible,
-// add a precisely-justified entry here. Stale entries also fail, so the
-// list cannot rot.
+// "<relpath>:<Repo>.<Method>", e.g.
+// "internal/server/grpc/server.go:Actions.Append". Any NEW direct memory
+// write fails this test: route it through the kernel (govwrite.Writer /
+// mnemos.Memory) or, only if genuinely impossible, add a precisely-
+// justified entry here. Stale entries also fail, so the list cannot rot.
 var bypassExceptions = map[string]string{}
 
 // foundWrite is a discovered direct storage write.
@@ -130,9 +171,6 @@ func scanDirForStorageWrites(t *testing.T, root, dir string) []foundWrite {
 			if !ok {
 				return true
 			}
-			if !storageWriteMethods[sel.Sel.Name] {
-				return true
-			}
 			key, ok := classifyWrite(rel, sel, aliases)
 			if !ok {
 				return true
@@ -170,35 +208,104 @@ func collectRepoAliases(file *ast.File) map[string]string {
 	return aliases
 }
 
-// classifyWrite turns a write call into a stable exception key. It
-// resolves three receiver shapes: pipeline.PersistArtifacts(...);
-// <recv>.<Repo>.<Method> (conn.Claims.Upsert); and <alias>.<Method>
-// where <alias> was assigned from a repository field. Returns ok=false
-// for calls that aren't storage writes.
+// classifyWrite decides whether a call is a GOVERNED-MEMORY write that
+// bypasses the kernel, and if so returns a stable exception key. It fails
+// closed: a call on a memory repo counts as a write unless its method is
+// on storageReadMethods. It resolves four shapes:
+//
+//   - pipeline.PersistArtifacts(...) — a package-level write func.
+//   - <recv>.<Repo>.<Method> (conn.Claims.Upsert) — a repo-field method.
+//   - <alias>.<Method> where <alias> := conn.Claims — aliased repo.
+//
+// Calls on operationalRepos (auth/agent-registry/jobs) are intentionally
+// NOT flagged — see the SCOPE DECISION on memoryRepos. Read-only methods
+// on memory repos are not flagged either.
 func classifyWrite(rel string, sel *ast.SelectorExpr, aliases map[string]string) (string, bool) {
 	method := sel.Sel.Name
-	if method == "PersistArtifacts" {
+	// Package-level pipeline write functions (pipeline.PersistArtifacts).
+	if pipelineWriteFuncs[method] {
 		if x, ok := sel.X.(*ast.Ident); ok && x.Name == "pipeline" {
-			return rel + ":PersistArtifacts", true
+			return rel + ":" + method, true
 		}
 		return "", false
 	}
+	// Resolve the repository this method is called on, if any.
+	repo, ok := repoOfSelector(sel, aliases)
+	if !ok {
+		return "", false
+	}
+	// Operational/auth repos are out of scope by the memory-vs-operational
+	// decision; never flag them.
+	if !memoryRepos[repo] {
+		return "", false
+	}
+	// Fail closed: on a memory repo, anything that is not an explicit
+	// read is a write.
+	if storageReadMethods[method] {
+		return "", false
+	}
+	return rel + ":" + repo + "." + method, true
+}
+
+// repoOfSelector returns the *store.Conn repository field a selector's
+// method is invoked on, resolving both the direct <recv>.<Repo>.<Method>
+// shape and the aliased <alias>.<Method> shape. ok=false when the call
+// isn't on a known repository.
+func repoOfSelector(sel *ast.SelectorExpr, aliases map[string]string) (string, bool) {
 	// conn.Claims.Upsert / s.conn.Claims.Upsert
 	if inner, ok := sel.X.(*ast.SelectorExpr); ok && storageRepos[inner.Sel.Name] {
-		return rel + ":" + inner.Sel.Name + "." + method, true
+		return inner.Sel.Name, true
 	}
 	// aliasVar.Upsert where aliasVar := conn.Claims
 	if id, ok := sel.X.(*ast.Ident); ok {
 		if repo, aliased := aliases[id.Name]; aliased {
-			return rel + ":" + repo + "." + method, true
+			return repo, true
 		}
 	}
 	return "", false
 }
 
-// storageRepos is the set of *store.Conn repository field names. Used to
-// distinguish a real storage write (conn.Claims.Upsert) from an unrelated
-// method named Upsert/Append on some other receiver.
+// memoryRepos are the *store.Conn repository fields that hold MEMORY /
+// knowledge state — the claims, events, relationships, embeddings,
+// outcomes, decisions, lessons, playbooks, incidents, feedback,
+// cross-entity edges, entities, and the version chain — plus the DELETES
+// thereof. Every mutating call on one of these MUST flow through the
+// governed Writer; a direct call fails the guard.
+//
+// SCOPE DECISION (memory vs operational): the spec governs memory writes,
+// not operational/auth bookkeeping. The auth + agent-registry repositories
+// (Users, RevokedTokens, Agents) and the workflow-job repository (Jobs)
+// are operational tables — API keys, JWT denylist, principal registry,
+// and job lifecycle. Their writes (Create / UpdateStatus / UpdateScopes /
+// UpdateAllowedRuns / Add / PurgeExpired / Upsert) are NOT memory writes,
+// so they are EXCLUDED from the no-bypass rule by REPO NAME below, with
+// this written rationale rather than by silently omitting method names.
+// If a repo's classification is ever in doubt, move it to memoryRepos and
+// govern it — governing an operational write is harmless; missing a
+// memory write is the bug this guard exists to prevent.
+var memoryRepos = map[string]bool{
+	"Events": true, "Claims": true, "Relationships": true, "Embeddings": true,
+	"Entities": true, "Actions": true, "Outcomes": true, "Lessons": true,
+	"Decisions": true, "Playbooks": true, "EntityRels": true, "Incidents": true,
+	"Feedback": true, "ClaimVersions": true,
+}
+
+// operationalRepos are the *store.Conn repository fields that hold
+// operational / auth state, NOT memory. They are deliberately excluded
+// from the no-bypass rule (see the SCOPE DECISION on memoryRepos). Listed
+// explicitly — not silently omitted — so the exclusion is auditable and a
+// reviewer can challenge it.
+var operationalRepos = map[string]bool{
+	// Auth: user identities + JWT denylist + non-human principal registry.
+	"Users": true, "RevokedTokens": true, "Agents": true,
+	// Workflow bookkeeping: compilation-job lifecycle state.
+	"Jobs": true,
+}
+
+// storageRepos is the union — every *store.Conn repository field name.
+// Used to distinguish a real repo call (conn.Claims.Upsert) from an
+// unrelated method on some other receiver. classifyWrite then narrows to
+// memoryRepos for the actual bypass check.
 var storageRepos = map[string]bool{
 	"Events": true, "Claims": true, "Relationships": true, "Embeddings": true,
 	"Users": true, "RevokedTokens": true, "Agents": true, "Entities": true,
