@@ -71,6 +71,26 @@ const (
 	actionWriteArtifacts     = "write_artifacts"
 	actionAttachOutcome      = "attach_outcome"
 	actionResolveIncident    = "resolve_incident"
+
+	// Claim-lifecycle mutations. These bump status_history, freshness,
+	// or validity on an existing claim rather than inserting a new
+	// version. They are NOT idempotent the way an upsert-by-id is —
+	// MarkVerified increments verify_count on every call — so they are
+	// registered with Idempotent:false to keep the audit honest.
+	actionMarkVerified = "mark_verified"
+	actionSetValidity  = "set_validity"
+
+	// Entity canonicalisation. Merge folds a loser entity into a winner
+	// and deletes the loser; it is destructive and non-idempotent.
+	actionMergeEntities = "merge_entities"
+
+	// Destructive deletes. Each is ONE governed entry so a delete leaves
+	// exactly one auditable record on the evidence chain — a delete with
+	// no audit trail is the worst case.
+	actionDeleteClaimCascade = "delete_claim_cascade"
+	actionDeleteEventCascade = "delete_event_cascade"
+	actionDeleteEvent        = "delete_event"
+	actionReset              = "reset"
 )
 
 // inputPayloadKey is the single map key under which a typed write input
@@ -130,6 +150,20 @@ func actions() []kernel.Action {
 			Description: "Attach an outcome to a decision and fire validates/refutes edges."},
 		{Name: actionResolveIncident, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Mark an incident resolved."},
+		{Name: actionMarkVerified, Effect: axidomain.EffectWriteLocal, Idempotent: false,
+			Description: "Bump a claim's last_verified and increment verify_count."},
+		{Name: actionSetValidity, Effect: axidomain.EffectWriteLocal, Idempotent: false,
+			Description: "Close a claim's validity interval (valid_to)."},
+		{Name: actionMergeEntities, Effect: axidomain.EffectWriteLocal, Idempotent: false,
+			Description: "Merge a loser entity into a winner and delete the loser."},
+		{Name: actionDeleteClaimCascade, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Delete a claim and its owned rows (relationships, embedding, evidence, status history) atomically."},
+		{Name: actionDeleteEventCascade, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Delete an event, its dependent claims (cascaded), and embeddings."},
+		{Name: actionDeleteEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Delete a single event row by id."},
+		{Name: actionReset, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Purge all memory state (claims, relationships, embeddings, and optionally events)."},
 	}
 }
 
@@ -153,6 +187,13 @@ func executors(conn *store.Conn) map[string]axidomain.ActionExecutor {
 		kernel.ExecutorRef(actionWriteArtifacts):     artifactsExecutor{conn: conn},
 		kernel.ExecutorRef(actionAttachOutcome):      attachOutcomeExecutor{conn: conn},
 		kernel.ExecutorRef(actionResolveIncident):    resolveIncidentExecutor{conn: conn},
+		kernel.ExecutorRef(actionMarkVerified):       markVerifiedExecutor{conn: conn},
+		kernel.ExecutorRef(actionSetValidity):        setValidityExecutor{conn: conn},
+		kernel.ExecutorRef(actionMergeEntities):      mergeEntitiesExecutor{conn: conn},
+		kernel.ExecutorRef(actionDeleteClaimCascade): deleteClaimCascadeExecutor{conn: conn},
+		kernel.ExecutorRef(actionDeleteEventCascade): deleteEventCascadeExecutor{conn: conn},
+		kernel.ExecutorRef(actionDeleteEvent):        deleteEventExecutor{conn: conn},
+		kernel.ExecutorRef(actionReset):              resetExecutor{conn: conn},
 	}
 }
 
@@ -208,6 +249,16 @@ func (w *Writer) Conn() *store.Conn { return w.conn }
 // recover the evidence chain of the last governed write without holding
 // onto the per-call session id. The session is the same one axi Save()s
 // on every terminal path.
+//
+// Concurrency note: LastSession is LAST-WINS. A [Writer] built with
+// [Wrap] is safe to share across request goroutines (the HTTP and gRPC
+// servers do exactly that), but under concurrent writes LastSession
+// returns whichever session happened to Save most recently — NOT the
+// session of the caller's own write. Callers that need the evidence of
+// THEIR specific write (per-request audit) must not rely on LastSession;
+// it is a best-effort "last governed write on this Writer" handle, useful
+// for single-threaded CLI commands and tests. Per-request evidence is
+// carried on the kernel's durable evidence sink instead.
 func (w *Writer) LastSession() *axidomain.ExecutionSession {
 	if w == nil {
 		return nil
