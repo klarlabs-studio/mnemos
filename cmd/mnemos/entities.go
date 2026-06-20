@@ -131,9 +131,7 @@ func handleEntitiesMerge(args []string, f Flags) {
 	winnerID, loserID := args[0], args[1]
 
 	err := runJob("entities-merge", map[string]string{"winner": winnerID, "loser": loserID}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
-		conn := w.Conn()
-		repo := conn.Entities
-		if err := repo.Merge(ctx, winnerID, loserID); err != nil {
+		if err := w.MergeEntities(ctx, winnerID, loserID); err != nil {
 			return NewSystemError(err, "merge entities")
 		}
 		fmt.Printf("merged: %s absorbed %s (loser deleted)\n", winnerID, loserID)

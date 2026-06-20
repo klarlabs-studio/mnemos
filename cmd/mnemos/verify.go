@@ -37,14 +37,14 @@ func handleVerify(args []string, _ Flags) {
 		}
 	}
 	ctx := context.Background()
-	conn, err := openConn(ctx)
+	w, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer closeConn(conn)
+	defer closeWriter(w)
 	now := time.Now().UTC()
-	if err := conn.Claims.MarkVerified(ctx, claimID, now, halfLife); err != nil {
+	if err := w.MarkVerified(ctx, claimID, now, halfLife); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "mark verified"))
 		return
 	}

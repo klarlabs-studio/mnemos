@@ -13,7 +13,6 @@ import (
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/ports"
-	"go.klarlabs.de/mnemos/internal/store"
 	"go.klarlabs.de/mnemos/internal/trust"
 	"go.klarlabs.de/mnemos/internal/workflow"
 )
@@ -54,12 +53,18 @@ func handleReset(args []string, f Flags) {
 	}
 
 	err := runJob("reset", map[string]string{"keep_events": fmt.Sprintf("%t", keepEvents)}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
-		conn := w.Conn()
-		counts, err := resetStore(ctx, conn, keepEvents)
+		gc, err := w.Reset(ctx, keepEvents)
 		if err != nil {
 			return NewSystemError(err, "reset failed")
 		}
-		printResetSummary(counts, keepEvents)
+		printResetSummary(resetCounts{
+			Claims:        gc.Claims,
+			Evidence:      gc.Evidence,
+			StatusHistory: gc.StatusHistory,
+			Relationships: gc.Relationships,
+			Embeddings:    gc.Embeddings,
+			Events:        gc.Events,
+		}, keepEvents)
 		return nil
 	})
 	exitWithMnemosError(f.Verbose, err)
@@ -73,22 +78,15 @@ func handleDeleteClaim(args []string, f Flags) {
 	}
 
 	err := runJob("delete-claim", map[string]string{"ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
-		conn := w.Conn()
 		var deletedClaims int64
-		// Per-claim orchestration through ports: drop the touching
-		// relationships first, then the claim's embedding, then
-		// cascade the claim itself (which removes claim_evidence
-		// and claim_status_history). Cross-repo atomicity is
+		// Each claim's full cascade (relationships, embedding,
+		// claim_evidence, claim_status_history, claim row) routes
+		// through ONE governed action so the destructive op is a single
+		// auditable entry on the evidence chain. Cross-claim atomicity is
 		// best-effort; a partial failure leaves the store in a
 		// recoverable state and surfaces via `mnemos doctor`.
 		for _, id := range args {
-			if err := conn.Relationships.DeleteByClaim(ctx, id); err != nil {
-				return NewSystemError(err, "delete relationships for %s", id)
-			}
-			if err := conn.Embeddings.Delete(ctx, id, "claim"); err != nil {
-				return NewSystemError(err, "delete embedding for %s", id)
-			}
-			if err := conn.Claims.DeleteCascade(ctx, id); err != nil {
+			if err := w.DeleteClaimCascade(ctx, id); err != nil {
 				return NewSystemError(err, "delete claim %s", id)
 			}
 			deletedClaims++
@@ -107,32 +105,17 @@ func handleDeleteEvent(args []string, f Flags) {
 	}
 
 	err := runJob("delete-event", map[string]string{"ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
-		conn := w.Conn()
 		var deletedEvents, cascadedClaims int64
 		for _, id := range args {
-			// Cascade through dependent claims first.
-			dependent, err := conn.Claims.ListByEventIDs(ctx, []string{id})
+			// One governed action cascades the event delete through its
+			// dependent claims (relationships, embedding, claim cascade)
+			// and then drops the event embedding + event row — a single
+			// auditable entry per event on the evidence chain.
+			n, err := w.DeleteEventCascade(ctx, id)
 			if err != nil {
-				return NewSystemError(err, "list dependent claims for %s", id)
-			}
-			for _, c := range dependent {
-				if err := conn.Relationships.DeleteByClaim(ctx, c.ID); err != nil {
-					return NewSystemError(err, "delete relationships for %s", c.ID)
-				}
-				if err := conn.Embeddings.Delete(ctx, c.ID, "claim"); err != nil {
-					return NewSystemError(err, "delete claim embedding %s", c.ID)
-				}
-				if err := conn.Claims.DeleteCascade(ctx, c.ID); err != nil {
-					return NewSystemError(err, "delete claim %s", c.ID)
-				}
-				cascadedClaims++
-			}
-			if err := conn.Embeddings.Delete(ctx, id, "event"); err != nil {
-				return NewSystemError(err, "delete event embedding %s", id)
-			}
-			if err := conn.Events.DeleteByID(ctx, id); err != nil {
 				return NewSystemError(err, "delete event %s", id)
 			}
+			cascadedClaims += int64(n)
 			deletedEvents++
 		}
 		fmt.Printf("Deleted %d event(s); cascaded %d claim(s).\n", deletedEvents, cascadedClaims)
@@ -349,66 +332,6 @@ func handleReembed(args []string, f Flags) {
 		return nil
 	})
 	exitWithMnemosError(f.Verbose, err)
-}
-
-// resetStore deletes all derived state (and optionally events) through
-// port-typed repositories. The underlying providers each implement
-// DeleteAll atomically within their own table; cross-repository
-// atomicity is best-effort — a partial failure is recoverable via
-// `mnemos doctor` and a re-run.
-//
-// Counts are read before the deletes so the user-facing summary
-// reflects what was actually removed. ListAllEvidence /
-// ListAllStatusHistory are used for evidence + status_history counts
-// because the port surface doesn't expose dedicated counters for
-// those tables and the cardinality is bounded by the claim count.
-func resetStore(ctx context.Context, conn *store.Conn, keepEvents bool) (resetCounts, error) {
-	var counts resetCounts
-	var err error
-
-	if counts.Claims, err = conn.Claims.CountAll(ctx); err != nil {
-		return counts, fmt.Errorf("count claims: %w", err)
-	}
-	evidence, err := conn.Claims.ListAllEvidence(ctx)
-	if err != nil {
-		return counts, fmt.Errorf("list claim evidence: %w", err)
-	}
-	counts.Evidence = int64(len(evidence))
-	history, err := conn.Claims.ListAllStatusHistory(ctx)
-	if err != nil {
-		return counts, fmt.Errorf("list status history: %w", err)
-	}
-	counts.StatusHistory = int64(len(history))
-	if counts.Relationships, err = conn.Relationships.CountAll(ctx); err != nil {
-		return counts, fmt.Errorf("count relationships: %w", err)
-	}
-	if counts.Embeddings, err = conn.Embeddings.CountAll(ctx); err != nil {
-		return counts, fmt.Errorf("count embeddings: %w", err)
-	}
-	if !keepEvents {
-		if counts.Events, err = conn.Events.CountAll(ctx); err != nil {
-			return counts, fmt.Errorf("count events: %w", err)
-		}
-	}
-
-	// Order matters under FK enforcement: relationships and
-	// embeddings (which reference claims/events) go first; claims
-	// (which include claim_evidence) next; events last.
-	if err := conn.Relationships.DeleteAll(ctx); err != nil {
-		return counts, fmt.Errorf("delete relationships: %w", err)
-	}
-	if err := conn.Embeddings.DeleteAll(ctx); err != nil {
-		return counts, fmt.Errorf("delete embeddings: %w", err)
-	}
-	if err := conn.Claims.DeleteAll(ctx); err != nil {
-		return counts, fmt.Errorf("delete claims: %w", err)
-	}
-	if !keepEvents {
-		if err := conn.Events.DeleteAll(ctx); err != nil {
-			return counts, fmt.Errorf("delete events: %w", err)
-		}
-	}
-	return counts, nil
 }
 
 func printResetSummary(c resetCounts, keepEvents bool) {

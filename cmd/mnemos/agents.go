@@ -11,6 +11,7 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/query"
 )
 
@@ -345,12 +346,13 @@ func handleAgentHeal(args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	conn, err := openConn(ctx)
+	gw, err := openWriter(ctx)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "open database"))
 		return
 	}
-	defer closeConn(conn)
+	defer closeWriter(gw)
+	conn := gw.Conn()
 
 	// 1. Fetch the existing claim.
 	claims, err := conn.Claims.ListByIDs(ctx, []string{claimID})
@@ -369,7 +371,7 @@ func handleAgentHeal(args []string) {
 	claim.Text = strings.TrimSpace(statement)
 
 	// 3. Persist the update with an audit reason.
-	if err := conn.Claims.UpsertWithReason(ctx, []domain.Claim{claim}, reason); err != nil {
+	if _, err := gw.Claims(ctx, []domain.Claim{claim}, govwrite.ClaimReason{Reason: reason}); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "update claim"))
 		return
 	}

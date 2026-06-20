@@ -1434,12 +1434,12 @@ func mcpRunMemoryDeprecate(ctx context.Context, actor string, input mcpMemoryDep
 	if input.ClaimID == "" {
 		return mcpMemoryDeprecateOutput{}, fmt.Errorf("claim_id is required")
 	}
-	conn, err := openConn(ctx)
+	gw, err := openWriter(ctx)
 	if err != nil {
 		return mcpMemoryDeprecateOutput{}, err
 	}
-	defer closeConn(conn)
-	existing, err := conn.Claims.ListByIDs(ctx, []string{input.ClaimID})
+	defer closeWriter(gw)
+	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.ClaimID})
 	if err != nil || len(existing) == 0 {
 		return mcpMemoryDeprecateOutput{}, fmt.Errorf("claim %s not found", input.ClaimID)
 	}
@@ -1450,7 +1450,7 @@ func mcpRunMemoryDeprecate(ctx context.Context, actor string, input mcpMemoryDep
 	if reason == "" {
 		reason = "agent-deprecated"
 	}
-	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{updated}, reason, actor); err != nil {
+	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 		return mcpMemoryDeprecateOutput{}, err
 	}
 	return mcpMemoryDeprecateOutput{
@@ -1467,12 +1467,12 @@ func mcpRunMemoryResolve(ctx context.Context, actor string, input mcpMemoryResol
 	if input.WinnerID == input.LoserID {
 		return mcpMemoryResolveOutput{}, fmt.Errorf("winner_id and loser_id must differ")
 	}
-	conn, err := openConn(ctx)
+	gw, err := openWriter(ctx)
 	if err != nil {
 		return mcpMemoryResolveOutput{}, err
 	}
-	defer closeConn(conn)
-	existing, err := conn.Claims.ListByIDs(ctx, []string{input.WinnerID, input.LoserID})
+	defer closeWriter(gw)
+	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.WinnerID, input.LoserID})
 	if err != nil || len(existing) < 2 {
 		return mcpMemoryResolveOutput{}, fmt.Errorf("both claims must exist")
 	}
@@ -1490,7 +1490,7 @@ func mcpRunMemoryResolve(ctx context.Context, actor string, input mcpMemoryResol
 		}
 		updates = append(updates, c)
 	}
-	if err := conn.Claims.UpsertWithReasonAs(ctx, updates, reason, actor); err != nil {
+	if _, err := gw.Claims(ctx, updates, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 		return mcpMemoryResolveOutput{}, err
 	}
 	return mcpMemoryResolveOutput{WinnerID: input.WinnerID, LoserID: input.LoserID}, nil
@@ -1501,13 +1501,13 @@ func mcpRunMemoryPromote(ctx context.Context, actor string, input mcpMemoryPromo
 	if input.ClaimID == "" {
 		return mcpMemoryPromoteOutput{}, fmt.Errorf("claim_id is required")
 	}
-	conn, err := openConn(ctx)
+	gw, err := openWriter(ctx)
 	if err != nil {
 		return mcpMemoryPromoteOutput{}, err
 	}
-	defer closeConn(conn)
+	defer closeWriter(gw)
 	now := time.Now().UTC()
-	if err := conn.Claims.MarkVerified(ctx, input.ClaimID, now, 0); err != nil {
+	if err := gw.MarkVerified(ctx, input.ClaimID, now, 0); err != nil {
 		return mcpMemoryPromoteOutput{}, err
 	}
 	return mcpMemoryPromoteOutput{
@@ -1678,7 +1678,7 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 	// than on every upsert. Apply it post-insert when the caller set
 	// an explicit TTL.
 	if !validTo.IsZero() {
-		if err := w.Conn().Claims.SetValidity(ctx, claimID, validTo); err != nil {
+		if err := w.SetValidity(ctx, claimID, validTo); err != nil {
 			return mcpRememberOutput{}, fmt.Errorf("set valid_to: %w", err)
 		}
 	}
@@ -1699,12 +1699,12 @@ func mcpRunForget(ctx context.Context, actor string, input mcpForgetInput) (mcpF
 	if strings.TrimSpace(input.ClaimID) == "" {
 		return mcpForgetOutput{}, fmt.Errorf("claim_id is required")
 	}
-	conn, err := openConn(ctx)
+	gw, err := openWriter(ctx)
 	if err != nil {
 		return mcpForgetOutput{}, err
 	}
-	defer closeConn(conn)
-	existing, err := conn.Claims.ListByIDs(ctx, []string{input.ClaimID})
+	defer closeWriter(gw)
+	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.ClaimID})
 	if err != nil || len(existing) == 0 {
 		return mcpForgetOutput{}, fmt.Errorf("claim %s not found", input.ClaimID)
 	}
@@ -1715,7 +1715,7 @@ func mcpRunForget(ctx context.Context, actor string, input mcpForgetInput) (mcpF
 	if reason == "" {
 		reason = "agent-forget"
 	}
-	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{updated}, reason, actor); err != nil {
+	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 		return mcpForgetOutput{}, err
 	}
 	return mcpForgetOutput{
@@ -1737,12 +1737,12 @@ func mcpRunUpdate(ctx context.Context, actor string, input mcpUpdateInput) (mcpU
 	if input.Confidence < 0 || input.Confidence > 1 {
 		return mcpUpdateOutput{}, fmt.Errorf("confidence must be in [0, 1]")
 	}
-	conn, err := openConn(ctx)
+	gw, err := openWriter(ctx)
 	if err != nil {
 		return mcpUpdateOutput{}, err
 	}
-	defer closeConn(conn)
-	existing, err := conn.Claims.ListByIDs(ctx, []string{claimID})
+	defer closeWriter(gw)
+	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{claimID})
 	if err != nil || len(existing) == 0 {
 		return mcpUpdateOutput{}, fmt.Errorf("claim %s not found", claimID)
 	}
@@ -1756,7 +1756,7 @@ func mcpRunUpdate(ctx context.Context, actor string, input mcpUpdateInput) (mcpU
 	if reason == "" {
 		reason = "agent-update"
 	}
-	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{updated}, reason, actor); err != nil {
+	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 		return mcpUpdateOutput{}, err
 	}
 	return mcpUpdateOutput{

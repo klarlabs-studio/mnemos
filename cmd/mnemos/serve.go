@@ -686,7 +686,7 @@ func makeClaimsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 		case http.MethodPost:
 			appendClaimsHandler(conn, gw, w, r)
 		case http.MethodDelete:
-			deleteClaimsHandler(conn, w, r)
+			deleteClaimsHandler(conn, gw, w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -1280,7 +1280,7 @@ type deleteClaimsResponse struct {
 // surfaces the error so the operator can retry; the design
 // trade-off is that a half-failed run can be re-deleted safely
 // (idempotent) rather than risking a giant cross-repo transaction.
-func deleteClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
+func deleteClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
 	if !requireScope(w, r, domain.ScopeClaimsWrite) {
 		return
 	}
@@ -1343,18 +1343,12 @@ func deleteClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 			// delete the events below.
 			continue
 		}
-		// Delete relationships first (foreign keys), then embedding,
-		// then claim cascade (which handles claim_evidence +
-		// claim_status_history + claim row).
-		if err := conn.Relationships.DeleteByClaim(ctx, cid); err != nil {
-			writeInternalError(w, "delete relationships for "+cid, err)
-			return
-		}
-		if err := conn.Embeddings.Delete(ctx, cid, "claim"); err != nil {
-			writeInternalError(w, "delete embedding for "+cid, err)
-			return
-		}
-		if err := conn.Claims.DeleteCascade(ctx, cid); err != nil {
+		// One governed action performs the whole per-claim cascade
+		// (relationships, embedding, claim_evidence, claim_status_history,
+		// claim row), so the destructive op is a single auditable entry
+		// on the evidence chain rather than three ungoverned reaches into
+		// storage.
+		if err := gw.DeleteClaimCascade(ctx, cid); err != nil {
 			writeInternalError(w, "delete claim "+cid, err)
 			return
 		}
@@ -1365,9 +1359,9 @@ func deleteClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reques
 
 	// Events go last so a partial failure above leaves the events
 	// referenceable (the operator can re-run the DELETE idempotently
-	// to finish).
+	// to finish). Each event delete is a governed, audited action.
 	for _, e := range events {
-		if err := conn.Events.DeleteByID(ctx, e.ID); err != nil {
+		if err := gw.DeleteEvent(ctx, e.ID); err != nil {
 			writeInternalError(w, "delete event "+e.ID, err)
 			return
 		}
