@@ -279,6 +279,18 @@ type Memory interface {
 	// detected pattern.
 	Timeline(ctx context.Context, q TimelineQuery) ([]Event, error)
 
+	// LastWriteSession returns the governance session recorded by the
+	// most recent write (Remember, RememberClaim, or RememberEvent) on
+	// this Memory. Every write routes through an in-process axi-go
+	// kernel; the returned [WriteSession] exposes the write's
+	// tamper-evident evidence chain and a verifier.
+	//
+	// Returns nil before any write has been performed. The session
+	// reflects the last write across all three write methods; callers
+	// that need to correlate a specific write should read this
+	// immediately after that call.
+	LastWriteSession() WriteSession
+
 	// Close releases the underlying storage handle. Safe to call more
 	// than once. Returns the first error encountered.
 	Close() error

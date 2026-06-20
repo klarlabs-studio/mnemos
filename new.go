@@ -10,7 +10,7 @@ import (
 	"github.com/felixgeelhaar/chronos/embed"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
-	"go.klarlabs.de/mnemos/internal/extract"
+	"go.klarlabs.de/mnemos/internal/kernel"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/query"
@@ -107,7 +107,7 @@ func New(opts ...Option) (Memory, error) {
 		chronosOwned = true
 	}
 
-	return &memory{
+	m := &memory{
 		conn:         conn,
 		actorID:      cfg.actorID,
 		extractor:    extractor,
@@ -116,7 +116,29 @@ func New(opts ...Option) (Memory, error) {
 		embedder:     embClient,
 		chronos:      chronosEngine,
 		chronosOwned: chronosOwned,
-	}, nil
+	}
+
+	// Build the in-process axi kernel every public write routes through.
+	// This is unconditional: there is no direct-write fallback, so the
+	// spec non-negotiable ("every write passes through axi-go") holds by
+	// construction. The default budget is permissive (env-derived,
+	// itself defaulting to unlimited tokens) so existing flows don't
+	// break.
+	budget := kernel.BudgetFromEnv()
+	if cfg.tokenBudgetSet {
+		budget.MaxTokens = cfg.tokenBudget
+	}
+	wkernel, err := buildWriteKernel(m, budget, cfg.evidenceLog)
+	if err != nil {
+		_ = conn.Close()
+		if chronosOwned {
+			_ = chronosEngine.Close()
+		}
+		return nil, fmt.Errorf("mnemos: build write kernel: %w", err)
+	}
+	m.wkernel = wkernel
+
+	return m, nil
 }
 
 // buildClients converts the mode + supplied options into internal LLM
@@ -190,12 +212,10 @@ func buildExtractor(m mode, lc llm.Client) (*pipeline.Extractor, error) {
 		}
 		return ext, nil
 	}
-	llmEngine := extract.NewLLMEngine(lc)
-	return &pipeline.Extractor{
-		ExtractFn: func(events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error) {
-			return llmEngine.ExtractWithEntities(events)
-		},
-	}, nil
+	// Use the pipeline's LLM extractor so token usage is captured into
+	// LastUsage — the bridge that lets the kernel's MaxTokens budget sum
+	// real spend across each governed write.
+	return pipeline.NewLLMExtractor(lc), nil
 }
 
 // resolveDSN mirrors cmd/mnemos's DSN resolution: MNEMOS_DB_URL > a

@@ -8,16 +8,18 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/felixgeelhaar/chronos"
 	"github.com/felixgeelhaar/chronos/embed"
 	"github.com/google/uuid"
+	"go.klarlabs.de/axi"
+	axidomain "go.klarlabs.de/axi/domain"
+	"go.klarlabs.de/bolt"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
-	"go.klarlabs.de/mnemos/internal/ingest"
 	"go.klarlabs.de/mnemos/internal/llm"
-	"go.klarlabs.de/mnemos/internal/parser"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/relate"
@@ -47,107 +49,69 @@ type memory struct {
 	// and is responsible for closing it. False when the caller
 	// supplied one via [WithChronos].
 	chronosOwned bool
+
+	// wkernel is the in-process axi kernel every public write routes
+	// through. Built unconditionally by [New] — there is no
+	// direct-write fallback, so no write can bypass the evidence chain
+	// + budget. See governed_writes.go.
+	wkernel *axi.Kernel
+	// logger backs the kernel's domain-event log. Nil keeps axi chatter
+	// off stderr (the library default); cmd/mnemos can supply its own.
+	logger *bolt.Logger
+
+	// lastSession holds the axi session recorded by the most recent
+	// public write, exposed via [Memory.LastWriteSession]. Guarded by
+	// sessionMu for concurrent writers.
+	sessionMu   sync.RWMutex
+	lastSession *axidomain.ExecutionSession
 }
 
 var _ Memory = (*memory)(nil)
 
-// Remember implements [Memory.Remember].
+// setLastSession records s as the session of the most recent write.
+func (m *memory) setLastSession(s *axidomain.ExecutionSession) {
+	m.sessionMu.Lock()
+	m.lastSession = s
+	m.sessionMu.Unlock()
+}
+
+// LastWriteSession implements [Memory.LastWriteSession]. Returns nil
+// before any write has been performed.
+func (m *memory) LastWriteSession() WriteSession {
+	m.sessionMu.RLock()
+	s := m.lastSession
+	m.sessionMu.RUnlock()
+	if s == nil {
+		return nil
+	}
+	return newWriteSession(s)
+}
+
+// Remember implements [Memory.Remember]. The write routes through the
+// axi kernel: this method validates input and builds the invocation; the
+// rememberExecutor performs the ingest -> extract -> relate -> persist
+// pipeline and records the evidence chain. See governed_writes.go.
 func (m *memory) Remember(ctx context.Context, item Item) error {
 	if strings.TrimSpace(item.Content) == "" {
 		return errors.New("mnemos: Remember: Content is required")
 	}
-
-	svc := ingest.NewService()
-	in, content, err := svc.IngestText(item.Content, mergeMetadata(item))
-	if err != nil {
-		return fmt.Errorf("mnemos: ingest: %w", err)
-	}
-
-	events, err := parser.NewNormalizer().Normalize(in, content)
-	if err != nil {
-		return fmt.Errorf("mnemos: normalize: %w", err)
-	}
-	for i := range events {
-		if item.RunID != "" {
-			events[i].RunID = item.RunID
-		}
-		events[i].CreatedBy = m.actorID
-	}
-
-	claims, links, _, err := m.extractor.ExtractFn(events)
-	if err != nil {
-		return fmt.Errorf("mnemos: extract: %w", err)
-	}
-	for i := range claims {
-		claims[i].CreatedBy = m.actorID
-		if item.Type != "" {
-			claims[i].Type = domain.ClaimType(item.Type)
-		}
-	}
-
-	rels, err := m.relator.Detect(claims)
-	if err != nil {
-		return fmt.Errorf("mnemos: relate: %w", err)
-	}
-	existing, err := m.conn.Claims.ListAll(ctx)
-	if err == nil && len(existing) > 0 {
-		incremental, irelErr := m.relator.DetectIncremental(claims, existing)
-		if irelErr == nil {
-			rels = append(rels, incremental...)
-		}
-	}
-	for i := range rels {
-		rels[i].CreatedBy = m.actorID
-	}
-
-	if err := pipeline.PersistArtifacts(ctx, m.conn, events, claims, links, rels); err != nil {
-		return fmt.Errorf("mnemos: persist: %w", err)
-	}
-	return nil
+	_, err := dispatchWrite[rememberOutput](ctx, m, actionRemember, rememberInput{Item: item})
+	return err
 }
 
-// RememberClaim implements [Memory.RememberClaim].
+// RememberClaim implements [Memory.RememberClaim]. The write routes
+// through the axi kernel; the rememberClaimExecutor persists the claim
+// (and any evidence links) and records the claim id in the evidence
+// chain. The generated claim id is returned to the caller.
 func (m *memory) RememberClaim(ctx context.Context, item ClaimItem) (string, error) {
 	if strings.TrimSpace(item.Text) == "" {
 		return "", errors.New("mnemos: RememberClaim: Text is required")
 	}
-
-	claimType := domain.ClaimType(item.Type)
-	if claimType == "" {
-		claimType = domain.ClaimTypeFact
+	out, err := dispatchWrite[rememberClaimOutput](ctx, m, actionRememberClaim, rememberClaimInput{Claim: item})
+	if err != nil {
+		return "", err
 	}
-	confidence := item.Confidence
-	if confidence == 0 {
-		confidence = 1.0
-	}
-
-	id := fmt.Sprintf("cl_%d", time.Now().UnixNano())
-	claim := domain.Claim{
-		ID:         id,
-		Text:       item.Text,
-		Type:       claimType,
-		Confidence: confidence,
-		Status:     domain.ClaimStatusActive,
-		CreatedAt:  time.Now().UTC(),
-		CreatedBy:  m.actorID,
-		ValidFrom:  item.ValidFrom,
-		ValidTo:    item.ValidUntil,
-	}
-
-	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {
-		return "", fmt.Errorf("mnemos: upsert claim: %w", err)
-	}
-
-	if len(item.EventIDs) > 0 {
-		links := make([]domain.ClaimEvidence, len(item.EventIDs))
-		for i, eid := range item.EventIDs {
-			links[i] = domain.ClaimEvidence{ClaimID: id, EventID: eid}
-		}
-		if err := m.conn.Claims.UpsertEvidence(ctx, links); err != nil {
-			return "", fmt.Errorf("mnemos: link evidence: %w", err)
-		}
-	}
-	return id, nil
+	return out.ClaimID, nil
 }
 
 // Recall implements [Memory.Recall].
@@ -195,7 +159,10 @@ func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
 	return results, nil
 }
 
-// RememberEvent implements [Memory.RememberEvent].
+// RememberEvent implements [Memory.RememberEvent]. The write routes
+// through the axi kernel; the rememberEventExecutor appends the event,
+// forwards it to the bundled Chronos engine, and records the event id in
+// the evidence chain. The action is idempotent on event id.
 func (m *memory) RememberEvent(ctx context.Context, e Event) error {
 	if e.At.IsZero() {
 		return errors.New("mnemos: RememberEvent: At is required")
@@ -203,52 +170,9 @@ func (m *memory) RememberEvent(ctx context.Context, e Event) error {
 	if strings.TrimSpace(e.Content) == "" {
 		return errors.New("mnemos: RememberEvent: Content is required")
 	}
-
-	id := strings.TrimSpace(e.ID)
-	if id == "" {
-		id = newEventID()
-	}
-	meta := map[string]string{}
-	maps.Copy(meta, e.Metadata)
-	if e.Type != "" {
-		meta["event_type"] = e.Type
-	}
-
-	ev := domain.Event{
-		ID:            id,
-		RunID:         e.RunID,
-		SchemaVersion: "1.0",
-		Content:       e.Content,
-		SourceInputID: "inline:" + id, // synthetic origin for direct API calls
-		Timestamp:     e.At.UTC(),
-		Metadata:      meta,
-		IngestedAt:    time.Now().UTC(),
-		CreatedBy:     m.actorID,
-	}
-	if err := m.conn.Events.Append(ctx, ev); err != nil {
-		return fmt.Errorf("mnemos: append event: %w", err)
-	}
-
-	// Forward the event to the bundled Chronos engine as a presence
-	// signal: each event maps to a single-feature EntityState at the
-	// event timestamp. This lets the detector see deployment / incident
-	// / decision bursts as recurrence + spike patterns over time.
-	//
-	// The mapping is deliberately minimal:
-	//   - EntityID  = NS-hash(event_type) so each type is its own series
-	//   - ScopeID   = NS-hash(run_id) so scopes match RememberEvent runs
-	//   - Features  = [1.0] presence indicator
-	//   - Labels    = ["event"]
-	//   - Meta      = event type + truncated content for explainability
-	//
-	// Chronos failures are non-fatal: the Mnemos event store is the
-	// source of truth and was already persisted above. Returning an
-	// error here would make a Chronos hiccup look like a Remember
-	// failure to the caller, which is wrong.
-	if m.chronos != nil {
-		_ = m.chronos.Process(ctx, m.eventToEntityState(e, id))
-	}
-	return nil
+	e.ID = strings.TrimSpace(e.ID)
+	_, err := dispatchWrite[rememberEventOutput](ctx, m, actionRememberEvent, rememberEventInput{Event: e})
+	return err
 }
 
 // eventToEntityState maps a public mnemos.Event into a chronos.EntityState

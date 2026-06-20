@@ -70,6 +70,20 @@ type config struct {
 	// itself (true) or accepted one from the caller (false). Drives
 	// whether [Memory.Close] also closes the engine.
 	chronosOwned bool
+
+	// tokenBudget overrides the kernel's MaxTokens cap on every write.
+	// Zero (the default) means "use the env-derived value"
+	// (MNEMOS_AXI_MAX_TOKENS, itself defaulting to unlimited). Set via
+	// [WithTokenBudget].
+	tokenBudget int64
+	// tokenBudgetSet records whether [WithTokenBudget] was called, so a
+	// caller can explicitly select an unlimited budget (0) and override
+	// a non-zero env value.
+	tokenBudgetSet bool
+	// evidenceLog overrides the kernel's JSONL audit-log path. Empty
+	// means "use MNEMOS_AXI_EVIDENCE_LOG" (itself defaulting to
+	// disabled). Set via [WithEvidenceLog].
+	evidenceLog string
 }
 
 type optionFunc func(*config)
@@ -145,6 +159,44 @@ func WithActor(userID string) Option {
 			return
 		}
 		c.actorID = userID
+	})
+}
+
+// WithTokenBudget caps the number of language-model tokens a single
+// governed write may spend before the kernel fails it with a budget
+// error. The cap is enforced per write (per axi session): a write whose
+// extraction reports more tokens than the cap is rejected and its error
+// mentions the budget.
+//
+// Zero selects an unlimited token budget, overriding any value derived
+// from MNEMOS_AXI_MAX_TOKENS. When this option is not used, Mnemos reads
+// the env var (which itself defaults to unlimited so existing flows
+// don't break). The duration and invocation caps remain env-driven via
+// MNEMOS_AXI_MAX_DURATION / MNEMOS_AXI_MAX_INVOCATIONS.
+func WithTokenBudget(maxTokens int64) Option {
+	return optionFunc(func(c *config) {
+		if maxTokens < 0 {
+			maxTokens = 0
+		}
+		c.tokenBudget = maxTokens
+		c.tokenBudgetSet = true
+	})
+}
+
+// WithEvidenceLog routes the kernel's per-write evidence chain to a JSONL
+// audit log at the given path (parent directories are created as needed).
+// The special values "-" and "stdout" route to standard output. This
+// mirrors the MNEMOS_AXI_EVIDENCE_LOG environment variable, which is used
+// when this option is not set; passing an empty string is a no-op.
+//
+// The evidence chain is always recorded in-memory on the [WriteSession]
+// regardless of this option; the log adds durable cross-session audit.
+func WithEvidenceLog(path string) Option {
+	return optionFunc(func(c *config) {
+		if path == "" {
+			return
+		}
+		c.evidenceLog = path
 	})
 }
 
