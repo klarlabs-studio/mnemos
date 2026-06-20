@@ -100,7 +100,7 @@ func (a *App) remember(ctx context.Context, args []string) error {
 	}); err != nil {
 		return err
 	}
-	fmt.Fprintln(a.out, "remembered")
+	a.println("remembered")
 	return nil
 }
 
@@ -127,7 +127,7 @@ func (a *App) claim(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.out, "recorded claim %s\n", id)
+	a.printf("recorded claim %s\n", id)
 	return nil
 }
 
@@ -162,7 +162,7 @@ func (a *App) event(ctx context.Context, args []string) error {
 	}); err != nil {
 		return err
 	}
-	fmt.Fprintln(a.out, "remembered event")
+	a.println("remembered event")
 	return nil
 }
 
@@ -200,11 +200,11 @@ func (a *App) recall(ctx context.Context, args []string) error {
 		return err
 	}
 	if len(results) == 0 {
-		fmt.Fprintln(a.out, "(no results)")
+		a.println("(no results)")
 		return nil
 	}
 	for _, r := range results {
-		fmt.Fprintf(a.out, "%s\t%.2f\t%s\n", r.ClaimID, r.TrustScore, r.Text)
+		a.printf("%s\t%.2f\t%s\n", r.ClaimID, r.TrustScore, r.Text)
 	}
 	return nil
 }
@@ -217,7 +217,7 @@ func (a *App) get(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.out, "%s\t%s\t%s\n", c.ID, c.Type, c.Statement)
+	a.printf("%s\t%s\t%s\n", c.ID, c.Type, c.Statement)
 	return nil
 }
 
@@ -251,7 +251,7 @@ func (a *App) scan(ctx context.Context, args []string) error {
 		return err
 	}
 	for _, c := range claims {
-		fmt.Fprintf(a.out, "%s\t%s\t%s\n", c.ID, c.ValidFrom.UTC().Format(time.RFC3339), c.Statement)
+		a.printf("%s\t%s\t%s\n", c.ID, c.ValidFrom.UTC().Format(time.RFC3339), c.Statement)
 	}
 	return nil
 }
@@ -288,16 +288,30 @@ func (a *App) timeline(ctx context.Context, args []string) error {
 		return err
 	}
 	for _, e := range events {
-		fmt.Fprintf(a.out, "%s\t%s\t%s\n", e.At.UTC().Format(time.RFC3339), e.Type, e.Content)
+		a.printf("%s\t%s\t%s\n", e.At.UTC().Format(time.RFC3339), e.Type, e.Content)
 	}
 	return nil
+}
+
+// println writes a line to the App's output sink. Write errors on a
+// human-output sink are non-actionable for a CLI, so they are discarded.
+func (a *App) println(s string) {
+	_, _ = fmt.Fprintln(a.out, s)
+}
+
+// printf writes formatted output to the App's output sink. Write errors
+// are discarded for the same reason as [App.println].
+func (a *App) printf(format string, args ...any) {
+	_, _ = fmt.Fprintf(a.out, format, args...)
 }
 
 // multiFlag collects a repeatable string flag (e.g. --event a --event b).
 type multiFlag []string
 
+// String renders the collected values as a comma-joined list.
 func (m *multiFlag) String() string { return strings.Join(*m, ",") }
 
+// Set appends one occurrence of the flag's value.
 func (m *multiFlag) Set(v string) error {
 	*m = append(*m, v)
 	return nil

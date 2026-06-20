@@ -74,6 +74,50 @@ func TestNewHandler_RecallRoundTrip(t *testing.T) {
 	}
 }
 
+// TestNewHandler_WriteIsGoverned proves the delivery adapter does not
+// bypass the governed kernel: a remember over HTTP leaves a verifiable
+// write session on the backing store.
+func TestNewHandler_WriteIsGoverned(t *testing.T) {
+	store := newStore(t, "http_governed")
+	handler := mnemoshttp.NewHandler(store)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body, _ := json.Marshal(map[string]any{"type": "fact", "content": "Governed over HTTP."})
+	resp, err := http.Post(srv.URL+"/v1/remember", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST remember: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	ws := store.LastWriteSession()
+	if ws == nil || ws.ID() == "" {
+		t.Fatal("HTTP write left no governed session — no-bypass guarantee violated")
+	}
+	if err := ws.VerifyEvidenceChain(); err != nil {
+		t.Errorf("evidence chain broken: %v", err)
+	}
+}
+
+// TestNewHandler_ClaimWithoutEvidenceRejected proves the evidence
+// non-negotiable holds over the wire.
+func TestNewHandler_ClaimWithoutEvidenceRejected(t *testing.T) {
+	store := newStore(t, "http_no_evidence")
+	handler := mnemoshttp.NewHandler(store)
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	body, _ := json.Marshal(map[string]any{"text": "Evidence-less claim over HTTP."})
+	resp, err := http.Post(srv.URL+"/v1/claims", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST claims: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+		t.Fatalf("evidence-less claim accepted over HTTP (status %d)", resp.StatusCode)
+	}
+}
+
 // TestListenAndServe_StartsAndStops verifies the spec's
 // http.ListenAndServe convenience boots a server that answers requests.
 func TestListenAndServe_StartsAndStops(t *testing.T) {

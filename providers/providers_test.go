@@ -93,7 +93,9 @@ func TestSingleEmbedder_AsEmbedder(t *testing.T) {
 	t.Parallel()
 	single := &stubSingleEmbedder{dim: 3}
 
-	var emb providers.Embedder = providers.EmbedderFromSingle(single)
+	// EmbedderFromSingle returns providers.Embedder, so this also proves
+	// the adapter satisfies the batch interface at compile time.
+	emb := providers.EmbedderFromSingle(single)
 	out, err := emb.Embed(context.Background(), providers.EmbedInput{
 		Texts: []string{"alpha", "beta", "gamma"},
 	})
