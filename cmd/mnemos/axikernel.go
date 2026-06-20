@@ -5,27 +5,20 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 
 	"go.klarlabs.de/axi"
 	"go.klarlabs.de/axi/domain"
 	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/kernel"
 )
 
-// axiActionPrefix is the axi-go action name corresponding to each MCP
-// tool. axi-go's name regex disallows underscores, so we map at the
-// boundary: agents see `process_text` (MCP), the kernel sees
-// `process-text`. The MCP protocol surface stays unchanged.
-const axiActionPrefix = "mnemos-mcp-"
-
-// mcpTools returns the descriptors for every MCP-exposed Mnemos tool.
-// One source of truth so the kernel registration and the MCP handler
-// dispatch can't drift.
-func mcpTools() []mcpToolDescriptor {
-	return []mcpToolDescriptor{
+// mcpTools returns the kernel action descriptors for every MCP-exposed
+// Mnemos tool. One source of truth so the kernel registration and the
+// MCP handler dispatch can't drift. The descriptors reuse the library
+// [kernel.Action] shape so the MCP kernel is built by the same
+// [kernel.Build] code path as the public library writes.
+func mcpTools() []kernel.Action {
+	return []kernel.Action{
 		{Name: "query_knowledge", Effect: domain.EffectReadLocal, Idempotent: true,
 			Description: "Query the Mnemos knowledge base and return evidence-backed results."},
 		{Name: "process_text", Effect: domain.EffectWriteLocal, Idempotent: false,
@@ -47,170 +40,22 @@ func mcpTools() []mcpToolDescriptor {
 	}
 }
 
-type mcpToolDescriptor struct {
-	Name        string
-	Effect      domain.EffectLevel
-	Idempotent  bool
-	Description string
-}
-
-// axiActionName returns the axi-go-compatible action name for the
-// given MCP tool name. Centralising the conversion keeps the regex
-// dependency in one place.
+// axiActionName returns the axi-go-compatible action name for the given
+// MCP tool name. Delegates to [kernel.ActionName] so the underscore→dash
+// convention and the "mnemos-" prefix stay defined in exactly one place,
+// shared with the public library writes. The MCP protocol surface is
+// unchanged: agents still see snake_case names (e.g. `process_text`).
 func axiActionName(mcpName string) string {
-	return axiActionPrefix + strings.ReplaceAll(mcpName, "_", "-")
+	return kernel.ActionName(mcpName)
 }
 
-// buildMCPKernel builds an axi-go kernel pre-registered with every
-// MCP tool. Executors are passed in by the caller because each tool's
-// implementation has different shape — the kernel just provides the
-// uniform execution surface (effect gating, evidence chain, budget).
-//
-// The returned kernel carries the bolt logger and a publisher that
-// forwards every domain event to the same logger. Token/duration
-// budgets are read from MNEMOS_AXI_MAX_DURATION and
-// MNEMOS_AXI_MAX_INVOCATIONS; both default to permissive caps so
-// adoption doesn't break existing flows.
-func buildMCPKernel(logger *bolt.Logger, executors map[string]domain.ActionExecutor) (*axi.Kernel, error) {
-	plugin, err := newMnemosMCPPlugin()
-	if err != nil {
-		return nil, fmt.Errorf("build plugin: %w", err)
-	}
-
-	// Compose two publishers: bolt (line-protocol log every event) +
-	// optional JSONL sink (cross-session audit chain on disk; opt-in
-	// via MNEMOS_AXI_EVIDENCE_LOG). The multiplex publisher routes
-	// every event to both.
-	publishers := []domain.DomainEventPublisher{
-		boltAxiPublisher{logger: logger},
-	}
-	evidenceSink, evidenceErr := newAxiEvidenceSink("")
-	if evidenceErr != nil {
-		logger.Warn().Err(evidenceErr).Msg("axi evidence sink disabled")
-	} else if evidenceSink != nil {
-		publishers = append(publishers, evidenceSink)
-	}
-
-	kernel := axi.New().
-		WithLogger(boltAxiLogger{logger: logger}).
-		WithDomainEventPublisher(multiAxiPublisher(publishers)).
-		WithBudget(axiBudgetFromEnv())
-
-	for ref, exec := range executors {
-		kernel.RegisterActionExecutor(ref, exec)
-	}
-	if err := kernel.RegisterPlugin(plugin); err != nil {
-		return nil, fmt.Errorf("register plugin: %w", err)
-	}
-	return kernel, nil
-}
-
-// mnemosMCPPlugin is the static plugin describing every MCP tool as
-// an axi-go action. It contributes definitions only — executors are
-// registered separately so they can carry runtime state (db handles,
-// resolved actor, etc.) without leaking into the static metadata.
-type mnemosMCPPlugin struct {
-	actions []*domain.ActionDefinition
-}
-
-// Contribute satisfies domain.Plugin.
-func (p mnemosMCPPlugin) Contribute() (*domain.PluginContribution, error) {
-	return domain.NewPluginContribution("mnemos.mcp", p.actions, nil)
-}
-
-func newMnemosMCPPlugin() (mnemosMCPPlugin, error) {
-	p := mnemosMCPPlugin{}
-	for _, t := range mcpTools() {
-		name, err := domain.NewActionName(axiActionName(t.Name))
-		if err != nil {
-			return p, fmt.Errorf("invalid axi action name for %s: %w", t.Name, err)
-		}
-		action, err := domain.NewActionDefinition(
-			name,
-			t.Description,
-			domain.EmptyContract(), // typed validation happens at the MCP layer
-			domain.EmptyContract(),
-			nil,
-			domain.EffectProfile{Level: t.Effect},
-			domain.IdempotencyProfile{IsIdempotent: t.Idempotent},
-		)
-		if err != nil {
-			return p, fmt.Errorf("define action %s: %w", t.Name, err)
-		}
-		if err := action.BindExecutor(domain.ActionExecutorRef("exec." + t.Name)); err != nil {
-			return p, fmt.Errorf("bind executor for %s: %w", t.Name, err)
-		}
-		p.actions = append(p.actions, action)
-	}
-	return p, nil
-}
-
-// axiBudgetFromEnv reads MNEMOS_AXI_MAX_DURATION (Go duration string),
-// MNEMOS_AXI_MAX_INVOCATIONS (positive int), and MNEMOS_AXI_MAX_TOKENS
-// (positive int64) and returns the resulting budget. Unset / invalid
-// values fall back to permissive defaults: 5 minutes / 1000
-// invocations / unlimited tokens. Token usage is reported on a
-// Kind="llm" evidence record per process_text call (input + output
-// tokens summed), so setting MaxTokens here actually engages the
-// kernel's per-session budget enforcer.
-func axiBudgetFromEnv() axi.Budget {
-	b := axi.Budget{
-		MaxDuration:              5 * time.Minute,
-		MaxCapabilityInvocations: 1000,
-	}
-	if v := os.Getenv("MNEMOS_AXI_MAX_DURATION"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			b.MaxDuration = d
-		}
-	}
-	if v := os.Getenv("MNEMOS_AXI_MAX_INVOCATIONS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			b.MaxCapabilityInvocations = n
-		}
-	}
-	if v := os.Getenv("MNEMOS_AXI_MAX_TOKENS"); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
-			b.MaxTokens = n
-		}
-	}
-	return b
-}
-
-// boltAxiLogger adapts our existing *bolt.Logger to axi-go's
-// domain.Logger interface so the kernel's internal logging lands in
-// the same JSON stream as the MCP server's own access log.
-type boltAxiLogger struct{ logger *bolt.Logger }
-
-func (l boltAxiLogger) Debug(msg string, fields ...domain.Field) {
-	l.emit(l.logger.Debug(), msg, fields)
-}
-func (l boltAxiLogger) Info(msg string, fields ...domain.Field) {
-	l.emit(l.logger.Info(), msg, fields)
-}
-func (l boltAxiLogger) Warn(msg string, fields ...domain.Field) {
-	l.emit(l.logger.Warn(), msg, fields)
-}
-func (l boltAxiLogger) Error(msg string, fields ...domain.Field) {
-	l.emit(l.logger.Error(), msg, fields)
-}
-
-func (l boltAxiLogger) emit(ev *bolt.Event, msg string, fields []domain.Field) {
-	for _, f := range fields {
-		ev = ev.Any(f.Key, f.Value)
-	}
-	ev.Msg(msg)
-}
-
-// boltAxiPublisher fans every kernel domain event into bolt as a
-// structured "axi_event" log line. Cheap, synchronous, never blocks
-// the execution path beyond a single JSON encode.
-type boltAxiPublisher struct{ logger *bolt.Logger }
-
-func (p boltAxiPublisher) Publish(e domain.DomainEvent) {
-	p.logger.Info().
-		Str("event_type", e.EventType()).
-		Str("occurred_at", e.OccurredAt().UTC().Format(time.RFC3339Nano)).
-		Msg("axi_event")
+// buildMCPKernel builds an axi-go kernel pre-registered with every MCP
+// tool, reusing the library [kernel.Build] infrastructure (bolt logger +
+// publisher, the opt-in JSONL evidence sink via MNEMOS_AXI_EVIDENCE_LOG,
+// and the env-driven budget). Executors are passed in by the caller
+// because each tool's implementation has different shape.
+func buildMCPKernel(logger *bolt.Logger, executors map[string]domain.ActionExecutor) (*kernel.Governed, error) {
+	return kernel.Build(logger, mcpTools(), executors, kernel.BudgetFromEnv(), "")
 }
 
 // remarshal converts between two arbitrary JSON-shaped types via a
@@ -432,13 +277,13 @@ func watchFileSummary(out mcpWatchFileOutput) string {
 // The unused db parameter is reserved: future enrichment (auditing
 // invocations into a mcp_invocations table from the same DB) will
 // thread it through without changing call sites.
-func dispatchAxiTool[Out any](ctx context.Context, kernel *axi.Kernel, _ *sql.DB, mcpName string, input any) (Out, error) {
+func dispatchAxiTool[Out any](ctx context.Context, k *kernel.Governed, _ *sql.DB, mcpName string, input any) (Out, error) {
 	var zero Out
 	payload, err := toInputMap(input)
 	if err != nil {
 		return zero, fmt.Errorf("encode %s input: %w", mcpName, err)
 	}
-	res, err := kernel.Execute(ctx, axi.Invocation{
+	res, err := k.Execute(ctx, axi.Invocation{
 		Action: axiActionName(mcpName),
 		Input:  payload,
 	})

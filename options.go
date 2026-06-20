@@ -70,6 +70,20 @@ type config struct {
 	// itself (true) or accepted one from the caller (false). Drives
 	// whether [Memory.Close] also closes the engine.
 	chronosOwned bool
+
+	// tokenBudget overrides the kernel's MaxTokens cap on every write.
+	// Zero (the default) means "use the env-derived value"
+	// (MNEMOS_AXI_MAX_TOKENS, itself defaulting to unlimited). Set via
+	// [WithTokenBudget].
+	tokenBudget int64
+	// tokenBudgetSet records whether [WithTokenBudget] was called, so a
+	// caller can explicitly select an unlimited budget (0) and override
+	// a non-zero env value.
+	tokenBudgetSet bool
+	// evidenceLog overrides the kernel's JSONL audit-log path. Empty
+	// means "use MNEMOS_AXI_EVIDENCE_LOG" (itself defaulting to
+	// disabled). Set via [WithEvidenceLog].
+	evidenceLog string
 }
 
 type optionFunc func(*config)
@@ -145,6 +159,61 @@ func WithActor(userID string) Option {
 			return
 		}
 		c.actorID = userID
+	})
+}
+
+// WithTokenBudget sets a cumulative language-model token budget across
+// all governed writes on the returned [Memory]. The budget is enforced
+// in two complementary places, because a write's true model cost is only
+// known after the extraction runs:
+//
+//   - PRE-execution gate: when the budget is already exhausted (the
+//     accumulated spend has reached maxTokens), the next write is
+//     rejected BEFORE its executor runs. The model is not called and
+//     nothing is persisted — no orphaned data. The error mentions the
+//     budget.
+//
+//   - Post-hoc report: the single write that CROSSES the threshold (spend
+//     was under budget at the start, over it after) still persists, then
+//     returns a budget error reporting the breach. Its tokens weren't
+//     knowable until the work ran, so blocking it pre-execution is
+//     impossible; this is inherent, not a workaround. Subsequent writes
+//     hit the pre-execution gate above.
+//
+// The budget is cumulative for the lifetime of the Memory handle and
+// counts the per-write "llm" token spend reported on each write's
+// evidence chain (rule-based / cached writes report zero and never
+// advance it). It is independent of axi's per-write MaxTokens cap, which
+// is env-driven (MNEMOS_AXI_MAX_TOKENS) and bounds a single session's
+// spend. The duration and invocation caps remain env-driven via
+// MNEMOS_AXI_MAX_DURATION / MNEMOS_AXI_MAX_INVOCATIONS.
+//
+// Zero selects an unlimited cumulative budget. A negative value is
+// clamped to zero.
+func WithTokenBudget(maxTokens int64) Option {
+	return optionFunc(func(c *config) {
+		if maxTokens < 0 {
+			maxTokens = 0
+		}
+		c.tokenBudget = maxTokens
+		c.tokenBudgetSet = true
+	})
+}
+
+// WithEvidenceLog routes the kernel's per-write evidence chain to a JSONL
+// audit log at the given path (parent directories are created as needed).
+// The special values "-" and "stdout" route to standard output. This
+// mirrors the MNEMOS_AXI_EVIDENCE_LOG environment variable, which is used
+// when this option is not set; passing an empty string is a no-op.
+//
+// The evidence chain is always recorded in-memory on the [WriteSession]
+// regardless of this option; the log adds durable cross-session audit.
+func WithEvidenceLog(path string) Option {
+	return optionFunc(func(c *config) {
+		if path == "" {
+			return
+		}
+		c.evidenceLog = path
 	})
 }
 

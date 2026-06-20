@@ -82,6 +82,22 @@ func NewExtractor(useLLM bool) (*Extractor, error) {
 		return nil, fmt.Errorf("failed to create LLM client: %w", err)
 	}
 
+	return NewLLMExtractor(client), nil
+}
+
+// NewLLMExtractor builds an Extractor backed by the supplied LLM client
+// with token-usage capture wired in, so LastUsage reports the spend of
+// the most recent ExtractFn call. This is the shared-/enhanced-mode
+// path the public library uses; it mirrors the env-driven NewExtractor
+// path but takes an already-constructed client and never reads the
+// environment.
+//
+// Centralising the usage-sink wiring here keeps the Extractor's
+// unexported lastUsage field encapsulated in this package — callers
+// outside pipeline cannot set it, so they must build their LLM
+// extractor through this constructor to get evidence-grade token
+// accounting.
+func NewLLMExtractor(client llm.Client) *Extractor {
 	ext := &Extractor{}
 	engine := extract.NewLLMEngine(client).WithUsageSink(func(u extract.TokenUsage) {
 		// Copy the value so the pointer the engine stack-allocated
@@ -93,7 +109,7 @@ func NewExtractor(useLLM bool) (*Extractor, error) {
 		ext.lastUsage = nil
 		return engine.ExtractWithEntities(events)
 	}
-	return ext, nil
+	return ext
 }
 
 // PersistArtifacts writes events, claims, evidence links, and

@@ -13,6 +13,14 @@ policy:
   default:
     min: 50
   domains:
+    - name: kernel
+      match:
+        - ./internal/kernel/...
+      # Library-core axi governance layer. Raised toward ~90% when the
+      # governed-write fix pass added evidence-sink, session-capture,
+      # budget, and bolt-adapter coverage (actual 91.5%). Floor sits ~2pp
+      # below actual per the repo convention.
+      min: 89
     - name: cmd
       match:
         - ./cmd/...

@@ -241,7 +241,21 @@ type TimelineQuery struct {
 }
 
 // Memory is the public API of the Mnemos evidence layer. Implementations
-// are returned by [New]; all methods are safe for concurrent use.
+// are returned by [New].
+//
+// # Concurrency
+//
+// A single Memory is safe for concurrent use. Multiple goroutines may
+// call Remember, RememberClaim, RememberEvent, Recall, and Timeline at
+// the same time; each write runs as its own governed kernel session with
+// its own evidence chain, so concurrent writes never corrupt one
+// another's audit trail. [Memory.LastWriteSession] reflects whichever
+// write finished last — when several writes race, the one that completes
+// last wins the slot, so callers that must correlate a specific write
+// should read LastWriteSession immediately after that write returns
+// rather than relying on it across concurrent calls. The cumulative
+// token budget (see [WithTokenBudget]) is accounted atomically across
+// concurrent writers.
 type Memory interface {
 	// Remember stores an item of knowledge. Extraction runs the item
 	// through the configured pipeline (rule-based in passive mode,
@@ -278,6 +292,18 @@ type Memory interface {
 	// surfaced as additional events with [Event.Type] reflecting the
 	// detected pattern.
 	Timeline(ctx context.Context, q TimelineQuery) ([]Event, error)
+
+	// LastWriteSession returns the governance session recorded by the
+	// most recent write (Remember, RememberClaim, or RememberEvent) on
+	// this Memory. Every write routes through an in-process axi-go
+	// kernel; the returned [WriteSession] exposes the write's
+	// tamper-evident evidence chain and a verifier.
+	//
+	// Returns nil before any write has been performed. The session
+	// reflects the last write across all three write methods; callers
+	// that need to correlate a specific write should read this
+	// immediately after that call.
+	LastWriteSession() WriteSession
 
 	// Close releases the underlying storage handle. Safe to call more
 	// than once. Returns the first error encountered.
