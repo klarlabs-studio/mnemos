@@ -27,7 +27,7 @@ import (
 // The caller is responsible for blank-importing the storage providers
 // it needs. The simplest pattern:
 //
-//	import _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+//	import _ "go.klarlabs.de/mnemos/sqlite"
 //
 // will let the default DSN resolve. For Postgres, MySQL, libSQL, or
 // in-memory storage, blank-import the corresponding sub-package.

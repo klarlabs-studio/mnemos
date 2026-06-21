@@ -262,7 +262,7 @@ func WithLogger(logger *bolt.Logger) Option {
 // package must be blank-imported by the consuming program for the scheme
 // to be registered:
 //
-//	import _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+//	import _ "go.klarlabs.de/mnemos/sqlite"
 //
 // Equivalent to WithStorage("sqlite://" + path). Passing an empty path is
 // a no-op (the default DSN resolution applies).

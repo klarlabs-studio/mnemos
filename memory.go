@@ -37,7 +37,7 @@
 //
 //	import (
 //	    _ "go.klarlabs.de/mnemos/internal/store/memory"
-//	    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+//	    _ "go.klarlabs.de/mnemos/sqlite"
 //	    _ "go.klarlabs.de/mnemos/internal/store/postgres"
 //	)
 //
