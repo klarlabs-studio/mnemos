@@ -66,6 +66,12 @@ type DSN struct {
 	// "mnemos"), validated against `^[a-z][a-z0-9_]{0,62}$` per
 	// ADR 0001. Used as the Postgres schema name.
 	Namespace string
+
+	// Tenant is the value of ?tenant= (or the default "__default__"),
+	// validated against tenantRE. Pinned as the `mnemos.tenant` GUC on
+	// every connection; row-level security filters reads/writes to it.
+	// See ADR 0007.
+	Tenant string
 }
 
 // namespaceRE mirrors the contract from ADR 0001 §3: lowercase,
@@ -73,10 +79,18 @@ type DSN struct {
 // (Postgres identifier limit).
 var namespaceRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
 
+// tenantRE validates the tenant id (ADR 0007). Quote/backslash-free so it is safe
+// to interpolate into the `SET mnemos.tenant = '<id>'` statement.
+var tenantRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
+
 const defaultNamespace = "mnemos"
 
-// ParseDSN extracts the namespace and produces a libpq-compatible
-// DSN with the namespace query parameter stripped.
+// defaultTenant is the reserved tenant an unscoped connection uses. MUST match the
+// mnemos root package's defaultTenant so unscoped data stays reachable.
+const defaultTenant = "__default__"
+
+// ParseDSN extracts the namespace + tenant and produces a libpq-compatible
+// DSN with those query parameters stripped.
 func ParseDSN(dsn string) (DSN, error) {
 	if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
 		return DSN{}, fmt.Errorf("postgres: not a postgres dsn: %q", dsn)
@@ -94,13 +108,22 @@ func ParseDSN(dsn string) (DSN, error) {
 	if !namespaceRE.MatchString(ns) {
 		return DSN{}, fmt.Errorf("postgres: invalid namespace %q (want %s)", ns, namespaceRE.String())
 	}
+	tenant := q.Get("tenant")
+	if tenant == "" {
+		tenant = defaultTenant
+	}
+	if tenant != defaultTenant && !tenantRE.MatchString(tenant) {
+		return DSN{}, fmt.Errorf("postgres: invalid tenant %q (want %s)", tenant, tenantRE.String())
+	}
 	q.Del("namespace")
+	q.Del("tenant")
 	u.RawQuery = q.Encode()
 
 	return DSN{
 		Raw:       dsn,
 		LibpqDSN:  u.String(),
 		Namespace: ns,
+		Tenant:    tenant,
 	}, nil
 }
 
@@ -125,9 +148,17 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: parse conn config: %w", err)
 	}
-	ns := parsed.Namespace // validated by namespaceRE in ParseDSN — safe to interpolate
+	ns := parsed.Namespace  // validated by namespaceRE in ParseDSN — safe to interpolate
+	tenant := parsed.Tenant // validated by tenantRE (or the reserved default) — safe to interpolate
 	connector := stdlib.GetConnector(*connConfig, stdlib.OptionAfterConnect(func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, "SET search_path TO "+ns)
+		// Pin BOTH the schema (namespace) and the tenant on every connection.
+		// Row-level security keys off the mnemos.tenant GUC (ADR 0007), so this
+		// makes the whole pool tenant-scoped by construction — a missing GUC
+		// fails closed (RLS denies, NOT NULL rejects writes), never open.
+		if _, err := conn.Exec(ctx, "SET search_path TO "+ns); err != nil {
+			return err
+		}
+		_, err := conn.Exec(ctx, "SET mnemos.tenant = '"+tenant+"'")
 		return err
 	}))
 	db := sql.OpenDB(connector)

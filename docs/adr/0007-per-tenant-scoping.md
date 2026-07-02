@@ -1,9 +1,48 @@
 # ADR 0007: Per-Tenant Scoping Within a Namespace
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implemented:** 2026-07-02 — Postgres provider (RLS). Other backends fail closed.
 - **Date:** 2026-07-02
 - **Deciders:** Felix Geelhaar
 - **Scope:** Mnemos storage + public API. Driven by Senat-OS dogfooding.
+
+## Implementation (as shipped)
+
+The shipped design is stronger + lower-risk than the per-repo `WHERE tenant`
+predicate first sketched below: **Postgres row-level security**, so isolation is
+enforced by the database and no repository SQL was touched (a forgotten predicate
+is impossible).
+
+- **`Memory.Tenant(id string) (Memory, error)`** returns a view over the same DSN
+  with a `tenant=` parameter. It returns an **error** on any non-Postgres backend
+  (memory/sqlite/…) rather than silently sharing data — fail-closed. (The signature
+  gained an `error` vs the original sketch for exactly this.)
+- The Postgres provider pins the tenant as a per-connection GUC (`SET
+  mnemos.tenant = '<id>'`, alongside `search_path`, in the pgx `AfterConnect` hook).
+- Every tenant-scoped table (21 of them; `users`/`revoked_tokens` excluded as auth
+  infra) gets a `tenant text NOT NULL DEFAULT current_setting('mnemos.tenant', …)`
+  column, **`ENABLE` + `FORCE ROW LEVEL SECURITY`**, and a policy
+  `USING/WITH CHECK (tenant = current_setting('mnemos.tenant', true))`. The column
+  DEFAULT stamps writes; RLS filters reads/writes. Applied idempotently in
+  `schema.sql`.
+- **Fail-closed everywhere:** a connection without the GUC gets `NULL` → RLS denies
+  every row and the `NOT NULL` default rejects every insert. An unscoped `Memory`
+  uses the reserved `__default__` tenant, so pre-existing single-tenant data (which
+  backfills to `__default__`) stays reachable.
+- **`FORCE` is required** so RLS applies to the table-owning role too. **Caveat:**
+  superusers and `BYPASSRLS` roles bypass RLS unconditionally — a deployment MUST
+  connect as a non-superuser role. The isolation test skips (loudly) if the role
+  bypasses RLS.
+
+Known follow-up: `Memory.Tenant` opens its own connection pool per tenant (like the
+namespace-per-store status quo). A shared-pool mode (per-transaction `SET LOCAL`)
+is a future optimization; the RLS + GUC contract already supports it without an API
+change. Other backends (sqlite/libsql/mysql) can adopt tenant scoping later behind
+the same `Tenant()` API + isolation test; until then they fail closed.
+
+---
+
+*Original proposal (kept for context):*
 
 ## Context
 
