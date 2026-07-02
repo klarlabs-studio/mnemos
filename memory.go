@@ -342,6 +342,17 @@ type Memory interface {
 	// claim in future relationship edges or evidence links.
 	RememberClaim(ctx context.Context, claim ClaimItem) (string, error)
 
+	// RememberClaimWithEvidence is a convenience over RememberEvent +
+	// RememberClaim for the common case where evidence is a set of plain
+	// strings (source references — commit shas, urls, metric ids) rather
+	// than pre-stored event ids. It records one "observation" event per
+	// non-blank evidence string at validFrom, then stores a "fact" claim
+	// linking them, and returns the claim id. The fail-closed rule still
+	// holds: at least one non-blank evidence string is required, else it
+	// returns an error and persists nothing. validFrom defaults to now
+	// when zero.
+	RememberClaimWithEvidence(ctx context.Context, text string, evidence []string, validFrom time.Time) (string, error)
+
 	// Recall answers a query against the stored knowledge. The result
 	// is ranked by trust score (or token overlap in passive mode when
 	// no embeddings are configured) and may include claims reached by
@@ -382,9 +393,36 @@ type Memory interface {
 	// immediately after that call.
 	LastWriteSession() WriteSession
 
+	// Info reports this Memory's runtime configuration — which storage
+	// backend and namespace it opened, the operating mode, the embedder,
+	// and the actor id stamped on writes. Operators use it to confirm a
+	// deployment is backed and isolated as intended (e.g. that recall is
+	// semantic rather than lexical, or that the tenant namespace is set).
+	Info() Info
+
 	// Close releases the underlying storage handle. Safe to call more
 	// than once. Returns the first error encountered.
 	Close() error
+}
+
+// Info describes a [Memory]'s runtime configuration, returned by
+// [Memory.Info]. Every field is derived at construction and never
+// changes for the life of the Memory.
+type Info struct {
+	// Backend is the storage scheme in use: "postgres", "sqlite",
+	// "libsql", "mysql", or "memory".
+	Backend string
+	// Namespace is the tenant/namespace the store opened — a Postgres
+	// schema, a SQLite file suffix, etc. "mnemos" when unset.
+	Namespace string
+	// Mode is the operating mode: "passive", "shared", or "enhanced".
+	Mode string
+	// Embedder names the embedding source: "none" (lexical recall only),
+	// "shared" (a caller-supplied embedder), "enhanced" (a model built
+	// from ProviderConfig), or "custom".
+	Embedder string
+	// Actor is the id stamped onto every governed write.
+	Actor string
 }
 
 // Store is the spec's name for the stable, embeddable core API. It is a

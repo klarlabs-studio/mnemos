@@ -6,6 +6,40 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ## [Unreleased]
 
+Dogfooding pass driven by Senat-OS wiring mnemos as per-org worker memory.
+
+### Added
+
+- **`Memory.RememberClaimWithEvidence(ctx, text, evidence, validFrom)`** —
+  convenience over `RememberEvent` + `RememberClaim` for the common
+  "statement plus the references backing it" case: records one observation
+  event per non-blank evidence string, then a fact claim linking them, and
+  returns the claim id. Same fail-closed rule (≥1 non-blank evidence).
+- **`Memory.Info() Info`** — reports the store's runtime configuration
+  (backend, namespace, mode, embedder, actor) so operators can confirm a
+  deployment is backed and isolated as intended.
+- **ADR 0007 (Proposed): per-tenant scoping within a namespace** — design
+  for a fine-grained in-namespace tenant boundary so one store (one pool,
+  one schema) can serve many tenants.
+
+### Changed
+
+- **Postgres provider: `search_path` pinned per connection** via a pgx
+  stdlib `AfterConnect` hook, so every pooled/lazily-created connection
+  resolves to the namespace schema — not just the first.
+
+### Fixed
+
+- **`WithSQLite` relative paths** — resolved to an absolute path before
+  building the `sqlite://` DSN, so a relative path is no longer mis-parsed as
+  a URL host (which turned `./data/x` into `/data/x`).
+
+### Docs
+
+- Removed the stale "postgres provider is a scaffold" comment and deprecated
+  the `ErrNotImplemented` sentinel — the Postgres provider is production-ready
+  (verified against pgvector pg17).
+
 ## [0.18.0] — 2026-05-31
 
 Minor release covering four hardening PRs landed after v0.17.1.

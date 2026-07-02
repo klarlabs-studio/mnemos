@@ -26,10 +26,9 @@ import (
 
 	// Register storage providers with the top-level store registry so
 	// resolveDSN()/openConn() can dispatch on URL scheme. Side-effect
-	// imports only. The postgres provider is currently a scaffold — it
-	// registers the scheme and parses DSNs but Open returns
-	// ErrNotImplemented; including it here means operators get a clear
-	// error rather than "unknown provider postgres".
+	// imports only. All providers below are production-ready: sqlite,
+	// libsql, mysql, and postgres (schema-per-?namespace=, verified
+	// against pgvector pg17).
 	_ "go.klarlabs.de/mnemos/internal/store/libsql"
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
 	_ "go.klarlabs.de/mnemos/internal/store/mysql"
