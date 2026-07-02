@@ -48,7 +48,13 @@ func New(opts ...Option) (Memory, error) {
 	for _, opt := range opts {
 		opt.applyOption(&cfg)
 	}
+	return newFromCfg(cfg)
+}
 
+// newFromCfg assembles a Memory from a fully-built config. Split out from [New] so
+// [Memory.Tenant] can re-run the assembly against a tenant-scoped DSN, reusing the
+// same client/extractor/kernel wiring.
+func newFromCfg(cfg config) (Memory, error) {
 	dsn := cfg.storageDSN
 	if dsn == "" {
 		dsn = resolveDSN()
@@ -117,6 +123,8 @@ func New(opts ...Option) (Memory, error) {
 		conn:         conn,
 		actorID:      cfg.actorID,
 		info:         deriveInfo(cfg, dsn),
+		cfg:          cfg,
+		dsn:          dsn,
 		extractor:    extractor,
 		relator:      relate.NewEngine(),
 		query:        q,

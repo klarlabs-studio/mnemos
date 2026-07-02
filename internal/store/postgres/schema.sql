@@ -340,3 +340,37 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_relationships_unique_edge
   ON entity_relationships(kind, from_type, from_id, to_type, to_id);
 CREATE INDEX IF NOT EXISTS idx_entity_relationships_from ON entity_relationships(from_type, from_id);
 CREATE INDEX IF NOT EXISTS idx_entity_relationships_to   ON entity_relationships(to_type, to_id);
+
+-- ADR 0007: per-tenant isolation WITHIN a namespace. Each data table gets a
+-- `tenant` column defaulted from the `mnemos.tenant` GUC (pinned per connection by
+-- the provider), plus row-level security that filters every read/write to the
+-- current tenant. FORCE applies RLS to the owning role too (our connection), so
+-- there is no owner bypass. A connection without the GUC fails CLOSED: RLS denies
+-- reads and the NOT NULL default rejects writes — never a cross-tenant leak.
+-- Idempotent: ADD COLUMN IF NOT EXISTS + DROP/CREATE POLICY make re-runs no-ops.
+-- (users/revoked_tokens are auth infrastructure, deliberately NOT tenant-scoped.)
+DO $mnemos_rls$
+DECLARE
+  t text;
+  scoped text[] := ARRAY[
+    'events','claims','entities','claim_entities','claim_evidence','relationships',
+    'compilation_jobs','claim_status_history','embeddings','agents','actions',
+    'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
+    'playbooks','playbook_lessons','lesson_versions','playbook_versions',
+    'entity_relationships'
+  ];
+BEGIN
+  FOREACH t IN ARRAY scoped LOOP
+    IF to_regclass(t) IS NULL THEN
+      CONTINUE; -- table absent in this build
+    END IF;
+    EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS tenant text NOT NULL DEFAULT %L', t, '__default__');
+    EXECUTE format('ALTER TABLE %I ALTER COLUMN tenant SET DEFAULT current_setting(%L, true)', t, 'mnemos.tenant');
+    EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (tenant)', 'idx_' || t || '_tenant', t);
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
+    EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant = current_setting(%L, true)) WITH CHECK (tenant = current_setting(%L, true))', t, 'mnemos.tenant', 'mnemos.tenant');
+  END LOOP;
+END
+$mnemos_rls$;

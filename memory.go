@@ -400,6 +400,18 @@ type Memory interface {
 	// semantic rather than lexical, or that the tenant namespace is set).
 	Info() Info
 
+	// Tenant returns a view of this Memory scoped to a single tenant WITHIN the
+	// same namespace: reads only see, and writes only produce, that tenant's
+	// rows. Isolation is default-deny, enforced at the database (Postgres
+	// row-level security keyed on a per-connection tenant GUC), so a forgotten
+	// filter cannot leak across tenants. The returned Memory owns its own storage
+	// handle — Close it independently.
+	//
+	// Only the Postgres backend enforces tenant isolation today; on any other
+	// backend Tenant returns an error rather than silently sharing data
+	// (fail-closed). See ADR 0007.
+	Tenant(id string) (Memory, error)
+
 	// Close releases the underlying storage handle. Safe to call more
 	// than once. Returns the first error encountered.
 	Close() error

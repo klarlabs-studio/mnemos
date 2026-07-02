@@ -10,6 +10,17 @@ Dogfooding pass driven by Senat-OS wiring mnemos as per-org worker memory.
 
 ### Added
 
+- **`Memory.Tenant(id) (Memory, error)` — per-tenant isolation within a namespace
+  (ADR 0007), Postgres.** Returns a view whose reads/writes are confined to one
+  tenant, enforced **default-deny at the database** via row-level security keyed on
+  a per-connection `mnemos.tenant` GUC + `FORCE ROW LEVEL SECURITY` (no repository
+  SQL touched — a forgotten predicate is impossible). Writes auto-stamp the tenant;
+  a GUC-less connection fails closed. Non-Postgres backends return an error rather
+  than silently sharing (fail-closed). **Requires a non-superuser role** (superusers
+  bypass RLS). Existing single-tenant data backfills to a reserved `__default__`
+  tenant and stays reachable via the unscoped `Memory`.
+
+
 - **`Memory.RememberClaimWithEvidence(ctx, text, evidence, validFrom)`** —
   convenience over `RememberEvent` + `RememberClaim` for the common
   "statement plus the references backing it" case: records one observation
