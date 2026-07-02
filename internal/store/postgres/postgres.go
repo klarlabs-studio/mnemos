@@ -24,8 +24,10 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/store"
 
-	// pgx-stdlib registers the "pgx" sql.DB driver in init().
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	// pgx-stdlib registers the "pgx" sql.DB driver in init() and provides
+	// the connector + AfterConnect hook used to pin search_path per conn.
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 // schemaSQL is the in-binary copy of sql/postgres/schema.sql,
@@ -36,10 +38,11 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-// ErrNotImplemented is the historical sentinel from the scaffold
-// phase. Kept exported so existing callers that errors.Is against
-// it still compile during the cutover; once the provider proves
-// out, downstream code can stop testing for it.
+// ErrNotImplemented is a historical sentinel from the provider's
+// scaffold phase. The provider is now production-ready and nothing
+// here returns it any longer. Deprecated: retained only so downstream
+// code that still errors.Is against it compiles; stop testing for it.
+// It will be removed in a future major.
 var ErrNotImplemented = errors.New("postgres provider: feature not yet implemented")
 
 // Register the postgres provider for both common scheme aliases.
@@ -113,10 +116,21 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("pgx", parsed.LibpqDSN)
+	// Open through a connector with an AfterConnect hook that pins
+	// search_path to the namespace schema on EVERY pooled connection —
+	// so non-tx queries and lazily-created connections all resolve to the
+	// right schema, not just the first. (Repositories still qualify their
+	// tables with the namespace as a belt-and-suspenders fallback.)
+	connConfig, err := pgx.ParseConfig(parsed.LibpqDSN)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: sql.Open: %w", err)
+		return nil, fmt.Errorf("postgres: parse conn config: %w", err)
 	}
+	ns := parsed.Namespace // validated by namespaceRE in ParseDSN — safe to interpolate
+	connector := stdlib.GetConnector(*connConfig, stdlib.OptionAfterConnect(func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET search_path TO "+ns)
+		return err
+	}))
+	db := sql.OpenDB(connector)
 	tuneConnPool(db)
 
 	if err := db.PingContext(ctx); err != nil {
@@ -129,17 +143,10 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 		return nil, fmt.Errorf("postgres: bootstrap namespace %q: %w", parsed.Namespace, err)
 	}
 
-	// search_path applies per-connection; setting it on the *sql.DB
-	// after pool creation only affects the first checked-out
-	// connection. Use a SET command in a default ConnMaxIdleTime
-	// hook? Simpler: encode it in the DSN options — the pgx stdlib
-	// accepts `search_path` in the standard connection string.
-	// For now we set it in bootstrap via SET LOCAL inside the
-	// migration tx; the pool's per-conn search_path is set by
-	// applying SET search_path on every Open below as well so any
-	// pooled connection (created lazily by database/sql) sees the
-	// right schema. The cleanest fix is to wire pgx's
-	// AfterConnect hook; that's a follow-up.
+	// search_path is pinned per-connection by the AfterConnect hook wired
+	// into the connector above, so every pooled connection resolves to the
+	// namespace schema. Repositories additionally qualify their tables with
+	// the namespace as a fallback.
 
 	return &store.Conn{
 		Events:        EventRepository{db: db, ns: parsed.Namespace},

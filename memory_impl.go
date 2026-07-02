@@ -38,6 +38,7 @@ var chronosEventNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("mnemos://eve
 type memory struct {
 	conn      *store.Conn
 	actorID   string
+	info      Info // immutable runtime config snapshot, exposed via Info()
 	extractor *pipeline.Extractor
 	relator   relate.Engine
 	query     query.Engine

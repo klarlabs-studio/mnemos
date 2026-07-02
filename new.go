@@ -116,6 +116,7 @@ func New(opts ...Option) (Memory, error) {
 	m := &memory{
 		conn:         conn,
 		actorID:      cfg.actorID,
+		info:         deriveInfo(cfg, dsn),
 		extractor:    extractor,
 		relator:      relate.NewEngine(),
 		query:        q,

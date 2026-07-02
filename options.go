@@ -1,6 +1,8 @@
 package mnemos
 
 import (
+	"path/filepath"
+
 	"github.com/felixgeelhaar/chronos/embed"
 	"go.klarlabs.de/bolt"
 	"go.klarlabs.de/mnemos/providers"
@@ -45,6 +47,20 @@ type ProviderConfig struct {
 // who pass conflicting options get a clear error from [New] rather than
 // silent precedence rules.
 type mode int
+
+// String renders the mode for [Info.Mode].
+func (m mode) String() string {
+	switch m {
+	case modePassive:
+		return "passive"
+	case modeShared:
+		return "shared"
+	case modeEnhanced:
+		return "enhanced"
+	default:
+		return "unset"
+	}
+}
 
 const (
 	modeUnset mode = iota
@@ -266,10 +282,18 @@ func WithLogger(logger *bolt.Logger) Option {
 //
 // Equivalent to WithStorage("sqlite://" + path). Passing an empty path is
 // a no-op (the default DSN resolution applies).
+//
+// The path is resolved to an absolute path first, so a relative path like
+// "./data/mnemos.db" is preserved as-written (a bare "sqlite://./data/x"
+// otherwise parses the leading segment as a URL host, turning "./data/x"
+// into "/data/x").
 func WithSQLite(path string) Option {
 	return optionFunc(func(c *config) {
 		if path == "" {
 			return
+		}
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
 		}
 		c.storageDSN = "sqlite://" + path
 	})
