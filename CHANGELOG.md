@@ -8,6 +8,20 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Native claim lifecycle (promotion state).** Claims gain a `Lifecycle`
+  dimension — `candidate` → `promoted` → `superseded` (empty = uncurated
+  default) — orthogonal to `ClaimStatus` (contradiction/verification) and to
+  valid-time. A claim can be currently valid yet still only a candidate awaiting
+  human review. `ClaimItem.Lifecycle` sets it on write; `Claim.Lifecycle` reads
+  it back; `Query.Lifecycle` / `AnswerOptions.Lifecycle` narrow recall to a
+  promotion state (e.g. `promoted` → only durable, human-endorsed knowledge).
+  Empty is a no-op, so ordinary recall is unchanged. The `lifecycle` column is
+  round-tripped in the postgres, sqlite, and in-memory backends (mysql schema
+  carries the column). mnemos enforces no transitions — it is descriptive
+  metadata the consumer curates. This is the primitive a knowledge-promotion
+  loop (propose candidate → human promotes → successor supersedes) builds on,
+  replacing an external `knowledge_items`/`knowledge_candidates` split.
+
 - **Public Decision API.** `Memory.RecordDecision(ctx, Decision) (id, error)` records
   an agent decision (belief → plan → outcome audit record) through the governed write
   path (its own axi action `record_decision`, evidence-chained like the other writes);
