@@ -432,12 +432,19 @@ func (m *memory) eventToEntityState(e Event, eventID string) chronos.EntityState
 		entityKey = m.tenant + "\x00" + typ
 		meta["tenant"] = m.tenant
 	}
+	// Use the event's real numeric features when present so Chronos detects
+	// patterns on actual VALUES; fall back to the presence default (a single
+	// 1.0) so cadence is still tracked for presence-only events.
+	features := e.Features
+	if len(features) == 0 {
+		features = []float64{1.0}
+	}
 	return chronos.EntityState{
 		ID:        uuid.New(),
 		EntityID:  uuid.NewSHA1(chronosEventNamespace, []byte(entityKey)),
 		ScopeID:   m.chronosScopeID(runID),
 		Timestamp: e.At.UTC(),
-		Features:  []float64{1.0},
+		Features:  features,
 		Labels:    []string{"event"},
 		Meta:      meta,
 	}

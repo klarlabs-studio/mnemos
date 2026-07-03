@@ -354,6 +354,13 @@ type Event struct {
 	// Metadata is free-form key/value context.
 	Metadata map[string]string
 
+	// Features are optional numeric observations attached to this event, fed to
+	// the bundled Chronos engine so it can detect patterns on real VALUES (a
+	// latency, a duration, an error rate) rather than mere event presence. Empty
+	// means "presence only" — mnemos forwards a single 1.0 so cadence is still
+	// tracked. When set, these values ARE the temporal series Chronos analyses.
+	Features []float64
+
 	// RunID groups related events. Optional; empty means default run.
 	RunID string
 }
