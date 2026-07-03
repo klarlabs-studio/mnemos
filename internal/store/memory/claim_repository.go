@@ -415,6 +415,19 @@ func (r ClaimRepository) SetValidity(_ context.Context, claimID string, validTo 
 	return nil
 }
 
+// SetLifecycle transitions a claim's promotion state in place.
+func (r ClaimRepository) SetLifecycle(_ context.Context, claimID string, lifecycle domain.ClaimLifecycle) error {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	c, ok := r.state.claims[claimID]
+	if !ok {
+		return fmt.Errorf("claim %s: not found", claimID)
+	}
+	c.Lifecycle = lifecycle
+	r.state.claims[claimID] = c
+	return nil
+}
+
 // RecomputeTrust applies the supplied scoring function to every
 // stored claim and writes the result back. Returns the number of
 // claims touched.

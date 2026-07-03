@@ -68,6 +68,14 @@ type ClaimRepository interface {
 	ListStatusHistoryByClaimID(ctx context.Context, claimID string) ([]domain.ClaimStatusTransition, error)
 	SetValidity(ctx context.Context, claimID string, validTo time.Time) error
 
+	// SetLifecycle transitions an existing claim's promotion state
+	// (candidate/promoted/superseded, or empty). It is the in-place
+	// counterpart to writing Lifecycle on Upsert: a candidate claim a
+	// human promotes, or a promoted claim a successor supersedes. Returns
+	// sql.ErrNoRows-wrapped when the claim does not exist. mnemos enforces
+	// no transition ordering — any value the domain recognises is allowed.
+	SetLifecycle(ctx context.Context, claimID string, lifecycle domain.ClaimLifecycle) error
+
 	// MarkVerified bumps the claim's last_verified to verifiedAt and
 	// increments verify_count by one. Optional halfLifeDays > 0 also
 	// rewrites the claim's per-claim freshness override; pass 0 to

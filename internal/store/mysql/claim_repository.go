@@ -426,6 +426,19 @@ func (r ClaimRepository) SetValidity(ctx context.Context, claimID string, validT
 	return nil
 }
 
+// SetLifecycle transitions a claim's promotion state in place.
+func (r ClaimRepository) SetLifecycle(ctx context.Context, claimID string, lifecycle domain.ClaimLifecycle) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE claims SET lifecycle = ? WHERE id = ?`, string(lifecycle), claimID)
+	if err != nil {
+		return fmt.Errorf("set lifecycle for %s: %w", claimID, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
+	}
+	return nil
+}
+
 // RecomputeTrust applies the supplied scoring function to every
 // claim. Returns the count touched. Implements ports.TrustScorer.
 func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {

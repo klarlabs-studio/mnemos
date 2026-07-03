@@ -17,10 +17,11 @@ import (
 //	actionRememberClaim -> mnemos-remember-claim  (write-local, non-idempotent)
 //	actionRememberEvent -> mnemos-remember-event  (write-local, idempotent on event id)
 const (
-	actionRemember       = "remember"
-	actionRememberClaim  = "remember_claim"
-	actionRememberEvent  = "remember_event"
-	actionRecordDecision = "record_decision"
+	actionRemember          = "remember"
+	actionRememberClaim     = "remember_claim"
+	actionRememberEvent     = "remember_event"
+	actionRecordDecision    = "record_decision"
+	actionSetClaimLifecycle = "set_claim_lifecycle"
 )
 
 // evidenceSourceLibrary tags every library-originated evidence record so
@@ -40,6 +41,8 @@ func writeActions() []kernel.Action {
 			Description: "Append a temporal event and forward it to the temporal engine."},
 		{Name: actionRecordDecision, Effect: axidomain.EffectWriteLocal, Idempotent: false,
 			Description: "Record an agent decision (belief -> plan -> outcome audit record)."},
+		{Name: actionSetClaimLifecycle, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Transition a claim's promotion lifecycle (candidate/promoted/superseded)."},
 	}
 }
 
@@ -48,10 +51,11 @@ func writeActions() []kernel.Action {
 // write path can bypass the evidence chain + budget.
 func buildWriteKernel(m *memory, budget axi.Budget, evidenceLogPath string) (*kernel.Governed, error) {
 	executors := map[string]axidomain.ActionExecutor{
-		kernel.ExecutorRef(actionRemember):       rememberExecutor{m: m},
-		kernel.ExecutorRef(actionRememberClaim):  rememberClaimExecutor{m: m},
-		kernel.ExecutorRef(actionRememberEvent):  rememberEventExecutor{m: m},
-		kernel.ExecutorRef(actionRecordDecision): recordDecisionExecutor{m: m},
+		kernel.ExecutorRef(actionRemember):          rememberExecutor{m: m},
+		kernel.ExecutorRef(actionRememberClaim):     rememberClaimExecutor{m: m},
+		kernel.ExecutorRef(actionRememberEvent):     rememberEventExecutor{m: m},
+		kernel.ExecutorRef(actionRecordDecision):    recordDecisionExecutor{m: m},
+		kernel.ExecutorRef(actionSetClaimLifecycle): setClaimLifecycleExecutor{m: m},
 	}
 	return kernel.Build(m.logger, writeActions(), executors, budget, evidenceLogPath)
 }

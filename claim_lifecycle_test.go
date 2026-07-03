@@ -67,6 +67,46 @@ func TestClaimLifecycle_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestSetClaimLifecycle_Transition verifies the in-place lifecycle
+// transition: a candidate claim promoted to promoted, then superseded,
+// each state reading back via Get. An invalid target is rejected and an
+// unknown claim id errors.
+func TestSetClaimLifecycle_Transition(t *testing.T) {
+	mem := newReadMemory(t, "lifecycle_transition")
+	ctx := context.Background()
+
+	id := seedClaimLifecycle(t, mem, "RollOps ships on pushed version tags.", mnemos.ClaimLifecycleCandidate)
+
+	if err := mem.SetClaimLifecycle(ctx, id, mnemos.ClaimLifecyclePromoted); err != nil {
+		t.Fatalf("SetClaimLifecycle promoted: %v", err)
+	}
+	got, err := mem.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Lifecycle != mnemos.ClaimLifecyclePromoted {
+		t.Errorf("after promote, lifecycle = %q, want promoted", got.Lifecycle)
+	}
+
+	if err := mem.SetClaimLifecycle(ctx, id, mnemos.ClaimLifecycleSuperseded); err != nil {
+		t.Fatalf("SetClaimLifecycle superseded: %v", err)
+	}
+	got, err = mem.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("Get 2: %v", err)
+	}
+	if got.Lifecycle != mnemos.ClaimLifecycleSuperseded {
+		t.Errorf("after supersede, lifecycle = %q, want superseded", got.Lifecycle)
+	}
+
+	if err := mem.SetClaimLifecycle(ctx, id, mnemos.ClaimLifecycle("bogus")); err == nil {
+		t.Error("SetClaimLifecycle accepted an invalid target; want rejection")
+	}
+	if err := mem.SetClaimLifecycle(ctx, "cl_missing", mnemos.ClaimLifecyclePromoted); err == nil {
+		t.Error("SetClaimLifecycle on unknown claim returned nil; want error")
+	}
+}
+
 // TestClaimLifecycle_RejectsInvalid verifies RememberClaim rejects an
 // unrecognised lifecycle at the write boundary, so recall's lifecycle
 // filter can't be defeated by an arbitrary stored string. Empty stays valid.

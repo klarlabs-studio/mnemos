@@ -334,3 +334,41 @@ func (e recordDecisionExecutor) Execute(ctx context.Context, input any, _ axidom
 		Summary: fmt.Sprintf("recorded decision %s", id),
 	}, records, nil
 }
+
+type setClaimLifecycleInput struct {
+	ClaimID   string
+	Lifecycle ClaimLifecycle
+}
+type setClaimLifecycleOutput struct{ ClaimID string }
+
+type setClaimLifecycleExecutor struct{ m *memory }
+
+// Execute transitions an existing claim's promotion lifecycle in place. It
+// validates the target value (empty allowed) so recall's lifecycle filter
+// can't be defeated by an unrecognised state, then updates the claim row.
+func (e setClaimLifecycleExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
+	in, ok := writeInput[setClaimLifecycleInput](input)
+	if !ok {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("set_claim_lifecycle: unexpected input type %T", input)
+	}
+	claimID := strings.TrimSpace(in.ClaimID)
+	if claimID == "" {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("set_claim_lifecycle: claim id is required")
+	}
+	if !domain.IsValidClaimLifecycle(domain.ClaimLifecycle(in.Lifecycle)) {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("set_claim_lifecycle: invalid lifecycle %q (want candidate, promoted, superseded, or empty)", in.Lifecycle)
+	}
+	if err := e.m.conn.Claims.SetLifecycle(ctx, claimID, domain.ClaimLifecycle(in.Lifecycle)); err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("set claim lifecycle: %w", err)
+	}
+	records := []axidomain.EvidenceRecord{
+		{Kind: "mnemos.set_claim_lifecycle", Source: evidenceSourceLibrary, Value: map[string]any{
+			"claim_id":  claimID,
+			"lifecycle": string(in.Lifecycle),
+		}},
+	}
+	return axidomain.ExecutionResult{
+		Data:    setClaimLifecycleOutput{ClaimID: claimID},
+		Summary: fmt.Sprintf("set claim %s lifecycle to %q", claimID, in.Lifecycle),
+	}, records, nil
+}

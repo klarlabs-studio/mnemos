@@ -161,6 +161,18 @@ func (m *memory) RecordDecision(ctx context.Context, d Decision) (string, error)
 	return out.DecisionID, nil
 }
 
+// SetClaimLifecycle implements [Memory.SetClaimLifecycle].
+func (m *memory) SetClaimLifecycle(ctx context.Context, claimID string, lifecycle ClaimLifecycle) error {
+	if strings.TrimSpace(claimID) == "" {
+		return errors.New("mnemos: SetClaimLifecycle: claimID is required")
+	}
+	_, err := dispatchWrite[setClaimLifecycleOutput](ctx, m, actionSetClaimLifecycle, setClaimLifecycleInput{
+		ClaimID:   claimID,
+		Lifecycle: lifecycle,
+	})
+	return err
+}
+
 // GetDecision returns the decision with the given id, or a not-found error.
 func (m *memory) GetDecision(ctx context.Context, id string) (Decision, error) {
 	if strings.TrimSpace(id) == "" {
