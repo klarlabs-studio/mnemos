@@ -8,6 +8,15 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Numeric event features for value-based temporal detection.** `Event.Features
+  []float64` lets a caller attach real numeric observations (a latency, a duration,
+  an error rate) to an event. mnemos forwards them to the bundled Chronos engine as
+  the temporal series it analyses, so patterns are detected on actual VALUES rather
+  than mere event presence. Empty (the default) preserves the prior behaviour —
+  mnemos forwards a single `1.0` so cadence is still tracked — making the field fully
+  backward-compatible. When set, the values ARE the series Chronos sees (e.g. a
+  rising feature reads as a trend instead of a constant-presence "stall").
+
 - **Temporal signal read API.** `Memory.Signals(ctx, SignalQuery)` surfaces the
   patterns the bundled Chronos engine detects over a run's event series — trend /
   spike / stall / anomaly / seasonality and the like — as public `Signal` values
