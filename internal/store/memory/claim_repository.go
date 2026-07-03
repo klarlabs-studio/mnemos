@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"time"
@@ -411,6 +412,21 @@ func (r ClaimRepository) SetValidity(_ context.Context, claimID string, validTo 
 	} else {
 		c.ValidTo = validTo.UTC()
 	}
+	r.state.claims[claimID] = c
+	return nil
+}
+
+// SetLifecycle transitions a claim's promotion state in place.
+func (r ClaimRepository) SetLifecycle(_ context.Context, claimID string, lifecycle domain.ClaimLifecycle) error {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	c, ok := r.state.claims[claimID]
+	if !ok {
+		// Wrap sql.ErrNoRows so callers can errors.Is across every backend
+		// (the SQL backends return the same), per the SetLifecycle contract.
+		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
+	}
+	c.Lifecycle = lifecycle
 	r.state.claims[claimID] = c
 	return nil
 }

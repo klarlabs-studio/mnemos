@@ -8,8 +8,18 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
-- **Native claim lifecycle (promotion state).** Claims gain a `Lifecycle`
-  dimension — `candidate` → `promoted` → `superseded` (empty = uncurated
+- **In-place claim lifecycle transition.** `Memory.SetClaimLifecycle(ctx, claimID,
+  lifecycle)` transitions an existing claim's promotion state in place — the verb a
+  human-gated flow uses to move a `candidate` to `promoted`, or to `supersede` a
+  promoted claim, without minting a new claim id. Runs through the governed write path
+  (its own axi action `set_claim_lifecycle`, evidence-chained, idempotent), validates
+  the target value (empty allowed) so recall's lifecycle filter can't be defeated, and
+  is implemented across the postgres, sqlite, mysql, and in-memory backends. Completes
+  the promotion axis: `ClaimItem.Lifecycle` sets it on write, `SetClaimLifecycle`
+  transitions it afterwards.
+
+- **Native claim lifecycle (promotion state).** *(Shipped in v0.30.0.)* Claims gain a
+  `Lifecycle` dimension — `candidate` → `promoted` → `superseded` (empty = uncurated
   default) — orthogonal to `ClaimStatus` (contradiction/verification) and to
   valid-time. A claim can be currently valid yet still only a candidate awaiting
   human review. `ClaimItem.Lifecycle` sets it on write; `Claim.Lifecycle` reads

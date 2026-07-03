@@ -389,6 +389,20 @@ func (r ClaimRepository) SetValidity(ctx context.Context, claimID string, validT
 	})
 }
 
+// SetLifecycle transitions a claim's promotion state in place. Raw exec
+// (not sqlc) so a single-column update needs no query regeneration.
+func (r ClaimRepository) SetLifecycle(ctx context.Context, claimID string, lifecycle domain.ClaimLifecycle) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE claims SET lifecycle = ? WHERE id = ?`, string(lifecycle), claimID)
+	if err != nil {
+		return fmt.Errorf("set lifecycle for %s: %w", claimID, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
+	}
+	return nil
+}
+
 // MarkVerified bumps last_verified to verifiedAt and increments
 // verify_count. A non-zero halfLifeDays writes the per-claim
 // override; zero leaves any existing override untouched (the SQL

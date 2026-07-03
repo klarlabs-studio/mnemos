@@ -67,6 +67,9 @@ func (f fakeClaimRepo) ListByTestRequirementRef(_ context.Context, ref string) (
 func (f fakeClaimRepo) SetValidity(_ context.Context, _ string, _ time.Time) error {
 	return nil
 }
+func (f fakeClaimRepo) SetLifecycle(_ context.Context, _ string, _ domain.ClaimLifecycle) error {
+	return nil
+}
 func (f fakeClaimRepo) MarkVerified(_ context.Context, _ string, _ time.Time, _ float64) error {
 	return nil
 }

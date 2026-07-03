@@ -427,6 +427,17 @@ type Memory interface {
 	// when zero.
 	RememberClaimWithEvidence(ctx context.Context, text string, evidence []string, validFrom time.Time) (string, error)
 
+	// SetClaimLifecycle transitions an existing claim's promotion state
+	// ([ClaimLifecycleCandidate] / [ClaimLifecyclePromoted] /
+	// [ClaimLifecycleSuperseded], or empty). It is the in-place counterpart
+	// to setting [ClaimItem.Lifecycle] on write: the verb a human-gated
+	// promotion flow uses to move a candidate to promoted, or to supersede a
+	// promoted claim. Runs through the governed write path like every other
+	// mutation. Returns an error when claimID does not exist or when the
+	// lifecycle value is not recognised (empty is allowed). mnemos enforces
+	// no transition ordering — it records the state the caller asserts.
+	SetClaimLifecycle(ctx context.Context, claimID string, lifecycle ClaimLifecycle) error
+
 	// RecordDecision persists an agent decision (belief -> plan -> outcome
 	// audit record) through the governed write path and returns its id.
 	// Statement is required; RiskLevel defaults to "medium" when empty.
