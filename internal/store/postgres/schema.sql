@@ -138,10 +138,10 @@ CREATE TABLE IF NOT EXISTS claim_status_history (
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_claim_id   ON claim_status_history(claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_changed_at ON claim_status_history(changed_at);
 
--- Embeddings: bytea matches the SQLite BLOB shape today. Once the
--- Postgres provider gains a pgvector capability path, embeddings
--- will live in a parallel `embeddings_pgvector` table with a
--- vector(N) column; the bytea column stays for portability.
+-- Embeddings: bytea matches the SQLite BLOB shape and stays the portable
+-- source of truth. When pgvector is installed, a nullable `embedding
+-- public.vector` accelerator column is added below (see the $mnemos_pgvector$
+-- block) and populated on write; the bytea column is never dropped.
 CREATE TABLE IF NOT EXISTS embeddings (
   entity_id   text             NOT NULL,
   entity_type text             NOT NULL,
@@ -374,3 +374,34 @@ BEGIN
   END LOOP;
 END
 $mnemos_rls$;
+
+-- pgvector scale path (optional, detect-only). When the pgvector `vector`
+-- type is installed, mirror each embedding into a native `vector` column so
+-- recall can rank with the C-native cosine operator (`<=>`) instead of
+-- decoding every bytea blob and cosining in Go over the whole corpus.
+--
+-- DETECT ONLY — never `CREATE EXTENSION`. Mnemos connects as a non-superuser
+-- role (ADR 0007 RLS requires it), and installing an extension is a DBA/
+-- superuser concern. If the operator has installed pgvector, this adopts it;
+-- if not, the bytea path stays authoritative and nothing changes.
+--
+-- The `vector` type lives in `public`, so it is fully qualified here
+-- (`public.vector`, `to_regtype('public.vector')`) — the bootstrap tx pins
+-- search_path to the namespace only, which would otherwise hide it.
+--
+-- The bytea `vector` column remains the portable source of truth; `embedding`
+-- is a derived accelerator, (re)written on Upsert. Rows written before the
+-- extension was present (or before a re-embed) simply have a NULL `embedding`
+-- and are invisible to the native path until rewritten — recall stays correct,
+-- only narrower, exactly like the embedding-model migration story. The column
+-- is intentionally unbounded (`vector`, no dimension typmod) so a single
+-- namespace can hold multiple embedding models; an ivfflat/hnsw index (which
+-- needs a fixed dimension) is a per-deployment follow-up, not required for the
+-- C-native sequential `<=>` scan that already beats Go-side cosine.
+DO $mnemos_pgvector$
+BEGIN
+  IF to_regtype('public.vector') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding public.vector';
+  END IF;
+END
+$mnemos_pgvector$;

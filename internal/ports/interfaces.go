@@ -2,10 +2,18 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
+
+// ErrVectorSearchUnavailable is returned by an EventVectorSearcher
+// implementation whose backend cannot serve a native vector search — the
+// pgvector `vector` type is not installed, or the accelerator column has
+// not been provisioned. Callers treat it as a soft signal to fall back to
+// the in-Go cosine / token-overlap ranking path, NOT as a hard failure.
+var ErrVectorSearchUnavailable = errors.New("mnemos: native vector search unavailable")
 
 // EventRepository persists and retrieves domain events.
 type EventRepository interface {
@@ -256,6 +264,38 @@ type ClaimSimilaritySearcher interface {
 		topK int,
 		minSimilarity float64,
 	) ([]ClaimSimilarityHit, error)
+}
+
+// EventSimilarityHit is one row of a vector-similarity search over event
+// embeddings: the event id, the cosine similarity (1.0 = identical, 0.0 =
+// orthogonal), and the model the stored vector was generated with. Callers
+// compare Model against their query embedding model so a quietly-different
+// stored model can't masquerade as a match.
+type EventSimilarityHit struct {
+	EventID    string
+	Similarity float64
+	Model      string
+}
+
+// EventVectorSearcher is the optional capability to rank events by cosine
+// similarity against a query vector using a native, index-friendly vector
+// operator (pgvector `<=>`) instead of decoding every stored embedding and
+// cosining in Go. It is the scale seam for recall: the query engine
+// type-asserts on this and, when present, retrieves the top-K candidate
+// event ids by vector rather than loading the whole corpus with ListAll.
+//
+// Implementations MUST scope results to the caller's tenant (row-level
+// security handles this transparently on Postgres) and MUST return
+// ErrVectorSearchUnavailable — never a partial or wrong result — when the
+// backend has no native vector path, so the engine falls back cleanly to
+// the in-Go cosine / token-overlap ranker.
+type EventVectorSearcher interface {
+	SearchEventsByVector(
+		ctx context.Context,
+		queryVector []float32,
+		topK int,
+		minSimilarity float64,
+	) ([]EventSimilarityHit, error)
 }
 
 // TextHit is one row of a keyword search: the matched row's id and a

@@ -179,11 +179,17 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 	// namespace schema. Repositories additionally qualify their tables with
 	// the namespace as a fallback.
 
+	// Detect whether the pgvector accelerator column landed (schema.sql adds
+	// it only when the `vector` type is installed). Ground-truth the column's
+	// existence rather than re-probing the type, so a race or a manual drop
+	// can't leave Upsert writing to a missing column.
+	vectorEnabled := embeddingVectorColumnExists(ctx, db, parsed.Namespace)
+
 	return &store.Conn{
 		Events:        EventRepository{db: db, ns: parsed.Namespace},
 		Claims:        ClaimRepository{db: db, ns: parsed.Namespace},
 		Relationships: RelationshipRepository{db: db, ns: parsed.Namespace},
-		Embeddings:    EmbeddingRepository{db: db, ns: parsed.Namespace},
+		Embeddings:    EmbeddingRepository{db: db, ns: parsed.Namespace, vectorEnabled: vectorEnabled},
 		Users:         UserRepository{db: db, ns: parsed.Namespace},
 		RevokedTokens: RevokedTokenRepository{db: db, ns: parsed.Namespace},
 		Agents:        AgentRepository{db: db, ns: parsed.Namespace},
@@ -247,4 +253,20 @@ func bootstrap(ctx context.Context, db *sql.DB, namespace string) error {
 // receive the SET search_path always hit the right schema.
 func qualify(ns, table string) string {
 	return ns + "." + table
+}
+
+// embeddingVectorColumnExists reports whether the pgvector accelerator
+// column `embedding` is present on <ns>.embeddings. schema.sql adds it only
+// when the `vector` type is installed, so this is the single source of truth
+// for whether the native `<=>` recall path is available — a false keeps the
+// repository on the portable bytea + Go-cosine path. Any probe error is
+// treated as "not available" (fail safe, never fail open into a bad query).
+func embeddingVectorColumnExists(ctx context.Context, db *sql.DB, namespace string) bool {
+	var exists bool
+	err := db.QueryRowContext(ctx, `
+SELECT EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = $1 AND table_name = 'embeddings' AND column_name = 'embedding'
+)`, namespace).Scan(&exists)
+	return err == nil && exists
 }
