@@ -44,15 +44,30 @@ func TestClaimValidate(t *testing.T) {
 			wantError: true,
 		},
 		{
-			name: "invalid type",
+			// A missing type is a domain-level error. The KNOWN-type check
+			// (built-in ∪ WithClaimTypes) moved to the store write boundary, so
+			// Validate now accepts any non-empty type — a consumer's "unknown"
+			// could be a registered type; the domain can't know.
+			name: "empty type",
 			claim: Claim{
 				ID:         "c-3",
 				Text:       "x",
-				Type:       "unknown",
+				Type:       "",
 				Status:     ClaimStatusActive,
 				Confidence: 0.5,
 			},
 			wantError: true,
+		},
+		{
+			name: "non-empty custom type accepted at the domain level",
+			claim: Claim{
+				ID:         "c-4",
+				Text:       "x",
+				Type:       "knowledge",
+				Status:     ClaimStatusActive,
+				Confidence: 0.5,
+			},
+			wantError: false,
 		},
 	}
 

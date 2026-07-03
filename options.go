@@ -2,6 +2,7 @@ package mnemos
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/felixgeelhaar/chronos/embed"
 	"go.klarlabs.de/bolt"
@@ -106,6 +107,14 @@ type config struct {
 	// domain-event log. Nil (the default) keeps axi chatter off stderr.
 	// Set via [WithLogger].
 	logger *bolt.Logger
+
+	// extraClaimTypes are consumer-registered claim types accepted in
+	// addition to the built-ins (fact/hypothesis/decision/test_result). Set
+	// via [WithClaimTypes]. Empty ⇒ only the built-ins are valid (today's
+	// behaviour). This is the "configurable around what you store" seam: a
+	// consumer declares its own vocabulary (e.g. "knowledge", "incident")
+	// as first-class claim types rather than shoehorning them into a built-in.
+	extraClaimTypes []string
 }
 
 type optionFunc func(*config)
@@ -126,6 +135,28 @@ func WithPassiveMode() Option {
 		c.mode = modePassive
 		c.textGen = nil
 		c.embedder = nil
+	})
+}
+
+// WithClaimTypes registers additional claim types the store accepts, beyond the
+// built-ins ("fact", "hypothesis", "decision", "test_result"). It is the
+// extensibility seam for "configurable around what you store": a consumer whose
+// domain has its own vocabulary (e.g. "knowledge", "incident", "runbook")
+// declares those types as first-class rather than mapping them onto a built-in.
+//
+// Registered types are validated at the write boundary exactly like the
+// built-ins — a claim whose type is neither built-in nor registered is rejected,
+// so recall's type semantics can't be defeated by an arbitrary string. Blank
+// entries are ignored. Calling it more than once accumulates. mnemos does not
+// (yet) attach per-type behaviour; a registered type is a first-class claim
+// stored, recalled, and trust-scored like any other.
+func WithClaimTypes(types ...string) Option {
+	return optionFunc(func(c *config) {
+		for _, t := range types {
+			if strings.TrimSpace(t) != "" {
+				c.extraClaimTypes = append(c.extraClaimTypes, t)
+			}
+		}
 	})
 }
 

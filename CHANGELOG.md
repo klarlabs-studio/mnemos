@@ -8,6 +8,21 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Consumer-registered claim types (`WithClaimTypes`).** The extensibility seam
+  for "configurable around what you store": a consumer whose domain has its own
+  vocabulary (e.g. `knowledge`, `incident`, `runbook`) registers those as
+  first-class claim types instead of shoehorning them into a built-in. Registered
+  types are validated at the write boundary exactly like the built-ins
+  (`fact`/`hypothesis`/`decision`/`test_result`) — a type that is neither built-in
+  nor registered is still rejected, so recall's type semantics can't be defeated by
+  an arbitrary string. Empty registry ⇒ only the built-ins are valid (unchanged
+  default). Architecturally, the known-type check moved off `domain.Claim.Validate`
+  (which now only requires a non-empty type) onto the store's configured set, since
+  the domain can't see the registry. A registered type is a first-class claim —
+  stored, recalled, and trust-scored like any other; per-type behaviour (freshness,
+  recall weighting) is a future refinement.
+
+
 - **Numeric event features for value-based temporal detection.** `Event.Features
   []float64` lets a caller attach real numeric observations (a latency, a duration,
   an error rate) to an event. mnemos forwards them to the bundled Chronos engine as

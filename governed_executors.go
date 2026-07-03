@@ -157,6 +157,13 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 	if claimType == "" {
 		claimType = domain.ClaimTypeFact
 	}
+	// Reject a claim type that is neither built-in nor registered via
+	// WithClaimTypes, at the public write boundary (the single chokepoint) — so
+	// recall's type semantics can't be defeated by an arbitrary string, while a
+	// consumer's declared vocabulary is accepted as first-class.
+	if !m.isValidClaimType(claimType) {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("remember_claim: invalid claim type %q (not a built-in or a type registered via WithClaimTypes)", claimType)
+	}
 	confidence := item.Confidence
 	if confidence == 0 {
 		confidence = 1.0

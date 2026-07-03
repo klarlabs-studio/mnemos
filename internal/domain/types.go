@@ -22,6 +22,18 @@ const (
 // ClaimType categorises a claim as a fact, hypothesis, or decision.
 type ClaimType string
 
+// IsBuiltinClaimType reports whether t is one of mnemos's native claim types.
+// The store also accepts consumer types registered via WithClaimTypes; that
+// wider check lives at the write boundary (the domain can't see the registry).
+func IsBuiltinClaimType(t ClaimType) bool {
+	switch t {
+	case ClaimTypeFact, ClaimTypeHypothesis, ClaimTypeDecision, ClaimTypeTestResult:
+		return true
+	default:
+		return false
+	}
+}
+
 // Supported ClaimType values.
 const (
 	ClaimTypeFact       ClaimType = "fact"
@@ -797,10 +809,12 @@ func (c Claim) Validate() error {
 	if c.Confidence < 0 || c.Confidence > 1 {
 		return errors.New("claim confidence must be between 0 and 1")
 	}
-	switch c.Type {
-	case ClaimTypeFact, ClaimTypeHypothesis, ClaimTypeDecision, ClaimTypeTestResult:
-	default:
-		return errors.New("claim type is invalid")
+	// A type is required, but the KNOWN-type check (built-in ∪ consumer-registered
+	// via WithClaimTypes) lives at the store write boundary where the configured
+	// vocabulary is available — the domain can't see the registry. Internal
+	// writers only ever produce built-ins, so a non-empty check suffices here.
+	if strings.TrimSpace(string(c.Type)) == "" {
+		return errors.New("claim type is required")
 	}
 	if c.Type == ClaimTypeTestResult && strings.TrimSpace(c.TestID) == "" {
 		return errors.New("claim test_id is required for test_result type")
