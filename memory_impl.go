@@ -450,6 +450,21 @@ func (m *memory) eventToEntityState(e Event, eventID string) chronos.EntityState
 	}
 }
 
+// isValidClaimType reports whether t is acceptable for a write: a built-in
+// claim type, or one the consumer registered via WithClaimTypes. This is the
+// configurable-vocabulary check the write executor enforces at the boundary.
+func (m *memory) isValidClaimType(t domain.ClaimType) bool {
+	if domain.IsBuiltinClaimType(t) {
+		return true
+	}
+	for _, extra := range m.cfg.extraClaimTypes {
+		if domain.ClaimType(extra) == t {
+			return true
+		}
+	}
+	return false
+}
+
 // chronosScopeID derives the Chronos scope UUID for a run, applying the same
 // tenant mix + default-run rule eventToEntityState uses to STORE events — so
 // [Memory.Signals] reads signals from the exact scope events were written under.
