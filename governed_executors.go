@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	axidomain "go.klarlabs.de/axi/domain"
@@ -261,5 +262,67 @@ func (e rememberEventExecutor) Execute(ctx context.Context, input any, _ axidoma
 	return axidomain.ExecutionResult{
 		Data:    rememberEventOutput{EventID: id},
 		Summary: fmt.Sprintf("remembered event %s", id),
+	}, records, nil
+}
+
+type recordDecisionInput struct{ Decision Decision }
+type recordDecisionOutput struct{ DecisionID string }
+
+type recordDecisionExecutor struct{ m *memory }
+
+// Execute persists an agent decision (belief -> plan -> outcome audit
+// record) through the governed write path, generating an id and defaulting
+// ChosenAt/RiskLevel. Empty risk defaults to medium so a caller that only
+// records "what was decided" still produces a valid audit row.
+func (e recordDecisionExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
+	in, ok := writeInput[recordDecisionInput](input)
+	if !ok {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("record_decision: unexpected input type %T", input)
+	}
+	m := e.m
+	d := in.Decision
+
+	id := d.ID
+	if id == "" {
+		id = newDecisionID()
+	}
+	chosenAt := d.ChosenAt
+	if chosenAt.IsZero() {
+		chosenAt = time.Now().UTC()
+	}
+	risk := domain.RiskLevel(strings.TrimSpace(d.RiskLevel))
+	if risk == "" {
+		risk = domain.RiskLevelMedium
+	}
+	dom := domain.Decision{
+		ID:           id,
+		Statement:    d.Statement,
+		Plan:         d.Plan,
+		Reasoning:    d.Reasoning,
+		RiskLevel:    risk,
+		Beliefs:      nonBlank(d.Beliefs),
+		Alternatives: d.Alternatives,
+		OutcomeID:    strings.TrimSpace(d.OutcomeID),
+		ChosenAt:     chosenAt.UTC(),
+		CreatedBy:    m.actorID,
+		CreatedAt:    time.Now().UTC(),
+	}
+	if err := dom.Validate(); err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("record_decision: %w", err)
+	}
+	if err := m.conn.Decisions.Append(ctx, dom); err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("append decision: %w", err)
+	}
+
+	records := []axidomain.EvidenceRecord{
+		{Kind: "mnemos.record_decision", Source: evidenceSourceLibrary, Value: map[string]any{
+			"decision_id": id,
+			"risk_level":  string(dom.RiskLevel),
+			"beliefs":     len(dom.Beliefs),
+		}},
+	}
+	return axidomain.ExecutionResult{
+		Data:    recordDecisionOutput{DecisionID: id},
+		Summary: fmt.Sprintf("recorded decision %s", id),
 	}, records, nil
 }

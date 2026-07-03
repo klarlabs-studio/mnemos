@@ -17,9 +17,10 @@ import (
 //	actionRememberClaim -> mnemos-remember-claim  (write-local, non-idempotent)
 //	actionRememberEvent -> mnemos-remember-event  (write-local, idempotent on event id)
 const (
-	actionRemember      = "remember"
-	actionRememberClaim = "remember_claim"
-	actionRememberEvent = "remember_event"
+	actionRemember       = "remember"
+	actionRememberClaim  = "remember_claim"
+	actionRememberEvent  = "remember_event"
+	actionRecordDecision = "record_decision"
 )
 
 // evidenceSourceLibrary tags every library-originated evidence record so
@@ -37,6 +38,8 @@ func writeActions() []kernel.Action {
 			Description: "Persist a pre-built claim and link it to source events."},
 		{Name: actionRememberEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Append a temporal event and forward it to the temporal engine."},
+		{Name: actionRecordDecision, Effect: axidomain.EffectWriteLocal, Idempotent: false,
+			Description: "Record an agent decision (belief -> plan -> outcome audit record)."},
 	}
 }
 
@@ -45,9 +48,10 @@ func writeActions() []kernel.Action {
 // write path can bypass the evidence chain + budget.
 func buildWriteKernel(m *memory, budget axi.Budget, evidenceLogPath string) (*kernel.Governed, error) {
 	executors := map[string]axidomain.ActionExecutor{
-		kernel.ExecutorRef(actionRemember):      rememberExecutor{m: m},
-		kernel.ExecutorRef(actionRememberClaim): rememberClaimExecutor{m: m},
-		kernel.ExecutorRef(actionRememberEvent): rememberEventExecutor{m: m},
+		kernel.ExecutorRef(actionRemember):       rememberExecutor{m: m},
+		kernel.ExecutorRef(actionRememberClaim):  rememberClaimExecutor{m: m},
+		kernel.ExecutorRef(actionRememberEvent):  rememberEventExecutor{m: m},
+		kernel.ExecutorRef(actionRecordDecision): recordDecisionExecutor{m: m},
 	}
 	return kernel.Build(m.logger, writeActions(), executors, budget, evidenceLogPath)
 }
