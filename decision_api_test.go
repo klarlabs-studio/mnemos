@@ -2,20 +2,42 @@ package mnemos_test
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"go.klarlabs.de/mnemos"
 
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 // TestRecordDecision_RoundTrip proves the public Decision API: RecordDecision
 // persists through the governed write path (id generated, RiskLevel defaulted),
-// and GetDecision / ListDecisions read it back.
+// and GetDecision / ListDecisions read it back. Runs on BOTH the memory and
+// sqlite backends — the sqlite path once mis-generated its upsert SQL
+// (excluded.failed_outcome_ vs _id), which only a real sqlite write catches.
 func TestRecordDecision_RoundTrip(t *testing.T) {
-	clearMnemosEnv(t)
-	mem, err := mnemos.New(mnemos.WithStorage("memory://?namespace=dec_test"), mnemos.WithPassiveMode())
+	for _, tc := range []struct {
+		name string
+		opt  mnemos.Option
+	}{
+		{"memory", mnemos.WithStorage("memory://?namespace=dec_test")},
+		{"sqlite", nil}, // filled per-run below (needs a temp path)
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearMnemosEnv(t)
+			opt := tc.opt
+			if opt == nil {
+				opt = mnemos.WithSQLite(filepath.Join(t.TempDir(), "dec.db"))
+			}
+			runRecordDecisionRoundTrip(t, opt)
+		})
+	}
+}
+
+func runRecordDecisionRoundTrip(t *testing.T, storage mnemos.Option) {
+	mem, err := mnemos.New(storage, mnemos.WithPassiveMode())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
