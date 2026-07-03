@@ -20,6 +20,26 @@ type Client interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 }
 
+// ModelIdentifier is an optional capability a [Client] may implement to
+// report the stable id of the embedding model it produces vectors with.
+// Recall stamps this on stored vectors and filters to it so vectors from
+// different models are never compared. Discover it via [ModelIDOf].
+type ModelIdentifier interface {
+	ModelID() string
+}
+
+// ModelIDOf returns the model id a Client reports, or "" when it does not
+// implement [ModelIdentifier] (treated as a single unnamed model space).
+func ModelIDOf(c Client) string {
+	if c == nil {
+		return ""
+	}
+	if m, ok := c.(ModelIdentifier); ok {
+		return m.ModelID()
+	}
+	return ""
+}
+
 // Config holds the parameters needed to construct a Client.
 type Config struct {
 	Provider llm.Provider

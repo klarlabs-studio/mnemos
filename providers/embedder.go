@@ -34,6 +34,17 @@ type Embedder interface {
 	Embed(ctx context.Context, in EmbedInput) (EmbedOutput, error)
 }
 
+// ModelIdentifier is an optional capability an [Embedder] may implement to
+// report the stable identifier of the model it produces vectors with (e.g.
+// "voyage-3-large-256"). Mnemos stamps this id on every stored vector and
+// filters recall to the current model, so vectors produced by different
+// models are never compared (cosine across model spaces is noise). An
+// Embedder that does not implement this is treated as a single unnamed model
+// space — recall behaves exactly as before.
+type ModelIdentifier interface {
+	ModelID() string
+}
+
 // SingleEmbedder is the simple, single-text embedding signature: embed one
 // string, get one vector. It is provided for callers whose embedding
 // client only exposes a per-text call. Wrap it with [EmbedderFromSingle]
@@ -53,17 +64,30 @@ type SingleEmbedder interface {
 // The reported Model is left empty (a single-text embedder does not
 // surface a model name); ranking does not depend on it. The vector
 // dimension must still be constant across calls, per the [Embedder]
-// contract.
+// contract. Use [EmbedderFromSingleWithModel] to attach a model id so
+// recall can filter to the current model space.
 func EmbedderFromSingle(s SingleEmbedder) Embedder {
+	return EmbedderFromSingleWithModel(s, "")
+}
+
+// EmbedderFromSingleWithModel is [EmbedderFromSingle] plus a stable model
+// identifier. The returned Embedder reports model on every [EmbedOutput] and
+// implements [ModelIdentifier], so Mnemos stamps it on stored vectors and
+// filters recall to it. Pass the id your embedding model is versioned by
+// (e.g. "voyage-3-large-256"); change it whenever the model changes so old
+// vectors stop matching until re-embedded. An empty model keeps the
+// single-unnamed-space behavior of [EmbedderFromSingle].
+func EmbedderFromSingleWithModel(s SingleEmbedder, model string) Embedder {
 	if s == nil {
 		return nil
 	}
-	return singleEmbedderAdapter{single: s}
+	return singleEmbedderAdapter{single: s, model: model}
 }
 
 // singleEmbedderAdapter bridges a SingleEmbedder to the batch Embedder.
 type singleEmbedderAdapter struct {
 	single SingleEmbedder
+	model  string
 }
 
 // Embed satisfies [Embedder] by invoking the wrapped single-text embedder
@@ -77,5 +101,8 @@ func (a singleEmbedderAdapter) Embed(ctx context.Context, in EmbedInput) (EmbedO
 		}
 		vectors[i] = v
 	}
-	return EmbedOutput{Vectors: vectors}, nil
+	return EmbedOutput{Vectors: vectors, Model: a.model}, nil
 }
+
+// ModelID satisfies [ModelIdentifier]. Empty when no model id was supplied.
+func (a singleEmbedderAdapter) ModelID() string { return a.model }

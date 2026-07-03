@@ -204,7 +204,7 @@ func (e Engine) eventsByVector(ctx context.Context, question string) ([]domain.E
 	if err != nil || len(qVectors) == 0 {
 		return nil, false
 	}
-	hits, err := e.eventVectorSearch.SearchEventsByVector(ctx, qVectors[0], eventVectorTopK, 0)
+	hits, err := e.eventVectorSearch.SearchEventsByVector(ctx, qVectors[0], embedding.ModelIDOf(e.embedClient), eventVectorTopK, 0)
 	if err != nil || len(hits) == 0 {
 		return nil, false
 	}
@@ -1075,8 +1075,14 @@ func (e Engine) cosineEventScores(ctx context.Context, question string, events [
 	if err != nil || len(stored) == 0 {
 		return nil
 	}
+	// Confine to the query embedder's model space so vectors from a different
+	// model are never cosined together (empty query model = no filter).
+	qModel := embedding.ModelIDOf(e.embedClient)
 	vecByID := make(map[string][]float32, len(stored))
 	for _, rec := range stored {
+		if qModel != "" && rec.Model != qModel {
+			continue
+		}
 		vecByID[rec.EntityID] = rec.Vector
 	}
 	hasAny := false
@@ -1202,8 +1208,13 @@ func (e Engine) cosineClaimScores(ctx context.Context, question string, claims [
 	if err != nil || len(stored) == 0 {
 		return nil
 	}
+	// Confine to the query embedder's model space (empty query model = no filter).
+	qModel := embedding.ModelIDOf(e.embedClient)
 	vecByID := make(map[string][]float32, len(stored))
 	for _, rec := range stored {
+		if qModel != "" && rec.Model != qModel {
+			continue
+		}
 		vecByID[rec.EntityID] = rec.Vector
 	}
 	hasAny := false

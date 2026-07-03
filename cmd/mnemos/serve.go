@@ -955,7 +955,7 @@ func semanticSearchClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *htt
 		return
 	}
 
-	hits, err := searcher.SearchClaimsByVector(ctx, vectors[0], candidateClaimIDs, topK, minSim)
+	hits, err := searcher.SearchClaimsByVector(ctx, vectors[0], candidateClaimIDs, embedding.ModelIDOf(embedder), topK, minSim)
 	if err != nil {
 		writeInternalError(w, "similarity search", err)
 		return

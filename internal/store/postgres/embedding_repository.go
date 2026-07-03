@@ -25,6 +25,7 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 	ctx context.Context,
 	queryVector []float32,
 	candidateClaimIDs map[string]struct{},
+	queryModel string,
 	topK int,
 	minSimilarity float64,
 ) ([]ports.ClaimSimilarityHit, error) {
@@ -34,10 +35,13 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 	if candidateClaimIDs != nil && len(candidateClaimIDs) == 0 {
 		return nil, nil
 	}
+	// The model filter ($2) confines the scan to the query embedder's model
+	// space so vectors from a different model are never compared; an empty
+	// $2 disables it (single unnamed space — backward compatible).
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(
-		`SELECT entity_id, vector, model FROM %s WHERE entity_type = $1`,
+		`SELECT entity_id, vector, model FROM %s WHERE entity_type = $1 AND ($2 = '' OR model = $2)`,
 		qualify(r.ns, "embeddings"),
-	), "claim")
+	), "claim", queryModel)
 	if err != nil {
 		return nil, fmt.Errorf("list claim embeddings: %w", err)
 	}
@@ -48,9 +52,9 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 		var (
 			entityID string
 			blob     []byte
-			model    string
+			rowModel string
 		)
-		if err := rows.Scan(&entityID, &blob, &model); err != nil {
+		if err := rows.Scan(&entityID, &blob, &rowModel); err != nil {
 			return nil, fmt.Errorf("scan claim embedding: %w", err)
 		}
 		if candidateClaimIDs != nil {
@@ -73,7 +77,7 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 		hits = append(hits, ports.ClaimSimilarityHit{
 			ClaimID:    entityID,
 			Similarity: score,
-			Model:      model,
+			Model:      rowModel,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -124,6 +128,7 @@ type EmbeddingRepository struct {
 func (r EmbeddingRepository) SearchEventsByVector(
 	ctx context.Context,
 	queryVector []float32,
+	model string,
 	topK int,
 	minSimilarity float64,
 ) ([]ports.EventSimilarityHit, error) {
@@ -139,15 +144,19 @@ func (r EmbeddingRepository) SearchEventsByVector(
 	// 1 - cosine_distance = cosine_similarity. Order by distance ascending
 	// (nearest first); the LIMIT keeps the scan result bounded. entity_type
 	// and dimensions are indexed/cheap filters that also guarantee the
-	// operator only ever compares same-length vectors.
+	// operator only ever compares same-length vectors. The model filter
+	// ($4) confines the scan to the query embedder's model space so vectors
+	// from a different model are never compared; an empty $4 disables it
+	// (single unnamed space — backward compatible).
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(
 		`SELECT entity_id, model, 1 - (embedding OPERATOR(public.<=>) $1::public.vector) AS similarity
 		 FROM %s
 		 WHERE entity_type = 'event' AND embedding IS NOT NULL AND dimensions = $2
+		   AND ($4 = '' OR model = $4)
 		 ORDER BY embedding OPERATOR(public.<=>) $1::public.vector
 		 LIMIT $3`,
 		qualify(r.ns, "embeddings"),
-	), formatVector(queryVector), len(queryVector), topK)
+	), formatVector(queryVector), len(queryVector), topK, model)
 	if err != nil {
 		return nil, fmt.Errorf("vector search events: %w", err)
 	}

@@ -135,7 +135,7 @@ func TestSearchClaimsByVector_RanksByCosine(t *testing.T) {
 		t.Fatalf("upsert event: %v", err)
 	}
 
-	hits, err := repo.SearchClaimsByVector(ctx, []float32{1.0, 0.0, 0.0}, nil, 10, 0.0)
+	hits, err := repo.SearchClaimsByVector(ctx, []float32{1.0, 0.0, 0.0}, nil, "", 10, 0.0)
 	if err != nil {
 		t.Fatalf("SearchClaimsByVector: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestSearchClaimsByVector_AllowlistAndMinSimilarity(t *testing.T) {
 		"claim-allowed-perfect": {},
 		"claim-allowed-low":     {},
 	}
-	hits, err := repo.SearchClaimsByVector(ctx, []float32{1.0, 0.0, 0.0}, allow, 10, 0.9)
+	hits, err := repo.SearchClaimsByVector(ctx, []float32{1.0, 0.0, 0.0}, allow, "", 10, 0.9)
 	if err != nil {
 		t.Fatalf("SearchClaimsByVector: %v", err)
 	}
@@ -199,11 +199,45 @@ func TestSearchClaimsByVector_EmptyAllowlistFailsClosed(t *testing.T) {
 	if err := repo.Upsert(ctx, "claim-x", "claim", []float32{1.0, 0.0, 0.0}, "m", ""); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	hits, err := repo.SearchClaimsByVector(ctx, []float32{1.0, 0.0, 0.0}, map[string]struct{}{}, 10, 0.0)
+	hits, err := repo.SearchClaimsByVector(ctx, []float32{1.0, 0.0, 0.0}, map[string]struct{}{}, "", 10, 0.0)
 	if err != nil {
 		t.Fatalf("SearchClaimsByVector: %v", err)
 	}
 	if len(hits) != 0 {
 		t.Errorf("empty allowlist must match nothing, got %+v", hits)
+	}
+}
+
+// TestSearchClaimsByVector_FiltersByModel pins the model filter on the
+// local-first sqlite backend: a non-empty model confines the search to that
+// model's vectors, so a claim embedded under a different model — even with an
+// identical vector — is never returned. An empty model disables the filter.
+func TestSearchClaimsByVector_FiltersByModel(t *testing.T) {
+	db := openTestDB(t)
+	defer closeDB(db)
+
+	ctx := context.Background()
+	repo := NewEmbeddingRepository(db)
+	if err := repo.Upsert(ctx, "cl_m1", "claim", []float32{1.0, 0.0, 0.0}, "model-1", ""); err != nil {
+		t.Fatalf("upsert m1: %v", err)
+	}
+	if err := repo.Upsert(ctx, "cl_m2", "claim", []float32{1.0, 0.0, 0.0}, "model-2", ""); err != nil {
+		t.Fatalf("upsert m2: %v", err)
+	}
+
+	filtered, err := repo.SearchClaimsByVector(ctx, []float32{1.0, 0.0, 0.0}, nil, "model-1", 10, 0.0)
+	if err != nil {
+		t.Fatalf("SearchClaimsByVector(model-1): %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].ClaimID != "cl_m1" {
+		t.Fatalf("model filter should return only cl_m1, got %+v", filtered)
+	}
+
+	all, err := repo.SearchClaimsByVector(ctx, []float32{1.0, 0.0, 0.0}, nil, "", 10, 0.0)
+	if err != nil {
+		t.Fatalf("SearchClaimsByVector(no filter): %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("empty model should not filter, got %d: %+v", len(all), all)
 	}
 }

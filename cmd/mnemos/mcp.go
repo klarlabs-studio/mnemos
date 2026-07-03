@@ -1834,7 +1834,7 @@ func mcpRunSearchMemory(ctx context.Context, input mcpSearchMemoryInput) (mcpSea
 		return mcpSearchMemoryOutput{}, fmt.Errorf("embed query: provider returned empty vector")
 	}
 
-	hits, err := searcher.SearchClaimsByVector(ctx, vectors[0], candidateClaimIDs, topK, input.MinSimilarity)
+	hits, err := searcher.SearchClaimsByVector(ctx, vectors[0], candidateClaimIDs, embedding.ModelIDOf(embedder), topK, input.MinSimilarity)
 	if err != nil {
 		return mcpSearchMemoryOutput{}, fmt.Errorf("similarity search: %w", err)
 	}

@@ -96,6 +96,7 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 	_ context.Context,
 	queryVector []float32,
 	candidateClaimIDs map[string]struct{},
+	model string,
 	topK int,
 	minSimilarity float64,
 ) ([]ports.ClaimSimilarityHit, error) {
@@ -114,6 +115,10 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 			if _, ok := candidateClaimIDs[k.EntityID]; !ok {
 				continue
 			}
+		}
+		// Confine to the query embedder's model space (empty = no filter).
+		if model != "" && v.Model != model {
+			continue
 		}
 		sim, err := embedding.CosineSimilarity(queryVector, v.Vector)
 		if err != nil {
