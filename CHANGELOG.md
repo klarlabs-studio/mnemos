@@ -8,6 +8,16 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Public Decision API.** `Memory.RecordDecision(ctx, Decision) (id, error)` records
+  an agent decision (belief → plan → outcome audit record) through the governed write
+  path (its own axi action `record_decision`, evidence-chained like the other writes);
+  `Memory.GetDecision` / `Memory.ListDecisions` read it back. The new public `Decision`
+  type mirrors the internal domain (Statement required, RiskLevel defaults to "medium",
+  Beliefs = claim ids, Alternatives, OutcomeID, ChosenAt). Decisions are embedded on
+  write (entity_type `decision`) so they're semantically recallable alongside events and
+  claims. Previously decisions were only reachable via internal APIs — this makes mnemos
+  a usable home for an agent's decision audit trail.
+
 - **Per-tenant chronos isolation.** The bundled chronos temporal engine is now
   tenant-safe on a SINGLE shared engine: `RememberEvent` mixes the store's
   tenant id into the chronos `EntityID`/`ScopeID` (NUL-separated), so two

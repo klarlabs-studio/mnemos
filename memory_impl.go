@@ -142,6 +142,54 @@ func (m *memory) RememberClaim(ctx context.Context, item ClaimItem) (string, err
 	return out.ClaimID, nil
 }
 
+// RecordDecision persists an agent decision (belief -> plan -> outcome audit
+// record) through the governed write path and returns its id. Statement is
+// required; RiskLevel defaults to "medium" when empty. This is the public
+// entry point for the decision audit trail that [Memory.AuditTrail]-style
+// consumers read back via [Memory.GetDecision] / [Memory.ListDecisions].
+func (m *memory) RecordDecision(ctx context.Context, d Decision) (string, error) {
+	if strings.TrimSpace(d.Statement) == "" {
+		return "", errors.New("mnemos: RecordDecision: Statement is required")
+	}
+	out, err := dispatchWrite[recordDecisionOutput](ctx, m, actionRecordDecision, recordDecisionInput{Decision: d})
+	if err != nil {
+		return "", err
+	}
+	// Embed the decision so it is semantically recallable alongside events and
+	// claims (same async, best-effort embed-on-write path).
+	m.embedAsync(out.DecisionID, "decision", d.Statement+" "+d.Reasoning)
+	return out.DecisionID, nil
+}
+
+// GetDecision returns the decision with the given id, or a not-found error.
+func (m *memory) GetDecision(ctx context.Context, id string) (Decision, error) {
+	if strings.TrimSpace(id) == "" {
+		return Decision{}, errors.New("mnemos: GetDecision: id is required")
+	}
+	d, err := m.conn.Decisions.GetByID(ctx, id)
+	if err != nil {
+		return Decision{}, fmt.Errorf("mnemos: GetDecision: %w", err)
+	}
+	return toPublicDecision(d), nil
+}
+
+// ListDecisions returns recorded decisions (most-recent first), capped at
+// limit (0 = no cap). It is the read side of the decision audit trail.
+func (m *memory) ListDecisions(ctx context.Context, limit int) ([]Decision, error) {
+	all, err := m.conn.Decisions.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("mnemos: ListDecisions: %w", err)
+	}
+	out := make([]Decision, 0, len(all))
+	for _, d := range all {
+		out = append(out, toPublicDecision(d))
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 // Recall implements [Memory.Recall].
 func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
 	if strings.TrimSpace(q.Text) == "" {
@@ -263,6 +311,23 @@ func toPublicClaim(c domain.Claim) Claim {
 		out.ValidUntil = &vt
 	}
 	return out
+}
+
+// toPublicDecision maps the internal domain decision onto the public shape.
+func toPublicDecision(d domain.Decision) Decision {
+	return Decision{
+		ID:           d.ID,
+		Statement:    d.Statement,
+		Plan:         d.Plan,
+		Reasoning:    d.Reasoning,
+		RiskLevel:    string(d.RiskLevel),
+		Beliefs:      d.Beliefs,
+		Alternatives: d.Alternatives,
+		OutcomeID:    d.OutcomeID,
+		ChosenAt:     d.ChosenAt,
+		CreatedBy:    d.CreatedBy,
+		CreatedAt:    d.CreatedAt,
+	}
 }
 
 // RememberEvent implements [Memory.RememberEvent]. The write routes
@@ -494,6 +559,11 @@ func nonBlank(in []string) []string {
 // two goroutines call RememberClaim within the same nanosecond.
 func newClaimID() string {
 	return "cl_" + uuid.NewString()
+}
+
+// newDecisionID returns a fresh, collision-resistant decision id.
+func newDecisionID() string {
+	return "dec_" + uuid.NewString()
 }
 
 // textGenAdapter wraps a [providers.TextGenerator] to satisfy the

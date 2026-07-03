@@ -105,6 +105,35 @@ type ClaimItem struct {
 	RunID string
 }
 
+// Decision is an agent decision audit record: the belief -> plan -> outcome
+// chain behind an action, recorded via [Memory.RecordDecision] and read back
+// via [Memory.GetDecision] / [Memory.ListDecisions]. It is the durable "why
+// did we do this / were we wrong?" trail.
+type Decision struct {
+	// ID is assigned by RecordDecision when left empty.
+	ID string
+	// Statement is the decision made (required).
+	Statement string
+	// Plan is the intended course of action.
+	Plan string
+	// Reasoning explains why this decision was chosen.
+	Reasoning string
+	// RiskLevel is one of "low", "medium", "high", "critical". Empty
+	// defaults to "medium" at write time.
+	RiskLevel string
+	// Beliefs are the claim ids that were load-bearing inputs.
+	Beliefs []string
+	// Alternatives are the human-readable options considered but not chosen.
+	Alternatives []string
+	// OutcomeID links to an observed outcome once known (optional).
+	OutcomeID string
+	// ChosenAt is when the decision was made; defaults to now when zero.
+	ChosenAt time.Time
+	// CreatedBy / CreatedAt are stamped by the store (read-only on write).
+	CreatedBy string
+	CreatedAt time.Time
+}
+
 // Item is a single piece of knowledge to remember. Type and Content are
 // the only required fields; everything else is optional.
 type Item struct {
@@ -352,6 +381,18 @@ type Memory interface {
 	// returns an error and persists nothing. validFrom defaults to now
 	// when zero.
 	RememberClaimWithEvidence(ctx context.Context, text string, evidence []string, validFrom time.Time) (string, error)
+
+	// RecordDecision persists an agent decision (belief -> plan -> outcome
+	// audit record) through the governed write path and returns its id.
+	// Statement is required; RiskLevel defaults to "medium" when empty.
+	RecordDecision(ctx context.Context, d Decision) (string, error)
+
+	// GetDecision returns the decision with the given id, or a not-found error.
+	GetDecision(ctx context.Context, id string) (Decision, error)
+
+	// ListDecisions returns recorded decisions (capped at limit; 0 = no cap) —
+	// the read side of the decision audit trail.
+	ListDecisions(ctx context.Context, limit int) ([]Decision, error)
 
 	// Recall answers a query against the stored knowledge. The result
 	// is ranked by trust score (or token overlap in passive mode when
