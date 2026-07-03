@@ -6,6 +6,18 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ## [Unreleased]
 
+### Added
+
+- **Async embed-on-write.** When an embedder is configured
+  (`WithSharedProvider` / `WithEnhancedMode`), `RememberClaim` and `RememberEvent`
+  now embed the claim text / event content in the BACKGROUND and store the vector,
+  so `Recall` ranks by semantic cosine instead of falling back to token overlap.
+  Best-effort and non-blocking: it never adds latency to or fails the write (an
+  embedding is derived, recomputable state — mirrors `GenerateEmbeddings`, which
+  also upserts directly). No-op without an embedder or an embeddings repository.
+  Before this, embeddings were only produced by the separate batch
+  `GenerateEmbeddings` step, so semantic recall silently degraded to lexical.
+
 Dogfooding pass driven by Senat-OS wiring mnemos as per-org worker memory.
 
 ### Added

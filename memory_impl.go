@@ -131,6 +131,7 @@ func (m *memory) RememberClaim(ctx context.Context, item ClaimItem) (string, err
 	if err != nil {
 		return "", err
 	}
+	m.embedAsync(out.ClaimID, "claim", item.Text)
 	return out.ClaimID, nil
 }
 
@@ -269,8 +270,48 @@ func (m *memory) RememberEvent(ctx context.Context, e Event) error {
 		return errors.New("mnemos: RememberEvent: Content is required")
 	}
 	e.ID = strings.TrimSpace(e.ID)
-	_, err := dispatchWrite[rememberEventOutput](ctx, m, actionRememberEvent, rememberEventInput{Event: e})
-	return err
+	out, err := dispatchWrite[rememberEventOutput](ctx, m, actionRememberEvent, rememberEventInput{Event: e})
+	if err != nil {
+		return err
+	}
+	m.embedAsync(out.EventID, "event", e.Content)
+	return nil
+}
+
+// embedAsync embeds text and stores the vector for (entityID, entityType) in the
+// BACKGROUND, so recall can rank it semantically without adding an embedding
+// round-trip to the write path. It is:
+//
+//   - opt-in: a no-op unless an embedder is configured (WithSharedProvider /
+//     WithEnhancedMode) and the backend has an embeddings repository;
+//   - best-effort: it never blocks or fails the originating write — an embedding
+//     is derived, recomputable state (this mirrors [pipeline.GenerateEmbeddings],
+//     which also Upserts embeddings directly rather than through the write kernel);
+//   - idempotent: the upsert is keyed on (entity_id, entity_type), so a re-embed
+//     (model change, backfill) overwrites cleanly.
+func (m *memory) embedAsync(entityID, entityType, text string) {
+	if m.embedder == nil || m.conn == nil || m.conn.Embeddings == nil {
+		return
+	}
+	if entityID == "" || strings.TrimSpace(text) == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		vectors, err := m.embedder.Embed(ctx, []string{text})
+		if err != nil || len(vectors) == 0 || len(vectors[0]) == 0 {
+			if m.logger != nil {
+				m.logger.Ctx(ctx).Warn().Err(err).Str("entity_id", entityID).Str("entity_type", entityType).Msg("mnemos: async embed skipped")
+			}
+			return
+		}
+		if err := m.conn.Embeddings.Upsert(ctx, entityID, entityType, vectors[0], "", m.actorID); err != nil {
+			if m.logger != nil {
+				m.logger.Ctx(ctx).Warn().Err(err).Str("entity_id", entityID).Str("entity_type", entityType).Msg("mnemos: async embed upsert failed")
+			}
+		}
+	}()
 }
 
 // eventToEntityState maps a public mnemos.Event into a chronos.EntityState
