@@ -428,21 +428,33 @@ func (m *memory) eventToEntityState(e Event, eventID string) chronos.EntityState
 	// the NUL separator unambiguously delimits the tenant prefix from the
 	// value — a tenant-prefixed key can never equal an unscoped key.
 	entityKey := typ
-	scopeKey := runID
 	if m.tenant != "" {
 		entityKey = m.tenant + "\x00" + typ
-		scopeKey = m.tenant + "\x00" + runID
 		meta["tenant"] = m.tenant
 	}
 	return chronos.EntityState{
 		ID:        uuid.New(),
 		EntityID:  uuid.NewSHA1(chronosEventNamespace, []byte(entityKey)),
-		ScopeID:   uuid.NewSHA1(chronosEventNamespace, []byte(scopeKey)),
+		ScopeID:   m.chronosScopeID(runID),
 		Timestamp: e.At.UTC(),
 		Features:  []float64{1.0},
 		Labels:    []string{"event"},
 		Meta:      meta,
 	}
+}
+
+// chronosScopeID derives the Chronos scope UUID for a run, applying the same
+// tenant mix + default-run rule eventToEntityState uses to STORE events — so
+// [Memory.Signals] reads signals from the exact scope events were written under.
+func (m *memory) chronosScopeID(runID string) uuid.UUID {
+	if runID == "" {
+		runID = "default"
+	}
+	scopeKey := runID
+	if m.tenant != "" {
+		scopeKey = m.tenant + "\x00" + runID
+	}
+	return uuid.NewSHA1(chronosEventNamespace, []byte(scopeKey))
 }
 
 // Timeline implements [Memory.Timeline].
@@ -484,6 +496,46 @@ func (m *memory) Timeline(ctx context.Context, q TimelineQuery) ([]Event, error)
 
 	if q.Limit > 0 && len(out) > q.Limit {
 		out = out[:q.Limit]
+	}
+	return out, nil
+}
+
+// Signals implements [Memory.Signals]. It asks the bundled Chronos engine to
+// detect temporal patterns over the run's scope (recomputing from the stored
+// event series, so the read reflects everything ingested so far), then projects
+// them onto the public [Signal] shape. No Chronos wired, or nothing detected,
+// yields (nil, nil) — an empty result means "all quiet", never an error.
+func (m *memory) Signals(ctx context.Context, q SignalQuery) ([]Signal, error) {
+	if m.chronos == nil {
+		return nil, nil
+	}
+	scopeID := m.chronosScopeID(q.RunID)
+	detected, err := m.chronos.Detect(ctx, []uuid.UUID{scopeID})
+	if err != nil {
+		return nil, fmt.Errorf("mnemos: detect signals: %w", err)
+	}
+	runID := q.RunID
+	if runID == "" {
+		runID = "default"
+	}
+	out := make([]Signal, 0, len(detected))
+	for _, s := range detected {
+		if q.MinConfidence > 0 && s.Confidence < q.MinConfidence {
+			continue
+		}
+		out = append(out, Signal{
+			Pattern:     string(s.Pattern),
+			RunID:       runID,
+			Strength:    s.Strength,
+			Confidence:  s.Confidence,
+			Class:       string(s.ConfidenceClass),
+			DetectedAt:  s.DetectedAt,
+			WindowStart: s.Window.Start,
+			WindowEnd:   s.Window.End,
+		})
+		if q.Limit > 0 && len(out) == q.Limit {
+			break
+		}
 	}
 	return out, nil
 }
