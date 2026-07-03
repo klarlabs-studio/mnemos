@@ -8,6 +8,18 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Per-tenant chronos isolation.** The bundled chronos temporal engine is now
+  tenant-safe on a SINGLE shared engine: `RememberEvent` mixes the store's
+  tenant id into the chronos `EntityID`/`ScopeID` (NUL-separated), so two
+  tenants' temporal series never merge. chronos itself isolates by
+  entity/scope, not tenant, so before this a shared engine across tenants
+  (e.g. `Memory.Tenant(id)` views, which reuse the caller-supplied engine)
+  would have cross-contaminated signals. The tenant is also stamped in the
+  event metadata for downstream tenant-filtered reads. An unscoped store
+  (empty tenant) keeps the legacy keys — no behaviour change. This lets a
+  multi-tenant consumer wire one durable chronos engine and rely on mnemos for
+  tenant separation, instead of a per-tenant engine or forgoing durability.
+
 - **Model-filtered recall.** Recall now confines vector search to the query
   embedder's model space, so vectors produced by different embedding models are
   never compared (cosine across model spaces is noise). An [Embedder] may report

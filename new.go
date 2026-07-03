@@ -125,6 +125,7 @@ func newFromCfg(cfg config) (Memory, error) {
 		info:         deriveInfo(cfg, dsn),
 		cfg:          cfg,
 		dsn:          dsn,
+		tenant:       tenantFromDSN(dsn),
 		extractor:    extractor,
 		relator:      relate.NewEngine(),
 		query:        q,

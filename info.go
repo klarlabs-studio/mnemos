@@ -42,6 +42,17 @@ func parseBackendNamespace(dsn string) (backend, namespace string) {
 	return backend, namespace
 }
 
+// tenantFromDSN extracts the `tenant=` query parameter from a storage DSN,
+// or "" when absent. Used to tenant-scope the bundled chronos engine so a
+// single shared engine keeps tenants' temporal signals isolated.
+func tenantFromDSN(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return ""
+	}
+	return u.Query().Get("tenant")
+}
+
 // embedderLabel names the embedding source for [Info.Embedder].
 func embedderLabel(cfg config) string {
 	switch cfg.mode {

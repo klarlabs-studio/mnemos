@@ -36,11 +36,18 @@ var chronosEventNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("mnemos://eve
 
 // memory is the concrete implementation of [Memory] returned by [New].
 type memory struct {
-	conn      *store.Conn
-	actorID   string
-	info      Info   // immutable runtime config snapshot, exposed via Info()
-	cfg       config // retained so Tenant() can re-run the New assembly
-	dsn       string // resolved storage DSN, tenant-rewritten by Tenant()
+	conn    *store.Conn
+	actorID string
+	info    Info   // immutable runtime config snapshot, exposed via Info()
+	cfg     config // retained so Tenant() can re-run the New assembly
+	dsn     string // resolved storage DSN, tenant-rewritten by Tenant()
+	// tenant is the tenant id this view is scoped to, read from the DSN's
+	// `tenant=` param; it is "" for an unscoped store (no tenant param), which
+	// preserves the legacy chronos keys. When non-empty it is mixed into the
+	// chronos EntityID/ScopeID so a SINGLE shared chronos engine keeps tenants
+	// isolated — chronos scopes by entity/scope, not tenant, so without this
+	// two tenants' temporal signals would merge.
+	tenant    string
 	extractor *pipeline.Extractor
 	relator   relate.Engine
 	query     query.Engine
@@ -336,10 +343,22 @@ func (m *memory) eventToEntityState(e Event, eventID string) chronos.EntityState
 		}
 		meta["content_preview"] = c
 	}
+	// Tenant-scope the entity + scope keys so a single shared chronos engine
+	// never merges two tenants' series (chronos isolates by entity/scope, not
+	// tenant). Tenant ids are NUL-free (validated by tenantRE in Tenant()), so
+	// the NUL separator unambiguously delimits the tenant prefix from the
+	// value — a tenant-prefixed key can never equal an unscoped key.
+	entityKey := typ
+	scopeKey := runID
+	if m.tenant != "" {
+		entityKey = m.tenant + "\x00" + typ
+		scopeKey = m.tenant + "\x00" + runID
+		meta["tenant"] = m.tenant
+	}
 	return chronos.EntityState{
 		ID:        uuid.New(),
-		EntityID:  uuid.NewSHA1(chronosEventNamespace, []byte(typ)),
-		ScopeID:   uuid.NewSHA1(chronosEventNamespace, []byte(runID)),
+		EntityID:  uuid.NewSHA1(chronosEventNamespace, []byte(entityKey)),
+		ScopeID:   uuid.NewSHA1(chronosEventNamespace, []byte(scopeKey)),
 		Timestamp: e.At.UTC(),
 		Features:  []float64{1.0},
 		Labels:    []string{"event"},
