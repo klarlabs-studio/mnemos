@@ -8,6 +8,26 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **pgvector scale path for recall (Postgres).** When the pgvector `vector` type
+  is installed, the Postgres provider adopts a native, C-evaluated recall path:
+  a nullable `embedding vector` accelerator column is added to `embeddings`
+  (DETECT-ONLY — never `CREATE EXTENSION`, so it works as the non-superuser role
+  RLS requires), `Upsert` mirrors every vector into it, and the new
+  `ports.EventVectorSearcher` capability (`SearchEventsByVector`) ranks events
+  with the `<=>` cosine operator. The query engine type-asserts this capability
+  and, when present, pulls the top-K candidate events by vector instead of
+  loading the whole corpus with `ListAll` and cosining in Go — O(K) recall
+  instead of O(all embeddings) per query. Fully backward compatible: without the
+  extension (or on SQLite/MySQL) the searcher reports `ErrVectorSearchUnavailable`
+  and the engine falls back to the existing Go-cosine / token-overlap path. The
+  bytea `vector` column stays the portable source of truth; the accelerator is
+  derived state, repopulated on write (rows predating the extension or a re-embed
+  simply carry a NULL accelerator and are invisible to the native path until
+  rewritten — recall stays correct, only narrower). The column is intentionally
+  unbounded (multi-model namespaces); an ivfflat/hnsw index is a per-deployment
+  follow-up, not required for the C-native sequential scan that already beats
+  Go-side cosine.
+
 - **Async embed-on-write.** When an embedder is configured
   (`WithSharedProvider` / `WithEnhancedMode`), `RememberClaim` and `RememberEvent`
   now embed the claim text / event content in the BACKGROUND and store the vector,

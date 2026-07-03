@@ -34,7 +34,24 @@ type Engine struct {
 	llmClient       llm.Client
 	eventTextSearch ports.TextSearcher
 	claimTextSearch ports.TextSearcher
+	// eventVectorSearch is the optional native-vector recall path. Set from
+	// embeddings when the backing store implements EventVectorSearcher (e.g.
+	// Postgres with pgvector). When present, AnswerWithOptions fetches the
+	// top-K candidate events by vector instead of loading the whole corpus
+	// with ListAll and cosining in Go.
+	eventVectorSearch ports.EventVectorSearcher
 }
+
+// eventVectorTopK is how many candidate events the native vector path pulls
+// (ordered by cosine distance) before answerEventLimit narrows to the final
+// answer set. Generous enough that at small corpora it covers everything
+// (matching the old whole-corpus behaviour), bounded enough that at scale it
+// stays cheap.
+const eventVectorTopK = 64
+
+// answerEventLimit is how many top-ranked events feed claim resolution for a
+// single answer. Matches the long-standing rankEventsWithFallback limit.
+const answerEventLimit = 5
 
 // NewEngine returns an Engine wired to the given event, claim, and relationship stores.
 func NewEngine(events eventLister, claims ports.ClaimRepository, relationships ports.RelationshipRepository) Engine {
@@ -61,6 +78,12 @@ func (e Engine) WithIncidents(incidents ports.IncidentRepository) Engine {
 func (e Engine) WithEmbeddings(repo ports.EmbeddingRepository, client embedding.Client) Engine {
 	e.embeddings = repo
 	e.embedClient = client
+	// Adopt the native vector path when the store provides one. The type
+	// assertion is the only wiring needed — New() already hands us the
+	// concrete repository, so no separate option or constructor arg exists.
+	if vs, ok := repo.(ports.EventVectorSearcher); ok {
+		e.eventVectorSearch = vs
+	}
 	return e
 }
 
@@ -149,11 +172,64 @@ func (e Engine) Answer(question string) (domain.Answer, error) {
 // see no behavior change.
 func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.Answer, error) {
 	ctx := context.Background()
+	// Native vector fast-path: when a pgvector-backed searcher is wired,
+	// pull only the top-K candidate events by cosine distance instead of
+	// loading the entire corpus. Falls through to ListAll on any miss so
+	// behaviour is identical whenever the fast-path can't serve the query
+	// (no searcher, no embedder, extension absent, or zero vector hits).
+	if candidates, ok := e.eventsByVector(ctx, question); ok {
+		return e.answerWithEvents(ctx, question, candidates, opts, true)
+	}
 	allEvents, err := e.events.ListAll(ctx)
 	if err != nil {
 		return domain.Answer{}, fmt.Errorf("load events for query: %w", err)
 	}
-	return e.answerWithEvents(ctx, question, allEvents, opts)
+	return e.answerWithEvents(ctx, question, allEvents, opts, false)
+}
+
+// eventsByVector serves the native-vector recall path: embed the question,
+// ask the searcher for the top-K nearest event ids, then load just those
+// events. Returns ok=false — signalling the caller to fall back to ListAll —
+// whenever the path is unavailable or yields nothing: no searcher wired, no
+// embedder, an embed/search error, ErrVectorSearchUnavailable from a
+// backend without pgvector, or an empty candidate set. The returned events
+// are ordered by the searcher's cosine distance and consumed as-is (no
+// second in-Go cosine pass), so recall quality matches the whole-corpus path
+// once eventVectorTopK covers the relevant events.
+func (e Engine) eventsByVector(ctx context.Context, question string) ([]domain.Event, bool) {
+	if e.eventVectorSearch == nil || e.embedClient == nil {
+		return nil, false
+	}
+	qVectors, err := e.embedClient.Embed(ctx, []string{question})
+	if err != nil || len(qVectors) == 0 {
+		return nil, false
+	}
+	hits, err := e.eventVectorSearch.SearchEventsByVector(ctx, qVectors[0], eventVectorTopK, 0)
+	if err != nil || len(hits) == 0 {
+		return nil, false
+	}
+	ids := make([]string, 0, len(hits))
+	for _, h := range hits {
+		ids = append(ids, h.EventID)
+	}
+	events, err := e.events.ListByIDs(ctx, ids)
+	if err != nil || len(events) == 0 {
+		return nil, false
+	}
+	// ListByIDs makes no ordering promise; re-emit the events in the searcher's
+	// distance order so the caller can treat them as already-ranked and skip a
+	// second, whole-corpus cosine pass (the very cost this path exists to avoid).
+	byID := make(map[string]domain.Event, len(events))
+	for _, ev := range events {
+		byID[ev.ID] = ev
+	}
+	ranked := make([]domain.Event, 0, len(hits))
+	for _, h := range hits {
+		if ev, ok := byID[h.EventID]; ok {
+			ranked = append(ranked, ev)
+		}
+	}
+	return ranked, true
 }
 
 // AnswerForRun searches events belonging to the specified run for the best answer.
@@ -174,10 +250,17 @@ func (e Engine) AnswerForRunWithOptions(question, runID string, opts AnswerOptio
 	if len(events) == 0 {
 		return domain.Answer{AnswerText: fmt.Sprintf("No events found for run %q.", runID)}, nil
 	}
-	return e.answerWithEvents(ctx, question, events, opts)
+	return e.answerWithEvents(ctx, question, events, opts, false)
 }
 
-func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents []domain.Event, opts AnswerOptions) (domain.Answer, error) {
+// answerWithEvents resolves claims, trust, and contradictions for a set of
+// events. When preRanked is true the events are already ordered by relevance
+// (e.g. the native pgvector `<=>` fast-path) and are used as-is, truncated to
+// answerEventLimit — this skips rankEventsWithFallback, whose cosine branch
+// would otherwise reload and re-score the WHOLE event-embedding corpus in Go,
+// negating the fast-path's entire reason for existing. When false, the events
+// are the full corpus and get the hybrid BM25 + cosine rank.
+func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents []domain.Event, opts AnswerOptions, preRanked bool) (domain.Answer, error) {
 	q := strings.TrimSpace(question)
 	if q == "" {
 		return domain.Answer{}, fmt.Errorf("query question is required")
@@ -186,7 +269,15 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 		return domain.Answer{AnswerText: "No ingested events yet."}, nil
 	}
 
-	topEvents := e.rankEventsWithFallback(ctx, q, allEvents, 5)
+	var topEvents []domain.Event
+	if preRanked {
+		topEvents = allEvents
+		if len(topEvents) > answerEventLimit {
+			topEvents = topEvents[:answerEventLimit]
+		}
+	} else {
+		topEvents = e.rankEventsWithFallback(ctx, q, allEvents, answerEventLimit)
+	}
 	if len(topEvents) == 0 {
 		return domain.Answer{
 			AnswerText: fmt.Sprintf("I have %d events in the knowledge base, but none are relevant to %q. Try a different question or use --embed for semantic search.", len(allEvents), q),
