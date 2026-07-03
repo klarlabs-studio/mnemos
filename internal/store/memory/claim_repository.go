@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"time"
@@ -421,7 +422,9 @@ func (r ClaimRepository) SetLifecycle(_ context.Context, claimID string, lifecyc
 	defer r.state.mu.Unlock()
 	c, ok := r.state.claims[claimID]
 	if !ok {
-		return fmt.Errorf("claim %s: not found", claimID)
+		// Wrap sql.ErrNoRows so callers can errors.Is across every backend
+		// (the SQL backends return the same), per the SetLifecycle contract.
+		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
 	}
 	c.Lifecycle = lifecycle
 	r.state.claims[claimID] = c

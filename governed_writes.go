@@ -13,9 +13,11 @@ import (
 // Write action names. These map, via kernel.ActionName, to the
 // dash-cased axi action identifiers the kernel registers:
 //
-//	actionRemember      -> mnemos-remember        (write-local, non-idempotent)
-//	actionRememberClaim -> mnemos-remember-claim  (write-local, non-idempotent)
-//	actionRememberEvent -> mnemos-remember-event  (write-local, idempotent on event id)
+//	actionRemember          -> mnemos-remember             (write-local, non-idempotent)
+//	actionRememberClaim     -> mnemos-remember-claim       (write-local, non-idempotent)
+//	actionRememberEvent     -> mnemos-remember-event       (write-local, idempotent on event id)
+//	actionRecordDecision    -> mnemos-record-decision      (write-local, non-idempotent)
+//	actionSetClaimLifecycle -> mnemos-set-claim-lifecycle  (write-local, idempotent)
 const (
 	actionRemember          = "remember"
 	actionRememberClaim     = "remember_claim"
@@ -28,9 +30,10 @@ const (
 // an auditor can tell a public-API write from an MCP-tool write.
 const evidenceSourceLibrary = "mnemos.library"
 
-// writeActions returns the descriptors for the three governed library
-// writes. One source of truth so the kernel plugin and the executor
-// bindings can't drift.
+// writeActions returns the descriptors for every governed library write
+// (remember, remember_claim, remember_event, record_decision,
+// set_claim_lifecycle). One source of truth so the kernel plugin and the
+// executor bindings can't drift.
 func writeActions() []kernel.Action {
 	return []kernel.Action{
 		{Name: actionRemember, Effect: axidomain.EffectWriteLocal, Idempotent: false,
