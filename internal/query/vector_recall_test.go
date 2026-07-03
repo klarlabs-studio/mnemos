@@ -29,15 +29,35 @@ type spyVectorRepo struct {
 	err            error
 	called         *int
 	listByTypeCall *int
+	gotModel       *string // records the model the engine passed to the searcher
 }
 
-func (r spyVectorRepo) SearchEventsByVector(_ context.Context, _ []float32, _ int, _ float64) ([]ports.EventSimilarityHit, error) {
+func (r spyVectorRepo) SearchEventsByVector(_ context.Context, _ []float32, model string, _ int, _ float64) ([]ports.EventSimilarityHit, error) {
 	*r.called++
+	if r.gotModel != nil {
+		*r.gotModel = model
+	}
 	if r.err != nil {
 		return nil, r.err
 	}
 	return r.hits, nil
 }
+
+// modelAwareEmbedClient is a fakeEmbedClient that also reports a model id via
+// embedding.ModelIdentifier, so a test can assert the engine threads it into
+// the searcher.
+type modelAwareEmbedClient struct {
+	model string
+}
+
+func (c modelAwareEmbedClient) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, len(texts))
+	for i := range texts {
+		out[i] = []float32{0.1, 0.2, 0.3}
+	}
+	return out, nil
+}
+func (c modelAwareEmbedClient) ModelID() string { return c.model }
 
 func (spyVectorRepo) Upsert(context.Context, string, string, []float32, string, string) error {
 	return nil
@@ -151,5 +171,38 @@ func TestAnswer_FallsBackWhenVectorUnavailable(t *testing.T) {
 	}
 	if listAllCalls != 1 {
 		t.Fatalf("expected ListAll fallback exactly once, got %d", listAllCalls)
+	}
+}
+
+// TestAnswer_ThreadsEmbedderModelToSearcher proves the engine passes the query
+// embedder's model id (when it implements embedding.ModelIdentifier) down to
+// the vector searcher, so recall filters to the current model space rather than
+// comparing across models.
+func TestAnswer_ThreadsEmbedderModelToSearcher(t *testing.T) {
+	var searchCalls, listAllCalls, byIDsCalls int
+	var gotModel string
+	target := domain.Event{ID: "e1", Content: "payments latency spike from a slow query"}
+	events := spyEventRepo{
+		byID:         map[string]domain.Event{"e1": target},
+		all:          []domain.Event{target},
+		listAllCount: &listAllCalls,
+		byIDsCount:   &byIDsCalls,
+	}
+	repo := spyVectorRepo{
+		hits:     []ports.EventSimilarityHit{{EventID: "e1", Similarity: 0.9, Model: "voyage-3-large-256"}},
+		called:   &searchCalls,
+		gotModel: &gotModel,
+	}
+	engine := NewEngine(events, fakeClaimRepo{}, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}}).
+		WithEmbeddings(repo, modelAwareEmbedClient{model: "voyage-3-large-256"})
+
+	if _, err := engine.Answer("why is payments slow?"); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	if searchCalls != 1 {
+		t.Fatalf("expected native vector search to run once, got %d", searchCalls)
+	}
+	if gotModel != "voyage-3-large-256" {
+		t.Fatalf("engine must thread the embedder model id to the searcher, got %q", gotModel)
 	}
 }

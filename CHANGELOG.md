@@ -8,6 +8,20 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Model-filtered recall.** Recall now confines vector search to the query
+  embedder's model space, so vectors produced by different embedding models are
+  never compared (cosine across model spaces is noise). An [Embedder] may report
+  its model via the new `providers.ModelIdentifier` / `providers.EmbedderFromSingleWithModel`;
+  Mnemos stamps that id on every stored vector (async embed-on-write now records
+  the model instead of an empty string) and filters both the native pgvector
+  `<=>` path and the Go-cosine path to it. `SearchEventsByVector` and
+  `SearchClaimsByVector` gain a `model` parameter across all backends
+  (postgres/sqlite/mysql/memory). Fully backward compatible: an embedder that
+  reports no model id (the default) is treated as a single unnamed space and
+  recall behaves exactly as before. This lets a deployment evolve its embedding
+  model safely — old-model vectors simply stop matching until re-embedded,
+  rather than silently corrupting ranking.
+
 - **pgvector scale path for recall (Postgres).** When the pgvector `vector` type
   is installed, the Postgres provider adopts a native, C-evaluated recall path:
   a nullable `embedding vector` accelerator column is added to `embeddings`

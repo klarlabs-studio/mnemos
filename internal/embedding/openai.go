@@ -56,6 +56,10 @@ type ollamaEmbedResponse struct {
 	Embeddings [][]float32 `json:"embeddings"`
 }
 
+// ModelID satisfies [ModelIdentifier], reporting the configured model so
+// stored vectors are stamped and recall filters to this model space.
+func (c *OpenAIEmbedder) ModelID() string { return c.model }
+
 // Embed generates embeddings for the given texts using the OpenAI embeddings API.
 func (c *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {

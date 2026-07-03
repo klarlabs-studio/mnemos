@@ -261,6 +261,7 @@ type ClaimSimilaritySearcher interface {
 		ctx context.Context,
 		queryVector []float32,
 		candidateClaimIDs map[string]struct{},
+		model string,
 		topK int,
 		minSimilarity float64,
 	) ([]ClaimSimilarityHit, error)
@@ -293,6 +294,7 @@ type EventVectorSearcher interface {
 	SearchEventsByVector(
 		ctx context.Context,
 		queryVector []float32,
+		model string,
 		topK int,
 		minSimilarity float64,
 	) ([]EventSimilarityHit, error)

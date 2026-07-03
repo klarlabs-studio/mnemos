@@ -15,7 +15,7 @@ import (
 // `<=>` operator on a pgvector/pgvector image.
 func requireVectorSearcher(t *testing.T, s ports.EventVectorSearcher) {
 	t.Helper()
-	_, err := s.SearchEventsByVector(context.Background(), []float32{0, 0, 0}, 1, 0)
+	_, err := s.SearchEventsByVector(context.Background(), []float32{0, 0, 0}, "", 1, 0)
 	if errors.Is(err, ports.ErrVectorSearchUnavailable) {
 		t.Skip("pgvector not installed on TEST_POSTGRES_DSN; skipping native vector search test")
 	}
@@ -46,7 +46,7 @@ func TestSearchEventsByVector_RanksByCosine(t *testing.T) {
 	upsert("e_mid", []float32{0.7, 0.7, 0})
 	upsert("e_far", []float32{0, 0, 1})
 
-	hits, err := searcher.SearchEventsByVector(ctx, []float32{1, 0, 0}, 10, 0)
+	hits, err := searcher.SearchEventsByVector(ctx, []float32{1, 0, 0}, "", 10, 0)
 	if err != nil {
 		t.Fatalf("SearchEventsByVector: %v", err)
 	}
@@ -89,11 +89,48 @@ func TestSearchEventsByVector_FiltersByDimension(t *testing.T) {
 		t.Fatalf("Upsert 5d: %v", err)
 	}
 
-	hits, err := searcher.SearchEventsByVector(ctx, []float32{1, 0, 0}, 10, 0)
+	hits, err := searcher.SearchEventsByVector(ctx, []float32{1, 0, 0}, "", 10, 0)
 	if err != nil {
 		t.Fatalf("SearchEventsByVector (3d query): %v", err)
 	}
 	if len(hits) != 1 || hits[0].EventID != "e_3d" {
 		t.Fatalf("dimension filter should return only the 3d event, got %+v", hits)
+	}
+}
+
+// TestSearchEventsByVector_FiltersByModel proves the model guard: a non-empty
+// model confines the native `<=>` scan to that model's vectors, so an event
+// embedded under a different model — identical vector — is invisible. An empty
+// model disables the filter.
+func TestSearchEventsByVector_FiltersByModel(t *testing.T) {
+	conn := withConn(t)
+	searcher, ok := conn.Embeddings.(ports.EventVectorSearcher)
+	if !ok {
+		t.Fatal("postgres EmbeddingRepository must implement ports.EventVectorSearcher")
+	}
+	requireVectorSearcher(t, searcher)
+
+	ctx := context.Background()
+	if err := conn.Embeddings.Upsert(ctx, "e_m1", "event", []float32{1, 0, 0}, "model-1", "tester"); err != nil {
+		t.Fatalf("Upsert m1: %v", err)
+	}
+	if err := conn.Embeddings.Upsert(ctx, "e_m2", "event", []float32{1, 0, 0}, "model-2", "tester"); err != nil {
+		t.Fatalf("Upsert m2: %v", err)
+	}
+
+	filtered, err := searcher.SearchEventsByVector(ctx, []float32{1, 0, 0}, "model-1", 10, 0)
+	if err != nil {
+		t.Fatalf("SearchEventsByVector(model-1): %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].EventID != "e_m1" {
+		t.Fatalf("model filter should return only e_m1, got %+v", filtered)
+	}
+
+	all, err := searcher.SearchEventsByVector(ctx, []float32{1, 0, 0}, "", 10, 0)
+	if err != nil {
+		t.Fatalf("SearchEventsByVector(no filter): %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("empty model should not filter, got %d: %+v", len(all), all)
 	}
 }

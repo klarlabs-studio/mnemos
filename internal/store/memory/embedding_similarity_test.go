@@ -52,6 +52,7 @@ func TestMemory_SearchClaimsByVector_RanksByCosine(t *testing.T) {
 		context.Background(),
 		[]float32{1.0, 0.0, 0.0},
 		nil,
+		"",
 		10,
 		0.0,
 	)
@@ -89,6 +90,7 @@ func TestMemory_SearchClaimsByVector_RespectsCandidateAllowlist(t *testing.T) {
 		context.Background(),
 		[]float32{1.0, 0.0, 0.0},
 		allow,
+		"",
 		10,
 		0.0,
 	)
@@ -118,6 +120,7 @@ func TestMemory_SearchClaimsByVector_MinSimilarityFilters(t *testing.T) {
 		context.Background(),
 		[]float32{1.0, 0.0, 0.0},
 		nil,
+		"",
 		10,
 		0.9,
 	)
@@ -145,6 +148,7 @@ func TestMemory_SearchClaimsByVector_TopKBounded(t *testing.T) {
 		context.Background(),
 		[]float32{1.0, 0.0, 0.0},
 		nil,
+		"",
 		2,
 		0.0,
 	)
@@ -170,6 +174,7 @@ func TestMemory_SearchClaimsByVector_IgnoresNonClaimEntities(t *testing.T) {
 		context.Background(),
 		[]float32{1.0, 0.0, 0.0},
 		nil,
+		"",
 		10,
 		0.0,
 	)
@@ -194,6 +199,7 @@ func TestMemory_SearchClaimsByVector_EmptyAllowlistMatchesNothing(t *testing.T) 
 		context.Background(),
 		[]float32{1.0, 0.0, 0.0},
 		map[string]struct{}{},
+		"",
 		10,
 		0.0,
 	)
@@ -202,5 +208,41 @@ func TestMemory_SearchClaimsByVector_EmptyAllowlistMatchesNothing(t *testing.T) 
 	}
 	if len(hits) != 0 {
 		t.Errorf("empty allowlist must match nothing, got %+v", hits)
+	}
+}
+
+// TestMemory_SearchClaimsByVector_FiltersByModel pins the model filter: a
+// non-empty model confines the search to that model's vectors, so a claim
+// embedded under a different model — even with an identical vector — is never
+// returned (cosine across model spaces is noise). An empty model disables the
+// filter and both are visible.
+func TestMemory_SearchClaimsByVector_FiltersByModel(t *testing.T) {
+	conn := openSim(t)
+	seed := func(id, model string) {
+		if err := conn.Embeddings.Upsert(context.Background(), id, "claim", []float32{1.0, 0.0, 0.0}, model, "test-actor"); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	seed("cl_m1", "model-1")
+	seed("cl_m2", "model-2")
+
+	// Filtered to model-1: only cl_m1, despite identical vectors.
+	hits, err := searcher(t, conn).SearchClaimsByVector(
+		context.Background(), []float32{1.0, 0.0, 0.0}, nil, "model-1", 10, 0.0)
+	if err != nil {
+		t.Fatalf("SearchClaimsByVector(model-1): %v", err)
+	}
+	if len(hits) != 1 || hits[0].ClaimID != "cl_m1" {
+		t.Fatalf("model filter should return only cl_m1, got %+v", hits)
+	}
+
+	// Empty model: no filter, both visible.
+	all, err := searcher(t, conn).SearchClaimsByVector(
+		context.Background(), []float32{1.0, 0.0, 0.0}, nil, "", 10, 0.0)
+	if err != nil {
+		t.Fatalf("SearchClaimsByVector(no filter): %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("empty model should not filter, got %d hits: %+v", len(all), all)
 	}
 }

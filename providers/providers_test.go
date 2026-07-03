@@ -136,3 +136,39 @@ func TestEmbedder_Adapter_Satisfies_Interface(t *testing.T) {
 		t.Errorf("Model = %q, want stub-emb-v1", out.Model)
 	}
 }
+
+// singleVec is a trivial SingleEmbedder for the model-id tests.
+type singleVec struct{}
+
+func (singleVec) Embed(_ context.Context, _ string) ([]float32, error) {
+	return []float32{1, 0, 0}, nil
+}
+
+// TestEmbedderFromSingleWithModel_ReportsModel verifies the model id flows
+// through both EmbedOutput.Model and the ModelIdentifier capability, so
+// Mnemos can stamp + filter recall by it. The plain EmbedderFromSingle
+// remains unnamed (empty model) for backward compatibility.
+func TestEmbedderFromSingleWithModel_ReportsModel(t *testing.T) {
+	t.Parallel()
+	withModel := providers.EmbedderFromSingleWithModel(singleVec{}, "voyage-3-large-256")
+	out, err := withModel.Embed(context.Background(), providers.EmbedInput{Texts: []string{"x"}})
+	if err != nil {
+		t.Fatalf("Embed: %v", err)
+	}
+	if out.Model != "voyage-3-large-256" {
+		t.Fatalf("EmbedOutput.Model = %q, want voyage-3-large-256", out.Model)
+	}
+	mi, ok := withModel.(providers.ModelIdentifier)
+	if !ok {
+		t.Fatal("model-aware embedder must implement providers.ModelIdentifier")
+	}
+	if mi.ModelID() != "voyage-3-large-256" {
+		t.Fatalf("ModelID() = %q, want voyage-3-large-256", mi.ModelID())
+	}
+
+	// Plain constructor: unnamed space (empty model).
+	plain := providers.EmbedderFromSingle(singleVec{})
+	if pm, ok := plain.(providers.ModelIdentifier); ok && pm.ModelID() != "" {
+		t.Fatalf("EmbedderFromSingle must report empty model, got %q", pm.ModelID())
+	}
+}

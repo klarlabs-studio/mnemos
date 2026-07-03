@@ -19,6 +19,7 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 	ctx context.Context,
 	queryVector []float32,
 	candidateClaimIDs map[string]struct{},
+	model string,
 	topK int,
 	minSimilarity float64,
 ) ([]ports.ClaimSimilarityHit, error) {
@@ -28,7 +29,12 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 	if candidateClaimIDs != nil && len(candidateClaimIDs) == 0 {
 		return nil, nil
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT entity_id, vector, model FROM embeddings WHERE entity_type = ?`, "claim")
+	// The model filter confines the scan to the query embedder's model space
+	// so vectors from a different model are never compared; an empty model
+	// disables it (single unnamed space — backward compatible).
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT entity_id, vector, model FROM embeddings WHERE entity_type = ? AND (? = '' OR model = ?)`,
+		"claim", model, model)
 	if err != nil {
 		return nil, fmt.Errorf("list claim embeddings: %w", err)
 	}
@@ -39,9 +45,9 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 		var (
 			entityID string
 			blob     []byte
-			model    string
+			rowModel string
 		)
-		if err := rows.Scan(&entityID, &blob, &model); err != nil {
+		if err := rows.Scan(&entityID, &blob, &rowModel); err != nil {
 			return nil, fmt.Errorf("scan claim embedding: %w", err)
 		}
 		if candidateClaimIDs != nil {
@@ -64,7 +70,7 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 		hits = append(hits, ports.ClaimSimilarityHit{
 			ClaimID:    entityID,
 			Similarity: score,
-			Model:      model,
+			Model:      rowModel,
 		})
 	}
 	if err := rows.Err(); err != nil {

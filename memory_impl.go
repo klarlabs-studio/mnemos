@@ -306,7 +306,7 @@ func (m *memory) embedAsync(entityID, entityType, text string) {
 			}
 			return
 		}
-		if err := m.conn.Embeddings.Upsert(ctx, entityID, entityType, vectors[0], "", m.actorID); err != nil {
+		if err := m.conn.Embeddings.Upsert(ctx, entityID, entityType, vectors[0], embedding.ModelIDOf(m.embedder), m.actorID); err != nil {
 			if m.logger != nil {
 				m.logger.Ctx(ctx).Warn().Err(err).Str("entity_id", entityID).Str("entity_type", entityType).Msg("mnemos: async embed upsert failed")
 			}
@@ -529,4 +529,14 @@ func (a *embedderAdapter) Embed(ctx context.Context, texts []string) ([][]float3
 		return nil, err
 	}
 	return out.Vectors, nil
+}
+
+// ModelID satisfies embedding.ModelIdentifier by forwarding the wrapped
+// provider's model id when it reports one (providers.ModelIdentifier), so
+// recall can stamp + filter by model. Empty when the provider is unnamed.
+func (a *embedderAdapter) ModelID() string {
+	if mi, ok := a.e.(providers.ModelIdentifier); ok {
+		return mi.ModelID()
+	}
+	return ""
 }
