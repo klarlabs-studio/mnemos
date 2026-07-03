@@ -170,6 +170,7 @@ type storedClaim struct {
 	HalfLifeDays         float64
 	Scope                domain.Scope
 	ConfidenceComponents map[string]float64
+	Lifecycle            domain.ClaimLifecycle
 }
 
 func (c storedClaim) toDomain() domain.Claim {
@@ -196,6 +197,7 @@ func (c storedClaim) toDomain() domain.Claim {
 		HalfLifeDays:         c.HalfLifeDays,
 		Scope:                c.Scope,
 		ConfidenceComponents: components,
+		Lifecycle:            c.Lifecycle,
 	}
 }
 
@@ -232,6 +234,7 @@ func storedClaimFromDomain(c domain.Claim) storedClaim {
 		HalfLifeDays:         c.HalfLifeDays,
 		Scope:                c.Scope,
 		ConfidenceComponents: components,
+		Lifecycle:            c.Lifecycle,
 	}
 }
 

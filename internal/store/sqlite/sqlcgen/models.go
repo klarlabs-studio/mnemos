@@ -63,6 +63,7 @@ type Claim struct {
 	TestFailCount        int64          `json:"test_fail_count"`
 	Visibility           string         `json:"visibility"`
 	ConfidenceComponents string         `json:"confidence_components"`
+	Lifecycle            string         `json:"lifecycle"`
 }
 
 type ClaimEntity struct {

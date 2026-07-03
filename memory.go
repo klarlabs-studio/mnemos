@@ -103,7 +103,40 @@ type ClaimItem struct {
 	// Optional; matches the RunID used on the linked events when
 	// present.
 	RunID string
+
+	// Lifecycle is the promotion state of the claim: a proposal the
+	// system surfaced ([ClaimLifecycleCandidate]), a fact a human has
+	// endorsed as durable organisational knowledge
+	// ([ClaimLifecyclePromoted]), or one retired by a successor
+	// ([ClaimLifecycleSuperseded]). Empty means the distinction does not
+	// apply — an ordinary claim that was never routed through a
+	// candidate→promoted review. Query with [AnswerOptions.Lifecycle] to
+	// recall only promoted knowledge.
+	Lifecycle ClaimLifecycle
 }
+
+// ClaimLifecycle is the human-promotion state of a claim. It is
+// orthogonal to [Claim] validity (valid-time) and to the internal claim
+// status: a claim can be currently valid yet still only a candidate
+// awaiting review. Empty means the claim was never routed through a
+// candidate→promoted review and the distinction does not apply.
+type ClaimLifecycle string
+
+const (
+	// ClaimLifecycleCandidate is a claim the system proposed as worth
+	// promoting to durable knowledge, pending human review.
+	ClaimLifecycleCandidate ClaimLifecycle = "candidate"
+
+	// ClaimLifecyclePromoted is a claim a human endorsed as durable
+	// organisational knowledge.
+	ClaimLifecyclePromoted ClaimLifecycle = "promoted"
+
+	// ClaimLifecycleSuperseded is a promoted claim retired by a
+	// successor; kept for history. It is not excluded from recall by
+	// default — filter it out with [Query.Lifecycle] (or invalidate it
+	// via ValidUntil) when a query should see only current knowledge.
+	ClaimLifecycleSuperseded ClaimLifecycle = "superseded"
+)
 
 // Decision is an agent decision audit record: the belief -> plan -> outcome
 // chain behind an action, recorded via [Memory.RecordDecision] and read back
@@ -197,6 +230,13 @@ type Query struct {
 	// IncludeHistory makes the engine also return superseded claim
 	// versions for the items that match. False by default.
 	IncludeHistory bool
+
+	// Lifecycle, when set, restricts the answer to claims in that
+	// human-promotion state — most usefully [ClaimLifecyclePromoted] to
+	// recall only durable, human-endorsed organisational knowledge. Empty
+	// (the default) disables the filter: ordinary claims that were never
+	// routed through a candidate→promoted review still appear.
+	Lifecycle ClaimLifecycle
 }
 
 // Claim is the stable, read-only projection of a stored claim returned by
@@ -233,6 +273,11 @@ type Claim struct {
 
 	// RecordedAt is the transaction time: when mnemos stored the claim.
 	RecordedAt time.Time
+
+	// Lifecycle is the human-promotion state of the claim
+	// (candidate/promoted/superseded), or empty when the claim was never
+	// routed through a candidate→promoted review. See [ClaimLifecycle].
+	Lifecycle ClaimLifecycle
 }
 
 // ScanQuery selects claims by valid-time range for [Memory.Scan]. A claim

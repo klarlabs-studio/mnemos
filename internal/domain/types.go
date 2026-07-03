@@ -97,6 +97,39 @@ const (
 	ClaimStatusDeprecated ClaimStatus = "deprecated"
 )
 
+// ClaimLifecycle is the human-curation dimension of a claim, ORTHOGONAL to
+// [ClaimStatus] (which tracks contradiction/verification). It models the
+// candidate -> promoted -> superseded pipeline a consumer uses to curate which
+// claims are vetted, durable knowledge:
+//
+//	"" (empty)  – uncurated; the default for extracted/synthesized claims.
+//	candidate   – proposed for promotion, not yet human-vetted.
+//	promoted    – a human promoted it to vetted, durable knowledge.
+//	superseded  – replaced by a newer promoted claim (history preserved).
+//
+// It is descriptive metadata the store round-trips and recall can filter on
+// (see the Lifecycle query filter); mnemos enforces no transitions itself.
+type ClaimLifecycle string
+
+// The valid promotion states for a claim; empty means the distinction
+// does not apply (an ordinary claim never routed through review).
+const (
+	ClaimLifecycleCandidate  ClaimLifecycle = "candidate"
+	ClaimLifecyclePromoted   ClaimLifecycle = "promoted"
+	ClaimLifecycleSuperseded ClaimLifecycle = "superseded"
+)
+
+// IsValidClaimLifecycle reports whether s is a recognised lifecycle value.
+// The empty string (uncurated) is valid.
+func IsValidClaimLifecycle(s ClaimLifecycle) bool {
+	switch s {
+	case "", ClaimLifecycleCandidate, ClaimLifecyclePromoted, ClaimLifecycleSuperseded:
+		return true
+	default:
+		return false
+	}
+}
+
 // RelationshipType describes how two claims are related.
 type RelationshipType string
 
@@ -188,6 +221,9 @@ type Claim struct {
 	Type       ClaimType
 	Confidence float64
 	Status     ClaimStatus
+	// Lifecycle is the human-curation dimension (candidate/promoted/superseded),
+	// orthogonal to Status. Empty = uncurated. See [ClaimLifecycle].
+	Lifecycle  ClaimLifecycle
 	CreatedAt  time.Time
 	CreatedBy  string  // user id of the actor that created this claim; "<system>" for unattributed
 	TrustScore float64 // derived from confidence × corroboration × freshness; computed by internal/trust

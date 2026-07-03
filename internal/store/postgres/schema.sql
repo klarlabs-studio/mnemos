@@ -63,7 +63,9 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_service  text             NOT 
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_env      text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_team     text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS confidence_components jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS lifecycle text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);
+CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
 CREATE INDEX IF NOT EXISTS idx_claims_valid_to    ON claims(valid_to);

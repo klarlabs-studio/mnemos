@@ -201,6 +201,7 @@ func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
 		AsOf:           q.AsOf,
 		RecordedAsOf:   q.RecordedAsOf,
 		IncludeHistory: q.IncludeHistory,
+		Lifecycle:      domain.ClaimLifecycle(q.Lifecycle),
 	}
 
 	var ans domain.Answer
@@ -305,6 +306,7 @@ func toPublicClaim(c domain.Claim) Claim {
 		TrustScore: c.TrustScore,
 		ValidFrom:  c.ValidFrom,
 		RecordedAt: c.CreatedAt,
+		Lifecycle:  ClaimLifecycle(c.Lifecycle),
 	}
 	if !c.ValidTo.IsZero() {
 		vt := c.ValidTo
