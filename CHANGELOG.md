@@ -8,6 +8,15 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Active forgetting in the consolidation pass (`ConsolidateOptions.ForgetBelowTrust`).**
+  The pruning half of the brain's sleep: claims whose recomputed trust falls below
+  the floor and are no longer reinforced are forgotten — invalidated (valid-to set
+  to now) so recall stops surfacing them, while the claim + its history are kept (a
+  point-in-time query still sees what was once believed). Forgetting is reduced
+  retrievability, not erasure. PROMOTED (human-endorsed) claims are never forgotten,
+  regardless of decay. 0 (default) disables it. `ConsolidateResult.Forgotten` reports
+  the count. Pairs with the gist-extraction already in Consolidate.
+
 - **Memory consolidation — a maintenance "sleep" pass (`Memory.Consolidate`).** Runs
   the offline gist-extraction the brain does during sleep: finds near-duplicate
   claims by embedding similarity and collapses each group into one canonical claim

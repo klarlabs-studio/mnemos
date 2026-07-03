@@ -428,8 +428,17 @@ type ConsolidateOptions struct {
 	// so nothing is lost. In (0, 1]; a sensible default (~0.92) is used when <= 0.
 	DedupeThreshold float64
 
-	// DryRun plans the pass without mutating — it reports what WOULD be merged so
-	// an operator (or a scheduler) can preview the consolidation before applying.
+	// ForgetBelowTrust actively forgets claims whose recomputed trust score is
+	// strictly below this floor — the brain's offline pruning: a memory that has
+	// decayed (low confidence × corroboration × freshness) and is no longer
+	// reinforced stops surfacing. Forgetting is reduced retrievability, NOT
+	// erasure: the claim is marked deprecated (excluded from recall) with its
+	// history preserved. PROMOTED (human-endorsed) claims are NEVER forgotten,
+	// regardless of trust. 0 (the default) disables forgetting — dedupe only.
+	ForgetBelowTrust float64
+
+	// DryRun plans the pass without mutating — it reports what WOULD be merged
+	// and forgotten so an operator (or a scheduler) can preview before applying.
 	DryRun bool
 }
 
@@ -445,6 +454,10 @@ type ConsolidateResult struct {
 	// TrustRefreshed is the number of claims whose trust score was recomputed
 	// after the merge (evidence counts changed, so freshness/corroboration shift).
 	TrustRefreshed int
+	// Forgotten is the number of stale, low-trust, non-promoted claims marked
+	// deprecated (excluded from recall, history kept) — 0 unless ForgetBelowTrust
+	// was set, and 0 on a dry run.
+	Forgotten int
 }
 
 // SignalQuery selects which temporal signals [Memory.Signals] returns.
