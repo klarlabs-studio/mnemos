@@ -46,10 +46,12 @@ CREATE TABLE IF NOT EXISTS claims (
   test_pass_count INTEGER NOT NULL DEFAULT 0,
   test_fail_count INTEGER NOT NULL DEFAULT 0,
   visibility TEXT NOT NULL DEFAULT 'team',
-  confidence_components TEXT NOT NULL DEFAULT '{}'
+  confidence_components TEXT NOT NULL DEFAULT '{}',
+  lifecycle TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);
+CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
 CREATE INDEX IF NOT EXISTS idx_claims_valid_to ON claims(valid_to);

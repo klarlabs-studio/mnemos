@@ -480,7 +480,7 @@ CREATE INDEX IF NOT EXISTS idx_incidents_root_cause_claim_id ON incidents(root_c
 // currentSchemaVersion is the schema generation this binary expects.
 // Bump whenever a column or table is added; pair the bump with a step
 // in addMissingColumns so existing DBs upgrade in place.
-const currentSchemaVersion = 16
+const currentSchemaVersion = 17
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -557,6 +557,8 @@ var expectedColumns = []addMissingColumn{
 	// downstream consumers can weight contributors. Empty object
 	// means "no decomposition surfaced".
 	{"claims", "confidence_components", "TEXT NOT NULL DEFAULT '{}'"},
+	// v17: claim curation lifecycle (candidate/promoted/superseded).
+	{"claims", "lifecycle", "TEXT NOT NULL DEFAULT ''"},
 	// v14: claim_feedback (Refs #40) — side table; no claim-column
 	// adds. The CREATE TABLE for it lives next to the other CREATE
 	// statements above (auto-applies via CREATE TABLE IF NOT EXISTS),

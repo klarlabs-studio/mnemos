@@ -166,6 +166,7 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		CreatedBy:  m.actorID,
 		ValidFrom:  item.ValidFrom,
 		ValidTo:    item.ValidUntil,
+		Lifecycle:  domain.ClaimLifecycle(item.Lifecycle),
 	}
 
 	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {

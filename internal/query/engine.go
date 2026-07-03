@@ -160,6 +160,12 @@ type AnswerOptions struct {
 	//   VisibilityOrg     – all claims: personal, team, and org-wide.
 	// The zero value is treated as VisibilityTeam for backward compatibility.
 	Visibility domain.Visibility
+	// Lifecycle, when non-empty, restricts the answer to claims whose
+	// human-promotion state matches (e.g. domain.ClaimLifecyclePromoted to
+	// recall only durable, human-endorsed knowledge). The zero value
+	// disables the filter, so ordinary recall is unchanged — claims that
+	// were never routed through a candidate→promoted review still appear.
+	Lifecycle domain.ClaimLifecycle
 }
 
 // Answer searches all stored events for the best answer to the given question.
@@ -377,6 +383,19 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 				cv = domain.VisibilityTeam
 			}
 			if allowed[cv] {
+				filtered = append(filtered, c)
+			}
+		}
+		claims = filtered
+	}
+
+	// Lifecycle filter: narrow to a promotion state when requested. Empty
+	// is a no-op, so ordinary recall (including claims that were never
+	// routed through a candidate→promoted review) is unchanged.
+	if opts.Lifecycle != "" {
+		filtered := make([]domain.Claim, 0, len(claims))
+		for _, c := range claims {
+			if c.Lifecycle == opts.Lifecycle {
 				filtered = append(filtered, c)
 			}
 		}
