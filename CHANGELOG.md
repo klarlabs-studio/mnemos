@@ -8,6 +8,19 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Temporal signal read API.** `Memory.Signals(ctx, SignalQuery)` surfaces the
+  patterns the bundled Chronos engine detects over a run's event series — trend /
+  spike / stall / anomaly / seasonality and the like — as public `Signal` values
+  (pattern, strength, confidence, qualitative class, detection time, observation
+  window). It is the perception counterpart to `Recall` ("what is changing?" vs
+  "what do we know?"). Events forwarded to Chronos on `RememberEvent` feed the
+  detectors; `Signals` recomputes over the stored series for the run's scope
+  (tenant-mixed, matching how events are written) and returns them. No Chronos
+  wired, or nothing detected, yields `(nil, nil)` — an empty result is "all quiet".
+  It is a read (not a governed write): signals are derived, not stored assertions.
+  Previously Chronos computed signals on write and nothing could read them back
+  (`Timeline` returns only raw events).
+
 - **In-place claim lifecycle transition.** `Memory.SetClaimLifecycle(ctx, claimID,
   lifecycle)` transitions an existing claim's promotion state in place — the verb a
   human-gated flow uses to move a `candidate` to `promoted`, or to `supersede` a

@@ -377,6 +377,55 @@ type TimelineQuery struct {
 	Limit int
 }
 
+// Signal is a temporal pattern the bundled Chronos engine detected over the
+// events a run (scope) accumulated — the "what is changing / unusual?" reading
+// that complements Recall's "what do we know?". Events forwarded to Chronos on
+// [Memory.RememberEvent] feed the detectors; [Memory.Signals] surfaces the
+// result. Zero signals is the common, healthy case (nothing notable changed).
+type Signal struct {
+	// Pattern names the kind of change detected: "trend", "spike", "drop",
+	// "stall", "anomaly", "seasonality", "recurrence", and others Chronos
+	// emits. Consumers should tolerate unknown values (Chronos may add kinds).
+	Pattern string
+
+	// RunID is the run whose event series the pattern was detected in — the
+	// scope passed to [Memory.Signals] (empty = the default run).
+	RunID string
+
+	// Strength is the intensity of the pattern as observed, in [0, 1] (e.g. a
+	// normalised slope for a trend, peak-to-baseline for a spike).
+	Strength float64
+
+	// Confidence is how sure the detector is the pattern is real given the
+	// evidence, in [0, 1].
+	Confidence float64
+
+	// Class is a coarse qualitative grade a narrator uses to phrase the signal
+	// ("possible", "clear", ...). Empty when the detector did not classify.
+	Class string
+
+	// DetectedAt is when Chronos inferred the pattern.
+	DetectedAt time.Time
+
+	// WindowStart / WindowEnd bound the period of observation the signal
+	// references. Zero when the detector did not surface a window.
+	WindowStart time.Time
+	WindowEnd   time.Time
+}
+
+// SignalQuery selects which temporal signals [Memory.Signals] returns.
+type SignalQuery struct {
+	// RunID selects the run (Chronos scope) to read signals for. Empty means
+	// the default run — the scope unscoped events (the common case) land in.
+	RunID string
+
+	// MinConfidence drops signals below the threshold; 0 keeps all.
+	MinConfidence float64
+
+	// Limit caps the number of signals returned. 0 means no cap.
+	Limit int
+}
+
 // Memory is the public API of the Mnemos evidence layer. Implementations
 // are returned by [New].
 //
@@ -477,6 +526,16 @@ type Memory interface {
 	// surfaced as additional events with [Event.Type] reflecting the
 	// detected pattern.
 	Timeline(ctx context.Context, q TimelineQuery) ([]Event, error)
+
+	// Signals returns the temporal patterns the bundled Chronos engine detects
+	// over a run's event series — trend / spike / stall / anomaly and the like
+	// (see [Signal]). It is the perception counterpart to Recall: "what is
+	// changing?" rather than "what do we know?". Returns no signals (nil, nil)
+	// when Chronos is not wired or nothing notable was detected — callers treat
+	// an empty result as "all quiet", never an error. Unlike the write methods
+	// it does not go through the governance kernel: signals are derived, not
+	// stored user assertions.
+	Signals(ctx context.Context, q SignalQuery) ([]Signal, error)
 
 	// LastWriteSession returns the governance session recorded by the
 	// most recent write (Remember, RememberClaim, or RememberEvent) on
