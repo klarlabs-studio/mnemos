@@ -8,6 +8,18 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Memory consolidation — a maintenance "sleep" pass (`Memory.Consolidate`).** Runs
+  the offline gist-extraction the brain does during sleep: finds near-duplicate
+  claims by embedding similarity and collapses each group into one canonical claim
+  (repointing the duplicates' evidence onto the survivor — nothing lost), then
+  recomputes trust so the merged evidence counts are reflected. `ConsolidateOptions`
+  tunes the similarity threshold and offers a `DryRun` preview; `ConsolidateResult`
+  reports scanned/groups/merged/trust-refreshed. Previously this pipeline existed
+  only as a CLI admin command — this exposes it as a library method a consumer can
+  schedule off the hot path, so the semantic layer stays sharp and bounded instead
+  of accreting redundant claims. Idempotent; a scorer-less backend still merges.
+
+
 - **Consumer-registered claim types (`WithClaimTypes`).** The extensibility seam
   for "configurable around what you store": a consumer whose domain has its own
   vocabulary (e.g. `knowledge`, `incident`, `runbook`) registers those as

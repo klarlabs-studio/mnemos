@@ -22,9 +22,11 @@ import (
 	"go.klarlabs.de/mnemos/internal/kernel"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/relate"
 	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/trust"
 	"go.klarlabs.de/mnemos/providers"
 )
 
@@ -560,6 +562,39 @@ func (m *memory) Signals(ctx context.Context, q SignalQuery) ([]Signal, error) {
 		}
 	}
 	return out, nil
+}
+
+// Consolidate implements [Memory.Consolidate] — the maintenance "sleep" pass.
+func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (ConsolidateResult, error) {
+	threshold := opts.DedupeThreshold
+	if threshold <= 0 {
+		threshold = 0.92
+	}
+	plan, err := pipeline.PlanSemanticDedupe(ctx, m.conn, threshold)
+	if err != nil {
+		return ConsolidateResult{}, fmt.Errorf("mnemos: consolidate: plan dedupe: %w", err)
+	}
+	res := ConsolidateResult{ClaimsScanned: plan.ClaimsScanned, DuplicateGroups: len(plan.Merges)}
+	if opts.DryRun || len(plan.Merges) == 0 {
+		return res, nil
+	}
+	merged, err := pipeline.ApplySemanticDedupe(ctx, m.conn, plan)
+	if err != nil {
+		return res, fmt.Errorf("mnemos: consolidate: apply dedupe: %w", err)
+	}
+	res.Merged = merged
+	// Merging changed evidence counts, so recompute trust (confidence ×
+	// corroboration × freshness) — the renormalisation half of the sleep pass.
+	// Best-effort: a scorer-less backend still consolidated correctly.
+	if scorer, ok := m.conn.Claims.(ports.TrustScorer); ok {
+		now := time.Now().UTC()
+		if n, terr := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
+			return trust.Score(confidence, evidenceCount, latestEvidence, now)
+		}); terr == nil {
+			res.TrustRefreshed = n
+		}
+	}
+	return res, nil
 }
 
 // Close implements [Memory.Close].

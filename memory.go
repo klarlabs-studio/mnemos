@@ -420,6 +420,33 @@ type Signal struct {
 	WindowEnd   time.Time
 }
 
+// ConsolidateOptions tunes a [Memory.Consolidate] pass.
+type ConsolidateOptions struct {
+	// DedupeThreshold is the cosine-similarity floor for treating two claims as
+	// near-duplicates and collapsing them into one canonical claim (gist
+	// extraction) — evidence from the duplicates is repointed to the survivor,
+	// so nothing is lost. In (0, 1]; a sensible default (~0.92) is used when <= 0.
+	DedupeThreshold float64
+
+	// DryRun plans the pass without mutating — it reports what WOULD be merged so
+	// an operator (or a scheduler) can preview the consolidation before applying.
+	DryRun bool
+}
+
+// ConsolidateResult reports what one [Memory.Consolidate] pass did.
+type ConsolidateResult struct {
+	// ClaimsScanned is the number of embedded claims considered.
+	ClaimsScanned int
+	// DuplicateGroups is the number of near-duplicate groups found.
+	DuplicateGroups int
+	// Merged is the number of duplicate claims collapsed into their canonical
+	// (the gist) — 0 on a dry run.
+	Merged int
+	// TrustRefreshed is the number of claims whose trust score was recomputed
+	// after the merge (evidence counts changed, so freshness/corroboration shift).
+	TrustRefreshed int
+}
+
 // SignalQuery selects which temporal signals [Memory.Signals] returns.
 type SignalQuery struct {
 	// RunID selects the run (Chronos scope) to read signals for. Empty means
@@ -543,6 +570,20 @@ type Memory interface {
 	// it does not go through the governance kernel: signals are derived, not
 	// stored user assertions.
 	Signals(ctx context.Context, q SignalQuery) ([]Signal, error)
+
+	// Consolidate runs a maintenance "sleep" pass over the semantic layer: it
+	// finds near-duplicate claims (by embedding similarity) and collapses each
+	// group into one canonical claim — repointing the duplicates' evidence onto
+	// the survivor (nothing is lost) — then recomputes trust so the freshly
+	// merged evidence counts are reflected. This is the gist-extraction /
+	// renormalisation the brain does offline: many overlapping traces become one
+	// consolidated memory, keeping recall sharp and the store from bloating.
+	//
+	// It mutates derived structure, not user assertions, so it is a maintenance
+	// operation (run it off the hot path, on a schedule). DryRun previews the
+	// plan without changing anything. Idempotent — a second pass with nothing new
+	// to merge is a no-op.
+	Consolidate(ctx context.Context, opts ConsolidateOptions) (ConsolidateResult, error)
 
 	// LastWriteSession returns the governance session recorded by the
 	// most recent write (Remember, RememberClaim, or RememberEvent) on
