@@ -575,17 +575,22 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		return ConsolidateResult{}, fmt.Errorf("mnemos: consolidate: plan dedupe: %w", err)
 	}
 	res := ConsolidateResult{ClaimsScanned: plan.ClaimsScanned, DuplicateGroups: len(plan.Merges)}
-	if opts.DryRun || len(plan.Merges) == 0 {
+	if opts.DryRun {
+		// Preview only — report what dedupe WOULD collapse; no mutation, and
+		// forgetting (which acts on freshly-recomputed trust) is not simulated.
 		return res, nil
 	}
-	merged, err := pipeline.ApplySemanticDedupe(ctx, m.conn, plan)
-	if err != nil {
-		return res, fmt.Errorf("mnemos: consolidate: apply dedupe: %w", err)
+	if len(plan.Merges) > 0 {
+		merged, err := pipeline.ApplySemanticDedupe(ctx, m.conn, plan)
+		if err != nil {
+			return res, fmt.Errorf("mnemos: consolidate: apply dedupe: %w", err)
+		}
+		res.Merged = merged
 	}
-	res.Merged = merged
-	// Merging changed evidence counts, so recompute trust (confidence ×
-	// corroboration × freshness) — the renormalisation half of the sleep pass.
-	// Best-effort: a scorer-less backend still consolidated correctly.
+	// Recompute trust (confidence × corroboration × freshness) — the
+	// renormalisation half of the sleep pass. Merging changed evidence counts,
+	// and freshness decays with wall-clock time regardless. Best-effort: a
+	// scorer-less backend still consolidated correctly.
 	if scorer, ok := m.conn.Claims.(ports.TrustScorer); ok {
 		now := time.Now().UTC()
 		if n, terr := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
@@ -594,7 +599,48 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 			res.TrustRefreshed = n
 		}
 	}
+	// Active forgetting: prune stale, low-trust, non-promoted claims — the
+	// offline synaptic renormalisation the brain does during sleep. Reduced
+	// retrievability, not erasure (marked deprecated, history preserved).
+	if opts.ForgetBelowTrust > 0 {
+		forgotten, ferr := m.forgetStaleClaims(ctx, opts.ForgetBelowTrust)
+		if ferr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: forget: %w", ferr)
+		}
+		res.Forgotten = forgotten
+	}
 	return res, nil
+}
+
+// forgetStaleClaims invalidates non-promoted claims whose trust is below the
+// floor by setting their valid-to to now — so recall (which filters by valid
+// time) stops surfacing them, while the claim + its history are preserved (a
+// point-in-time query can still see what was once believed). This is forgetting
+// as reduced retrievability, not erasure. Promoted (human-endorsed) claims are
+// never forgotten, regardless of decay. Already-invalidated claims are skipped.
+func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64) (int, error) {
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list claims: %w", err)
+	}
+	now := time.Now().UTC()
+	forgotten := 0
+	for _, c := range all {
+		if !c.ValidTo.IsZero() {
+			continue // already invalidated (superseded or previously forgotten)
+		}
+		if c.Lifecycle == domain.ClaimLifecyclePromoted {
+			continue // never forget human-endorsed knowledge
+		}
+		if c.TrustScore >= belowTrust {
+			continue // still trusted enough to keep surfacing
+		}
+		if err := m.conn.Claims.SetValidity(ctx, c.ID, now); err != nil {
+			return forgotten, fmt.Errorf("invalidate stale claim %s: %w", c.ID, err)
+		}
+		forgotten++
+	}
+	return forgotten, nil
 }
 
 // Close implements [Memory.Close].
