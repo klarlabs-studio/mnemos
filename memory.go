@@ -132,7 +132,9 @@ const (
 	ClaimLifecyclePromoted ClaimLifecycle = "promoted"
 
 	// ClaimLifecycleSuperseded is a promoted claim retired by a
-	// successor; kept for history, excluded from active recall.
+	// successor; kept for history. It is not excluded from recall by
+	// default — filter it out with [Query.Lifecycle] (or invalidate it
+	// via ValidUntil) when a query should see only current knowledge.
 	ClaimLifecycleSuperseded ClaimLifecycle = "superseded"
 )
 

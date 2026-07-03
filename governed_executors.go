@@ -146,6 +146,13 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("remember_claim: claims require evidence (no valid EventIDs)")
 	}
 
+	// Reject an unrecognised lifecycle at the API boundary so recall's
+	// lifecycle filter can never be defeated by an arbitrary stored string.
+	// Empty (uncurated) remains valid — it is the default.
+	if !domain.IsValidClaimLifecycle(domain.ClaimLifecycle(item.Lifecycle)) {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("remember_claim: invalid lifecycle %q (want candidate, promoted, superseded, or empty)", item.Lifecycle)
+	}
+
 	claimType := domain.ClaimType(item.Type)
 	if claimType == "" {
 		claimType = domain.ClaimTypeFact

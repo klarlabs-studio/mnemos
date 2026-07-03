@@ -2,6 +2,7 @@ package mnemos_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,13 +11,19 @@ import (
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
 )
 
+// seedSeq makes evidence-event ids unique within a test without deriving
+// them from claim text (which could be empty or start with a multi-byte
+// rune). Incremented by each seedClaimLifecycle call.
+var seedSeq int
+
 // seedClaimLifecycle persists an evidence event then a claim in the given
 // lifecycle state and returns the claim id.
 func seedClaimLifecycle(t *testing.T, mem mnemos.Memory, text string, lc mnemos.ClaimLifecycle) string {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now()
-	evID := "ev-" + now.Format("150405.000000000") + "-" + text[:1]
+	seedSeq++
+	evID := fmt.Sprintf("ev-%s-%d", now.Format("150405.000000000"), seedSeq)
 	if err := mem.RememberEvent(ctx, mnemos.Event{ID: evID, At: now, Type: "observation", Content: text}); err != nil {
 		t.Fatalf("RememberEvent: %v", err)
 	}
@@ -57,6 +64,26 @@ func TestClaimLifecycle_RoundTrip(t *testing.T) {
 	}
 	if plain.Lifecycle != "" {
 		t.Errorf("plain claim lifecycle = %q, want empty", plain.Lifecycle)
+	}
+}
+
+// TestClaimLifecycle_RejectsInvalid verifies RememberClaim rejects an
+// unrecognised lifecycle at the write boundary, so recall's lifecycle
+// filter can't be defeated by an arbitrary stored string. Empty stays valid.
+func TestClaimLifecycle_RejectsInvalid(t *testing.T) {
+	mem := newReadMemory(t, "lifecycle_reject")
+	ctx := context.Background()
+
+	if err := mem.RememberEvent(ctx, mnemos.Event{ID: "ev-bad", At: time.Now(), Type: "observation", Content: "x"}); err != nil {
+		t.Fatalf("RememberEvent: %v", err)
+	}
+	_, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
+		Text:      "A claim with a bogus lifecycle.",
+		EventIDs:  []string{"ev-bad"},
+		Lifecycle: mnemos.ClaimLifecycle("bogus"),
+	})
+	if err == nil {
+		t.Fatal("RememberClaim accepted an invalid lifecycle; want rejection")
 	}
 }
 

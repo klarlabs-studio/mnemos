@@ -648,6 +648,7 @@ func migrate(db *sql.DB) error {
 	const postMigrateIndexes = `
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
 CREATE INDEX IF NOT EXISTS idx_claims_valid_to ON claims(valid_to);
+CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 `
 	if _, err := db.Exec(postMigrateIndexes); err != nil {
 		return fmt.Errorf("post-migrate indexes: %w", err)
