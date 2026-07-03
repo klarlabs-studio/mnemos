@@ -1,9 +1,13 @@
+-- WARNING (sqlc v1.30.0 bug): do NOT place a comment line between a `-- name:`
+-- directive and its query. A doc comment AFTER `-- name:` shifts sqlc's byte
+-- offsets and corrupts EVERY generated query in this file (scrambled/truncated
+-- SQL strings). Put per-query docs BEFORE the `-- name:` line, as below.
+--
+-- CreateDecision is idempotent on id. Re-recording the same decision id refreshes
+-- statement, plan, reasoning, risk_level, alternatives, outcome_id, refuted_beliefs_json,
+-- and failed_outcome_id but preserves chosen_at and created_at (the original decision
+-- moment is the load-bearing fact).
 -- name: CreateDecision :exec
--- Idempotent on id. Re-recording the same decision id refreshes
--- statement, plan, reasoning, risk_level, alternatives, outcome_id,
--- refuted_beliefs_json, and failed_outcome_id but preserves chosen_at
--- and created_at — the original decision moment is the load-bearing
--- fact.
 INSERT INTO decisions (id, statement, plan, reasoning, risk_level, alternatives_json, outcome_id, chosen_at, created_by, created_at, scope_service, scope_env, scope_team, refuted_beliefs_json, failed_outcome_id)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET

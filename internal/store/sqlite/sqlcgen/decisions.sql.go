@@ -10,11 +10,9 @@ import (
 )
 
 const appendDecisionBelief = `-- name: AppendDecisionBelief :exec
-s;
-
 INSERT INTO decision_beliefs (decision_id, claim_id)
 VALUES (?, ?)
-ON CONFLICT(decision_id, claim_id) DO NOTHI
+ON CONFLICT(decision_id, claim_id) DO NOTHING
 `
 
 type AppendDecisionBeliefParams struct {
@@ -28,9 +26,7 @@ func (q *Queries) AppendDecisionBelief(ctx context.Context, arg AppendDecisionBe
 }
 
 const attachDecisionOutcome = `-- name: AttachDecisionOutcome :exec
-C;
-
-UPDATE decisions SET outcome_id = ? WHERE id =
+UPDATE decisions SET outcome_id = ? WHERE id = ?
 `
 
 type AttachDecisionOutcomeParams struct {
@@ -44,9 +40,7 @@ func (q *Queries) AttachDecisionOutcome(ctx context.Context, arg AttachDecisionO
 }
 
 const countDecisions = `-- name: CountDecisions :one
-?;
-
-SELECT COUNT(*) FROM decisio
+SELECT COUNT(*) FROM decisions
 `
 
 func (q *Queries) CountDecisions(ctx context.Context) (int64, error) {
@@ -67,7 +61,7 @@ ON CONFLICT(id) DO UPDATE SET
   alternatives_json = excluded.alternatives_json,
   outcome_id = excluded.outcome_id,
   refuted_beliefs_json = excluded.refuted_beliefs_json,
-  failed_outcome_id = excluded.failed_outcome_
+  failed_outcome_id = excluded.failed_outcome_id
 `
 
 type CreateDecisionParams struct {
@@ -88,11 +82,15 @@ type CreateDecisionParams struct {
 	FailedOutcomeID    string `json:"failed_outcome_id"`
 }
 
-// Idempotent on id. Re-recording the same decision id refreshes
-// statement, plan, reasoning, risk_level, alternatives, outcome_id,
-// refuted_beliefs_json, and failed_outcome_id but preserves chosen_at
-// and created_at — the original decision moment is the load-bearing
-// fact.
+// WARNING (sqlc v1.30.0 bug): do NOT place a comment line between a `-- name:`
+// directive and its query. A doc comment AFTER `-- name:` shifts sqlc's byte
+// offsets and corrupts EVERY generated query in this file (scrambled/truncated
+// SQL strings). Put per-query docs BEFORE the `-- name:` line, as below.
+//
+// CreateDecision is idempotent on id. Re-recording the same decision id refreshes
+// statement, plan, reasoning, risk_level, alternatives, outcome_id, refuted_beliefs_json,
+// and failed_outcome_id but preserves chosen_at and created_at (the original decision
+// moment is the load-bearing fact).
 func (q *Queries) CreateDecision(ctx context.Context, arg CreateDecisionParams) error {
 	_, err := q.db.ExecContext(ctx, createDecision,
 		arg.ID,
@@ -115,9 +113,7 @@ func (q *Queries) CreateDecision(ctx context.Context, arg CreateDecisionParams) 
 }
 
 const deleteAllDecisionBeliefs = `-- name: DeleteAllDecisionBeliefs :exec
-?;
-
-DELETE FROM decision_belie
+DELETE FROM decision_beliefs
 `
 
 func (q *Queries) DeleteAllDecisionBeliefs(ctx context.Context) error {
@@ -126,9 +122,7 @@ func (q *Queries) DeleteAllDecisionBeliefs(ctx context.Context) error {
 }
 
 const deleteAllDecisions = `-- name: DeleteAllDecisions :exec
-s;
-
-DELETE FROM decisio
+DELETE FROM decisions
 `
 
 func (q *Queries) DeleteAllDecisions(ctx context.Context) error {
@@ -137,9 +131,7 @@ func (q *Queries) DeleteAllDecisions(ctx context.Context) error {
 }
 
 const deleteDecisionBeliefs = `-- name: DeleteDecisionBeliefs :exec
-?;
-
-DELETE FROM decision_beliefs WHERE decision_id =
+DELETE FROM decision_beliefs WHERE decision_id = ?
 `
 
 func (q *Queries) DeleteDecisionBeliefs(ctx context.Context, decisionID string) error {
@@ -148,11 +140,9 @@ func (q *Queries) DeleteDecisionBeliefs(ctx context.Context, decisionID string) 
 }
 
 const getDecisionByID = `-- name: GetDecisionByID :one
-d;
-
 SELECT id, statement, plan, reasoning, risk_level, alternatives_json, outcome_id, chosen_at, created_by, created_at, scope_service, scope_env, scope_team, refuted_beliefs_json, failed_outcome_id
 FROM decisions
-WHERE id =
+WHERE id = ?
 `
 
 func (q *Queries) GetDecisionByID(ctx context.Context, id string) (Decision, error) {
@@ -179,11 +169,9 @@ func (q *Queries) GetDecisionByID(ctx context.Context, id string) (Decision, err
 }
 
 const listAllDecisions = `-- name: ListAllDecisions :many
-?;
-
 SELECT id, statement, plan, reasoning, risk_level, alternatives_json, outcome_id, chosen_at, created_by, created_at, scope_service, scope_env, scope_team, refuted_beliefs_json, failed_outcome_id
 FROM decisions
-ORDER BY chosen_at DE
+ORDER BY chosen_at DESC
 `
 
 func (q *Queries) ListAllDecisions(ctx context.Context) ([]Decision, error) {
@@ -226,11 +214,9 @@ func (q *Queries) ListAllDecisions(ctx context.Context) ([]Decision, error) {
 }
 
 const listDecisionBeliefs = `-- name: ListDecisionBeliefs :many
-G;
-
 SELECT decision_id, claim_id
 FROM decision_beliefs
-WHERE decision_id =
+WHERE decision_id = ?
 `
 
 func (q *Queries) ListDecisionBeliefs(ctx context.Context, decisionID string) ([]DecisionBelief, error) {
@@ -257,12 +243,10 @@ func (q *Queries) ListDecisionBeliefs(ctx context.Context, decisionID string) ([
 }
 
 const listDecisionsByRiskLevel = `-- name: ListDecisionsByRiskLevel :many
-C;
-
 SELECT id, statement, plan, reasoning, risk_level, alternatives_json, outcome_id, chosen_at, created_by, created_at, scope_service, scope_env, scope_team, refuted_beliefs_json, failed_outcome_id
 FROM decisions
 WHERE risk_level = ?
-ORDER BY chosen_at DE
+ORDER BY chosen_at DESC
 `
 
 func (q *Queries) ListDecisionsByRiskLevel(ctx context.Context, riskLevel string) ([]Decision, error) {
