@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>From store to brain: what we learned building Mnemos</title>
+  <meta name="description" content="A memory library that only writes and reads is missing the interesting half. What building the other half — consolidation, forgetting, salience, self-correcting recall, and metacognition — taught us, with no LLM in the loop.">
+  <meta property="og:title" content="From store to brain: what we learned building Mnemos">
+  <meta property="og:description" content="Consolidation, forgetting, salience, hybrid retrieval, corrective recall, hypercorrection — the background processes a brain runs, built deterministically and self-hosted. The lessons, and the bugs.">
+  <meta property="og:type" content="article">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header>
+  <div class="wrap">
+    <a class="logo" aria-label="Mnemos" href="../index.html">mnemos<span aria-hidden="true">.</span></a>
+    <nav aria-label="Primary">
+      <a href="../index.html#snippet">Snippet</a>
+      <a href="../index.html#scenario">Scenario</a>
+      <a href="../index.html#architecture">Architecture</a>
+      <a href="../index.html#run">Run it</a>
+      <a href="https://github.com/klarlabs-studio/mnemos">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+<article class="post">
+  <p class="post-meta">Engineering · 2026 · Klarlabs</p>
+  <h1>From store to brain: what we learned building Mnemos</h1>
+  <p class="standfirst">
+    A memory library that only writes and reads is missing the interesting half. Here is what
+    building the other half — consolidation, forgetting, salience, self-correcting recall, and
+    metacognition — taught us. All of it deterministic, self-hosted, and with no language model in
+    the loop.
+  </p>
+
+  <p>
+    Mnemos started as an evidence layer: typed claims, each linked back to the source event that
+    produced it, with contradictions surfaced instead of silently overwritten. That part is useful
+    on its own. But the longer we ran it, the more it looked like a <em>store</em> — something you
+    write to and read from — and less like a <strong>memory</strong>, which is something that also
+    changes on its own between the writes and the reads.
+  </p>
+  <p>
+    A brain does not just record and recall. While you sleep it consolidates the day into gist,
+    forgets what did not matter, and quietly strengthens what did. At encoding it tags some things
+    as important and lets others fade. At retrieval it notices when it comes up short and looks
+    again. And it flags, loudly, when new evidence contradicts something you were sure of. We spent
+    a stretch building those processes into Mnemos. Here is what we learned — including the parts we
+    got wrong first.
+  </p>
+
+  <h2>A store is not a memory system — and the machinery was already there</h2>
+  <p>
+    The most useful realisation came early and was slightly humbling: most of the organs of a
+    memory system were <em>already in the codebase</em>, just never wired to run on their own. Trust
+    scoring with half-life decay was there but only computed at query time. A consolidation routine
+    existed but was a manual CLI command. A bias-detection pass existed but ran on demand. Temporal
+    pattern detection was computed and then never read.
+  </p>
+  <p>
+    The lever, over and over, was not "build a new capability" — it was "take the capability you
+    have and make it a <em>process</em>." Schedule the consolidation. Read the temporal signals into
+    the recall path. Turn the one-shot bias check into a standing alert. If you are building a memory
+    system, audit what you already compute and throw away before you add anything new.
+  </p>
+
+  <h2>Forgetting is reduced retrievability, not deletion</h2>
+  <p>
+    Forgetting sounds destructive, so it is worth being precise. In Mnemos a forgotten claim is
+    <strong>invalidated</strong>, not erased: we close its valid-time. Recall stops surfacing it, but
+    the claim and its full history stay in the store — a point-in-time query still shows what was once
+    believed. Forgetting is a drop in <em>retrievability</em>, not a delete. Human-promoted knowledge
+    is never forgotten at all.
+  </p>
+  <p>
+    This is also where we shipped a bug and learned something. Our first "forget" implementation
+    marked claims <code>deprecated</code> by status. It looked right and did nothing — the forgotten
+    claims kept showing up in recall. The reason: recall filters by <em>valid-time</em>, not by
+    status. Deprecating a claim changed a field nothing downstream read. Setting its validity closed
+    was what actually removed it from results.
+  </p>
+  <blockquote>
+    Before you build "forgetting," know exactly what your retrieval path filters on. Ours filtered on
+    valid-time; we spent an afternoon changing a field that recall never looked at.
+  </blockquote>
+  <p>
+    The bi-temporal model — separate axes for when a fact was <em>true</em> and when it was
+    <em>recorded</em> — is what makes forgetting safe rather than lossy. You can prune aggressively
+    because nothing is gone; it is only no longer current.
+  </p>
+
+  <h2>Trust and importance are different axes</h2>
+  <p>
+    We nearly conflated two things that need to stay separate. <strong>Trust</strong> answers "is
+    this still true?" and it <em>decays</em> — an unverified claim gets less trustworthy as its
+    evidence ages. <strong>Salience</strong> answers "does this matter enough to keep, even if I
+    rarely recall it?" and it does <em>not</em> decay. A Sev-1 post-mortem is important the day it is
+    written and important a year later, regardless of how fresh the evidence is.
+  </p>
+  <p>
+    If forgetting keys only on decayed trust, you forget the consequential-but-old — exactly the
+    memories you most want to keep. So salience is a separate, write-time score, computed from signals
+    already on the claim: confidence, how much independent evidence corroborates it, its kind (a
+    decision or a verified test result outweighs a passing remark), source authority. The
+    consolidation pass protects anything sufficiently salient from being forgotten, and prunes only
+    the mundane tail. It is the rule-based analog of the "poignancy" score other systems ask a
+    language model for — and it costs nothing to compute.
+  </p>
+
+  <h2>For hybrid search, fuse ranks, not scores</h2>
+  <p>
+    Embedding similarity has a systematic blind spot: exact tokens. A commit SHA, a service name, an
+    error code, a flag — cosine blurs these, because they carry little semantic weight. So a query for
+    <code>abc123def</code> can miss the one event that contains it, even with a perfectly good
+    embedder.
+  </p>
+  <p>
+    The fix is hybrid retrieval — run a sparse full-text leg alongside the dense vector leg — but the
+    interesting part is the fusion. The two legs produce <em>incomparable</em> scores: cosine
+    distance and a full-text rank are on different scales, and normalising them is guesswork.
+    <strong>Reciprocal Rank Fusion</strong> sidesteps this entirely by consuming only <em>ranks</em>.
+    Each result scores the sum of <code>1 / (k + rank)</code> across the legs it appears in. No
+    calibration, no tuning, and a result that ranks well in <em>both</em> legs naturally beats one
+    that tops a single leg. It is a two-line idea that removed a whole category of "how do we weight
+    these" bikeshedding.
+  </p>
+
+  <h2>Self-correction has to be bounded and non-regressive</h2>
+  <p>
+    When a recall comes back weak — no claims, or low aggregate confidence — the obvious move is to
+    look again: widen the search, relax a filter. But "look again" is how you build an unbounded loop
+    that blows a latency budget, and how you accidentally return a <em>worse</em> answer than the one
+    you had.
+  </p>
+  <p>
+    Two constraints kept it honest. First, <strong>bounded</strong>: exactly one corrective pass, ever
+    — structurally, not by a timeout. One retry respects a tool-call budget without any deadline
+    plumbing. Second, <strong>non-regressive</strong>: the corrective answer only replaces the first
+    one if it is strictly better (more claims, or higher confidence), and it never trades a real answer
+    for an empty one. A self-correcting step that can make things worse is a liability; make it
+    provably unable to.
+  </p>
+  <p>
+    And relax the <em>right</em> filters. We widen the corpus and drop the soft trust floor, but we
+    never touch the semantic filters — scope, visibility, point-in-time. Loosening those would return
+    results the caller explicitly excluded, which is not "recovering recall," it is answering a
+    different question.
+  </p>
+
+  <h2>Metacognition: surface the contradictions that actually matter</h2>
+  <p>
+    Contradiction detection is table stakes; the metacognitive move is knowing <em>which</em>
+    contradictions deserve a human. When new evidence contradicts a claim nobody vetted, that is
+    ordinary churn. When it contradicts an <strong>established</strong> belief — one a human promoted,
+    or one that earned high trust — that is the event worth attention: either a settled belief is now
+    wrong, or the new claim is suspect. Mnemos surfaces exactly those, most-established-first.
+  </p>
+  <p>
+    Resolving one taught us the valid-time-versus-status lesson a second time. Retiring a claim means
+    transitioning it to <code>superseded</code> — but that sets a lifecycle field, and our alert query
+    filtered on valid-time, so "resolving" a conflict left the alert standing. The fix was to make the
+    alert query also treat a superseded side as resolved. Same shape of bug as forgetting: a
+    write that changes a field the read never consults does nothing you can see. It is worth writing
+    down which field each query keys on and checking every mutation against it.
+  </p>
+
+  <h2>The constraint that shaped all of it: no model in the loop</h2>
+  <p>
+    Every one of these runs with <strong>no language model</strong>. Salience is a weighting rule, not
+    an LLM importance rating. Consolidation is embedding similarity plus deterministic merges.
+    Contradiction detection is rule-based across polarity, numeric, entity, and temporal axes. That
+    was a deliberate constraint, and it did more to shape the design than any feature decision.
+  </p>
+  <p>
+    Determinism means the memory layer is self-hostable, reproducible, and free to run — no
+    per-operation billing on your own recall, no data leaving your infrastructure, no third service to
+    be down at 3 a.m. It also forces a certain honesty: you cannot hand-wave "the model will figure
+    out what is important." You have to say, in code, what important <em>means</em>. Writing those
+    rules down turned out to be clarifying rather than limiting.
+  </p>
+  <p>
+    We leaned on neuroscience for the shape of it — complementary learning systems for the
+    hippocampus-to-neocortex consolidation, synaptic renormalisation for the pruning of weak traces,
+    salience gating for write-time importance, the hypercorrection effect for the "high-confidence
+    errors correct hardest" intuition — and cross-checked each against how leading agent-memory
+    systems approach the same problems. But the implementations are boring on purpose: SQL, rank
+    fusion, a scheduled job. A brain's worth of behaviour does not require a brain's worth of magic.
+  </p>
+
+  <hr>
+
+  <p>
+    Mnemos is MIT-licensed, a single Go binary, and runs entirely on your infrastructure. The
+    cognitive layer described here — consolidation, forgetting, salience, hybrid and corrective
+    retrieval, hypercorrection — is all in the box.
+  </p>
+  <div class="post-foot">
+    <p>
+      Read the <a href="../index.html">overview</a>, browse the
+      <a href="https://github.com/klarlabs-studio/mnemos">source on GitHub</a>, or start a
+      <a href="https://github.com/klarlabs-studio/mnemos/discussions">discussion</a>. Feedback from
+      people running their own memory layers is the feedback we want most.
+    </p>
+  </div>
+</article>
+</main>
+
+<footer>
+  <div class="wrap footer-grid">
+    <div>
+      <a class="logo" href="../index.html">mnemos<span aria-hidden="true">.</span></a>
+      <p class="dim">MIT licensed · single Go binary · 5 storage backends · zero hosted dependencies.</p>
+    </div>
+    <div>
+      <h4>Project</h4>
+      <ul>
+        <li><a href="https://github.com/klarlabs-studio/mnemos">GitHub repo</a></li>
+        <li><a href="https://github.com/klarlabs-studio/mnemos/blob/main/Roadmap.md">Roadmap</a></li>
+        <li><a href="https://github.com/klarlabs-studio/mnemos/blob/main/Vision.md">Vision</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Contact</h4>
+      <ul>
+        <li><a href="https://github.com/klarlabs-studio/mnemos/discussions">Discussions</a></li>
+        <li><a href="https://github.com/klarlabs-studio/mnemos/issues">Issues</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
