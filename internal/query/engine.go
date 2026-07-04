@@ -53,6 +53,12 @@ const eventVectorTopK = 64
 // single answer. Matches the long-standing rankEventsWithFallback limit.
 const answerEventLimit = 5
 
+// rrfK is the Reciprocal Rank Fusion damping constant (Cormack et al. 2009).
+// A hit's fused score is Σ 1/(rrfK + rank) over the rankers it appears in, so a
+// larger k flattens the contribution of top ranks and lets many-list agreement
+// outweigh any single ranker's #1. 60 is the field-standard default.
+const rrfK = 60
+
 // NewEngine returns an Engine wired to the given event, claim, and relationship stores.
 func NewEngine(events eventLister, claims ports.ClaimRepository, relationships ports.RelationshipRepository) Engine {
 	return Engine{events: events, claims: claims, relationships: relationships}
@@ -183,7 +189,7 @@ func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.A
 	// loading the entire corpus. Falls through to ListAll on any miss so
 	// behaviour is identical whenever the fast-path can't serve the query
 	// (no searcher, no embedder, extension absent, or zero vector hits).
-	if candidates, ok := e.eventsByVector(ctx, question); ok {
+	if candidates, ok := e.eventsByHybrid(ctx, question); ok {
 		return e.answerWithEvents(ctx, question, candidates, opts, true)
 	}
 	allEvents, err := e.events.ListAll(ctx)
@@ -193,16 +199,24 @@ func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.A
 	return e.answerWithEvents(ctx, question, allEvents, opts, false)
 }
 
-// eventsByVector serves the native-vector recall path: embed the question,
-// ask the searcher for the top-K nearest event ids, then load just those
-// events. Returns ok=false — signalling the caller to fall back to ListAll —
-// whenever the path is unavailable or yields nothing: no searcher wired, no
-// embedder, an embed/search error, ErrVectorSearchUnavailable from a
-// backend without pgvector, or an empty candidate set. The returned events
-// are ordered by the searcher's cosine distance and consumed as-is (no
-// second in-Go cosine pass), so recall quality matches the whole-corpus path
-// once eventVectorTopK covers the relevant events.
-func (e Engine) eventsByVector(ctx context.Context, question string) ([]domain.Event, bool) {
+// eventsByHybrid serves the native fast-path recall: embed the question, ask
+// the pgvector searcher for the top-K nearest event ids (the dense leg), and —
+// when a text searcher is wired — fuse in a full-text ranking of the same
+// question (the sparse leg) by Reciprocal Rank Fusion before loading events.
+// The sparse leg is what makes this HYBRID: exact tokens the embedding blurs
+// (SHAs, service names, error codes, flag names) are recalled even when they
+// fall outside the dense top-K, and RRF consumes only ranks so the two
+// incomparable score scales (cosine distance vs ts_rank_cd) fuse without any
+// normalisation. With no text searcher wired it degrades to the pure dense
+// order — identical to the old vector-only fast-path.
+//
+// Returns ok=false — signalling the caller to fall back to ListAll — whenever
+// the dense path is unavailable or yields nothing: no searcher wired, no
+// embedder, an embed/search error, ErrVectorSearchUnavailable from a backend
+// without pgvector, or an empty candidate set. (A dense miss falls back rather
+// than serving sparse-only, so backends without pgvector still take the
+// whole-corpus hybrid path in rankEventsWithFallback, unchanged.)
+func (e Engine) eventsByHybrid(ctx context.Context, question string) ([]domain.Event, bool) {
 	if e.eventVectorSearch == nil || e.embedClient == nil {
 		return nil, false
 	}
@@ -214,28 +228,67 @@ func (e Engine) eventsByVector(ctx context.Context, question string) ([]domain.E
 	if err != nil || len(hits) == 0 {
 		return nil, false
 	}
-	ids := make([]string, 0, len(hits))
+	denseIDs := make([]string, 0, len(hits))
 	for _, h := range hits {
-		ids = append(ids, h.EventID)
+		denseIDs = append(denseIDs, h.EventID)
 	}
-	events, err := e.events.ListByIDs(ctx, ids)
+
+	// Sparse (lexical) leg — best-effort. An FTS error, a backend without a text
+	// searcher, or an empty match all leave the dense order intact; only a
+	// non-empty full-text ranking triggers fusion.
+	orderedIDs := denseIDs
+	if e.eventTextSearch != nil {
+		if ftsHits, ferr := e.eventTextSearch.SearchByText(ctx, question, eventVectorTopK); ferr == nil && len(ftsHits) > 0 {
+			sparseIDs := make([]string, 0, len(ftsHits))
+			for _, h := range ftsHits {
+				sparseIDs = append(sparseIDs, h.ID)
+			}
+			orderedIDs = fuseRRF([][]string{denseIDs, sparseIDs})
+		}
+	}
+
+	events, err := e.events.ListByIDs(ctx, orderedIDs)
 	if err != nil || len(events) == 0 {
 		return nil, false
 	}
-	// ListByIDs makes no ordering promise; re-emit the events in the searcher's
-	// distance order so the caller can treat them as already-ranked and skip a
-	// second, whole-corpus cosine pass (the very cost this path exists to avoid).
+	// ListByIDs makes no ordering promise; re-emit the events in the fused rank
+	// order so the caller can treat them as already-ranked and skip a second,
+	// whole-corpus cosine pass (the very cost this path exists to avoid).
 	byID := make(map[string]domain.Event, len(events))
 	for _, ev := range events {
 		byID[ev.ID] = ev
 	}
-	ranked := make([]domain.Event, 0, len(hits))
-	for _, h := range hits {
-		if ev, ok := byID[h.EventID]; ok {
+	ranked := make([]domain.Event, 0, len(orderedIDs))
+	for _, id := range orderedIDs {
+		if ev, ok := byID[id]; ok {
 			ranked = append(ranked, ev)
 		}
 	}
 	return ranked, true
+}
+
+// fuseRRF merges several ranked id lists into one by Reciprocal Rank Fusion:
+// each id accumulates Σ 1/(rrfK + rank) across every list it appears in (rank
+// 1-based), and the ids are returned in descending fused score. Because RRF
+// reads only ranks, never scores, it fuses rankers whose score scales are
+// incomparable (cosine similarity vs ts_rank_cd) without any normalisation, and
+// an id that ranks well in BOTH legs outscores one that tops a single leg. Ties
+// resolve by first appearance for deterministic output.
+func fuseRRF(rankings [][]string) []string {
+	score := make(map[string]float64)
+	order := make([]string, 0)
+	for _, list := range rankings {
+		for rank, id := range list {
+			if _, seen := score[id]; !seen {
+				order = append(order, id)
+			}
+			score[id] += 1.0 / float64(rrfK+rank+1)
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return score[order[i]] > score[order[j]]
+	})
+	return order
 }
 
 // AnswerForRun searches events belonging to the specified run for the best answer.
