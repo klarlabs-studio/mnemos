@@ -52,6 +52,7 @@ nav:
     - Claims & evidence: concepts/claims.md
     - Contradictions: concepts/contradictions.md
     - Bi-temporal queries: concepts/bitemporal.md
+    - Cognitive layer: concepts/cognitive-layer.md
   - SDKs:
     - Python: sdks/python.md
     - TypeScript: sdks/typescript.md
