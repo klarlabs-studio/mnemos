@@ -669,6 +669,88 @@ func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64) (int
 	return forgotten, nil
 }
 
+// hypercorrectionTrustFloor is how established the challenged claim must be for a
+// contradiction to count as a hypercorrection alert. Below it (and unpromoted),
+// the belief wasn't entrenched enough for new counter-evidence to be surprising,
+// so its contradiction is ordinary epistemic churn, not an alert.
+const hypercorrectionTrustFloor = 0.7
+
+// Hypercorrections implements [Memory.Hypercorrections]. It reads the epistemic
+// graph — no recomputation — so it's a cheap, on-demand metacognition query.
+func (m *memory) Hypercorrections(ctx context.Context) ([]Hypercorrection, error) {
+	rels, err := m.conn.Relationships.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("mnemos: Hypercorrections: list relationships: %w", err)
+	}
+	var contradicts []domain.Relationship
+	for _, r := range rels {
+		if r.Type == domain.RelationshipTypeContradicts {
+			contradicts = append(contradicts, r)
+		}
+	}
+	if len(contradicts) == 0 {
+		return nil, nil
+	}
+	claims, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("mnemos: Hypercorrections: list claims: %w", err)
+	}
+	byID := make(map[string]domain.Claim, len(claims))
+	for _, c := range claims {
+		byID[c.ID] = c
+	}
+	// establishment ranks the two sides of a contradiction: human-promoted
+	// knowledge outranks any trust score; otherwise rank by trust.
+	establishment := func(c domain.Claim) float64 {
+		if c.Lifecycle == domain.ClaimLifecyclePromoted {
+			return 1.0 + c.TrustScore
+		}
+		return c.TrustScore
+	}
+
+	var out []Hypercorrection
+	for _, r := range contradicts {
+		a, aok := byID[r.FromClaimID]
+		b, bok := byID[r.ToClaimID]
+		if !aok || !bok {
+			continue
+		}
+		// Only currently-valid claims: a contradiction of an already-superseded or
+		// forgotten belief is history, not a live alert.
+		if !a.ValidTo.IsZero() || !b.ValidTo.IsZero() {
+			continue
+		}
+		// The contradicted side is the more-established of the pair; the other is
+		// the challenger prompting re-examination.
+		contradicted, challenger := a, b
+		if establishment(b) > establishment(a) {
+			contradicted, challenger = b, a
+		}
+		promoted := contradicted.Lifecycle == domain.ClaimLifecyclePromoted
+		if !promoted && contradicted.TrustScore < hypercorrectionTrustFloor {
+			continue // the challenged belief wasn't established enough to be an alert
+		}
+		out = append(out, Hypercorrection{
+			ContradictedClaimID:  contradicted.ID,
+			ContradictedText:     contradicted.Text,
+			ContradictedTrust:    contradicted.TrustScore,
+			ContradictedPromoted: promoted,
+			ChallengingClaimID:   challenger.ID,
+			ChallengingText:      challenger.Text,
+			DetectedAt:           r.CreatedAt,
+		})
+	}
+	// Most-established-first: promoted before unpromoted, then by trust desc — the
+	// front of the curation queue.
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].ContradictedPromoted != out[j].ContradictedPromoted {
+			return out[i].ContradictedPromoted
+		}
+		return out[i].ContradictedTrust > out[j].ContradictedTrust
+	})
+	return out, nil
+}
+
 // Close implements [Memory.Close].
 func (m *memory) Close() error {
 	var firstErr error

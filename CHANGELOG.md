@@ -8,6 +8,19 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Hypercorrection alerts + contradiction edges on the claim-write path (C3).**
+  `Memory.Hypercorrections` surfaces currently-valid contradictions where the
+  challenged claim is well-established (human-promoted, or trust at/above the
+  floor), ordered most-established-first — the metacognitive signal that new
+  evidence is challenging an entrenched belief, routed to the front of the
+  curation queue. To feed it, `RememberClaim` now generates supports/contradicts
+  edges against the existing corpus (previously only the full `Remember` pipeline
+  did), best-effort so a detection miss never fails the write. Establishment
+  requires promotion or accrued trust — a fresh claim's self-reported confidence
+  alone doesn't count, so ordinary churn between unvetted claims is not an alert.
+  (Per-source confidence calibration is deferred: mnemos has no ground-truth
+  outcome signal to measure predicted confidence against yet.)
+
 - **Intrinsic salience score, protecting important claims from forgetting (C1).**
   A new `trust.Salience` scores a claim's intrinsic importance in [0,1] from signals
   already on it — confidence, corroboration (evidence count), claim type (a decision

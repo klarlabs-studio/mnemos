@@ -460,6 +460,28 @@ type ConsolidateResult struct {
 	Forgotten int
 }
 
+// Hypercorrection is one metacognitive alert: a currently-valid contradiction of
+// a well-established claim. Named for the hypercorrection effect — high-confidence
+// errors, once caught, are corrected most strongly — it flags exactly those
+// high-stakes moments where new evidence challenges an entrenched belief.
+type Hypercorrection struct {
+	// ContradictedClaimID / ContradictedText identify the ESTABLISHED claim being
+	// challenged (the higher-trust or promoted side of the contradiction).
+	ContradictedClaimID string
+	ContradictedText    string
+	// ContradictedTrust is that claim's trust score at detection time, and
+	// ContradictedPromoted reports whether it is human-endorsed knowledge. Together
+	// they rank the alert: promoted + high-trust conflicts surface first.
+	ContradictedTrust    float64
+	ContradictedPromoted bool
+	// ChallengingClaimID / ChallengingText identify the newer claim that
+	// contradicts it — the evidence prompting a re-examination.
+	ChallengingClaimID string
+	ChallengingText    string
+	// DetectedAt is when the contradicts edge was recorded.
+	DetectedAt time.Time
+}
+
 // SignalQuery selects which temporal signals [Memory.Signals] returns.
 type SignalQuery struct {
 	// RunID selects the run (Chronos scope) to read signals for. Empty means
@@ -597,6 +619,17 @@ type Memory interface {
 	// plan without changing anything. Idempotent — a second pass with nothing new
 	// to merge is a no-op.
 	Consolidate(ctx context.Context, opts ConsolidateOptions) (ConsolidateResult, error)
+
+	// Hypercorrections surfaces the metacognitive alerts: currently-valid
+	// contradictions where the challenged claim is well-established (high trust or
+	// human-promoted). When new evidence contradicts a belief the store was
+	// confident in, that is the epistemic event most worth a human's attention —
+	// either the established belief is now wrong and must be updated, or the new
+	// claim is suspect. Results are ordered most-established-first, so the caller
+	// can route the highest-stakes conflicts to the front of the curation queue.
+	// It reads the epistemic graph (contradicts edges, populated on write); a
+	// contradiction of a low-trust, unvetted claim is not an alert and is omitted.
+	Hypercorrections(ctx context.Context) ([]Hypercorrection, error)
 
 	// LastWriteSession returns the governance session recorded by the
 	// most recent write (Remember, RememberClaim, or RememberEvent) on
