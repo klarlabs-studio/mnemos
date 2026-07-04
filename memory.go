@@ -482,6 +482,37 @@ type Hypercorrection struct {
 	DetectedAt time.Time
 }
 
+// Calibration reports how well stated confidence matches reality, computed only
+// from claims that an observed outcome later validated or refuted.
+type Calibration struct {
+	// Samples is the number of outcome-adjudicated claims the curve is built from.
+	// Small early on — the calibration is only as trustworthy as this count.
+	Samples int
+	// Buckets partitions those claims by stated confidence (deciles), low→high,
+	// omitting empty ranges.
+	Buckets []CalibrationBucket
+	// ECE is the Expected Calibration Error: the sample-weighted mean gap between
+	// a bucket's accuracy and its mean stated confidence. 0 = perfectly
+	// calibrated; larger means confidence is a less reliable signal.
+	ECE float64
+	// Brier is the mean squared error of confidence against the {0,1} outcome
+	// (0 best, 1 worst) — a single-number scoring of the confidence estimates.
+	Brier float64
+}
+
+// CalibrationBucket is one stated-confidence band and how claims in it fared.
+type CalibrationBucket struct {
+	// Lower/Upper is the confidence range [Lower, Upper) the bucket covers.
+	Lower float64
+	Upper float64
+	// Count is the number of adjudicated claims whose stated confidence fell here.
+	Count int
+	// MeanConfidence is their mean stated confidence (what was predicted).
+	MeanConfidence float64
+	// Accuracy is the fraction that were actually borne out (what happened).
+	Accuracy float64
+}
+
 // SignalQuery selects which temporal signals [Memory.Signals] returns.
 type SignalQuery struct {
 	// RunID selects the run (Chronos scope) to read signals for. Empty means
@@ -630,6 +661,17 @@ type Memory interface {
 	// It reads the epistemic graph (contradicts edges, populated on write); a
 	// contradiction of a low-trust, unvetted claim is not an alert and is omitted.
 	Hypercorrections(ctx context.Context) ([]Hypercorrection, error)
+
+	// Calibration measures whether stated confidence is itself trustworthy — the
+	// accuracy half of metacognition. It groups every claim that was later BORNE
+	// OUT or REFUTED by an observed outcome (a validates / refutes edge, minted
+	// when a decision's outcome is attached) into stated-confidence buckets, and
+	// compares the predicted confidence in each bucket to how often those claims
+	// actually turned out right. A well-calibrated store's 0.9-confidence claims
+	// are right about 90% of the time; a gap means confidence is over- or
+	// under-stated. Only outcome-adjudicated claims count, so Samples is small
+	// until outcomes accumulate — read it before trusting the curve. Pure read.
+	Calibration(ctx context.Context) (Calibration, error)
 
 	// LastWriteSession returns the governance session recorded by the
 	// most recent write (Remember, RememberClaim, or RememberEvent) on
