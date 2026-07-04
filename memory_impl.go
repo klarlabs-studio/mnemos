@@ -619,6 +619,18 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.Refuted = refuted
 	}
+	// Skill reinforcement: bend each playbook's confidence toward the observed
+	// success rate of the outcomes on the actions its lessons were derived from —
+	// the learning half of the sleep pass, closing the loop so a write-once skill
+	// store becomes self-tuning. Deterministic, no LLM; independent of the
+	// forgetting steps above.
+	if opts.ReinforcePlaybooks {
+		reinforced, perr := m.reinforcePlaybooks(ctx)
+		if perr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: reinforce playbooks: %w", perr)
+		}
+		res.PlaybooksReinforced = reinforced
+	}
 	return res, nil
 }
 

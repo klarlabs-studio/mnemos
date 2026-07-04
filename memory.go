@@ -447,6 +447,17 @@ type ConsolidateOptions struct {
 	// refuted while still nominally trusted.
 	ForgetRefuted bool
 
+	// ReinforcePlaybooks bends each playbook's confidence toward the observed
+	// success rate of the outcomes recorded against the actions its lessons were
+	// derived from — the skill-learning half of the sleep pass. Synthesize writes
+	// a playbook's confidence from its lessons once; this closes the loop so real
+	// outcomes reinforce or decay it over time (a playbook whose underlying
+	// actions keep failing decays; one whose actions keep succeeding is
+	// reinforced), turning the skill store from write-only into self-tuning. A
+	// deterministic, no-LLM blend (see [ReinforcementRetention]). Off by default;
+	// a no-op on backends without the skill layer or with too few outcomes.
+	ReinforcePlaybooks bool
+
 	// DryRun plans the pass without mutating — it reports what WOULD be merged
 	// and forgotten so an operator (or a scheduler) can preview before applying.
 	DryRun bool
@@ -471,6 +482,9 @@ type ConsolidateResult struct {
 	// Refuted is the number of non-promoted claims invalidated because an observed
 	// outcome refuted them — 0 unless ForgetRefuted was set, and 0 on a dry run.
 	Refuted int
+	// PlaybooksReinforced is the number of playbooks whose confidence was moved by
+	// observed outcomes — 0 unless ReinforcePlaybooks was set, and 0 on a dry run.
+	PlaybooksReinforced int
 }
 
 // Hypercorrection is one metacognitive alert: a currently-valid contradiction of
