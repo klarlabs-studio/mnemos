@@ -615,13 +615,31 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 // forgetStaleClaims invalidates non-promoted claims whose trust is below the
 // floor by setting their valid-to to now — so recall (which filters by valid
 // time) stops surfacing them, while the claim + its history are preserved (a
+// salienceProtectFloor is the intrinsic-importance threshold above which a claim
+// is kept by forgetStaleClaims even when its trust has fallen below the forget
+// floor. Tuned so only genuinely consequential claims (a decision, or a well-
+// corroborated + verified finding — see trust.Salience's weighting) clear it,
+// while the low-confidence, single-source, unverified tail is still let go.
+const salienceProtectFloor = 0.66
+
 // point-in-time query can still see what was once believed). This is forgetting
 // as reduced retrievability, not erasure. Promoted (human-endorsed) claims are
 // never forgotten, regardless of decay. Already-invalidated claims are skipped.
+// Intrinsically salient claims are also protected — see the salience gate below.
 func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64) (int, error) {
 	all, err := m.conn.Claims.ListAll(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list claims: %w", err)
+	}
+	// Evidence counts feed the salience score's corroboration term. One scan of
+	// all links → per-claim count; cheap next to iterating every claim.
+	evidence, err := m.conn.Claims.ListAllEvidence(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list evidence: %w", err)
+	}
+	evidenceCount := make(map[string]int, len(all))
+	for _, e := range evidence {
+		evidenceCount[e.ClaimID]++
 	}
 	now := time.Now().UTC()
 	forgotten := 0
@@ -634,6 +652,14 @@ func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64) (int
 		}
 		if c.TrustScore >= belowTrust {
 			continue // still trusted enough to keep surfacing
+		}
+		// Salience gate (C1): trust decays, intrinsic importance does not. A
+		// consequential claim — a decision, a corroborated + verified finding, a
+		// high-authority source — is kept even once its trust has faded, mirroring
+		// how the brain protects salient memories from the forgetting that prunes
+		// the mundane. Only the low-salience tail is let go. See trust.Salience.
+		if trust.SalienceOf(c, evidenceCount[c.ID]) >= salienceProtectFloor {
+			continue
 		}
 		if err := m.conn.Claims.SetValidity(ctx, c.ID, now); err != nil {
 			return forgotten, fmt.Errorf("invalidate stale claim %s: %w", c.ID, err)

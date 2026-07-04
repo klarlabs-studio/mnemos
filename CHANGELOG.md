@@ -8,6 +8,19 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Intrinsic salience score, protecting important claims from forgetting (C1).**
+  A new `trust.Salience` scores a claim's intrinsic importance in [0,1] from signals
+  already on it — confidence, corroboration (evidence count), claim type (a decision
+  or verified test outcome outweighs a bare fact or a hypothesis), source authority,
+  and verification — no LLM, no I/O, deterministic. It is the rule-based analog of
+  Generative Agents' "poignancy". The consolidation sleep pass now consults it: a
+  claim whose trust has decayed below the forget floor is nonetheless KEPT when its
+  salience clears `salienceProtectFloor`, so a consequential-but-quiet memory (a
+  Sev-1 post-mortem, a high-authority decision) survives the forgetting that prunes
+  the mundane — mirroring the brain's amygdala/dopamine importance gate. Trust
+  decays; salience does not. (The corpus-relative NOVELTY term and chronos SURPRISE,
+  which must be captured at encoding, are the tracked write-time follow-up.)
+
 - **Active forgetting in the consolidation pass (`ConsolidateOptions.ForgetBelowTrust`).**
   The pruning half of the brain's sleep: claims whose recomputed trust falls below
   the floor and are no longer reinforced are forgotten — invalidated (valid-to set
