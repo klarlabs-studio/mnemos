@@ -171,6 +171,16 @@ Every other tier reads trust and corroboration. Harden them first.
   low, *or low in a domain where calibration is known-poor* → **abstain / escalate to a
   human**. Abstention is the most under-served agent behavior, and mnemos is uniquely able
   because it *knows its own calibration* (now per-source, via T0.2). *Deterministic. Low.*
+  **SHIPPED (feeling-of-knowing) — v0.47.0 (`Memory.RecallWithSufficiency` → `Sufficiency`).**
+  Surfaces the aggregate answer confidence (the trust/density/contradiction/recency blend the
+  query already computes but plain Recall discarded) + a `Sufficient` flag against the exact
+  `RecallSufficiencyFloor` (0.35) mnemos uses to gate its own corrective pass — so the "feeling
+  of knowing" a caller reads is the signal mnemos acts on. Senat wires it as an **abstain gate**
+  (v0.11.59): `engine.abstainHint` injects an epistemic-humility directive into a run's objective
+  when the org's VETTED memory is thin, so the worker investigates first-hand and flags
+  uncertainty instead of asserting weakly-supported conclusions; silent when memory is sufficient.
+  *Calibration-adjusted thresholding + explicit human-escalation are the open remainder — today
+  the gate is a fixed floor over promoted-knowledge confidence.*
 - **T3.3 Effort/attention budgeting.** Generalize the corrective pass into an
   Expected-Value-of-Control budget: retrieval depth, fusion breadth, and number of
   corrective passes scale with `stakes × (1 − calibratedConfidence)`. Stakes can be read
