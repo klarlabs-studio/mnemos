@@ -183,6 +183,11 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		Lifecycle:  domain.ClaimLifecycle(item.Lifecycle),
 	}
 
+	// Snapshot the existing corpus BEFORE upserting so edge detection compares the
+	// new claim against prior claims only (not itself). Best-effort: a read miss
+	// just means no edges this write.
+	existing, existingErr := m.conn.Claims.ListAll(ctx)
+
 	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert claim: %w", err)
 	}
@@ -196,18 +201,37 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 	}
 	linkCount := len(links)
 
+	// Epistemic edge generation: relate the new claim to the existing corpus so
+	// supports/contradicts edges populate on the claim-write path too — not only
+	// the full Remember pipeline. This is what lets a contradiction of established
+	// knowledge become a hypercorrection signal (see Memory.Hypercorrections).
+	// Strictly best-effort: a detection or persistence miss never fails the write,
+	// which is already durable. Mirrors rememberExecutor's incremental relate.
+	relCount := 0
+	if existingErr == nil && len(existing) > 0 {
+		if rels, derr := m.relator.DetectIncremental([]domain.Claim{claim}, existing); derr == nil && len(rels) > 0 {
+			for i := range rels {
+				rels[i].CreatedBy = m.actorID
+			}
+			if uerr := m.conn.Relationships.Upsert(ctx, rels); uerr == nil {
+				relCount = len(rels)
+			}
+		}
+	}
+
 	records := []axidomain.EvidenceRecord{
 		{Kind: "mnemos.remember_claim", Source: evidenceSourceLibrary, Value: map[string]any{
 			"claim_id":       id,
 			"type":           string(claimType),
 			"confidence":     confidence,
 			"evidence_links": linkCount,
+			"relationships":  relCount,
 			"run_id":         item.RunID,
 		}},
 	}
 	return axidomain.ExecutionResult{
 		Data:    rememberClaimOutput{ClaimID: id},
-		Summary: fmt.Sprintf("remembered claim %s (links=%d)", id, linkCount),
+		Summary: fmt.Sprintf("remembered claim %s (links=%d, edges=%d)", id, linkCount, relCount),
 	}, records, nil
 }
 
