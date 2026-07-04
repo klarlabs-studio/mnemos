@@ -329,6 +329,40 @@ type Result struct {
 	Provenance string
 }
 
+// RecallSufficiencyFloor is the aggregate-confidence threshold at or above
+// which a recall is considered strong enough to answer on: below it (or with
+// no claims) the memory is too thin and the caller should gather more evidence
+// or abstain rather than confabulate. It mirrors the floor Mnemos uses
+// internally to gate its own corrective-retrieval pass, so the "feeling of
+// knowing" a caller reads is the same signal Mnemos acts on. The aggregate
+// confidence tops out around 0.7, so a genuinely grounded answer clears this
+// comfortably.
+const RecallSufficiencyFloor = 0.35
+
+// Sufficiency is Mnemos's "feeling of knowing" for a recall — a deterministic
+// (no-LLM) read on whether the memory backing an answer is strong enough to
+// rely on. It lets an agent runtime abstain, hedge, or go seek first-hand
+// evidence when its memory is thin, instead of stating a weakly-supported
+// conclusion as established fact.
+type Sufficiency struct {
+	// Confidence is the aggregate answer confidence in [0, 1] — a weighted
+	// blend of the recalled claims' trust, citation density, contradiction
+	// penalty, and freshness. Distinct from any single claim's Confidence.
+	Confidence float64
+
+	// ClaimCount is the number of claims the recall returned.
+	ClaimCount int
+
+	// Sufficient reports whether the recall clears the bar: Confidence at or
+	// above [RecallSufficiencyFloor] with at least one claim. When false, the
+	// caller is holding thin memory and should seek evidence or abstain.
+	Sufficient bool
+
+	// Floor is the threshold applied ([RecallSufficiencyFloor]), surfaced so
+	// callers can render the margin without hard-coding the constant.
+	Floor float64
+}
+
 // Event is a temporal entry to remember. Unlike an [Item], an Event is
 // always anchored to a wall-clock time and is intended for the timeline
 // (incident timelines, audit trails, deployment history, decision logs).
@@ -653,6 +687,16 @@ type Memory interface {
 	// no embeddings are configured) and may include claims reached by
 	// graph expansion when [Query.Hops] > 0.
 	Recall(ctx context.Context, q Query) ([]Result, error)
+
+	// RecallWithSufficiency is Recall plus a "feeling of knowing": a
+	// deterministic verdict on whether the memory Mnemos holds is strong
+	// enough to answer confidently, or whether the caller should seek more
+	// evidence (or abstain) rather than confabulate. The [Sufficiency]
+	// carries the aggregate answer confidence, the claim count, and the
+	// Sufficient flag (confidence at or above [RecallSufficiencyFloor] with
+	// at least one claim). The []Result is identical to what Recall returns;
+	// no extra work beyond surfacing the confidence Recall already computes.
+	RecallWithSufficiency(ctx context.Context, q Query) ([]Result, Sufficiency, error)
 
 	// Get returns the stored claim with the given id. It is the stable
 	// exact-lookup read on the API surface. Returns a non-nil error when
