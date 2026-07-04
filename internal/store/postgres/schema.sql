@@ -407,3 +407,24 @@ BEGIN
   END IF;
 END
 $mnemos_pgvector$;
+
+-- Full-text search (hybrid retrieval, R1). A generated `tsvector` column plus a
+-- GIN index over each table's text gives the sparse (lexical) recall leg that the
+-- dense embedding leg underweights: exact tokens — SHAs, service names, error
+-- codes, flag names — that cosine similarity blurs. The query engine fuses this
+-- leg with the pgvector `<=>` leg by Reciprocal Rank Fusion.
+--
+-- STORED generated columns backfill existing rows the moment they're added and
+-- stay in sync on every write, so there is no trigger to maintain and no separate
+-- indexing pass. The TWO-ARG `to_tsvector('english', ...)` is IMMUTABLE (required
+-- for a generated-column expression); the one-arg form reads a GUC and is not.
+-- tsvector + GIN are core Postgres — no extension, so (unlike pgvector) this needs
+-- no detect guard; it always applies. `search_tsv` is a derived accelerator — the
+-- source text column stays authoritative.
+ALTER TABLE events ADD COLUMN IF NOT EXISTS search_tsv tsvector
+  GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+CREATE INDEX IF NOT EXISTS idx_events_search_tsv ON events USING GIN (search_tsv);
+
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS search_tsv tsvector
+  GENERATED ALWAYS AS (to_tsvector('english', text)) STORED;
+CREATE INDEX IF NOT EXISTS idx_claims_search_tsv ON claims USING GIN (search_tsv);
