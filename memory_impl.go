@@ -610,7 +610,90 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.Forgotten = forgotten
 	}
+	// Surprise-driven forgetting: a belief an observed outcome REFUTED should stop
+	// surfacing — the prediction-error loop closing. Independent of trust decay.
+	if opts.ForgetRefuted {
+		refuted, rerr := m.forgetRefutedClaims(ctx)
+		if rerr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: forget refuted: %w", rerr)
+		}
+		res.Refuted = refuted
+	}
 	return res, nil
+}
+
+// refutedClaimIDs returns the ids of claims whose LATEST outcome verdict is
+// "refuted" — an observed outcome (a refutes edge) contradicted the belief and no
+// later outcome re-validated it. Shared shape with Calibration's verdict logic.
+func (m *memory) refutedClaimIDs(ctx context.Context) (map[string]struct{}, error) {
+	validates, err := m.conn.EntityRels.ListByKind(ctx, string(domain.RelationshipTypeValidates))
+	if err != nil {
+		return nil, fmt.Errorf("list validates: %w", err)
+	}
+	refutes, err := m.conn.EntityRels.ListByKind(ctx, string(domain.RelationshipTypeRefutes))
+	if err != nil {
+		return nil, fmt.Errorf("list refutes: %w", err)
+	}
+	type verdict struct {
+		refuted bool
+		at      time.Time
+	}
+	latest := make(map[string]verdict)
+	adopt := func(edges []domain.EntityRelationship, refuted bool) {
+		for _, e := range edges {
+			if e.ToType != domain.RelEntityClaim || e.ToID == "" {
+				continue
+			}
+			if cur, ok := latest[e.ToID]; !ok || e.CreatedAt.After(cur.at) {
+				latest[e.ToID] = verdict{refuted: refuted, at: e.CreatedAt}
+			}
+		}
+	}
+	adopt(validates, false)
+	adopt(refutes, true)
+	out := make(map[string]struct{})
+	for id, v := range latest {
+		if v.refuted {
+			out[id] = struct{}{}
+		}
+	}
+	return out, nil
+}
+
+// forgetRefutedClaims invalidates currently-valid, non-promoted claims that an
+// observed outcome refuted. Like forgetStaleClaims it closes valid-time (recall
+// stops surfacing them; history preserved). Promoted claims are exempt — a
+// refuted human belief is a Hypercorrection for review, not a silent forget.
+func (m *memory) forgetRefutedClaims(ctx context.Context) (int, error) {
+	refuted, err := m.refutedClaimIDs(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(refuted) == 0 {
+		return 0, nil
+	}
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list claims: %w", err)
+	}
+	now := time.Now().UTC()
+	n := 0
+	for _, c := range all {
+		if !c.ValidTo.IsZero() {
+			continue // already invalidated
+		}
+		if c.Lifecycle == domain.ClaimLifecyclePromoted {
+			continue // human-endorsed: surfaces as a hypercorrection, never silently forgotten
+		}
+		if _, ok := refuted[c.ID]; !ok {
+			continue
+		}
+		if err := m.conn.Claims.SetValidity(ctx, c.ID, now); err != nil {
+			return n, fmt.Errorf("invalidate refuted claim %s: %w", c.ID, err)
+		}
+		n++
+	}
+	return n, nil
 }
 
 // forgetStaleClaims invalidates non-promoted claims whose trust is below the
