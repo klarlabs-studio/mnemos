@@ -437,6 +437,16 @@ type ConsolidateOptions struct {
 	// regardless of trust. 0 (the default) disables forgetting — dedupe only.
 	ForgetBelowTrust float64
 
+	// ForgetRefuted actively forgets claims that an observed outcome later REFUTED
+	// (a refutes edge, minted when a decision's failing outcome is attached) — the
+	// prediction-error loop closing on itself: a belief reality contradicted should
+	// stop surfacing, not linger at whatever trust it had. Like ForgetBelowTrust it
+	// invalidates (valid-time closed, history kept), never erases; PROMOTED claims
+	// are exempt (a refuted human belief surfaces as a Hypercorrection for review
+	// instead). Off by default. Independent of ForgetBelowTrust — a claim can be
+	// refuted while still nominally trusted.
+	ForgetRefuted bool
+
 	// DryRun plans the pass without mutating — it reports what WOULD be merged
 	// and forgotten so an operator (or a scheduler) can preview before applying.
 	DryRun bool
@@ -458,6 +468,9 @@ type ConsolidateResult struct {
 	// deprecated (excluded from recall, history kept) — 0 unless ForgetBelowTrust
 	// was set, and 0 on a dry run.
 	Forgotten int
+	// Refuted is the number of non-promoted claims invalidated because an observed
+	// outcome refuted them — 0 unless ForgetRefuted was set, and 0 on a dry run.
+	Refuted int
 }
 
 // Hypercorrection is one metacognitive alert: a currently-valid contradiction of

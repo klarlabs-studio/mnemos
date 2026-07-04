@@ -8,6 +8,17 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Surprise-driven forgetting (`ConsolidateOptions.ForgetRefuted`).** The
+  prediction-error loop closing on itself: the sleep pass now also invalidates
+  claims that an observed outcome REFUTED (a refutes edge) — a belief reality
+  contradicted should stop surfacing, not linger at whatever trust it held.
+  Independent of trust decay (a claim can be refuted while still nominally
+  trusted); latest outcome wins (refuted-then-revalidated is kept); reduced
+  retrievability, not erasure (valid-time closed, history preserved); PROMOTED
+  claims are exempt (a refuted human belief is a Hypercorrection for review, not a
+  silent forget). `ConsolidateResult.Refuted` reports the count. Research part 2,
+  tier 1 — routing outcome-surprise into forgetting. Deterministic, off by default.
+
 - **Confidence calibration (`Memory.Calibration`), the accuracy half of metacognition.**
   Answers "is stated confidence itself trustworthy?" — a well-calibrated store's
   0.9-confidence claims are right about 90% of the time. It groups every claim an
