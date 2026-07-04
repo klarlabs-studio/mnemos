@@ -29,11 +29,16 @@ func calibMem(t *testing.T) *memory {
 
 func seedClaim(t *testing.T, m *memory, id string, confidence float64) {
 	t.Helper()
+	seedClaimFrom(t, m, id, confidence, "")
+}
+
+func seedClaimFrom(t *testing.T, m *memory, id string, confidence float64, source string) {
+	t.Helper()
 	now := time.Now().UTC()
 	if err := m.conn.Claims.Upsert(context.Background(), []domain.Claim{{
 		ID: id, Text: "claim " + id, Type: domain.ClaimTypeFact,
 		Confidence: confidence, Status: domain.ClaimStatusActive,
-		CreatedAt: now, ValidFrom: now,
+		CreatedBy: source, CreatedAt: now, ValidFrom: now,
 	}}); err != nil {
 		t.Fatalf("seed claim %s: %v", id, err)
 	}
@@ -124,6 +129,45 @@ func TestCalibration_LatestVerdictWins(t *testing.T) {
 	}
 	if len(cal.Buckets) != 1 || cal.Buckets[0].Accuracy != 0 {
 		t.Fatalf("want the later refutation to win (accuracy 0), got %+v", cal.Buckets)
+	}
+}
+
+func TestCalibration_PerSource(t *testing.T) {
+	m := calibMem(t)
+	now := time.Now().UTC()
+	// grace: 2 claims at 0.9, both borne out → well-under-confident (gap -0.1).
+	seedClaimFrom(t, m, "g1", 0.9, "grace")
+	adjudicate(t, m, "g1", "g1", true, now)
+	seedClaimFrom(t, m, "g2", 0.9, "grace")
+	adjudicate(t, m, "g2", "g2", true, now)
+	// kai: 2 claims at 0.9, both wrong → badly over-confident (gap +0.9).
+	seedClaimFrom(t, m, "k1", 0.9, "kai")
+	adjudicate(t, m, "k1", "k1", false, now)
+	seedClaimFrom(t, m, "k2", 0.9, "kai")
+	adjudicate(t, m, "k2", "k2", false, now)
+
+	cal, err := m.Calibration(context.Background())
+	if err != nil {
+		t.Fatalf("Calibration: %v", err)
+	}
+	if len(cal.Sources) != 2 {
+		t.Fatalf("Sources = %d, want 2: %+v", len(cal.Sources), cal.Sources)
+	}
+	bySrc := map[string]SourceCalibration{}
+	for _, s := range cal.Sources {
+		bySrc[s.Source] = s
+	}
+	grace := bySrc["grace"]
+	if grace.Samples != 2 || !approx(grace.Accuracy, 1.0, 1e-9) || !approx(grace.Gap, -0.1, 1e-9) {
+		t.Fatalf("grace = %+v, want samples2 acc1.0 gap-0.1 (under-confident)", grace)
+	}
+	kai := bySrc["kai"]
+	if kai.Samples != 2 || !approx(kai.Accuracy, 0.0, 1e-9) || !approx(kai.Gap, 0.9, 1e-9) {
+		t.Fatalf("kai = %+v, want samples2 acc0 gap+0.9 (over-confident)", kai)
+	}
+	// A positive gap flags the over-confident source — the whole point.
+	if kai.Gap <= grace.Gap {
+		t.Fatal("over-confident source must have a larger gap than the under-confident one")
 	}
 }
 
