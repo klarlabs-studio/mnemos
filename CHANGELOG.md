@@ -8,6 +8,19 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Recall "feeling of knowing" (abstain gate, T3).** New
+  `Memory.RecallWithSufficiency(ctx, Query) ([]Result, Sufficiency, error)` surfaces a
+  deterministic verdict on whether the memory backing a recall is strong enough to rely
+  on — so an agent runtime can abstain, hedge, or go seek first-hand evidence instead of
+  stating a weakly-supported conclusion as established fact. `Sufficiency` carries the
+  aggregate answer `Confidence` (the trust/density/contradiction/recency blend the query
+  already computes — Recall discarded it), the `ClaimCount`, the `Sufficient` flag
+  (`Confidence >= RecallSufficiencyFloor` with at least one claim), and the `Floor`. The
+  floor (`RecallSufficiencyFloor`, 0.35) is the exact threshold Mnemos already uses to gate
+  its own corrective-retrieval pass, so the signal a caller reads is the one Mnemos acts on.
+  Plain `Recall` is unchanged; no extra query work. Opens tier 3 (the executive) of research
+  part 2 — knowing what you don't know.
+
 - **Outcome-reinforced playbooks (self-tuning skills, T2.2).** The sleep pass can
   now bend a playbook's confidence toward the observed success rate of the outcomes
   recorded against the actions its lessons were derived from

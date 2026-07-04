@@ -207,8 +207,33 @@ func (m *memory) ListDecisions(ctx context.Context, limit int) ([]Decision, erro
 
 // Recall implements [Memory.Recall].
 func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
+	results, _, err := m.recall(ctx, q)
+	return results, err
+}
+
+// RecallWithSufficiency implements [Memory.RecallWithSufficiency]: Recall plus
+// the "feeling of knowing" verdict, built from the aggregate answer confidence
+// the underlying query already computes (Recall discards it).
+func (m *memory) RecallWithSufficiency(ctx context.Context, q Query) ([]Result, Sufficiency, error) {
+	results, ans, err := m.recall(ctx, q)
+	if err != nil {
+		return nil, Sufficiency{}, err
+	}
+	suf := Sufficiency{
+		Confidence: ans.Confidence,
+		ClaimCount: len(ans.Claims),
+		Sufficient: len(ans.Claims) > 0 && ans.Confidence >= RecallSufficiencyFloor,
+		Floor:      RecallSufficiencyFloor,
+	}
+	return results, suf, nil
+}
+
+// recall is the shared core: it runs the query and maps claims to results,
+// returning the raw domain.Answer too so callers that want the aggregate
+// confidence (RecallWithSufficiency) can read it without a second pass.
+func (m *memory) recall(ctx context.Context, q Query) ([]Result, domain.Answer, error) {
 	if strings.TrimSpace(q.Text) == "" {
-		return nil, errors.New("mnemos: Recall: Text is required")
+		return nil, domain.Answer{}, errors.New("mnemos: Recall: Text is required")
 	}
 
 	opts := query.AnswerOptions{
@@ -227,7 +252,7 @@ func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
 		ans, err = m.query.AnswerWithOptions(q.Text, opts)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("mnemos: answer: %w", err)
+		return nil, domain.Answer{}, fmt.Errorf("mnemos: answer: %w", err)
 	}
 
 	results := make([]Result, 0, len(ans.Claims))
@@ -249,7 +274,7 @@ func (m *memory) Recall(ctx context.Context, q Query) ([]Result, error) {
 	// is reserved for future cancellation propagation through the
 	// query.Engine surface.
 	_ = ctx
-	return results, nil
+	return results, ans, nil
 }
 
 // Get implements [Memory.Get]. Exact lookup by claim id. Returns a
