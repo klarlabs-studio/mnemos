@@ -8,6 +8,17 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Independence-aware corroboration (echo-chamber guard, T0.1).** Trust's
+  corroboration term is now graded by INDEPENDENCE, not raw volume: each distinct
+  evidence-event author counts fully, and same-source repeats are discounted
+  (`domain.EvidenceRepeatWeight`, 0.5). Five events from one author corroborate far
+  less than five events from five authors — a single voice can no longer manufacture
+  consensus. Implemented across all four backends' RecomputeTrust (in-memory,
+  Postgres, SQLite, MySQL) by counting distinct `created_by` alongside total events;
+  the trust formula and the RecomputeTrust port signature are unchanged. Completes
+  tier 0 (epistemic honesty) of research part 2 — honest trust that every downstream
+  layer (recall, forgetting, prediction) reads.
+
 - **Surprise-driven forgetting (`ConsolidateOptions.ForgetRefuted`).** The
   prediction-error loop closing on itself: the sleep pass now also invalidates
   claims that an observed outcome REFUTED (a refutes edge) — a belief reality

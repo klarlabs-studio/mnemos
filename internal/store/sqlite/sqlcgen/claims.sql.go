@@ -11,7 +11,9 @@ import (
 )
 
 const averageTrust = `-- name: AverageTrust :one
-SELECT CAST(COALESCE(AVG(trust_score), 0) AS REAL) AS avg_trust FROM claims
+e;
+
+SELECT CAST(COALESCE(AVG(trust_score), 0) AS REAL) AS avg_trust FROM clai
 `
 
 func (q *Queries) AverageTrust(ctx context.Context) (float64, error) {
@@ -22,7 +24,9 @@ func (q *Queries) AverageTrust(ctx context.Context) (float64, error) {
 }
 
 const countClaimsBelowTrust = `-- name: CountClaimsBelowTrust :one
-SELECT COUNT(*) AS n FROM claims WHERE trust_score < ?
+s;
+
+SELECT COUNT(*) AS n FROM claims WHERE trust_score <
 `
 
 func (q *Queries) CountClaimsBelowTrust(ctx context.Context, trustScore float64) (int64, error) {
@@ -33,7 +37,9 @@ func (q *Queries) CountClaimsBelowTrust(ctx context.Context, trustScore float64)
 }
 
 const deleteAllClaimEvidence = `-- name: DeleteAllClaimEvidence :exec
-DELETE FROM claim_evidence
+?;
+
+DELETE FROM claim_eviden
 `
 
 func (q *Queries) DeleteAllClaimEvidence(ctx context.Context) error {
@@ -42,7 +48,9 @@ func (q *Queries) DeleteAllClaimEvidence(ctx context.Context) error {
 }
 
 const deleteAllClaimStatusHistory = `-- name: DeleteAllClaimStatusHistory :exec
-DELETE FROM claim_status_history
+?;
+
+DELETE FROM claim_status_histo
 `
 
 func (q *Queries) DeleteAllClaimStatusHistory(ctx context.Context) error {
@@ -51,7 +59,9 @@ func (q *Queries) DeleteAllClaimStatusHistory(ctx context.Context) error {
 }
 
 const deleteAllClaims = `-- name: DeleteAllClaims :exec
-DELETE FROM claims
+?;
+
+DELETE FROM clai
 `
 
 func (q *Queries) DeleteAllClaims(ctx context.Context) error {
@@ -60,7 +70,9 @@ func (q *Queries) DeleteAllClaims(ctx context.Context) error {
 }
 
 const deleteClaimByID = `-- name: DeleteClaimByID :exec
-DELETE FROM claims WHERE id = ?
+?;
+
+DELETE FROM claims WHERE id =
 `
 
 func (q *Queries) DeleteClaimByID(ctx context.Context, id string) error {
@@ -69,7 +81,9 @@ func (q *Queries) DeleteClaimByID(ctx context.Context, id string) error {
 }
 
 const deleteClaimEvidenceByClaimID = `-- name: DeleteClaimEvidenceByClaimID :exec
-DELETE FROM claim_evidence WHERE claim_id = ?
+s;
+
+DELETE FROM claim_evidence WHERE claim_id =
 `
 
 func (q *Queries) DeleteClaimEvidenceByClaimID(ctx context.Context, claimID string) error {
@@ -78,7 +92,9 @@ func (q *Queries) DeleteClaimEvidenceByClaimID(ctx context.Context, claimID stri
 }
 
 const deleteClaimStatusHistoryByClaimID = `-- name: DeleteClaimStatusHistoryByClaimID :exec
-DELETE FROM claim_status_history WHERE claim_id = ?
+e;
+
+DELETE FROM claim_status_history WHERE claim_id =
 `
 
 func (q *Queries) DeleteClaimStatusHistoryByClaimID(ctx context.Context, claimID string) error {
@@ -160,7 +176,8 @@ const listClaimTrustInputs = `-- name: ListClaimTrustInputs :many
 SELECT
   c.id              AS claim_id,
   c.confidence      AS confidence,
-  COUNT(DISTINCT ce.event_id) AS evidence_count,
+  COUNT(DISTINCT e.created_by) AS distinct_sources,
+  COUNT(DISTINCT ce.event_id)  AS total_events,
   CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
@@ -171,14 +188,16 @@ GROUP BY c.id, c.confidence
 type ListClaimTrustInputsRow struct {
 	ClaimID          string  `json:"claim_id"`
 	Confidence       float64 `json:"confidence"`
-	EvidenceCount    int64   `json:"evidence_count"`
+	DistinctSources  int64   `json:"distinct_sources"`
+	TotalEvents      int64   `json:"total_events"`
 	LatestEvidenceAt string  `json:"latest_evidence_at"`
 }
 
-// Inputs to recompute trust_score for every claim: confidence, the
-// distinct evidence-event count, and the most-recent evidence event
-// timestamp. LEFT JOIN so claims with no evidence still appear; the
-// caller treats the missing aggregate as 0/empty.
+// Inputs to recompute trust_score for every claim: confidence, the count of
+// DISTINCT evidence-event authors and of total events (so corroboration can be
+// graded by independence — an echo-chamber guard), and the most-recent evidence
+// timestamp. LEFT JOIN so claims with no evidence still appear; the caller treats
+// the missing aggregate as 0/empty.
 func (q *Queries) ListClaimTrustInputs(ctx context.Context) ([]ListClaimTrustInputsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listClaimTrustInputs)
 	if err != nil {
@@ -191,7 +210,8 @@ func (q *Queries) ListClaimTrustInputs(ctx context.Context) ([]ListClaimTrustInp
 		if err := rows.Scan(
 			&i.ClaimID,
 			&i.Confidence,
-			&i.EvidenceCount,
+			&i.DistinctSources,
+			&i.TotalEvents,
 			&i.LatestEvidenceAt,
 		); err != nil {
 			return nil, err

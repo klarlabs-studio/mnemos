@@ -442,8 +442,10 @@ func (r ClaimRepository) SetLifecycle(ctx context.Context, claimID string, lifec
 // RecomputeTrust applies the supplied scoring function to every
 // claim. Returns the count touched. Implements ports.TrustScorer.
 func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+	// COUNT distinct evidence-event AUTHORS and total events separately, so
+	// corroboration can be graded by independence (echo-chamber guard).
 	rows, err := r.db.QueryContext(ctx, `
-SELECT c.id, c.confidence, COUNT(DISTINCT ce.event_id), MAX(e.timestamp)
+SELECT c.id, c.confidence, COUNT(DISTINCT e.created_by), COUNT(DISTINCT ce.event_id), MAX(e.timestamp)
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e ON e.id = ce.event_id
@@ -452,16 +454,17 @@ GROUP BY c.id, c.confidence`)
 		return 0, fmt.Errorf("list trust inputs: %w", err)
 	}
 	type input struct {
-		id         string
-		confidence float64
-		count      int
-		latest     time.Time
+		id              string
+		confidence      float64
+		distinctSources int
+		totalEvents     int
+		latest          time.Time
 	}
 	var inputs []input
 	for rows.Next() {
 		var in input
 		var latest sql.NullTime
-		if err := rows.Scan(&in.id, &in.confidence, &in.count, &latest); err != nil {
+		if err := rows.Scan(&in.id, &in.confidence, &in.distinctSources, &in.totalEvents, &latest); err != nil {
 			_ = rows.Close()
 			return 0, fmt.Errorf("scan trust input: %w", err)
 		}
@@ -481,7 +484,7 @@ GROUP BY c.id, c.confidence`)
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, in := range inputs {
-		s := score(in.confidence, in.count, in.latest)
+		s := score(in.confidence, domain.EffectiveEvidenceCount(in.distinctSources, in.totalEvents), in.latest)
 		if _, err := tx.ExecContext(ctx, `UPDATE claims SET trust_score = ? WHERE id = ?`, s, in.id); err != nil {
 			return 0, fmt.Errorf("update trust for %s: %w", in.id, err)
 		}

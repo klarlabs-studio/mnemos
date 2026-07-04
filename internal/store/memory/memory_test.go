@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -295,6 +296,71 @@ func TestClaimRepository_TrustScorerCapability(t *testing.T) {
 	}
 	if low != 1 {
 		t.Errorf("CountClaimsBelowTrust(999) = %d, want 1", low)
+	}
+}
+
+// TestClaimRepository_IndependenceAwareCorroboration is the echo-chamber guard:
+// three events from three DISTINCT authors corroborate more than three events from
+// ONE author (whose repeats are discounted), even though the raw event count is
+// identical.
+func TestClaimRepository_IndependenceAwareCorroboration(t *testing.T) {
+	t.Parallel()
+	conn := openMemory(t)
+	ctx := context.Background()
+	scorer := conn.Claims.(ports.TrustScorer)
+
+	mkEvent := func(id, author string) domain.Event {
+		e := newEvent(id, "run", "content "+id)
+		e.CreatedBy = author
+		return e
+	}
+	for i, a := range []string{"alice", "bob", "carol"} { // claim A: three voices
+		if err := conn.Events.Append(ctx, mkEvent(fmt.Sprintf("evA%d", i), a)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 3; i++ { // claim B: one voice, thrice
+		if err := conn.Events.Append(ctx, mkEvent(fmt.Sprintf("evB%d", i), "dave")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now().UTC()
+	if err := conn.Claims.Upsert(ctx, []domain.Claim{
+		{ID: "clA", Text: "three voices", Type: domain.ClaimTypeFact, Confidence: 0.5, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "clB", Text: "one voice thrice", Type: domain.ClaimTypeFact, Confidence: 0.5, Status: domain.ClaimStatusActive, CreatedAt: now},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	links := []domain.ClaimEvidence{
+		{ClaimID: "clA", EventID: "evA0"}, {ClaimID: "clA", EventID: "evA1"}, {ClaimID: "clA", EventID: "evA2"},
+		{ClaimID: "clB", EventID: "evB0"}, {ClaimID: "clB", EventID: "evB1"}, {ClaimID: "clB", EventID: "evB2"},
+	}
+	if err := conn.Claims.UpsertEvidence(ctx, links); err != nil {
+		t.Fatal(err)
+	}
+
+	// score = the graded evidence count, to isolate corroboration.
+	if _, err := scorer.RecomputeTrust(ctx, func(_ float64, evidenceCount int, _ time.Time) float64 {
+		return float64(evidenceCount)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := conn.Claims.ListByIDs(ctx, []string{"clA", "clB"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust := map[string]float64{}
+	for _, c := range got {
+		trust[c.ID] = c.TrustScore
+	}
+	if trust["clA"] != 3 { // 3 distinct sources → full credit
+		t.Errorf("clA (three independent voices) graded count = %v, want 3", trust["clA"])
+	}
+	if trust["clB"] != 2 { // 1 source, 3 events → 1 + floor(0.5*2) = 2
+		t.Errorf("clB (one voice thrice) graded count = %v, want 2 (repeats discounted)", trust["clB"])
+	}
+	if trust["clA"] <= trust["clB"] {
+		t.Fatal("three independent voices must corroborate more than one voice repeated")
 	}
 }
 

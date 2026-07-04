@@ -442,7 +442,10 @@ func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confiden
 				latest = t
 			}
 		}
-		s := score(row.Confidence, int(row.EvidenceCount), latest)
+		// Corroboration graded by independence (echo-chamber guard): distinct
+		// evidence-event authors count fully, same-source repeats are discounted.
+		evidenceCount := domain.EffectiveEvidenceCount(int(row.DistinctSources), int(row.TotalEvents))
+		s := score(row.Confidence, evidenceCount, latest)
 		if err := qtx.UpdateClaimTrust(ctx, sqlcgen.UpdateClaimTrustParams{
 			TrustScore: s,
 			ID:         row.ClaimID,

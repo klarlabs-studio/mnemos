@@ -90,14 +90,16 @@ ORDER BY test_last_run_at DESC, created_at DESC;
 UPDATE claims SET trust_score = ? WHERE id = ?;
 
 -- name: ListClaimTrustInputs :many
--- Inputs to recompute trust_score for every claim: confidence, the
--- distinct evidence-event count, and the most-recent evidence event
--- timestamp. LEFT JOIN so claims with no evidence still appear; the
--- caller treats the missing aggregate as 0/empty.
+-- Inputs to recompute trust_score for every claim: confidence, the count of
+-- DISTINCT evidence-event authors and of total events (so corroboration can be
+-- graded by independence — an echo-chamber guard), and the most-recent evidence
+-- timestamp. LEFT JOIN so claims with no evidence still appear; the caller treats
+-- the missing aggregate as 0/empty.
 SELECT
   c.id              AS claim_id,
   c.confidence      AS confidence,
-  COUNT(DISTINCT ce.event_id) AS evidence_count,
+  COUNT(DISTINCT e.created_by) AS distinct_sources,
+  COUNT(DISTINCT ce.event_id)  AS total_events,
   CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
