@@ -136,6 +136,14 @@ Every other tier reads trust and corroboration. Harden them first.
   bandit mirroring the claim calibrator. Playbooks that keep working rise; ones that fail
   decay (reuse trust half-life). Turns the skill store from write-only into self-tuning —
   the difference between "stores facts" and "gets better." *Deterministic. Low–medium.*
+  **SHIPPED (arrow b) — v0.46.0 (`ConsolidateOptions.ReinforcePlaybooks`).** The sleep pass
+  bends each playbook's confidence toward the observed success rate of the outcomes on the
+  actions its lessons were derived from (`0.7·prior + 0.3·success_rate`, success=1 /
+  partial=0.5 / failure=0, "unknown" ignored, skipped below 2 scored outcomes). Signal is
+  corroboration-by-underlying-evidence (reuses the links synthesize already writes — no new
+  schema primitive), not decision-level attribution. Senat runs it nightly
+  (`REINFORCE_PLAYBOOKS=1`, v0.11.58). *Arrow (a) auto-trigger-synthesize is the open
+  remainder — synthesize is still CLI-only, so the loop is dormant in Senat until it runs.*
 - **T2.3 REM-like recombination (LLM-optional, lands as candidates).** A second offline
   stage: deterministic clustering picks high-salience pairs the waking graph never
   juxtaposed (distant in the graph, close in embedding); an LLM only *names* the candidate
