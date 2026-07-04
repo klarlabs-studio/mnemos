@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -124,7 +125,16 @@ func TestAnswer_VectorFastPath_SkipsListAll(t *testing.T) {
 		called:         &searchCalls,
 		listByTypeCall: &listByTypeCalls,
 	}
-	engine := NewEngine(events, fakeClaimRepo{}, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}}).
+	// A trusted, fresh claim so the fast-path answer grades as SUFFICIENT — the
+	// corrective-retrieval gate (R3) must NOT fire, so the whole-corpus ListAll
+	// path stays untouched. (An empty claim set would grade insufficient and
+	// legitimately trigger the corrective widen — covered by its own test.)
+	now := time.Now().UTC()
+	claims := fakeClaimRepo{claims: []domain.Claim{{
+		ID: "cl1", Text: "payments latency is caused by a slow query",
+		TrustScore: 0.9, Confidence: 0.9, CreatedAt: now, ValidFrom: now,
+	}}}
+	engine := NewEngine(events, claims, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}}).
 		WithEmbeddings(repo, fakeEmbedClient{})
 
 	if _, err := engine.Answer("why is payments slow?"); err != nil {
