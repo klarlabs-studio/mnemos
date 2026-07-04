@@ -8,6 +8,16 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Corrective-retrieval gate (R3, CRAG-style).** Recall now grades its own
+  result: if the first pass comes back insufficient (no claims, or aggregate
+  confidence below the floor), it makes ONE bounded corrective pass — widening the
+  narrow pgvector top-K to the whole corpus and relaxing the soft MinTrust quality
+  gate — and keeps whichever answer is stronger. The retry is structurally bounded
+  to a single extra pass (respecting the caller's tool-call budget), only fires on
+  a weak first pass, and is strictly non-regressive (never returns an answer worse
+  than the first). Semantic filters (Scope, Lifecycle, Visibility, AsOf) are NEVER
+  relaxed — loosening them would surface claims the caller explicitly excluded.
+
 - **Intrinsic salience score, protecting important claims from forgetting (C1).**
   A new `trust.Salience` scores a claim's intrinsic importance in [0,1] from signals
   already on it — confidence, corroboration (evidence count), claim type (a decision
