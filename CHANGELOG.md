@@ -8,6 +8,22 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Outcome-reinforced playbooks (self-tuning skills, T2.2).** The sleep pass can
+  now bend a playbook's confidence toward the observed success rate of the outcomes
+  recorded against the actions its lessons were derived from
+  (`ConsolidateOptions.ReinforcePlaybooks`). Synthesize writes a playbook's
+  confidence from its lessons once; this closes the loop so real outcomes reinforce
+  or decay it over time — a playbook whose underlying actions keep failing decays,
+  one whose actions keep succeeding is reinforced — turning the skill store from
+  write-only into self-tuning. A deterministic, no-LLM blend
+  (`0.7·prior + 0.3·success_rate`, `ReinforcementRetention`); success = 1, partial =
+  0.5, failure = 0, "unknown" ignored; skipped below `ReinforceMinOutcomes` (2)
+  scored outcomes so a learned confidence is never moved on noise. The signal is
+  corroboration-by-underlying-evidence, not decision-level attribution (which would
+  need an explicit decision→playbook link). `ConsolidateResult.PlaybooksReinforced`
+  reports the count; a no-op on backends without the skill layer. Opens tier 2
+  (the learning loop) of research part 2.
+
 - **Independence-aware corroboration (echo-chamber guard, T0.1).** Trust's
   corroboration term is now graded by INDEPENDENCE, not raw volume: each distinct
   evidence-event author counts fully, and same-source repeats are discounted
