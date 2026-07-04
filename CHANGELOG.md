@@ -8,6 +8,12 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Hypercorrection resolution hook.** `Memory.Hypercorrections` now also excludes
+  a conflict once EITHER side's claim is `superseded`, so a reviewer resolves an
+  alert simply by `SetClaimLifecycle(claimID, superseded)` — retiring the stale
+  belief or dismissing the bad challenger clears it from the list. (Previously only
+  a valid-time close removed a conflict; lifecycle=superseded now does too.)
+
 - **Hypercorrection alerts + contradiction edges on the claim-write path (C3).**
   `Memory.Hypercorrections` surfaces currently-valid contradictions where the
   challenged claim is well-established (human-promoted, or trust at/above the

@@ -715,9 +715,16 @@ func (m *memory) Hypercorrections(ctx context.Context) ([]Hypercorrection, error
 		if !aok || !bok {
 			continue
 		}
-		// Only currently-valid claims: a contradiction of an already-superseded or
-		// forgotten belief is history, not a live alert.
+		// Only currently-valid claims: a contradiction of an already-forgotten
+		// belief (valid-time closed) is history, not a live alert.
 		if !a.ValidTo.IsZero() || !b.ValidTo.IsZero() {
+			continue
+		}
+		// Superseding either side RESOLVES the conflict: a reviewer retires the
+		// stale belief (or dismisses the bad challenger) by transitioning it to
+		// superseded, and the alert clears. This is the resolution hook — a
+		// superseded claim on either side means a human already adjudicated it.
+		if a.Lifecycle == domain.ClaimLifecycleSuperseded || b.Lifecycle == domain.ClaimLifecycleSuperseded {
 			continue
 		}
 		// The contradicted side is the more-established of the pair; the other is
