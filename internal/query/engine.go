@@ -182,21 +182,110 @@ func (e Engine) Answer(question string) (domain.Answer, error) {
 // AnswerWithOptions is the configurable form of Answer. The plain Answer
 // method delegates here with a zero-value AnswerOptions so existing callers
 // see no behavior change.
+//
+// It runs a corrective-retrieval gate (R3, CRAG-style): the first pass answers
+// from the best available candidate set; if that answer grades as insufficient
+// (no claims, or confidence below recallSufficiencyFloor), it makes ONE bounded
+// corrective pass — widening the narrow pgvector top-K to the whole corpus and
+// relaxing the soft MinTrust quality gate — and keeps whichever answer is
+// stronger. The retry is structurally bounded to a single extra pass (so it
+// respects the caller's tool-call budget), only fires on a weak first pass, and
+// never returns an answer worse than the one it started with. Semantic filters
+// (Scope, Lifecycle, Visibility, AsOf) are NEVER relaxed — loosening them would
+// return results the caller explicitly excluded.
 func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.Answer, error) {
 	ctx := context.Background()
-	// Native vector fast-path: when a pgvector-backed searcher is wired,
-	// pull only the top-K candidate events by cosine distance instead of
-	// loading the entire corpus. Falls through to ListAll on any miss so
-	// behaviour is identical whenever the fast-path can't serve the query
-	// (no searcher, no embedder, extension absent, or zero vector hits).
+	ans, usedFastPath, err := e.answerOnce(ctx, question, opts)
+	if err != nil {
+		return domain.Answer{}, err
+	}
+	if !recallInsufficient(ans) {
+		return ans, nil
+	}
+	// Corrective pass. It can help two ways: widen the corpus (only meaningful
+	// when the first pass took the narrow fast-path) or relax MinTrust (only when
+	// it was set). If neither applies, the retry can't recover anything, so skip.
+	relaxed, relaxedFilters := relaxRecall(opts)
+	if !usedFastPath && !relaxedFilters {
+		return ans, nil
+	}
+	corrected, cerr := e.answerCorpusWide(ctx, question, relaxed)
+	if cerr == nil && strongerAnswer(corrected, ans) {
+		return corrected, nil
+	}
+	return ans, nil
+}
+
+// answerOnce runs a single recall pass and reports whether it took the native
+// vector fast-path (pulling only the top-K candidate events by cosine distance)
+// or fell through to the whole-corpus ListAll path. The fast-path is used
+// whenever it can serve the query; it falls through on any miss (no searcher, no
+// embedder, extension absent, or zero vector hits) so behaviour is identical to
+// the pre-gate flow when the corrective pass doesn't fire.
+func (e Engine) answerOnce(ctx context.Context, question string, opts AnswerOptions) (domain.Answer, bool, error) {
 	if candidates, ok := e.eventsByHybrid(ctx, question); ok {
-		return e.answerWithEvents(ctx, question, candidates, opts, true)
+		ans, err := e.answerWithEvents(ctx, question, candidates, opts, true)
+		return ans, true, err
 	}
 	allEvents, err := e.events.ListAll(ctx)
 	if err != nil {
-		return domain.Answer{}, fmt.Errorf("load events for query: %w", err)
+		return domain.Answer{}, false, fmt.Errorf("load events for query: %w", err)
+	}
+	ans, err := e.answerWithEvents(ctx, question, allEvents, opts, false)
+	return ans, false, err
+}
+
+// answerCorpusWide is the corrective pass: it forces the whole-corpus path
+// (bypassing the narrow vector top-K) so events the dense/sparse top-K missed
+// can still surface. Used only by the corrective-retrieval gate.
+func (e Engine) answerCorpusWide(ctx context.Context, question string, opts AnswerOptions) (domain.Answer, error) {
+	allEvents, err := e.events.ListAll(ctx)
+	if err != nil {
+		return domain.Answer{}, fmt.Errorf("load events for corrective query: %w", err)
 	}
 	return e.answerWithEvents(ctx, question, allEvents, opts, false)
+}
+
+// recallSufficiencyFloor is the Answer.Confidence below which the first recall
+// pass is graded "insufficient" and the corrective gate fires. computeConfidence
+// tops out around 0.7, so a genuinely grounded answer clears this comfortably
+// while empty or weakly-supported recall falls under it.
+const recallSufficiencyFloor = 0.35
+
+// recallInsufficient grades a recall pass: an answer with no claims, or one whose
+// aggregate confidence is below the floor, is a candidate for corrective retrieval.
+func recallInsufficient(a domain.Answer) bool {
+	return len(a.Claims) == 0 || a.Confidence < recallSufficiencyFloor
+}
+
+// relaxRecall loosens only the SOFT quality gate (MinTrust) for a corrective
+// pass, reporting whether anything changed. Semantic filters (Scope, Lifecycle,
+// Visibility, AsOf/RecordedAsOf) are deliberately left intact: relaxing them
+// would surface claims the caller explicitly asked to exclude, changing the
+// meaning of the query rather than just widening its reach.
+func relaxRecall(opts AnswerOptions) (AnswerOptions, bool) {
+	if opts.MinTrust > 0 {
+		opts.MinTrust = 0
+		return opts, true
+	}
+	return opts, false
+}
+
+// strongerAnswer reports whether the corrective answer should replace the first
+// one. It never trades a non-empty answer for an empty one; otherwise it prefers
+// more claims, breaking ties by higher confidence. This makes the gate strictly
+// non-regressive — the corrective pass can only improve or be discarded.
+func strongerAnswer(corrected, original domain.Answer) bool {
+	if len(corrected.Claims) == 0 {
+		return false
+	}
+	if len(original.Claims) == 0 {
+		return true
+	}
+	if len(corrected.Claims) != len(original.Claims) {
+		return len(corrected.Claims) > len(original.Claims)
+	}
+	return corrected.Confidence > original.Confidence
 }
 
 // eventsByHybrid serves the native fast-path recall: embed the question, ask
