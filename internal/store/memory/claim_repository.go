@@ -443,7 +443,18 @@ func (r ClaimRepository) RecomputeTrust(_ context.Context, score func(confidence
 		if !ok {
 			continue
 		}
-		evidenceCount := len(r.state.evidence[id])
+		// Corroboration is graded by INDEPENDENCE, not raw volume: count distinct
+		// evidence-event authors, with same-source repeats discounted (echo-chamber
+		// guard) — many events from one voice don't corroborate like many voices.
+		distinct := make(map[string]struct{})
+		total := 0
+		for evID := range r.state.evidence[id] {
+			if ev, ok := r.state.events[evID]; ok {
+				distinct[ev.CreatedBy] = struct{}{}
+				total++
+			}
+		}
+		evidenceCount := domain.EffectiveEvidenceCount(len(distinct), total)
 		latest := latestEvidenceTimestamp(r.state, id)
 		c.TrustScore = score(c.Confidence, evidenceCount, latest)
 		r.state.claims[id] = c

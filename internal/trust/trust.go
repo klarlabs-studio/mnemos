@@ -37,6 +37,11 @@ const FreshnessFloor = 0.3
 //   - 20 sources→ 1.60
 //
 // Logarithmic so adding the 100th source doesn't dwarf the 10th.
+//
+// NB: the evidenceCount passed to Score is the INDEPENDENCE-graded count
+// (see [go.klarlabs.de/mnemos/internal/domain.EffectiveEvidenceCount]) — many
+// events from one author no longer inflate corroboration like independent
+// confirmations. This function's math is unchanged; only its input is graded.
 const CorroborationCoefficient = 0.2
 
 // ScoreWithHalfLife is the per-claim variant of Score: it uses the

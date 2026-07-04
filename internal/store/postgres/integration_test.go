@@ -178,6 +178,59 @@ func TestPostgres_ClaimUpsertWithStatusHistory(t *testing.T) {
 	}
 }
 
+// TestPostgres_IndependenceAwareCorroboration proves the echo-chamber guard runs
+// on the SQL path: COUNT(DISTINCT created_by) vs COUNT(DISTINCT event_id) feeds the
+// graded evidence count, so three independent authors beat one author repeated.
+func TestPostgres_IndependenceAwareCorroboration(t *testing.T) {
+	conn := withConn(t)
+	ctx := context.Background()
+	scorer := conn.Claims.(ports.TrustScorer)
+	now := time.Now().UTC()
+
+	ev := func(id, author string) domain.Event {
+		return domain.Event{ID: id, RunID: "r", SchemaVersion: "1", Content: "c " + id,
+			SourceInputID: "in", Timestamp: now, IngestedAt: now, CreatedBy: author}
+	}
+	for i, a := range []string{"alice", "bob", "carol"} {
+		if err := conn.Events.Append(ctx, ev(fmt.Sprintf("evA%d", i), a)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		if err := conn.Events.Append(ctx, ev(fmt.Sprintf("evB%d", i), "dave")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := conn.Claims.Upsert(ctx, []domain.Claim{
+		{ID: "clA", Text: "three voices", Type: domain.ClaimTypeFact, Confidence: 0.5, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "clB", Text: "one voice thrice", Type: domain.ClaimTypeFact, Confidence: 0.5, Status: domain.ClaimStatusActive, CreatedAt: now},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{
+		{ClaimID: "clA", EventID: "evA0"}, {ClaimID: "clA", EventID: "evA1"}, {ClaimID: "clA", EventID: "evA2"},
+		{ClaimID: "clB", EventID: "evB0"}, {ClaimID: "clB", EventID: "evB1"}, {ClaimID: "clB", EventID: "evB2"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := scorer.RecomputeTrust(ctx, func(_ float64, count int, _ time.Time) float64 {
+		return float64(count)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := conn.Claims.ListByIDs(ctx, []string{"clA", "clB"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust := map[string]float64{}
+	for _, c := range got {
+		trust[c.ID] = c.TrustScore
+	}
+	if trust["clA"] != 3 || trust["clB"] != 2 {
+		t.Fatalf("graded corroboration wrong: clA=%v (want 3), clB=%v (want 2)", trust["clA"], trust["clB"])
+	}
+}
+
 func TestPostgres_TrustScorerCapability(t *testing.T) {
 	conn := withConn(t)
 	ctx := context.Background()
