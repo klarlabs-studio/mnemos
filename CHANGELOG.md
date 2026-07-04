@@ -8,6 +8,18 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Confidence calibration (`Memory.Calibration`), the accuracy half of metacognition.**
+  Answers "is stated confidence itself trustworthy?" — a well-calibrated store's
+  0.9-confidence claims are right about 90% of the time. It groups every claim an
+  observed outcome later VALIDATED or REFUTED (the validates/refutes edges minted
+  when a decision's outcome is attached) into stated-confidence deciles and compares
+  predicted confidence to empirical accuracy, reporting per-bucket
+  count/mean-confidence/accuracy plus overall Expected Calibration Error (ECE) and
+  Brier score. Pure read over existing outcome edges — no new write path, no LLM.
+  Only outcome-adjudicated claims count, and the latest outcome wins per claim, so
+  `Samples` is small until outcomes accumulate — read it before trusting the curve.
+  Completes C3 (hypercorrection was the alert half; this is the accuracy half).
+
 - **Hypercorrection resolution hook.** `Memory.Hypercorrections` now also excludes
   a conflict once EITHER side's claim is `superseded`, so a reviewer resolves an
   alert simply by `SetClaimLifecycle(claimID, superseded)` — retiring the stale

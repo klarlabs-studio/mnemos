@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -756,6 +757,103 @@ func (m *memory) Hypercorrections(ctx context.Context) ([]Hypercorrection, error
 		return out[i].ContradictedTrust > out[j].ContradictedTrust
 	})
 	return out, nil
+}
+
+// Calibration implements [Memory.Calibration]. Pure read over the outcome edges
+// (validates / refutes) + claim confidences — no recomputation, no writes.
+func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
+	validates, err := m.conn.EntityRels.ListByKind(ctx, string(domain.RelationshipTypeValidates))
+	if err != nil {
+		return Calibration{}, fmt.Errorf("mnemos: Calibration: list validates: %w", err)
+	}
+	refutes, err := m.conn.EntityRels.ListByKind(ctx, string(domain.RelationshipTypeRefutes))
+	if err != nil {
+		return Calibration{}, fmt.Errorf("mnemos: Calibration: list refutes: %w", err)
+	}
+
+	// One verdict per claim: an outcome validated (correct) or refuted (wrong) the
+	// belief. If a claim was adjudicated more than once, the most recent outcome
+	// wins — the latest observation is the truth we calibrate against.
+	type verdict struct {
+		correct bool
+		at      time.Time
+	}
+	verdicts := make(map[string]verdict)
+	adopt := func(edges []domain.EntityRelationship, correct bool) {
+		for _, e := range edges {
+			if e.ToType != domain.RelEntityClaim || e.ToID == "" {
+				continue
+			}
+			if cur, ok := verdicts[e.ToID]; !ok || e.CreatedAt.After(cur.at) {
+				verdicts[e.ToID] = verdict{correct: correct, at: e.CreatedAt}
+			}
+		}
+	}
+	adopt(validates, true)
+	adopt(refutes, false)
+	if len(verdicts) == 0 {
+		return Calibration{}, nil
+	}
+
+	claims, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return Calibration{}, fmt.Errorf("mnemos: Calibration: list claims: %w", err)
+	}
+	confByID := make(map[string]float64, len(claims))
+	for _, c := range claims {
+		confByID[c.ID] = c.Confidence
+	}
+
+	// Accumulate per confidence-decile bucket, and the running Brier sum.
+	const nb = 10
+	sumConf := make([]float64, nb)
+	correct := make([]int, nb)
+	count := make([]int, nb)
+	var brierSum float64
+	samples := 0
+	for claimID, v := range verdicts {
+		conf, ok := confByID[claimID]
+		if !ok {
+			continue // adjudicated a claim we no longer have; skip
+		}
+		b := int(conf * nb)
+		if b >= nb {
+			b = nb - 1 // confidence 1.0 lands in the top bucket
+		}
+		if b < 0 {
+			b = 0
+		}
+		count[b]++
+		sumConf[b] += conf
+		outcome := 0.0
+		if v.correct {
+			correct[b]++
+			outcome = 1.0
+		}
+		brierSum += (conf - outcome) * (conf - outcome)
+		samples++
+	}
+
+	res := Calibration{Samples: samples}
+	var ece float64
+	for b := 0; b < nb; b++ {
+		if count[b] == 0 {
+			continue
+		}
+		meanConf := sumConf[b] / float64(count[b])
+		acc := float64(correct[b]) / float64(count[b])
+		res.Buckets = append(res.Buckets, CalibrationBucket{
+			Lower:          float64(b) / nb,
+			Upper:          float64(b+1) / nb,
+			Count:          count[b],
+			MeanConfidence: meanConf,
+			Accuracy:       acc,
+		})
+		ece += float64(count[b]) / float64(samples) * math.Abs(acc-meanConf)
+	}
+	res.ECE = ece
+	res.Brier = brierSum / float64(samples)
+	return res, nil
 }
 
 // Close implements [Memory.Close].
