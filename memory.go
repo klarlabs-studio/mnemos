@@ -498,6 +498,28 @@ type Calibration struct {
 	// Brier is the mean squared error of confidence against the {0,1} outcome
 	// (0 best, 1 worst) — a single-number scoring of the confidence estimates.
 	Brier float64
+	// Sources breaks calibration down by the claim author (CreatedBy),
+	// most-adjudicated first. It answers "which source is over- or under-confident?"
+	// — so a chronically over-confident source can be discounted without a human
+	// touching config. Empty when no claims carry a distinct author.
+	Sources []SourceCalibration
+}
+
+// SourceCalibration is one author's track record: how their stated confidence has
+// matched reality, over the claims of theirs an outcome later adjudicated.
+type SourceCalibration struct {
+	// Source is the claim author (CreatedBy) — e.g. a worker id.
+	Source string
+	// Samples is how many of this source's claims have an outcome verdict.
+	Samples int
+	// MeanConfidence / Accuracy are what this source predicted vs what happened.
+	MeanConfidence float64
+	Accuracy       float64
+	// Gap is MeanConfidence − Accuracy: positive = over-confident (says 0.9, right
+	// less often), negative = under-confident. The single number to route on.
+	Gap float64
+	// Brier is this source's mean squared error (0 best, 1 worst).
+	Brier float64
 }
 
 // CalibrationBucket is one stated-confidence band and how claims in it fared.

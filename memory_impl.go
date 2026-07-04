@@ -799,10 +799,23 @@ func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
 	if err != nil {
 		return Calibration{}, fmt.Errorf("mnemos: Calibration: list claims: %w", err)
 	}
-	confByID := make(map[string]float64, len(claims))
-	for _, c := range claims {
-		confByID[c.ID] = c.Confidence
+	type claimInfo struct {
+		conf   float64
+		source string
 	}
+	infoByID := make(map[string]claimInfo, len(claims))
+	for _, c := range claims {
+		infoByID[c.ID] = claimInfo{conf: c.Confidence, source: c.CreatedBy}
+	}
+
+	// Per-source (author) running totals, for the reliability breakdown.
+	type srcAcc struct {
+		n        int
+		sumConf  float64
+		correct  int
+		brierSum float64
+	}
+	bySource := make(map[string]*srcAcc)
 
 	// Accumulate per confidence-decile bucket, and the running Brier sum.
 	const nb = 10
@@ -812,10 +825,11 @@ func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
 	var brierSum float64
 	samples := 0
 	for claimID, v := range verdicts {
-		conf, ok := confByID[claimID]
+		ci, ok := infoByID[claimID]
 		if !ok {
 			continue // adjudicated a claim we no longer have; skip
 		}
+		conf := ci.conf
 		b := int(conf * nb)
 		if b >= nb {
 			b = nb - 1 // confidence 1.0 lands in the top bucket
@@ -830,8 +844,21 @@ func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
 			correct[b]++
 			outcome = 1.0
 		}
-		brierSum += (conf - outcome) * (conf - outcome)
+		sqErr := (conf - outcome) * (conf - outcome)
+		brierSum += sqErr
 		samples++
+
+		sa := bySource[ci.source]
+		if sa == nil {
+			sa = &srcAcc{}
+			bySource[ci.source] = sa
+		}
+		sa.n++
+		sa.sumConf += conf
+		sa.brierSum += sqErr
+		if v.correct {
+			sa.correct++
+		}
 	}
 
 	res := Calibration{Samples: samples}
@@ -853,6 +880,26 @@ func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
 	}
 	res.ECE = ece
 	res.Brier = brierSum / float64(samples)
+
+	// Per-source breakdown, most-adjudicated first.
+	for src, sa := range bySource {
+		meanConf := sa.sumConf / float64(sa.n)
+		acc := float64(sa.correct) / float64(sa.n)
+		res.Sources = append(res.Sources, SourceCalibration{
+			Source:         src,
+			Samples:        sa.n,
+			MeanConfidence: meanConf,
+			Accuracy:       acc,
+			Gap:            meanConf - acc,
+			Brier:          sa.brierSum / float64(sa.n),
+		})
+	}
+	sort.Slice(res.Sources, func(i, j int) bool {
+		if res.Sources[i].Samples != res.Sources[j].Samples {
+			return res.Sources[i].Samples > res.Sources[j].Samples
+		}
+		return res.Sources[i].Source < res.Sources[j].Source // stable tiebreak
+	})
 	return res, nil
 }
 
