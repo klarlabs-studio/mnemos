@@ -164,6 +164,7 @@ node that get you a defensible audit trail. Source:
 
 - **Evidence-backed claims** — Every extracted claim maps to source material
 - **Contradiction detection** — Automatically surface conflicting information
+- **A cognitive layer** — consolidation + forgetting (a "sleep" pass), write-time salience, hybrid dense+sparse retrieval, self-correcting recall, and hypercorrection alerts — the background processes a brain runs, all deterministic and LLM-free. [Details below.](#cognitive-layer-v035v041)
 - **Local-first** — Your data stays on your machine (`~/.local/share/mnemos/`)
 - **Multi-provider extraction** — Anthropic, OpenAI, Gemini, Ollama, and OpenAI-compatible endpoints
 - **Developer-friendly** — CLI-first, JSON output, MCP-ready, pipeline-friendly
@@ -639,6 +640,40 @@ Mnemos has shipped a self-learning loop on top of the evidence layer:
 - **Human-editable layer** — `mnemos export` + `mnemos import` round-trip Lessons/Playbooks to Git-friendly YAML+markdown; `mnemos history` lists snapshots from system-versioned `*_versions` tables.
 
 Marketing claim: *"evidence-based memory that learns from actions over time, with provable causality, scoped multi-tenancy, and a human-editable corrections loop."*
+
+### Cognitive layer (v0.35–v0.41)
+
+Most memory systems only write and read. Mnemos also runs the background processes
+a brain runs — and all of it is deterministic, self-hostable, and needs **no LLM**.
+See [`docs-site/docs/concepts/cognitive-layer.md`](docs-site/docs/concepts/cognitive-layer.md) and the research synthesis in [`docs/RESEARCH-brain-enhancements.md`](docs/RESEARCH-brain-enhancements.md).
+
+- **The sleep pass — consolidation + forgetting** (`Memory.Consolidate`). Off the
+  hot path it collapses near-duplicate claims into one canonical claim (evidence
+  repointed, nothing lost), refreshes trust, and **actively forgets** claims that
+  have decayed below a trust floor. Forgetting is reduced retrievability, not
+  erasure — the claim and its history stay queryable point-in-time; it just stops
+  surfacing. Promoted knowledge is never forgotten. (hippocampus→neocortex gist +
+  synaptic renormalisation.)
+- **Salience** (`trust.Salience`). A write-time importance score — from confidence,
+  corroboration, claim type, authority, verification — that does **not** decay.
+  The sleep pass keeps intrinsically salient claims (a decision, a corroborated
+  finding) even as their trust fades, and prunes only the mundane tail. Importance
+  and freshness are separate axes.
+- **Hybrid retrieval, fused by RRF.** The dense embedding leg (pgvector `<=>`) is
+  fused with a sparse full-text leg (Postgres `tsvector` / SQLite FTS5) by
+  Reciprocal Rank Fusion, so exact tokens cosine underweights — SHAs, service
+  names, error codes — are recalled even when the query is semantically distant.
+  Auto-wired; no config.
+- **Corrective retrieval (CRAG-style).** Recall grades its own result; on a weak
+  first pass it makes one bounded corrective pass (widen the corpus, relax the soft
+  trust filter) and keeps the stronger answer. Bounded to a single retry, only
+  fires when weak, strictly non-regressive.
+- **Hypercorrection** (`Memory.Hypercorrections`). When new evidence contradicts an
+  **established** belief (promoted or high-trust), it surfaces as an alert,
+  most-established-first — the front of the review queue. Resolve by retiring a
+  side (`SetClaimLifecycle(id, superseded)`): accept the new evidence or dismiss
+  the challenger; history is preserved and the alert clears. Named for the
+  hypercorrection effect — high-confidence errors, once caught, correct strongest.
 
 ## Contributing
 

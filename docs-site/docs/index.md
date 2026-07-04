@@ -26,6 +26,7 @@ events = httpx.get(f"{m}/v1/events", params={"run_id": run}).json()
 
 - **Typed claims** with confidence + evidence + status (fact / hypothesis / decision; active / contested / resolved / deprecated)
 - **Contradiction detection** — rule-based across polarity / numeric / entity / temporal axes
+- **A [cognitive layer](concepts/cognitive-layer.md)** — consolidation + forgetting (a "sleep" pass), write-time salience, hybrid dense+sparse retrieval, self-correcting recall, and hypercorrection alerts. No LLM required.
 - **Replay-by-run-id** — group events by chat session or agent run, replay months later from one HTTP call
 - **Bi-temporal queries** — separate validity-time and ingestion-time axes
 - **Multi-backend SQL** — SQLite default, Postgres / MySQL / libSQL also supported
