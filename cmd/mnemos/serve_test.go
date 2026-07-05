@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -458,6 +459,63 @@ func TestServe_ListClaimsRejectsInvalidType(t *testing.T) {
 // run_id returns only claims whose evidence links to an event tagged
 // with the matching RunID. Critical contract for integrators that
 // scope memory by run_id prefix (e.g. animal:<uuid>).
+// TestServe_AppendClaimHonorsCreatedBy proves the per-claim created_by override
+// (mnemos ClaimItem.CreatedBy) round-trips through the HTTP API: an append that
+// supplies created_by attributes the claim to that author (not the token actor),
+// and it's echoed back on read.
+func TestServe_AppendClaimHonorsCreatedBy(t *testing.T) {
+	secret, _ := setupJWTTestEnv(t)
+	_, conn := openTestStore(t)
+	now := time.Now().UTC()
+	// Seed the event the decision claim is evidence-linked to (so the run_id
+	// read can resolve it).
+	seedEventConn(t, conn, "ev_dec", "athlete:42", "decision context", "src", "{}", now)
+	// A writer authorised for claim writes. Its id ("usr_writer") is the TOKEN
+	// actor — the created_by override in the body must beat it.
+	if err := conn.Users.Create(context.Background(), domain.User{
+		ID: "usr_writer", Name: "w", Email: "w@test.local",
+		Status: domain.UserStatusActive, Scopes: []string{domain.ScopeClaimsWrite},
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	tok, _, err := auth.NewIssuer(secret).IssueUserToken(domain.User{
+		ID: "usr_writer", Scopes: []string{domain.ScopeClaimsWrite}, Status: domain.UserStatusActive,
+	}, time.Hour)
+	if err != nil {
+		t.Fatalf("issue token: %v", err)
+	}
+	srv := httptest.NewServer(newServerMux(conn))
+	defer srv.Close()
+	authHdr := map[string]string{"Authorization": "Bearer " + tok}
+
+	body := map[string]any{
+		"claims": []map[string]any{{
+			"id": "cl_dec", "text": "approved plan", "type": "decision",
+			"status": "active", "created_by": "coach:99",
+		}},
+		"evidence": []map[string]any{{"claim_id": "cl_dec", "event_id": "ev_dec"}},
+	}
+	resp := postJSON(t, srv.URL+"/v1/claims", body, authHdr)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		t.Fatalf("append status = %d", resp.StatusCode)
+	}
+
+	got := getJSON(t, srv.URL+"/v1/claims?run_id=athlete:42", authHdr)
+	defer func() { _ = got.Body.Close() }()
+	var out claimsResponse
+	if err := json.NewDecoder(got.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(out.Claims) != 1 || out.Claims[0].ID != "cl_dec" {
+		t.Fatalf("expected cl_dec, got %+v", out.Claims)
+	}
+	if out.Claims[0].CreatedBy != "coach:99" {
+		t.Errorf("CreatedBy = %q, want coach:99 (per-claim override must beat token actor usr_writer)", out.Claims[0].CreatedBy)
+	}
+}
+
 func TestServe_ListClaimsByRunID(t *testing.T) {
 	_, conn := openTestStore(t)
 	ctx := context.Background()
