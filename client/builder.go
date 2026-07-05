@@ -21,6 +21,7 @@ type EventsBuilder struct {
 	c      *Client
 	limit  int
 	offset int
+	runID  string
 }
 
 // Limit sets the page size. Server caps at 200; values <= 0 use the
@@ -30,11 +31,21 @@ func (b *EventsBuilder) Limit(n int) *EventsBuilder { b.limit = n; return b }
 // Offset sets the pagination offset.
 func (b *EventsBuilder) Offset(n int) *EventsBuilder { b.offset = n; return b }
 
+// RunID scopes the listing to events emitted under a single run_id — the
+// server filters via ListByRunID rather than returning every event, so a
+// consumer that partitions memory by run (a per-tenant, per-session, or
+// per-subject boundary) no longer has to page the whole store and filter
+// client-side. Empty string clears the filter. Token whitelists still apply.
+func (b *EventsBuilder) RunID(id string) *EventsBuilder { b.runID = id; return b }
+
 // List hits GET /v1/events with the configured filters.
 func (b *EventsBuilder) List(ctx context.Context) (*ListEventsResponse, error) {
 	var out ListEventsResponse
 	q := url.Values{}
 	addPagination(q, b.limit, b.offset)
+	if b.runID != "" {
+		q.Set("run_id", b.runID)
+	}
 	if err := b.c.do(ctx, http.MethodGet, withQuery("/v1/events", q), nil, &out); err != nil {
 		return nil, err
 	}
@@ -61,6 +72,7 @@ type ClaimsBuilder struct {
 	offset      int
 	claimType   string
 	claimStatus string
+	runID       string
 }
 
 // Limit sets the page size.
@@ -77,6 +89,14 @@ func (b *ClaimsBuilder) Type(t string) *ClaimsBuilder { b.claimType = t; return 
 // or deprecated. Empty string clears the filter.
 func (b *ClaimsBuilder) Status(s string) *ClaimsBuilder { b.claimStatus = s; return b }
 
+// RunID scopes the listing to claims whose evidence points at events emitted
+// under a single run_id — the tenant boundary. The server resolves run_id →
+// events → claim evidence, so a consumer partitioning memory by run gets only
+// that partition's claims without paging every claim and mapping evidence
+// client-side. An empty allowed-event set (no events for the run) returns no
+// claims rather than leaking the unfiltered set. Empty string clears the filter.
+func (b *ClaimsBuilder) RunID(id string) *ClaimsBuilder { b.runID = id; return b }
+
 // List hits GET /v1/claims with the configured filters. Evidence links
 // for the returned claims are included in the response so the local
 // query engine can resolve them back to events.
@@ -89,6 +109,9 @@ func (b *ClaimsBuilder) List(ctx context.Context) (*ListClaimsResponse, error) {
 	}
 	if b.claimStatus != "" {
 		q.Set("status", b.claimStatus)
+	}
+	if b.runID != "" {
+		q.Set("run_id", b.runID)
 	}
 	if err := b.c.do(ctx, http.MethodGet, withQuery("/v1/claims", q), nil, &out); err != nil {
 		return nil, err
