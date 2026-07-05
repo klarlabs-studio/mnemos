@@ -642,12 +642,17 @@ type claimsResponse struct {
 }
 
 type claimDTO struct {
-	ID              string  `json:"id"`
-	Text            string  `json:"text"`
-	Type            string  `json:"type"`
-	Confidence      float64 `json:"confidence"`
-	Status          string  `json:"status"`
-	CreatedAt       string  `json:"created_at"`
+	ID         string  `json:"id"`
+	Text       string  `json:"text"`
+	Type       string  `json:"type"`
+	Confidence float64 `json:"confidence"`
+	Status     string  `json:"status"`
+	CreatedAt  string  `json:"created_at"`
+	// CreatedBy attributes the claim to a specific author (a service's
+	// sub-actor — a worker or, e.g., a coach). On append it OVERRIDES the
+	// token actor for this claim (the mnemos ClaimItem.CreatedBy semantics);
+	// absent → the request's token actor. Echoed back on read.
+	CreatedBy       string  `json:"created_by,omitempty"`
 	SourceDocument  string  `json:"source_document,omitempty"`
 	SourceType      string  `json:"source_type,omitempty"`
 	SourceAuthority float64 `json:"source_authority,omitempty"`
@@ -842,6 +847,7 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 			Confidence:           c.Confidence,
 			Status:               string(c.Status),
 			CreatedAt:            c.CreatedAt.UTC().Format(time.RFC3339),
+			CreatedBy:            c.CreatedBy,
 			Visibility:           string(c.Visibility),
 			ConfidenceComponents: c.ConfidenceComponents,
 		})
@@ -1425,6 +1431,13 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("claims[%d].test_last_run_at: %v", i, err))
 			return
 		}
+		// Per-claim author override (mnemos ClaimItem.CreatedBy): a trusted
+		// service attributes on behalf of its sub-actor (worker/coach). Absent
+		// → the request's token actor.
+		claimActor := actor
+		if c.CreatedBy != "" {
+			claimActor = c.CreatedBy
+		}
 		claim := domain.Claim{
 			ID:                   c.ID,
 			Text:                 c.Text,
@@ -1432,7 +1445,7 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 			Confidence:           c.Confidence,
 			Status:               domain.ClaimStatus(c.Status),
 			CreatedAt:            created,
-			CreatedBy:            actor,
+			CreatedBy:            claimActor,
 			SourceDocument:       c.SourceDocument,
 			SourceType:           domain.SourceType(c.SourceType),
 			SourceAuthority:      c.SourceAuthority,

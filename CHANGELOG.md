@@ -10,6 +10,21 @@ notable changes.
 
 ### Added
 
+- **Per-claim author attribution over HTTP (`Claim.CreatedBy` +
+  `created_by` on append).** The library has had per-claim authorship
+  (`ClaimItem.CreatedBy`, v0.59) — a trusted service attributing a claim to its
+  own sub-actor (a worker or, e.g., a coach), overriding the store-wide token
+  actor — but the HTTP API and Go client SDK didn't expose it, so every claim
+  appended over HTTP was stamped with the token's actor. Now `POST /v1/claims`
+  honours a per-claim `created_by` (falling back to the token actor when absent)
+  and echoes it back on read, and the SDK's `Claim` type carries `CreatedBy`.
+  This is the substrate for who-knows-what, per-source calibration, and
+  independence grading in a per-org store shared across many authors.
+
+## [0.63.0] — 2026-07-05
+
+### Added
+
 - **Client SDK: optional-by-default construction + run-scoped views.** Three
   additions that move the "resilient, optional client" boilerplate every
   HTTP-SDK consumer hand-rolls into the library itself:

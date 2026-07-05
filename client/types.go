@@ -30,6 +30,14 @@ type Claim struct {
 	Confidence float64 `json:"confidence"` // 0.0 to 1.0
 	Status     string  `json:"status"`     // active | contested | resolved | deprecated
 	CreatedAt  string  `json:"created_at"`
+	// CreatedBy attributes the claim to a specific author — a service's
+	// sub-actor (a worker or, e.g., a coach). On Append it OVERRIDES the
+	// client's token actor for this claim (the mnemos ClaimItem.CreatedBy
+	// semantics), letting a per-org store shared across many authors attribute
+	// each claim to the one that produced it — the substrate for who-knows-what,
+	// per-source calibration, and independence grading. Empty → the token actor.
+	// Echoed back on read.
+	CreatedBy string `json:"created_by,omitempty"`
 	// Visibility gates audience access: personal | team | org.
 	// Omitted values are treated as "team" by the server.
 	Visibility string `json:"visibility,omitempty"`

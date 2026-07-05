@@ -364,6 +364,22 @@ func TestForRun_ScopesRunIDOnEventsAndClaims(t *testing.T) {
 	}
 }
 
+func TestClaims_AppendSendsCreatedBy(t *testing.T) {
+	reg := &fakeRegistry{}
+	srv := httptest.NewServer(reg.handler())
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	_, err := c.Claims().Append(context.Background(),
+		[]client.Claim{{ID: "cl1", Text: "approved plan", Type: "decision", CreatedBy: "coach:42"}}, nil)
+	if err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if len(reg.claims) != 1 || reg.claims[0].CreatedBy != "coach:42" {
+		t.Fatalf("created_by not sent on append: %+v", reg.claims)
+	}
+}
+
 func TestRelationships_TypeFilter(t *testing.T) {
 	reg := &fakeRegistry{}
 	srv := httptest.NewServer(reg.handler())
