@@ -107,6 +107,12 @@ Every other tier reads trust and corroboration. Harden them first.
   **surprise scalar** = precision-weighted |predicted − observed|. *Deterministic for
   structured predictions (numeric/boolean/chronos-signal) — bless these as the only
   auto-scored path; unmet-at-horizon is `unconfirmed`, never `refuted`. Medium effort.*
+  **SHIPPED — v0.58.0 (`Memory.Expect` / `RecordObservation` / `ReconcileExpectations`).** A claim
+  carries a numeric prediction (value, tolerance, horizon); reconciliation closes it against the
+  observed value into a surprise scalar (precision-weighted |predicted − observed|) and EMITS a
+  validates/refutes verdict edge — which the T1.2 routing consumes, closing the loop. Idempotent;
+  unobserved-at-horizon stays unconfirmed. `ports.ExpectationRepository` on in-memory/SQLite/Postgres
+  (tenant-RLS). **Mints prediction-error as a first-class signal — tier 1, and the whole roadmap, complete.**
 - **T1.2 Route surprise into the existing knobs.** The surprise scalar bumps **salience**
   (surprising memories resist forgetting — the flashbulb / hypercorrection effect), tags
   episodes as priority for the next consolidation pass, and shortens the **trust half-life**
