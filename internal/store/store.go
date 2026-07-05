@@ -59,6 +59,10 @@ type Conn struct {
 	// without an implementation; callers type-check before use.
 	Blocks ports.BlockRepository
 
+	// Expectations is the structured-forward-expectation store (one per
+	// claim). nil on providers without an implementation.
+	Expectations ports.ExpectationRepository
+
 	// Raw is the provider's underlying handle (e.g. *sql.DB for
 	// SQLite/Postgres, an in-memory state struct for memory). It is
 	// nil-safe to ignore. Some call sites still issue raw SQL or

@@ -207,6 +207,19 @@ CREATE TABLE IF NOT EXISTS working_memory_blocks (
 	PRIMARY KEY (owner, label)
 );
 
+-- claim_expectations (T1.1) — one structured forward prediction per claim,
+-- reconciled against an observed value into a validates/refutes verdict.
+CREATE TABLE IF NOT EXISTS claim_expectations (
+	claim_id TEXT PRIMARY KEY,
+	predicted REAL NOT NULL DEFAULT 0,
+	tolerance REAL NOT NULL DEFAULT 0,
+	horizon TEXT NOT NULL DEFAULT '',
+	observed REAL NOT NULL DEFAULT 0,
+	has_observation INTEGER NOT NULL DEFAULT 0,
+	resolved INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS embeddings (
 	entity_id TEXT NOT NULL,
 	entity_type TEXT NOT NULL,

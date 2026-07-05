@@ -240,6 +240,19 @@ type FeedbackRepository interface {
 	Upsert(ctx context.Context, state domain.ClaimFeedback) error
 }
 
+// ExpectationRepository persists structured forward expectations attached to
+// claims (one per claim). Like the other side tables it is a dumb store; the
+// reconciliation logic lives in the caller. nil on backends without an
+// implementation; callers type-check before use.
+type ExpectationRepository interface {
+	// Upsert writes the expectation under its ClaimID.
+	Upsert(ctx context.Context, exp domain.Expectation) error
+	// Get returns the expectation for claimID, or ok=false when none exists.
+	Get(ctx context.Context, claimID string) (domain.Expectation, bool, error)
+	// ListOpen returns every unresolved expectation (awaiting reconciliation).
+	ListOpen(ctx context.Context) ([]domain.Expectation, error)
+}
+
 // BlockRepository persists an agent's working-memory blocks — bounded, labeled,
 // mutable text keyed by (owner, label). Like [FeedbackRepository] it is a dumb
 // side-table store: bound-enforcement and read-modify-write live in the caller

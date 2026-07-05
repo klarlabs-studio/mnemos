@@ -436,6 +436,27 @@ func clampUnit(x float64) float64 {
 	return x
 }
 
+// ErrExpectationsUnsupported is returned by the expectation methods on a backend
+// with no expectation store.
+var ErrExpectationsUnsupported = errors.New("mnemos: structured expectations not supported on this backend")
+
+// Reconciliation is the result of closing one structured expectation against its
+// observed value — the prediction-error event.
+type Reconciliation struct {
+	// ClaimID is the claim whose expectation was reconciled.
+	ClaimID string
+	// Predicted / Observed are the expected and arrived values.
+	Predicted float64
+	Observed  float64
+	// Surprise is the precision-weighted prediction error: |predicted − observed|
+	// divided by the tolerance (or the scale of the prediction when tolerance is 0).
+	// 0 is a perfect prediction; ≥ 1 means the miss exceeded the tolerance.
+	Surprise float64
+	// Confirmed is true when the observation fell within tolerance (a validates
+	// verdict); false means a refutation.
+	Confirmed bool
+}
+
 // WorkingMemoryBlockLimit is the default character cap on a single working-memory
 // block. The cap IS the attention budget: [Memory.SetBlock] rejects an over-limit
 // value and [Memory.AppendBlock] evicts the oldest lines to stay within it.
@@ -889,6 +910,25 @@ type Memory interface {
 	// (cheap to learn, against an existing schema), otherwise novel accommodation.
 	// The assimilation-vs-accommodation routing signal. Deterministic.
 	ClassifyClaim(ctx context.Context, text string) (Assimilation, error)
+
+	// Expect attaches a structured forward prediction to a claim: the value is
+	// expected to be `predicted` within `tolerance` by `horizon`. One expectation
+	// per claim (re-calling replaces it). Returns [ErrExpectationsUnsupported] on a
+	// backend without the expectation store.
+	Expect(ctx context.Context, claimID string, predicted, tolerance float64, horizon time.Time) error
+
+	// RecordObservation reports the value that actually arrived for a claim's
+	// expectation, so the next reconciliation can close it. Errors if the claim has
+	// no expectation.
+	RecordObservation(ctx context.Context, claimID string, observed float64) error
+
+	// ReconcileExpectations closes every open expectation that has an observation:
+	// it computes a surprise scalar (precision-weighted |predicted − observed|),
+	// emits a validates (within tolerance) or refutes (beyond) verdict edge — so the
+	// existing surprise routing (reinforce / forget) picks it up — marks the
+	// expectation resolved, and returns the reconciliations. This is the mechanism
+	// that mints prediction-error as a first-class signal. Deterministic.
+	ReconcileExpectations(ctx context.Context) ([]Reconciliation, error)
 
 	// KnowledgeGaps is the curiosity / knowledge-gap detector: it scans the store
 	// for its weak spots — unresolved hypotheses (predicted, never validated or
