@@ -8,6 +8,16 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Contested frontier (`Memory.RecallWithConflicts`, T4.3).** Recall plus its own live
+  counter-evidence: for each recalled claim, any currently-valid claim that CONTRADICTS it
+  over the epistemic graph, strongest challenger first (`[]Conflict`). So a recall never
+  hides a dispute it knows about — the caller sees that a claim is contested, and by what,
+  before relying on it. Only *unresolved* contradictions surface: the challenger must be
+  valid and not superseded (supersede either side and the conflict clears). The `[]Result`
+  is exactly what `Recall` returns; deterministic, best-effort (a graph-read failure yields
+  the results with no conflicts). Opens tier 4 (the connected brain) of research part 2 —
+  retrieval-as-reasoning over the typed epistemic graph a pure-vector store can't do.
+
 - **Spreading activation (`Memory.RecallWithContext`, T3.4).** Ranks a query's results
   with spreading activation from the caller's current context (typically its working
   memory): the context is expanded up to `ActivationHops` (2) over the epistemic

@@ -312,6 +312,101 @@ func (m *memory) RecallWithContext(ctx context.Context, q Query, activeContext s
 	return out, nil
 }
 
+// RecallWithConflicts implements [Memory.RecallWithConflicts]: base recall plus the
+// contested frontier — for each recalled claim, the currently-valid claims that
+// contradict it over the epistemic graph. Strongest challenger first.
+func (m *memory) RecallWithConflicts(ctx context.Context, q Query) ([]Result, []Conflict, error) {
+	results, _, err := m.recall(ctx, q)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(results) == 0 {
+		return results, nil, nil
+	}
+	resultByID := make(map[string]Result, len(results))
+	ids := make([]string, len(results))
+	for i, r := range results {
+		ids[i] = r.ClaimID
+		resultByID[r.ClaimID] = r
+	}
+	rels, err := m.conn.Relationships.ListByClaimIDs(ctx, ids)
+	if err != nil {
+		return results, nil, nil // best-effort: no graph → no conflicts, results stand
+	}
+	// Endpoints not already recalled need a validity check before they can count
+	// as live counter-evidence (a superseded/invalidated challenger is resolved).
+	need := map[string]struct{}{}
+	for _, rel := range rels {
+		if rel.Type != domain.RelationshipTypeContradicts {
+			continue
+		}
+		for _, id := range []string{rel.FromClaimID, rel.ToClaimID} {
+			if _, ok := resultByID[id]; !ok {
+				need[id] = struct{}{}
+			}
+		}
+	}
+	valid := map[string]domain.Claim{}
+	if len(need) > 0 {
+		list := make([]string, 0, len(need))
+		for id := range need {
+			list = append(list, id)
+		}
+		if claims, cerr := m.conn.Claims.ListByIDs(ctx, list); cerr == nil {
+			for _, c := range claims {
+				if c.ValidTo.IsZero() && c.Lifecycle != domain.ClaimLifecycleSuperseded {
+					valid[c.ID] = c
+				}
+			}
+		}
+	}
+	// challengerOf returns the text/trust of a claim usable as counter-evidence,
+	// whether it was itself recalled (valid by construction) or externally valid.
+	challengerOf := func(id string) (text string, trust float64, ok bool) {
+		if r, isResult := resultByID[id]; isResult {
+			return r.Text, r.TrustScore, true
+		}
+		if c, isValid := valid[id]; isValid {
+			return c.Text, c.TrustScore, true
+		}
+		return "", 0, false
+	}
+	var conflicts []Conflict
+	seen := map[string]struct{}{}
+	for _, rel := range rels {
+		if rel.Type != domain.RelationshipTypeContradicts {
+			continue
+		}
+		// A contradiction is undirected here: whichever endpoint is recalled is the
+		// contested claim, the other (if a live claim) is its counter-evidence.
+		for _, pair := range [2][2]string{{rel.FromClaimID, rel.ToClaimID}, {rel.ToClaimID, rel.FromClaimID}} {
+			recalledID, otherID := pair[0], pair[1]
+			recalled, isRecalled := resultByID[recalledID]
+			if !isRecalled {
+				continue
+			}
+			text, trust, ok := challengerOf(otherID)
+			if !ok {
+				continue
+			}
+			key := recalledID + "\x00" + otherID
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			conflicts = append(conflicts, Conflict{
+				ClaimID: recalledID, ClaimText: recalled.Text,
+				ContradictingID: otherID, ContradictingText: text, ContradictingTrust: trust,
+			})
+		}
+	}
+	// Strongest counter-evidence first.
+	sort.SliceStable(conflicts, func(i, j int) bool {
+		return conflicts[i].ContradictingTrust > conflicts[j].ContradictingTrust
+	})
+	return results, conflicts, nil
+}
+
 // sufficiencyOf builds the public "feeling of knowing" from a raw answer.
 func sufficiencyOf(ans domain.Answer) Sufficiency {
 	return Sufficiency{
