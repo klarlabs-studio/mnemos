@@ -422,3 +422,50 @@ func TestPostgres_CompilationJobRoundTrip(t *testing.T) {
 // non-nil error from GetByID(missing). The test above logs but
 // does not require the chain to expose sql.ErrNoRows.
 func errNoRowsSentinel(err error) error { return err }
+
+// TestPostgres_WorkingMemoryBlocks exercises the block repository against a live
+// Postgres namespace: upsert (insert + in-place update), get, list, delete. Also
+// confirms the ADR 0007 tenant column + RLS scoping (added to working_memory_blocks)
+// does not reject inserts on the namespace-mode connection.
+func TestPostgres_WorkingMemoryBlocks(t *testing.T) {
+	conn := withConn(t)
+	if conn.Blocks == nil {
+		t.Fatal("Blocks repository is nil on postgres — expected an implementation")
+	}
+	ctx := context.Background()
+	const owner = "worker-uuid-1"
+
+	if err := conn.Blocks.Upsert(ctx, domain.WorkingMemoryBlock{Owner: owner, Label: "persona", Content: "analyst", UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("Upsert insert: %v", err)
+	}
+	// In-place update on the (owner,label) key.
+	if err := conn.Blocks.Upsert(ctx, domain.WorkingMemoryBlock{Owner: owner, Label: "persona", Content: "terse analyst", UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("Upsert update: %v", err)
+	}
+	if err := conn.Blocks.Upsert(ctx, domain.WorkingMemoryBlock{Owner: owner, Label: "open_threads", Content: "checkout latency", UpdatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("Upsert second: %v", err)
+	}
+
+	got, ok, err := conn.Blocks.Get(ctx, owner, "persona")
+	if err != nil || !ok {
+		t.Fatalf("Get: ok=%v err=%v", ok, err)
+	}
+	if got.Content != "terse analyst" {
+		t.Errorf("update didn't take: content = %q", got.Content)
+	}
+
+	list, err := conn.Blocks.List(ctx, owner)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 2 || list[0].Label != "open_threads" || list[1].Label != "persona" {
+		t.Fatalf("List wrong (want label-ordered open_threads, persona): %+v", list)
+	}
+
+	if err := conn.Blocks.Delete(ctx, owner, "persona"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, ok, _ := conn.Blocks.Get(ctx, owner, "persona"); ok {
+		t.Error("block still present after Delete")
+	}
+}

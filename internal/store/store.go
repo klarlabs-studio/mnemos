@@ -54,6 +54,11 @@ type Conn struct {
 	// (Refs #38). nil on providers without an implementation.
 	ClaimVersions ports.ClaimVersionRepository
 
+	// Blocks is the working-memory block store (agent "core memory":
+	// bounded, labeled, mutable text per owner). nil on providers
+	// without an implementation; callers type-check before use.
+	Blocks ports.BlockRepository
+
 	// Raw is the provider's underlying handle (e.g. *sql.DB for
 	// SQLite/Postgres, an in-memory state struct for memory). It is
 	// nil-safe to ignore. Some call sites still issue raw SQL or
