@@ -8,6 +8,14 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Per-claim authorship (`ClaimItem.CreatedBy`).** `RememberClaim` can now attribute a claim to a
+  specific author (worker/agent id), overriding the store-wide actor (`WithActor`) for that write.
+  This is the multi-worker substrate that powers independence-aware corroboration, per-source
+  calibration, and the who-knows-what directory — a per-org store shared across workers can now
+  attribute each claim to the worker that produced it. Empty falls back to the store actor.
+
+### Added
+
 - **Structured forward expectations (`Memory.Expect` / `RecordObservation` /
   `ReconcileExpectations`, T1.1).** A claim can now carry a structured prediction — a numeric
   value expected within a tolerance by a horizon (`Expect`). When the real value arrives
