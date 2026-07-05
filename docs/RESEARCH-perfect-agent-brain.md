@@ -233,6 +233,14 @@ Every other tier reads trust and corroboration. Harden them first.
   *same causal skeleton* even when services/metrics differ — "we've seen this *shape*
   before." A pure-vector store cannot do this; mnemos can *because* it has a typed epistemic
   graph. *Deterministic. Medium–high.*
+  **SHIPPED — v0.52.0 (`Memory.AnalogousClaims` + pure `structuralFingerprint`).**
+  Weisfeiler-Lehman label propagation (`StructuralIterations` rounds over `StructuralHops`;
+  node roles = claim types + edge types, content ignored) → histogram; ranks other
+  neighbourhoods by cosine overlap (`MinStructuralSimilarity` floor), one representative
+  per neighbourhood. Isomorphic-shaped subgraphs fingerprint identically regardless of
+  content. *Query-time fingerprinting (fine at investigation scale; index-on-write for a
+  large store). Senat consumer (analogous past incidents) needs an anchor subgraph — a
+  post-run/retrospective integration — deliberately deferred.*
 - **T4.3 Iterative retrieve↔reason loop + conflict-aware multi-hop.** Replace single-shot
   retrieve→answer with a bounded fixpoint: retrieve → assess coverage → on an unresolved
   entity/claim, spawn a follow-up query → stop on saturation or budget. The controller is
