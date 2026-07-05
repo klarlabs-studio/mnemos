@@ -835,6 +835,13 @@ type Memory interface {
 	// plain recall order is returned.
 	RecallWithContext(ctx context.Context, q Query, context string) ([]Result, error)
 
+	// WhoKnows is the transactive "who-knows-what" directory: it ranks the workers
+	// whose memory is most relevant to a query by affinity (how strongly their
+	// claims cover the topic) × reliability (the mean trust of those claims), so a
+	// knowledge gap routes to the right expert-memory instead of a flat search.
+	// Unattributed claims are ignored; empty when no attributed claim matches.
+	WhoKnows(ctx context.Context, query string, limit int) ([]Expert, error)
+
 	// AnalogousClaims finds claims whose surrounding typed subgraph is structurally
 	// similar to the one around claimID — retrieval by relational SHAPE
 	// (Weisfeiler-Lehman fingerprinting over the epistemic graph), not content. It
