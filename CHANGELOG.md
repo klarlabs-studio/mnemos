@@ -8,6 +8,19 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Working-memory blocks (agent "core memory", T3.1).** A new persisted primitive:
+  bounded, labeled, mutable text blocks owned by an agent (`persona`, `open_threads`,
+  `working_context`, …) that a runtime keeps always-loaded ahead of retrieval — turning
+  mnemos from a queried archive into an agent with a persistent train of thought. Public
+  API: `Memory.Blocks(owner)`, `SetBlock(owner, label, value)` (empty value deletes;
+  over-`WorkingMemoryBlockLimit` is `ErrBlockTooLarge` — working memory is bounded on
+  purpose), `AppendBlock(owner, label, text)` (evicts the OLDEST lines to stay within the
+  cap — the size cap IS the attention budget). Implemented on in-memory, SQLite, and
+  Postgres (with the ADR 0007 tenant column + RLS, so blocks are per-tenant isolated);
+  nil-able repo → `ErrBlocksUnsupported` on backends without it (MySQL/libsql). Opens tier
+  3.1 of research part 2 — the executive substrate. (Self-edit governance is the caller's
+  concern: e.g. gate the write behind a granted, audited tool.)
+
 - **Effort/attention budgeting (`Memory.RecallWithEffort`, T3).** Generalizes the
   fixed corrective-retrieval pass into an Expected-Value-of-Control budget: a first
   pass, then ONE bounded wider+deeper pass invested only when the caller's stakes and

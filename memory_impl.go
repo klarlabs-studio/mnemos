@@ -283,6 +283,87 @@ func strongerAnswer(b, a domain.Answer) bool {
 	return len(b.Claims) >= len(a.Claims) && b.Confidence > a.Confidence
 }
 
+// Blocks implements [Memory.Blocks].
+func (m *memory) Blocks(ctx context.Context, owner string) ([]Block, error) {
+	if m.conn.Blocks == nil {
+		return nil, ErrBlocksUnsupported
+	}
+	rows, err := m.conn.Blocks.List(ctx, strings.TrimSpace(owner))
+	if err != nil {
+		return nil, fmt.Errorf("mnemos: Blocks: %w", err)
+	}
+	out := make([]Block, 0, len(rows))
+	for _, b := range rows {
+		out = append(out, Block{Owner: b.Owner, Label: b.Label, Value: b.Content, UpdatedAt: b.UpdatedAt})
+	}
+	return out, nil
+}
+
+// SetBlock implements [Memory.SetBlock]. An empty value deletes the block; an
+// over-limit value is rejected (working memory is bounded on purpose).
+func (m *memory) SetBlock(ctx context.Context, owner, label, value string) error {
+	if m.conn.Blocks == nil {
+		return ErrBlocksUnsupported
+	}
+	owner, label = strings.TrimSpace(owner), strings.TrimSpace(label)
+	if owner == "" || label == "" {
+		return errors.New("mnemos: SetBlock: owner and label are required")
+	}
+	if len(value) > WorkingMemoryBlockLimit {
+		return ErrBlockTooLarge
+	}
+	if value == "" {
+		return m.conn.Blocks.Delete(ctx, owner, label)
+	}
+	return m.conn.Blocks.Upsert(ctx, domain.WorkingMemoryBlock{
+		Owner: owner, Label: label, Content: value, UpdatedAt: time.Now().UTC(),
+	})
+}
+
+// AppendBlock implements [Memory.AppendBlock]: append a line, then evict oldest
+// lines to stay within the block limit.
+func (m *memory) AppendBlock(ctx context.Context, owner, label, text string) error {
+	if m.conn.Blocks == nil {
+		return ErrBlocksUnsupported
+	}
+	owner, label = strings.TrimSpace(owner), strings.TrimSpace(label)
+	if owner == "" || label == "" {
+		return errors.New("mnemos: AppendBlock: owner and label are required")
+	}
+	cur, _, err := m.conn.Blocks.Get(ctx, owner, label)
+	if err != nil {
+		return fmt.Errorf("mnemos: AppendBlock: %w", err)
+	}
+	combined := cur.Content
+	if combined != "" && text != "" {
+		combined += "\n"
+	}
+	combined += text
+	combined = evictToLimit(combined, WorkingMemoryBlockLimit)
+	return m.conn.Blocks.Upsert(ctx, domain.WorkingMemoryBlock{
+		Owner: owner, Label: label, Content: combined, UpdatedAt: time.Now().UTC(),
+	})
+}
+
+// evictToLimit trims content to fit limit by dropping WHOLE lines from the FRONT
+// (oldest first) — the working-memory eviction policy: the cap is the attention
+// budget, and the freshest lines win. If a single trailing line still exceeds the
+// limit it is hard-truncated to its last `limit` characters.
+func evictToLimit(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	for len(lines) > 1 && len(strings.Join(lines, "\n")) > limit {
+		lines = lines[1:]
+	}
+	out := strings.Join(lines, "\n")
+	if len(out) > limit {
+		out = out[len(out)-limit:]
+	}
+	return out
+}
+
 // recall is the shared core: it runs the query and maps claims to results,
 // returning the raw domain.Answer too so callers that want the aggregate
 // confidence (RecallWithSufficiency) can read it without a second pass.

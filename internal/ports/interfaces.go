@@ -240,6 +240,24 @@ type FeedbackRepository interface {
 	Upsert(ctx context.Context, state domain.ClaimFeedback) error
 }
 
+// BlockRepository persists an agent's working-memory blocks — bounded, labeled,
+// mutable text keyed by (owner, label). Like [FeedbackRepository] it is a dumb
+// side-table store: bound-enforcement and read-modify-write live in the caller
+// (the public API), so the repository stays a plain persistence seam. nil on
+// backends without an implementation; callers type-check before use.
+type BlockRepository interface {
+	// Get returns the block for (owner, label), or ok=false when none exists.
+	// "Not found" is not an error — blocks are sparse by design.
+	Get(ctx context.Context, owner, label string) (domain.WorkingMemoryBlock, bool, error)
+	// List returns every block for an owner, label-ordered.
+	List(ctx context.Context, owner string) ([]domain.WorkingMemoryBlock, error)
+	// Upsert writes the block atomically under (owner, label).
+	Upsert(ctx context.Context, block domain.WorkingMemoryBlock) error
+	// Delete removes the block for (owner, label). Deleting a missing block is
+	// a no-op, not an error.
+	Delete(ctx context.Context, owner, label string) error
+}
+
 // ClaimSimilarityHit is one row of a vector-similarity search over
 // claim embeddings: the claim id, the cosine similarity (1.0 =
 // identical, 0.0 = orthogonal), and the model the stored vector was

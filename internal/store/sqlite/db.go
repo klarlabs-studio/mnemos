@@ -196,6 +196,17 @@ CREATE TABLE IF NOT EXISTS claim_feedback (
 	FOREIGN KEY (claim_id) REFERENCES claims(id)
 );
 
+-- working_memory_blocks (T3.1) — an agent's "core memory": bounded, labeled,
+-- mutable text keyed by (owner, label). Side table, independent of claims;
+-- the caller enforces the size cap. Upserts on the (owner, label) primary key.
+CREATE TABLE IF NOT EXISTS working_memory_blocks (
+	owner TEXT NOT NULL,
+	label TEXT NOT NULL,
+	content TEXT NOT NULL DEFAULT '',
+	updated_at TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (owner, label)
+);
+
 CREATE TABLE IF NOT EXISTS embeddings (
 	entity_id TEXT NOT NULL,
 	entity_type TEXT NOT NULL,

@@ -56,6 +56,7 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 		Incidents:     NewIncidentRepository(db),
 		Feedback:      NewFeedbackRepository(db),
 		ClaimVersions: NewClaimVersionRepository(db),
+		Blocks:        NewBlockRepository(db),
 		Raw:           db,
 		Closer:        db.Close,
 	}, nil

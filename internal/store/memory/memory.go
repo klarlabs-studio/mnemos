@@ -89,6 +89,7 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 		EntityRels:    EntityRelationshipRepository{state: st},
 		Incidents:     IncidentRepository{state: st},
 		Feedback:      FeedbackRepository{state: st},
+		Blocks:        BlockRepository{state: st},
 		ClaimVersions: ClaimVersionRepository{state: st},
 		Raw:           st,
 		Closer:        func() error { st.clear(); return nil },
@@ -145,7 +146,8 @@ type state struct {
 	incidents        map[string]domain.Incident
 	incidentOrder    []string
 	feedback         map[string]domain.ClaimFeedback
-	claimVersions    map[string][]domain.ClaimVersion // claim_id -> version chain, append-ordered
+	claimVersions    map[string][]domain.ClaimVersion     // claim_id -> version chain, append-ordered
+	blocks           map[string]domain.WorkingMemoryBlock // owner\x00label -> working-memory block
 }
 
 // storedEntityVersion is the in-memory analogue of a row in
@@ -188,6 +190,7 @@ func newState() *state {
 		incidents:        map[string]domain.Incident{},
 		feedback:         map[string]domain.ClaimFeedback{},
 		claimVersions:    map[string][]domain.ClaimVersion{},
+		blocks:           map[string]domain.WorkingMemoryBlock{},
 	}
 }
 

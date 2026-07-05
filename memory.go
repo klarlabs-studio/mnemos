@@ -48,6 +48,7 @@ package mnemos
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -419,6 +420,33 @@ func clampUnit(x float64) float64 {
 	return x
 }
 
+// WorkingMemoryBlockLimit is the default character cap on a single working-memory
+// block. The cap IS the attention budget: [Memory.SetBlock] rejects an over-limit
+// value and [Memory.AppendBlock] evicts the oldest lines to stay within it.
+const WorkingMemoryBlockLimit = 2000
+
+// ErrBlocksUnsupported is returned by the working-memory block methods on a
+// backend that has no block store (the repository is nil).
+var ErrBlocksUnsupported = errors.New("mnemos: working-memory blocks not supported on this backend")
+
+// ErrBlockTooLarge is returned by [Memory.SetBlock] when the value exceeds
+// [WorkingMemoryBlockLimit]. AppendBlock never returns it — it evicts instead.
+var ErrBlockTooLarge = errors.New("mnemos: working-memory block exceeds size limit")
+
+// Block is one of an agent's working-memory blocks — a bounded, labeled, mutable
+// piece of "core memory" the agent keeps always-loaded (persona, open threads,
+// current focus), distinct from the queried claim archive.
+type Block struct {
+	// Owner is the agent the block belongs to.
+	Owner string
+	// Label is the block's name (e.g. "persona", "open_threads", "working_context").
+	Label string
+	// Value is the block's text, bounded by [WorkingMemoryBlockLimit].
+	Value string
+	// UpdatedAt is the last-write timestamp.
+	UpdatedAt time.Time
+}
+
 // Event is a temporal entry to remember. Unlike an [Item], an Event is
 // always anchored to a wall-clock time and is intended for the timeline
 // (incident timelines, audit trails, deployment history, decision logs).
@@ -765,6 +793,22 @@ type Memory interface {
 	// escalation is a single bounded pass and non-regressive — it never returns
 	// a weaker answer than the first. The [EffortReport] says what was spent.
 	RecallWithEffort(ctx context.Context, q Query, stakes float64) ([]Result, Sufficiency, EffortReport, error)
+
+	// Blocks returns an owner's working-memory blocks (its "core memory":
+	// bounded, labeled, mutable text), label-ordered. An owner with none gets an
+	// empty slice. Returns [ErrBlocksUnsupported] on a backend without the block
+	// store. Reading blocks is how a caller always-loads them ahead of retrieval.
+	Blocks(ctx context.Context, owner string) ([]Block, error)
+
+	// SetBlock replaces (or creates) an owner's block under label. The value must
+	// fit [WorkingMemoryBlockLimit] — working memory is bounded on purpose; an
+	// over-limit value is [ErrBlockTooLarge]. An empty value deletes the block.
+	SetBlock(ctx context.Context, owner, label, value string) error
+
+	// AppendBlock appends text to an owner's block, keeping it within
+	// [WorkingMemoryBlockLimit] by evicting the OLDEST lines when it would
+	// overflow (the size cap IS the attention budget). Creates the block if absent.
+	AppendBlock(ctx context.Context, owner, label, text string) error
 
 	// Get returns the stored claim with the given id. It is the stable
 	// exact-lookup read on the API surface. Returns a non-nil error when

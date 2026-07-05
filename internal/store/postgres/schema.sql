@@ -343,6 +343,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_relationships_unique_edge
 CREATE INDEX IF NOT EXISTS idx_entity_relationships_from ON entity_relationships(from_type, from_id);
 CREATE INDEX IF NOT EXISTS idx_entity_relationships_to   ON entity_relationships(to_type, to_id);
 
+-- working_memory_blocks (T3.1) — an agent's "core memory": bounded, labeled,
+-- mutable text keyed by (owner, label). Gets the ADR 0007 tenant column + RLS
+-- via the DO block below (owner is a globally-unique agent id, so the natural
+-- key never collides across tenants). The caller enforces the size cap.
+CREATE TABLE IF NOT EXISTS working_memory_blocks (
+    owner text NOT NULL,
+    label text NOT NULL,
+    content text NOT NULL DEFAULT '',
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (owner, label)
+);
+
 -- ADR 0007: per-tenant isolation WITHIN a namespace. Each data table gets a
 -- `tenant` column defaulted from the `mnemos.tenant` GUC (pinned per connection by
 -- the provider), plus row-level security that filters every read/write to the
@@ -359,7 +371,7 @@ DECLARE
     'compilation_jobs','claim_status_history','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
-    'entity_relationships'
+    'entity_relationships','working_memory_blocks'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP
