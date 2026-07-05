@@ -835,6 +835,15 @@ type Memory interface {
 	// plain recall order is returned.
 	RecallWithContext(ctx context.Context, q Query, context string) ([]Result, error)
 
+	// AnalogousClaims finds claims whose surrounding typed subgraph is structurally
+	// similar to the one around claimID — retrieval by relational SHAPE
+	// (Weisfeiler-Lehman fingerprinting over the epistemic graph), not content. It
+	// surfaces past situations with the same causal skeleton even when the claims,
+	// services, or metrics differ — "we've seen this shape before", something a
+	// pure-vector store cannot do. One representative per neighbourhood, strongest
+	// structural similarity first; empty when the anchor has no local structure.
+	AnalogousClaims(ctx context.Context, claimID string, limit int) ([]Analogy, error)
+
 	// RecallWithConflicts is Recall plus the "contested frontier": for each recalled
 	// claim, any currently-valid claim that CONTRADICTS it over the epistemic graph.
 	// So a recall carries its own live counter-evidence — the caller sees that a
