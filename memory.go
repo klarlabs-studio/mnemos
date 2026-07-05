@@ -945,6 +945,16 @@ type Memory interface {
 	// to agenda-setting: mnemos proposes, the agent disposes. Deterministic.
 	KnowledgeGaps(ctx context.Context, limit int) ([]Gap, error)
 
+	// RecordAction records an operational action an agent took (a deploy, a
+	// rollback, a post, an investigation) — the raw material [Memory.Synthesize]
+	// clusters into lessons. Returns the action id (generated when empty). A no-op-
+	// safe [ErrActionsUnsupported] only on a backend without the action layer.
+	RecordAction(ctx context.Context, item ActionItem) (string, error)
+
+	// RecordActionOutcome records the observed result of a recorded action
+	// (success / failure / partial), so the skill loop can learn which actions work.
+	RecordActionOutcome(ctx context.Context, item OutcomeItem) error
+
 	// Synthesize derives the skill layer from experience: it clusters the store's
 	// actions-with-outcomes into lessons, then groups lessons into playbooks. Both
 	// steps are idempotent (upsert by cluster), so it is safe to run on a schedule —
