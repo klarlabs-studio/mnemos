@@ -8,6 +8,16 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Transactive "who-knows-what" directory (`Memory.WhoKnows`, T4.1).** Routes a knowledge
+  gap to the right expert-memory instead of a flat search: ranks the workers whose claims
+  are most relevant to a query by **affinity** (how much of the topic that worker's memory
+  covers, normalised so the strongest is 1.0) × **reliability** (the mean trust of their
+  matching claims), returning `[]Expert{Worker, Affinity, Reliability, ClaimCount}`.
+  Unattributed (`<system>`) and invalidated claims are ignored. The deterministic backbone
+  of theory-of-mind — "who should I ask?" Continues tier 4 (the connected brain). Ships a
+  deterministic lexical baseline (token-overlap topical relevance); reusing the stored claim
+  embeddings for semantic topic centroids is the production enhancement.
+
 - **Analogical / structural retrieval (`Memory.AnalogousClaims`, T4.2).** Retrieval by
   relational SHAPE, not content: fingerprints the typed subgraph around a claim with
   Weisfeiler-Lehman label propagation (`StructuralIterations` rounds over
