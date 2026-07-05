@@ -267,8 +267,12 @@ Every other tier reads trust and corroboration. Harden them first.
   unresolved disputes surface (a superseded challenger clears); complements the global
   `Hypercorrections` queue with a recall-scoped view. Senat wires it (v0.11.63):
   `engine.conflictHint` injects the disputed vetted claims + their counter-evidence into the
-  run objective, so a worker weighs both sides instead of stating a contested claim as
-  settled. *The iterative retrieve↔reason FIXPOINT loop is the open remainder of T4.3.*
+  run objective, so a worker weighs both sides instead of stating a contested claim as settled.
+  **SHIPPED (iterative side) — v0.55.0 (`Memory.RecallIterative`).** Bounded retrieve↔reason
+  fixpoint: retrieve → check coverage (sufficiency/CRAG) → reason a follow-up (expand toward
+  the strongest new finding + deepen a hop) → repeat; stops on coverage / saturation / budget.
+  Deterministic controller (LLM-optional open-ended sub-question generation deferred). **T4.3
+  and tier 4 complete.**
 
 ---
 
