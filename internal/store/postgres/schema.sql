@@ -355,6 +355,19 @@ CREATE TABLE IF NOT EXISTS working_memory_blocks (
     PRIMARY KEY (owner, label)
 );
 
+-- claim_expectations (T1.1) — one structured forward prediction per claim; gets
+-- the ADR 0007 tenant column + RLS via the DO block below.
+CREATE TABLE IF NOT EXISTS claim_expectations (
+    claim_id text PRIMARY KEY,
+    predicted double precision NOT NULL DEFAULT 0,
+    tolerance double precision NOT NULL DEFAULT 0,
+    horizon timestamptz,
+    observed double precision NOT NULL DEFAULT 0,
+    has_observation boolean NOT NULL DEFAULT false,
+    resolved boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- ADR 0007: per-tenant isolation WITHIN a namespace. Each data table gets a
 -- `tenant` column defaulted from the `mnemos.tenant` GUC (pinned per connection by
 -- the provider), plus row-level security that filters every read/write to the
@@ -371,7 +384,7 @@ DECLARE
     'compilation_jobs','claim_status_history','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
-    'entity_relationships','working_memory_blocks'
+    'entity_relationships','working_memory_blocks','claim_expectations'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

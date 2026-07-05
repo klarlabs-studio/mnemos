@@ -90,6 +90,7 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 		Incidents:     IncidentRepository{state: st},
 		Feedback:      FeedbackRepository{state: st},
 		Blocks:        BlockRepository{state: st},
+		Expectations:  ExpectationRepository{state: st},
 		ClaimVersions: ClaimVersionRepository{state: st},
 		Raw:           st,
 		Closer:        func() error { st.clear(); return nil },
@@ -148,6 +149,7 @@ type state struct {
 	feedback         map[string]domain.ClaimFeedback
 	claimVersions    map[string][]domain.ClaimVersion     // claim_id -> version chain, append-ordered
 	blocks           map[string]domain.WorkingMemoryBlock // owner\x00label -> working-memory block
+	expectations     map[string]domain.Expectation        // claim_id -> forward expectation
 }
 
 // storedEntityVersion is the in-memory analogue of a row in
@@ -191,6 +193,7 @@ func newState() *state {
 		feedback:         map[string]domain.ClaimFeedback{},
 		claimVersions:    map[string][]domain.ClaimVersion{},
 		blocks:           map[string]domain.WorkingMemoryBlock{},
+		expectations:     map[string]domain.Expectation{},
 	}
 }
 

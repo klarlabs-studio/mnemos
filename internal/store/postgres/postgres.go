@@ -202,6 +202,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 		Playbooks:     PlaybookRepository{db: db, ns: parsed.Namespace},
 		EntityRels:    EntityRelationshipRepository{db: db, ns: parsed.Namespace},
 		Blocks:        BlockRepository{db: db, ns: parsed.Namespace},
+		Expectations:  ExpectationRepository{db: db, ns: parsed.Namespace},
 		Raw:           db,
 		Closer:        db.Close,
 	}, nil

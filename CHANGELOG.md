@@ -8,6 +8,18 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Structured forward expectations (`Memory.Expect` / `RecordObservation` /
+  `ReconcileExpectations`, T1.1).** A claim can now carry a structured prediction — a numeric
+  value expected within a tolerance by a horizon (`Expect`). When the real value arrives
+  (`RecordObservation`), `ReconcileExpectations` closes it into a **surprise scalar**
+  (precision-weighted |predicted − observed|) and **emits a validates/refutes verdict edge** —
+  which the existing surprise routing (`ForgetRefuted` / `ReinforceValidated`) consumes, so the
+  prediction loop closes on itself. Reconciliation is idempotent; an unobserved expectation stays
+  `unconfirmed` (never refuted). New `ports.ExpectationRepository` + `Conn.Expectations` on
+  in-memory, SQLite, and Postgres (with the ADR 0007 tenant column + RLS); `ErrExpectationsUnsupported`
+  elsewhere. **This mints prediction-error as a first-class signal — completing tier 1 and the
+  entire research part-2 roadmap.**
+
 - **REM-like recombination detector (`Memory.Recombinations`, T2.3).** Finds pairs of
   high-salience, currently-valid claims that are topically related (Jaccard ≥
   `RecombineSimilarityFloor`) yet NOT directly connected in the epistemic graph — the novel

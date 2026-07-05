@@ -423,6 +423,54 @@ func TestPostgres_CompilationJobRoundTrip(t *testing.T) {
 // does not require the chain to expose sql.ErrNoRows.
 func errNoRowsSentinel(err error) error { return err }
 
+// TestPostgres_Expectations exercises the expectation repository against a live
+// Postgres namespace: upsert (with + without a horizon), get, record an
+// observation, list-open filtering by resolved, and the RLS-scoped insert.
+func TestPostgres_Expectations(t *testing.T) {
+	conn := withConn(t)
+	if conn.Expectations == nil {
+		t.Fatal("Expectations repository is nil on postgres — expected an implementation")
+	}
+	ctx := context.Background()
+	horizon := time.Now().Add(time.Hour).UTC()
+
+	if err := conn.Expectations.Upsert(ctx, domain.Expectation{ClaimID: "c1", Predicted: 100, Tolerance: 10, Horizon: horizon, CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	got, ok, err := conn.Expectations.Get(ctx, "c1")
+	if err != nil || !ok {
+		t.Fatalf("Get: ok=%v err=%v", ok, err)
+	}
+	if got.Predicted != 100 || got.Tolerance != 10 || got.Horizon.IsZero() {
+		t.Errorf("round-trip wrong: %+v", got)
+	}
+
+	// Record an observation + resolve it; it should drop out of ListOpen.
+	got.Observed = 250
+	got.HasObservation = true
+	if err := conn.Expectations.Upsert(ctx, got); err != nil {
+		t.Fatalf("Upsert observation: %v", err)
+	}
+	open, err := conn.Expectations.ListOpen(ctx)
+	if err != nil {
+		t.Fatalf("ListOpen: %v", err)
+	}
+	if len(open) != 1 || !open[0].HasObservation {
+		t.Fatalf("ListOpen (unresolved) wrong: %+v", open)
+	}
+	got.Resolved = true
+	if err := conn.Expectations.Upsert(ctx, got); err != nil {
+		t.Fatalf("Upsert resolved: %v", err)
+	}
+	open, err = conn.Expectations.ListOpen(ctx)
+	if err != nil {
+		t.Fatalf("ListOpen after resolve: %v", err)
+	}
+	if len(open) != 0 {
+		t.Errorf("resolved expectation must not appear in ListOpen; got %+v", open)
+	}
+}
+
 // TestPostgres_WorkingMemoryBlocks exercises the block repository against a live
 // Postgres namespace: upsert (insert + in-place update), get, list, delete. Also
 // confirms the ADR 0007 tenant column + RLS scoping (added to working_memory_blocks)
