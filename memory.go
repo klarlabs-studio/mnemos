@@ -114,6 +114,13 @@ type ClaimItem struct {
 	// candidate→promoted review. Query with [AnswerOptions.Lifecycle] to
 	// recall only promoted knowledge.
 	Lifecycle ClaimLifecycle
+
+	// CreatedBy attributes the claim to a specific author (agent/worker id),
+	// overriding the store-wide actor ([WithActor]) for this write. Empty falls
+	// back to the store actor. Per-author attribution is what powers independence-
+	// aware corroboration, per-source calibration, and the who-knows-what directory
+	// in a multi-worker store — set it to the worker that produced the claim.
+	CreatedBy string
 }
 
 // ClaimLifecycle is the human-promotion state of a claim. It is

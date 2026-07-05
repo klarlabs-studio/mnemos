@@ -169,6 +169,10 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		confidence = 1.0
 	}
 
+	createdBy := item.CreatedBy
+	if createdBy == "" {
+		createdBy = m.actorID
+	}
 	id := newClaimID()
 	claim := domain.Claim{
 		ID:         id,
@@ -177,7 +181,7 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		Confidence: confidence,
 		Status:     domain.ClaimStatusActive,
 		CreatedAt:  time.Now().UTC(),
-		CreatedBy:  m.actorID,
+		CreatedBy:  createdBy,
 		ValidFrom:  item.ValidFrom,
 		ValidTo:    item.ValidUntil,
 		Lifecycle:  domain.ClaimLifecycle(item.Lifecycle),
