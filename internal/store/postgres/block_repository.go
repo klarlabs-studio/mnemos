@@ -44,7 +44,7 @@ SELECT label, content, updated_at FROM %s WHERE owner = $1 ORDER BY label ASC`, 
 	if err != nil {
 		return nil, fmt.Errorf("list blocks for %s: %w", owner, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]domain.WorkingMemoryBlock, 0)
 	for rows.Next() {
 		var label, content string

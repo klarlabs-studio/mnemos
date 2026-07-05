@@ -146,7 +146,7 @@ type state struct {
 	incidents        map[string]domain.Incident
 	incidentOrder    []string
 	feedback         map[string]domain.ClaimFeedback
-	claimVersions    map[string][]domain.ClaimVersion    // claim_id -> version chain, append-ordered
+	claimVersions    map[string][]domain.ClaimVersion     // claim_id -> version chain, append-ordered
 	blocks           map[string]domain.WorkingMemoryBlock // owner\x00label -> working-memory block
 }
 

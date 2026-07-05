@@ -48,7 +48,7 @@ WHERE owner = ? ORDER BY label ASC`, owner)
 	if err != nil {
 		return nil, fmt.Errorf("list blocks for %s: %w", owner, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]domain.WorkingMemoryBlock, 0)
 	for rows.Next() {
 		var label, content, updatedAt string
