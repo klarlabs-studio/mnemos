@@ -265,6 +265,53 @@ func (m *memory) RecallWithEffort(ctx context.Context, q Query, stakes float64) 
 	return baseResults, baseSuf, report, nil
 }
 
+// RecallWithContext implements [Memory.RecallWithContext]: base query recall, then
+// a stable re-rank that promotes results connected (over the epistemic graph) to
+// the caller's current context — spreading activation from the train of thought.
+func (m *memory) RecallWithContext(ctx context.Context, q Query, activeContext string) ([]Result, error) {
+	results, _, err := m.recall(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	activeContext = strings.TrimSpace(activeContext)
+	if activeContext == "" || len(results) < 2 {
+		return results, nil // no context, or nothing to reorder
+	}
+	// Spread activation: expand the context over the epistemic graph and record a
+	// decaying activation per reached claim. Hop expansion IS the spread. Reuse the
+	// query's Lifecycle so the activation source respects the same visibility.
+	activated, _, aerr := m.recall(ctx, Query{Text: activeContext, Hops: ActivationHops, Lifecycle: q.Lifecycle})
+	if aerr != nil {
+		return results, nil // best-effort: spreading failed → plain recall order
+	}
+	activation := make(map[string]float64, len(activated))
+	for _, a := range activated {
+		act := math.Pow(ActivationDecay, float64(a.HopDistance))
+		if act > activation[a.ClaimID] {
+			activation[a.ClaimID] = act
+		}
+	}
+	if len(activation) == 0 {
+		return results, nil
+	}
+	// Stable re-rank: base score preserves the recall order (len-i); activation
+	// promotes connected results by up to ActivationBoost positions.
+	type scored struct {
+		r Result
+		s float64
+	}
+	ranked := make([]scored, len(results))
+	for i, r := range results {
+		ranked[i] = scored{r, float64(len(results)-i) + ActivationBoost*activation[r.ClaimID]}
+	}
+	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].s > ranked[j].s })
+	out := make([]Result, len(ranked))
+	for i, sc := range ranked {
+		out[i] = sc.r
+	}
+	return out, nil
+}
+
 // sufficiencyOf builds the public "feeling of knowing" from a raw answer.
 func sufficiencyOf(ans domain.Answer) Sufficiency {
 	return Sufficiency{

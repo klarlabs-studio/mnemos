@@ -8,6 +8,18 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Spreading activation (`Memory.RecallWithContext`, T3.4).** Ranks a query's results
+  with spreading activation from the caller's current context (typically its working
+  memory): the context is expanded up to `ActivationHops` (2) over the epistemic
+  (supports/contradicts) graph — reusing hop expansion as the spread — and each query
+  result connected to that context is promoted by a decaying activation term
+  (`ActivationDecay` per hop, up to `ActivationBoost` positions). Makes retrieval
+  follow the current train of thought — a claim relevant to the query AND connected to
+  what the agent is thinking about outranks one that is only query-relevant. A gentle,
+  order-preserving re-rank (not a reshuffle); an empty context, or a result set too
+  small to reorder, is exactly `Recall`; best-effort (a failed spread returns the plain
+  order). Continues tier 3 (the executive) of research part 2 — coherence for nearly free.
+
 - **Working-memory blocks (agent "core memory", T3.1).** A new persisted primitive:
   bounded, labeled, mutable text blocks owned by an agent (`persona`, `open_threads`,
   `working_context`, …) that a runtime keeps always-loaded ahead of retrieval — turning
