@@ -8,6 +8,20 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Effort/attention budgeting (`Memory.RecallWithEffort`, T3).** Generalizes the
+  fixed corrective-retrieval pass into an Expected-Value-of-Control budget: a first
+  pass, then ONE bounded wider+deeper pass invested only when the caller's stakes and
+  the first pass's uncertainty justify it — `budget = stakes × (1 − confidence)` (the
+  pure, exported `EffortBudget`). A low-stakes query stays cheap even when memory is
+  thin; a high-stakes one escalates (up to `EffortMaxExtraHops` more graph hops and
+  `EffortMaxExtraBreadth` more claims) until grounded or the ceiling is hit. `stakes` is
+  a [0,1] signal the caller supplies from how much being right matters (e.g. mapped from
+  a pending action's blast radius) — zero new stored inputs. The escalation is
+  non-regressive (adopted only when strictly stronger — at least as many claims AND
+  higher confidence) and bounded (one extra pass). Returns the usual `[]Result` +
+  `Sufficiency` + an `EffortReport{Budget, Passes, Hops, Breadth}`. Continues tier 3
+  (the executive) — spend cognition in proportion to stakes × uncertainty.
+
 - **Recall "feeling of knowing" (abstain gate, T3).** New
   `Memory.RecallWithSufficiency(ctx, Query) ([]Result, Sufficiency, error)` surfaces a
   deterministic verdict on whether the memory backing a recall is strong enough to rely
