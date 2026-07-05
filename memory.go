@@ -382,6 +382,22 @@ const (
 	EffortMaxExtraBreadth = 10
 )
 
+// Spreading-activation constants govern [Memory.RecallWithContext].
+const (
+	// ActivationHops is how far activation spreads from the context over the
+	// epistemic graph (supports/contradicts edges) — 1–2 in the literature.
+	ActivationHops = 2
+
+	// ActivationDecay is the per-hop decay of activation: a claim one hop from the
+	// context contributes ActivationDecay, two hops ActivationDecay², and so on.
+	ActivationDecay = 0.5
+
+	// ActivationBoost is the most positions a fully-activated (hop-0) query result
+	// is promoted. The re-rank preserves the base order and only lifts results that
+	// connect to the current train of thought — a gentle bias, not a reshuffle.
+	ActivationBoost = 3.0
+)
+
 // EffortReport records what one [Memory.RecallWithEffort] call spent, so callers
 // (and tests) can see the budget decision without inferring it.
 type EffortReport struct {
@@ -793,6 +809,16 @@ type Memory interface {
 	// escalation is a single bounded pass and non-regressive — it never returns
 	// a weaker answer than the first. The [EffortReport] says what was spent.
 	RecallWithEffort(ctx context.Context, q Query, stakes float64) ([]Result, Sufficiency, EffortReport, error)
+
+	// RecallWithContext ranks a query's results with spreading activation from the
+	// caller's current context (typically its working memory). The context is
+	// expanded up to [ActivationHops] over the epistemic (supports/contradicts)
+	// graph, and each query result connected to that context is promoted by a
+	// decaying activation term — biasing retrieval toward the current train of
+	// thought (coherence). An empty context, or a result set too small to reorder,
+	// is exactly Recall. Deterministic and best-effort: if the spread fails, the
+	// plain recall order is returned.
+	RecallWithContext(ctx context.Context, q Query, context string) ([]Result, error)
 
 	// Blocks returns an owner's working-memory blocks (its "core memory":
 	// bounded, labeled, mutable text), label-ordered. An owner with none gets an
