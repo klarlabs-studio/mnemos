@@ -363,6 +363,62 @@ type Sufficiency struct {
 	Floor float64
 }
 
+// Effort-budgeting constants govern [Memory.RecallWithEffort]. The escalation is
+// deliberately bounded: at most one extra pass, at most a few more hops and a
+// bounded breadth increase, so a high-stakes query works harder but can never run
+// away.
+const (
+	// EffortEscalationThreshold is the budget at or above which RecallWithEffort
+	// spends a second, wider+deeper pass. Below it the first pass stands.
+	EffortEscalationThreshold = 0.3
+
+	// EffortMaxExtraHops is the most additional graph-expansion hops the escalated
+	// pass may add on top of the caller's requested hops.
+	EffortMaxExtraHops = 2
+
+	// EffortMaxExtraBreadth is the most additional claims the escalated pass may
+	// request on top of the first pass's breadth.
+	EffortMaxExtraBreadth = 10
+)
+
+// EffortReport records what one [Memory.RecallWithEffort] call spent, so callers
+// (and tests) can see the budget decision without inferring it.
+type EffortReport struct {
+	// Budget is the Expected-Value-of-Control budget computed from the first
+	// pass: stakes × (1 − first-pass confidence). See [EffortBudget].
+	Budget float64
+
+	// Passes is the number of retrieval passes actually run: 1 when the budget
+	// did not warrant escalation, 2 when it did.
+	Passes int
+
+	// Hops and Breadth are the graph depth and claim breadth of the ADOPTED
+	// result — the escalated pass's when it was kept, else the first pass's.
+	Hops    int
+	Breadth int
+}
+
+// EffortBudget is the Expected-Value-of-Control budget in [0, 1] for grounding an
+// answer harder: how much extra retrieval effort is warranted given the stakes and
+// the confidence already achieved. It is simply stakes × (1 − confidence) —
+// high stakes AND low confidence warrant investment; low stakes OR high confidence
+// do not. Both inputs are clamped to [0, 1]. Pure and deterministic.
+func EffortBudget(stakes, confidence float64) float64 {
+	s := clampUnit(stakes)
+	c := clampUnit(confidence)
+	return s * (1 - c)
+}
+
+func clampUnit(x float64) float64 {
+	if x < 0 {
+		return 0
+	}
+	if x > 1 {
+		return 1
+	}
+	return x
+}
+
 // Event is a temporal entry to remember. Unlike an [Item], an Event is
 // always anchored to a wall-clock time and is intended for the timeline
 // (incident timelines, audit trails, deployment history, decision logs).
@@ -697,6 +753,18 @@ type Memory interface {
 	// at least one claim). The []Result is identical to what Recall returns;
 	// no extra work beyond surfacing the confidence Recall already computes.
 	RecallWithSufficiency(ctx context.Context, q Query) ([]Result, Sufficiency, error)
+
+	// RecallWithEffort recalls under an Expected-Value-of-Control budget: it
+	// runs a first pass, then invests MORE retrieval breadth and depth only
+	// when the caller's stakes and the uncertainty of that first pass justify
+	// it (budget = stakes × (1 − confidence), see [EffortBudget]). A low-stakes
+	// query stays cheap even when memory is thin; a high-stakes one widens and
+	// deepens until it is grounded or the bounded ceiling is hit. stakes is a
+	// [0, 1] signal the caller supplies from how much it matters that this
+	// answer is right (e.g. mapped from the pending action's blast radius). The
+	// escalation is a single bounded pass and non-regressive — it never returns
+	// a weaker answer than the first. The [EffortReport] says what was spent.
+	RecallWithEffort(ctx context.Context, q Query, stakes float64) ([]Result, Sufficiency, EffortReport, error)
 
 	// Get returns the stored claim with the given id. It is the stable
 	// exact-lookup read on the API surface. Returns a non-nil error when

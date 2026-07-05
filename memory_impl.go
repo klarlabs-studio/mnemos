@@ -219,13 +219,68 @@ func (m *memory) RecallWithSufficiency(ctx context.Context, q Query) ([]Result, 
 	if err != nil {
 		return nil, Sufficiency{}, err
 	}
-	suf := Sufficiency{
+	return results, sufficiencyOf(ans), nil
+}
+
+// RecallWithEffort implements [Memory.RecallWithEffort]: a first pass, then one
+// bounded wider+deeper pass when the Expected-Value-of-Control budget
+// (stakes × (1 − first-pass confidence)) warrants it and the first pass was not
+// already sufficient. Non-regressive: the escalated pass is adopted only when it
+// is stronger (at least as many claims AND higher confidence).
+func (m *memory) RecallWithEffort(ctx context.Context, q Query, stakes float64) ([]Result, Sufficiency, EffortReport, error) {
+	baseResults, baseAns, err := m.recall(ctx, q)
+	if err != nil {
+		return nil, Sufficiency{}, EffortReport{}, err
+	}
+	baseBreadth := q.Limit
+	if baseBreadth <= 0 {
+		baseBreadth = len(baseResults) // no explicit cap — the breadth that came back
+	}
+	report := EffortReport{
+		Budget:  EffortBudget(stakes, baseAns.Confidence),
+		Passes:  1,
+		Hops:    q.Hops,
+		Breadth: baseBreadth,
+	}
+	baseSuf := sufficiencyOf(baseAns)
+
+	// Escalate a single bounded pass only when the stakes-weighted uncertainty
+	// warrants it AND we are not already grounded.
+	if report.Budget < EffortEscalationThreshold || baseSuf.Sufficient {
+		return baseResults, baseSuf, report, nil
+	}
+	eq := q
+	eq.Hops = q.Hops + int(math.Ceil(report.Budget*EffortMaxExtraHops))
+	eq.Limit = baseBreadth + int(math.Round(report.Budget*EffortMaxExtraBreadth))
+	report.Passes = 2
+
+	escResults, escAns, eerr := m.recall(ctx, eq)
+	if eerr == nil && strongerAnswer(escAns, baseAns) {
+		report.Hops = eq.Hops
+		report.Breadth = eq.Limit
+		return escResults, sufficiencyOf(escAns), report, nil
+	}
+	// Escalation did not help (or errored): keep the first pass. The effort was
+	// spent (Passes == 2) but the answer is unchanged — never regressed.
+	return baseResults, baseSuf, report, nil
+}
+
+// sufficiencyOf builds the public "feeling of knowing" from a raw answer.
+func sufficiencyOf(ans domain.Answer) Sufficiency {
+	return Sufficiency{
 		Confidence: ans.Confidence,
 		ClaimCount: len(ans.Claims),
 		Sufficient: len(ans.Claims) > 0 && ans.Confidence >= RecallSufficiencyFloor,
 		Floor:      RecallSufficiencyFloor,
 	}
-	return results, suf, nil
+}
+
+// strongerAnswer reports whether b is a non-regressive improvement over a: at
+// least as many claims AND strictly higher confidence. Mirrors the rule the
+// internal corrective-retrieval pass uses so effort never trades breadth for a
+// marginally higher score.
+func strongerAnswer(b, a domain.Answer) bool {
+	return len(b.Claims) >= len(a.Claims) && b.Confidence > a.Confidence
 }
 
 // recall is the shared core: it runs the query and maps claims to results,
