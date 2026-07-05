@@ -226,6 +226,12 @@ Every other tier reads trust and corroboration. Harden them first.
   with the consolidation clusters). `WhoKnows(query) → ranked [(worker, affinity,
   reliability)]` routes a knowledge gap to the right expert-memory instead of a flat search.
   The deterministic backbone of theory-of-mind. *Deterministic. Medium.*
+  **SHIPPED — v0.53.0 (`Memory.WhoKnows` → `[]Expert`).** Ranks workers by affinity (how
+  much of the query topic their claims cover, normalised) × reliability (mean trust of those
+  claims); unattributed/invalidated claims ignored. Ships a deterministic lexical baseline
+  (token-overlap grouped by claim author); reusing the stored claim embeddings for semantic
+  topic centroids is the noted production enhancement. *Senat consumer (route/delegate a
+  knowledge gap to the expert worker) is a natural follow-up.*
 - **T4.2 Analogical / structural retrieval — differentiated; only possible here.** Retrieve
   by *relational* similarity, not content: fingerprint each episode's typed subgraph
   (Weisfeiler-Lehman label propagation, 1–2 iterations over the edge types), index it, and
