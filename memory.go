@@ -876,6 +876,20 @@ type Memory interface {
 	// plain recall order is returned.
 	RecallWithContext(ctx context.Context, q Query, context string) ([]Result, error)
 
+	// Recombinations is the REM-like recombination detector: it finds pairs of
+	// high-salience, currently-valid claims that are topically related yet NOT
+	// directly connected in the epistemic graph — novel juxtapositions the waking
+	// graph never made — ranked by similarity. Deterministic detection; naming the
+	// emergent schema/hypothesis is left to a human or an LLM (proposals, never
+	// auto-promoted).
+	Recombinations(ctx context.Context, limit int) ([]Recombination, error)
+
+	// ClassifyClaim routes a candidate claim by fit to established knowledge: if the
+	// store already holds sufficient knowledge on the topic it is assimilation
+	// (cheap to learn, against an existing schema), otherwise novel accommodation.
+	// The assimilation-vs-accommodation routing signal. Deterministic.
+	ClassifyClaim(ctx context.Context, text string) (Assimilation, error)
+
 	// KnowledgeGaps is the curiosity / knowledge-gap detector: it scans the store
 	// for its weak spots — unresolved hypotheses (predicted, never validated or
 	// refuted) and contested claims (multiple live contradictions) — and ranks them
