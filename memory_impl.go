@@ -922,6 +922,16 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.Refuted = refuted
 	}
+	// Confirmation routing: freshen claims a later outcome BORE OUT, so validated
+	// beliefs resist forgetting — the mirror of ForgetRefuted. Together they route
+	// prediction-error both ways: confirmed kept fresh, refuted let go.
+	if opts.ReinforceValidated {
+		validated, verr := m.reinforceValidatedClaims(ctx)
+		if verr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: reinforce validated: %w", verr)
+		}
+		res.Validated = validated
+	}
 	// Skill synthesis: re-derive lessons + playbooks from accumulated experience —
 	// the auto-trigger arrow that keeps the skill layer current without a manual CLI
 	// run. Runs before reinforcement so freshly-derived playbooks tune this pass.
@@ -1030,7 +1040,9 @@ func replayRecency(c domain.Claim, now time.Time) float64 {
 // refutedClaimIDs returns the ids of claims whose LATEST outcome verdict is
 // "refuted" — an observed outcome (a refutes edge) contradicted the belief and no
 // later outcome re-validated it. Shared shape with Calibration's verdict logic.
-func (m *memory) refutedClaimIDs(ctx context.Context) (map[string]struct{}, error) {
+// latestClaimVerdicts returns, per claim that carries any validates/refutes edge,
+// whether its LATEST verdict was a refutation (true) or a confirmation (false).
+func (m *memory) latestClaimVerdicts(ctx context.Context) (map[string]bool, error) {
 	validates, err := m.conn.EntityRels.ListByKind(ctx, string(domain.RelationshipTypeValidates))
 	if err != nil {
 		return nil, fmt.Errorf("list validates: %w", err)
@@ -1056,13 +1068,60 @@ func (m *memory) refutedClaimIDs(ctx context.Context) (map[string]struct{}, erro
 	}
 	adopt(validates, false)
 	adopt(refutes, true)
-	out := make(map[string]struct{})
+	out := make(map[string]bool, len(latest))
 	for id, v := range latest {
-		if v.refuted {
+		out[id] = v.refuted
+	}
+	return out, nil
+}
+
+func (m *memory) refutedClaimIDs(ctx context.Context) (map[string]struct{}, error) {
+	verdicts, err := m.latestClaimVerdicts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]struct{})
+	for id, refuted := range verdicts {
+		if refuted {
 			out[id] = struct{}{}
 		}
 	}
 	return out, nil
+}
+
+// reinforceValidatedClaims freshens claims whose latest outcome verdict CONFIRMED
+// them (a borne-out prediction) — routing the confirmation half of prediction-error
+// into the freshness knob so validated beliefs resist forgetting (the flashbulb
+// effect). The refutation half is handled by ForgetRefuted; together they route
+// the surprise signal both ways.
+func (m *memory) reinforceValidatedClaims(ctx context.Context) (int, error) {
+	verdicts, err := m.latestClaimVerdicts(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(verdicts) == 0 {
+		return 0, nil
+	}
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list claims: %w", err)
+	}
+	now := time.Now().UTC()
+	n := 0
+	for _, c := range all {
+		if !c.ValidTo.IsZero() {
+			continue // skip invalidated claims
+		}
+		refuted, ok := verdicts[c.ID]
+		if !ok || refuted {
+			continue // only claims whose latest verdict confirmed them
+		}
+		if err := m.conn.Claims.MarkVerified(ctx, c.ID, now, 0); err != nil {
+			return n, fmt.Errorf("reinforce validated claim %s: %w", c.ID, err)
+		}
+		n++
+	}
+	return n, nil
 }
 
 // forgetRefutedClaims invalidates currently-valid, non-promoted claims that an
