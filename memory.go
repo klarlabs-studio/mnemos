@@ -891,6 +891,16 @@ type Memory interface {
 	// structural similarity first; empty when the anchor has no local structure.
 	AnalogousClaims(ctx context.Context, claimID string, limit int) ([]Analogy, error)
 
+	// RecallIterative runs recall as a bounded retrieve↔reason fixpoint instead of a
+	// single shot: it retrieves, checks coverage (the sufficiency / CRAG signal),
+	// and while memory is still thin it reasons a follow-up — expanding the query
+	// toward the strongest new finding and deepening a graph hop — then retrieves
+	// again, accumulating results. It stops when coverage is reached, when a round
+	// adds nothing new (saturation), or at maxRounds (budget; a sensible default
+	// when <= 0). Returns the accumulated results (trust-ranked) and the rounds run.
+	// Deterministic controller — no LLM.
+	RecallIterative(ctx context.Context, q Query, maxRounds int) ([]Result, int, error)
+
 	// RecallWithConflicts is Recall plus the "contested frontier": for each recalled
 	// claim, any currently-valid claim that CONTRADICTS it over the epistemic graph.
 	// So a recall carries its own live counter-evidence — the caller sees that a

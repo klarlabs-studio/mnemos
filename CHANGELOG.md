@@ -8,6 +8,14 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Iterative retrieve↔reason fixpoint (`Memory.RecallIterative`, T4.3).** Replaces single-shot
+  retrieve→answer with a bounded loop: retrieve → check coverage (the sufficiency / CRAG signal)
+  → while memory is still thin, reason a follow-up (expand the query toward the strongest new
+  finding and deepen a graph hop) → retrieve again, accumulating. Stops on coverage, saturation
+  (a round adds nothing new), or `maxRounds` (budget; sensible default when ≤ 0). Returns the
+  accumulated trust-ranked results and the rounds run. Deterministic controller — no LLM. With
+  the contested frontier (v0.51.0), **completes T4.3 and tier 4 (the connected brain).**
+
 - **Prioritized replay in the sleep pass (`ConsolidateOptions.ReplayTopK`, T2.1).** Rehearses
   the K most important currently-valid claims — ranked by salience × recency (the surprise
   term folds in once the prediction loop lands) — by bumping their freshness, so the memories
