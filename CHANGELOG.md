@@ -8,6 +8,19 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Confirmation routing (`ConsolidateOptions.ReinforceValidated`, T1.2).** The mirror of
+  `ForgetRefuted`: the sleep pass freshens claims whose latest outcome verdict CONFIRMED them,
+  so borne-out beliefs resist forgetting (the flashbulb effect). Together the two route the
+  prediction-error signal both ways — confirmed kept fresh, refuted let go. `ConsolidateResult.Validated`
+  reports the count. Deterministic; reuses the latest-verdict computation + the re-verify path.
+
+- **Curiosity / knowledge-gap detector (`Memory.KnowledgeGaps`, T1.3).** Scans the store for its
+  weak spots — unresolved hypotheses (predicted, never validated or refuted) and contested claims
+  (≥ `GapContestedThreshold` live contradictions) — and ranks them by expected information gain
+  (salience × uncertainty × staleness), returning the top ones as an agenda of *what to seek next*
+  (`[]Gap{ClaimID, Text, Kind, Score}`). Turns memory from reactive to agenda-setting: mnemos
+  proposes, the agent disposes. Deterministic.
+
 - **Iterative retrieve↔reason fixpoint (`Memory.RecallIterative`, T4.3).** Replaces single-shot
   retrieve→answer with a bounded loop: retrieve → check coverage (the sufficiency / CRAG signal)
   → while memory is still thin, reason a follow-up (expand the query toward the strongest new

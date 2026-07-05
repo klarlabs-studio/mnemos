@@ -604,6 +604,12 @@ type ConsolidateOptions struct {
 	// pass.
 	Synthesize bool
 
+	// ReinforceValidated, when true, freshens claims whose latest outcome verdict
+	// CONFIRMED them — routing the confirmation half of prediction-error into the
+	// freshness knob so borne-out beliefs resist forgetting (the flashbulb effect).
+	// The mirror of ForgetRefuted; together they route the surprise signal both ways.
+	ReinforceValidated bool
+
 	// ReplayTopK, when > 0, rehearses the K most important currently-valid claims
 	// during the sleep pass — prioritized experience replay. Claims are ranked by
 	// salience × recency (the surprise term folds in once the prediction loop
@@ -647,6 +653,9 @@ type ConsolidateResult struct {
 	// Refuted is the number of non-promoted claims invalidated because an observed
 	// outcome refuted them — 0 unless ForgetRefuted was set, and 0 on a dry run.
 	Refuted int
+	// Validated is the number of claims freshened because their latest outcome
+	// verdict confirmed them — 0 unless ReinforceValidated was set, and 0 on a dry run.
+	Validated int
 	// PlaybooksReinforced is the number of playbooks whose confidence was moved by
 	// observed outcomes — 0 unless ReinforcePlaybooks was set, and 0 on a dry run.
 	PlaybooksReinforced int
@@ -866,6 +875,14 @@ type Memory interface {
 	// is exactly Recall. Deterministic and best-effort: if the spread fails, the
 	// plain recall order is returned.
 	RecallWithContext(ctx context.Context, q Query, context string) ([]Result, error)
+
+	// KnowledgeGaps is the curiosity / knowledge-gap detector: it scans the store
+	// for its weak spots — unresolved hypotheses (predicted, never validated or
+	// refuted) and contested claims (multiple live contradictions) — and ranks them
+	// by expected information gain (salience × uncertainty × staleness), returning
+	// the top ones as an agenda of "what to seek next". Turns memory from reactive
+	// to agenda-setting: mnemos proposes, the agent disposes. Deterministic.
+	KnowledgeGaps(ctx context.Context, limit int) ([]Gap, error)
 
 	// Synthesize derives the skill layer from experience: it clusters the store's
 	// actions-with-outcomes into lessons, then groups lessons into playbooks. Both
