@@ -241,6 +241,14 @@ Every other tier reads trust and corroboration. Harden them first.
   `refutes` as *signed* edges and surface the **contested frontier** — high-trust claims
   connected by an unresolved contradiction — so the answer carries its own live
   counter-evidence. *Deterministic controller viable. Medium.*
+  **SHIPPED (conflict-aware side) — v0.51.0 (`Memory.RecallWithConflicts` → `[]Conflict`).**
+  For each recalled claim, the currently-valid claims that CONTRADICT it over the epistemic
+  graph (strongest challenger first) — a recall carries its own live counter-evidence. Only
+  unresolved disputes surface (a superseded challenger clears); complements the global
+  `Hypercorrections` queue with a recall-scoped view. Senat wires it (v0.11.63):
+  `engine.conflictHint` injects the disputed vetted claims + their counter-evidence into the
+  run objective, so a worker weighs both sides instead of stating a contested claim as
+  settled. *The iterative retrieve↔reason FIXPOINT loop is the open remainder of T4.3.*
 
 ---
 
