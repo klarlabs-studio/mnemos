@@ -8,6 +8,16 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Public action/outcome recording (`Memory.RecordAction` / `RecordActionOutcome`).** Exposes the
+  skill-loop substrate on the public API: an agent records the operational actions it took
+  (`ActionItem{Kind, Subject, Actor, …}`) and their observed results (`OutcomeItem{ActionID, Result}`),
+  which `Synthesize` then clusters by (subject, kind) into lessons and playbooks. Previously actions
+  and outcomes were reachable only via the internal `store.Conn`, so the learning loop could not be
+  fed from a consuming runtime — now it can. Generated ids when empty; `ErrActionsUnsupported` on a
+  backend without the action layer. Closes the last gap in making the skill loop turn end-to-end.
+
+### Added
+
 - **Per-claim authorship (`ClaimItem.CreatedBy`).** `RememberClaim` can now attribute a claim to a
   specific author (worker/agent id), overriding the store-wide actor (`WithActor`) for that write.
   This is the multi-worker substrate that powers independence-aware corroboration, per-source
