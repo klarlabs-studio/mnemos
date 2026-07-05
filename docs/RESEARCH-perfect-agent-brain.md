@@ -165,6 +165,17 @@ Every other tier reads trust and corroboration. Harden them first.
   *Deterministic writes. Medium.* Risk: an always-loaded self-editing block is a standing
   prompt-injection / error-amplification surface — the candidate lifecycle + evidence-backing
   + trust decay are the native mitigations; it must never become an ungoverned scratchpad.
+  **SHIPPED — v0.49.0 (`Memory.Blocks`/`SetBlock`/`AppendBlock` + `ports.BlockRepository`).**
+  Bounded (`WorkingMemoryBlockLimit`: `SetBlock` rejects over-limit, `AppendBlock` evicts
+  oldest lines), labeled, per-owner blocks on in-memory + SQLite + Postgres (with the ADR 0007
+  tenant column + RLS, so per-tenant isolated); nil-able → `ErrBlocksUnsupported` elsewhere.
+  Senat wires it (v0.11.61): `engine.workingMemoryHint` injects a worker's blocks verbatim
+  AHEAD of the retrieval hints, and a governed, worker-scoped `update_working_memory` tool
+  (write-local, auto-approved, bounded to the worker's OWN blocks) is auto-granted to every
+  worker — the self-edit governance the risk note wants (deliberate tool call + bounded block
+  + axi audit, never an ungoverned always-on write). *Blocks are set/append with UpdatedAt;
+  full version-chain reversibility + consolidation-pass eviction to the archive are the open
+  refinements.*
 - **T3.2 Retrieve-vs-answer / feeling-of-knowing gate — highest ROI per line of code.**
   Before retrieving (or answering), consult calibration-adjusted recall confidence:
   high + well-calibrated → answer from working memory, skip retrieval; mid → retrieve;
