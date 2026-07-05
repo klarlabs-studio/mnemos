@@ -10,6 +10,20 @@ notable changes.
 
 ### Added
 
+- **Client SDK: server-side `run_id` filter on events and claims
+  (`Events().RunID(id)`, `Claims().RunID(id)`).** The HTTP API already scoped both
+  listings by `run_id` (events via `ListByRunID`; claims by resolving `run_id` →
+  events → evidence), but the Go client SDK's builders had no way to send it — so a
+  consumer that partitions memory by run (a per-tenant, per-session, or per-subject
+  boundary) had to page the entire store and filter client-side. The builders now
+  expose `.RunID(id)`, which sets `?run_id=` and pushes the filter to the server.
+  Empty string clears it; token whitelists still apply. Turns a bounded full-store
+  scan into a single scoped query for run-partitioned callers.
+
+## [0.61.0] — 2026-07-05
+
+### Added
+
 - **`mnemos consolidate` CLI command.** The cognitive "sleep" pass, previously
   library-only (`Memory.Consolidate`), is now a one-shot CLI: `mnemos consolidate
   [--forget-below-trust T] [--forget-refuted] [--reinforce-validated]

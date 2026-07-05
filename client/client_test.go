@@ -40,6 +40,9 @@ func (f *fakeRegistry) handler() http.Handler {
 	mux.HandleFunc("/v1/events", f.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
+			if r.URL.Query().Get("run_id") != "" {
+				w.Header().Set("X-Test-RunID", r.URL.Query().Get("run_id"))
+			}
 			writeJSON(w, http.StatusOK, client.ListEventsResponse{Events: f.events, Total: len(f.events), Limit: 50, Offset: 0})
 		case http.MethodPost:
 			var body struct {
@@ -63,6 +66,9 @@ func (f *fakeRegistry) handler() http.Handler {
 			}
 			if r.URL.Query().Get("status") != "" {
 				w.Header().Set("X-Test-Status", r.URL.Query().Get("status"))
+			}
+			if r.URL.Query().Get("run_id") != "" {
+				w.Header().Set("X-Test-RunID", r.URL.Query().Get("run_id"))
 			}
 			writeJSON(w, http.StatusOK, out)
 		case http.MethodPost:
@@ -226,6 +232,41 @@ func TestClaims_FilterChainPropagatesQueryParams(t *testing.T) {
 	_, err := c.Claims().Type("decision").Status("active").Limit(25).List(context.Background())
 	if err != nil {
 		t.Fatalf("fluent List: %v", err)
+	}
+}
+
+func TestEventsAndClaims_RunIDFilterReachesServer(t *testing.T) {
+	// The fluent builder must send ?run_id= on both /v1/events and /v1/claims
+	// so a run-partitioned consumer scopes server-side instead of paging the
+	// whole store and filtering by hand. Capture the query the builder emits.
+	var gotEventsRunID, gotClaimsRunID string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/events":
+			gotEventsRunID = r.URL.Query().Get("run_id")
+			writeJSON(w, http.StatusOK, client.ListEventsResponse{Events: []client.Event{}, Limit: 50})
+		case "/v1/claims":
+			gotClaimsRunID = r.URL.Query().Get("run_id")
+			writeJSON(w, http.StatusOK, client.ListClaimsResponse{Claims: []client.Claim{}, Limit: 50})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	ctx := context.Background()
+	if _, err := c.Events().RunID("animal:abc").List(ctx); err != nil {
+		t.Fatalf("events List: %v", err)
+	}
+	if _, err := c.Claims().Status("active").RunID("animal:abc").List(ctx); err != nil {
+		t.Fatalf("claims List: %v", err)
+	}
+	if gotEventsRunID != "animal:abc" {
+		t.Errorf("events run_id not sent: got %q", gotEventsRunID)
+	}
+	if gotClaimsRunID != "animal:abc" {
+		t.Errorf("claims run_id not sent: got %q", gotClaimsRunID)
 	}
 }
 
