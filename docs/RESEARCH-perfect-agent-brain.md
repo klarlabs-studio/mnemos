@@ -186,6 +186,15 @@ Every other tier reads trust and corroboration. Harden them first.
   corrective passes scale with `stakes × (1 − calibratedConfidence)`. Stakes can be read
   from the axi effect profile of the pending action (read vs. write-external) — zero new
   inputs. *Deterministic. Low–medium.*
+  **SHIPPED — v0.48.0 (`Memory.RecallWithEffort` + pure `EffortBudget`).** A first pass,
+  then ONE bounded wider+deeper pass invested only when `budget = stakes × (1 − confidence)`
+  clears `EffortEscalationThreshold` and the first pass wasn't already sufficient — low-stakes
+  stays cheap, high-stakes+uncertain escalates (up to `EffortMaxExtraHops`/`EffortMaxExtraBreadth`),
+  non-regressive, `EffortReport` returned. Senat wires it (v0.11.60): `engine.runStakes` reads
+  stakes from the worker's grants (any non-read capability → acting → high stakes) and threads it
+  into `knowledgeHint` via `Store.RecallPromotedGraphEffort`, so workers that act on the world
+  ground their knowledge harder when vetted memory is thin. *Confidence not yet
+  calibration-adjusted (T0.2 feeds it later); passes capped at one.*
 - **T3.4 Spreading activation.** Whatever is in working-context pre-activates its graph
   neighbours: at retrieval, expand 1–2 hops over the epistemic graph and add a decaying
   `+activation` term before RRF/CRAG. Makes retrieval sensitive to the current train of
