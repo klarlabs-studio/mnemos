@@ -8,6 +8,19 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Analogical / structural retrieval (`Memory.AnalogousClaims`, T4.2).** Retrieval by
+  relational SHAPE, not content: fingerprints the typed subgraph around a claim with
+  Weisfeiler-Lehman label propagation (`StructuralIterations` rounds over
+  `StructuralHops` of the epistemic graph — node roles = claim types, plus edge types;
+  node identity/content ignored) and ranks other claims by structural-signature overlap
+  (cosine, `MinStructuralSimilarity` floor). Surfaces past situations with the *same
+  causal skeleton* even when the claims, services, or metrics differ — "we've seen this
+  shape before" — something a pure-vector store fundamentally cannot do, and that mnemos
+  can *because* it holds a typed epistemic graph. One representative per neighbourhood,
+  strongest similarity first. Continues tier 4 (the connected brain) of research part 2.
+  (Cost note: fingerprints candidate neighbourhoods at query time — fine at investigation
+  scale; a large store would index fingerprints on write.)
+
 - **Contested frontier (`Memory.RecallWithConflicts`, T4.3).** Recall plus its own live
   counter-evidence: for each recalled claim, any currently-valid claim that CONTRADICTS it
   over the epistemic graph, strongest challenger first (`[]Conflict`). So a recall never
