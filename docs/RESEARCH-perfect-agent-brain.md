@@ -210,6 +210,14 @@ Every other tier reads trust and corroboration. Harden them first.
   neighbours: at retrieval, expand 1–2 hops over the epistemic graph and add a decaying
   `+activation` term before RRF/CRAG. Makes retrieval sensitive to the current train of
   thought — coherence for nearly free. *Deterministic. Low.*
+  **SHIPPED — v0.50.0 (`Memory.RecallWithContext`).** Expands the context up to
+  `ActivationHops` (2) over the epistemic graph (reusing hop expansion as the spread) and
+  promotes each connected query result by a decaying term (`ActivationDecay`/hop, up to
+  `ActivationBoost` positions) — an order-preserving re-rank, empty context = plain Recall.
+  Senat wires it (v0.11.62): a worker's `knowledgeHint` recall is biased by its working
+  memory when present (`Store.RecallPromotedContext`), else falls back to effort-budgeting —
+  so working memory (T3.1) now shapes both what the worker reads AND what knowledge surfaces.
+  **Tier 3 (the executive) complete: working-memory substrate + abstain/effort/activation control.**
 
 ### Tier 4 — The connected brain (social routing & retrieval-as-reasoning)
 
