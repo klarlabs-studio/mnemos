@@ -270,6 +270,100 @@ func TestEventsAndClaims_RunIDFilterReachesServer(t *testing.T) {
 	}
 }
 
+func TestNewFromEnv_DisabledWhenUnset(t *testing.T) {
+	t.Setenv("MNEMOS_URL", "")
+	c := client.NewFromEnv()
+	if c.IsEnabled() {
+		t.Fatal("client should be disabled when MNEMOS_URL is unset")
+	}
+	// Every call is a graceful no-op: reads yield empty, writes accepted,
+	// nothing errors — no server is running.
+	ctx := context.Background()
+	ev, err := c.Events().List(ctx)
+	if err != nil || ev == nil || len(ev.Events) != 0 {
+		t.Fatalf("disabled events list: resp=%v err=%v", ev, err)
+	}
+	if _, err := c.Claims().RunID("animal:x").List(ctx); err != nil {
+		t.Fatalf("disabled claims list errored: %v", err)
+	}
+	if _, err := c.Events().Append(ctx, []client.Event{{ID: "ev_1"}}); err != nil {
+		t.Fatalf("disabled append errored: %v", err)
+	}
+	if _, err := c.Metrics(ctx); err != nil {
+		t.Fatalf("disabled metrics errored: %v", err)
+	}
+}
+
+func TestNewFromEnv_EnabledWhenSet(t *testing.T) {
+	reg := &fakeRegistry{}
+	srv := httptest.NewServer(reg.handler())
+	defer srv.Close()
+
+	t.Setenv("MNEMOS_URL", srv.URL)
+	c := client.NewFromEnv()
+	if !c.IsEnabled() {
+		t.Fatal("client should be enabled when MNEMOS_URL is set")
+	}
+	if _, err := c.Events().List(context.Background()); err != nil {
+		t.Fatalf("enabled events list: %v", err)
+	}
+}
+
+func TestNilAndDisabledClient_AreNoOp(t *testing.T) {
+	ctx := context.Background()
+	// A nil *Client must not panic — the guard in do() covers it, so
+	// consumers can hold a possibly-nil client and call through it.
+	var nilClient *client.Client
+	if nilClient.IsEnabled() {
+		t.Fatal("nil client should report disabled")
+	}
+	if _, err := nilClient.Events().List(ctx); err != nil {
+		t.Fatalf("nil events list errored: %v", err)
+	}
+	if _, err := nilClient.Claims().List(ctx); err != nil {
+		t.Fatalf("nil claims list errored: %v", err)
+	}
+	if _, err := nilClient.Metrics(ctx); err != nil {
+		t.Fatalf("nil metrics errored: %v", err)
+	}
+	// ForRun off a nil client is also safe.
+	if _, err := nilClient.ForRun("animal:x").Claims().List(ctx); err != nil {
+		t.Fatalf("nil ForRun claims list errored: %v", err)
+	}
+}
+
+func TestForRun_ScopesRunIDOnEventsAndClaims(t *testing.T) {
+	var gotEventsRunID, gotClaimsRunID string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/events":
+			gotEventsRunID = r.URL.Query().Get("run_id")
+			writeJSON(w, http.StatusOK, client.ListEventsResponse{Events: []client.Event{}, Limit: 50})
+		case "/v1/claims":
+			gotClaimsRunID = r.URL.Query().Get("run_id")
+			writeJSON(w, http.StatusOK, client.ListClaimsResponse{Claims: []client.Claim{}, Limit: 50})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	scoped := client.New(srv.URL).ForRun("animal:xyz")
+	ctx := context.Background()
+	if _, err := scoped.Events().List(ctx); err != nil {
+		t.Fatalf("scoped events List: %v", err)
+	}
+	if _, err := scoped.Claims().Status("active").List(ctx); err != nil {
+		t.Fatalf("scoped claims List: %v", err)
+	}
+	if gotEventsRunID != "animal:xyz" {
+		t.Errorf("ForRun did not scope events run_id: got %q", gotEventsRunID)
+	}
+	if gotClaimsRunID != "animal:xyz" {
+		t.Errorf("ForRun did not scope claims run_id: got %q", gotClaimsRunID)
+	}
+}
+
 func TestRelationships_TypeFilter(t *testing.T) {
 	reg := &fakeRegistry{}
 	srv := httptest.NewServer(reg.handler())

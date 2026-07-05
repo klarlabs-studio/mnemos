@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,10 @@ import (
 	"go.klarlabs.de/bolt"
 	"go.klarlabs.de/fortify/retry"
 )
+
+// EnvBaseURL is the environment variable NewFromEnv reads for the registry
+// base URL.
+const EnvBaseURL = "MNEMOS_URL"
 
 // Client is a typed Go client for the Mnemos registry HTTP API. It is
 // safe for concurrent use by multiple goroutines.
@@ -91,6 +96,11 @@ func WithRetry(cfg retry.Config) Option {
 // New returns a Client pointing at the given Mnemos registry base URL
 // (e.g. "http://localhost:7777"). Trailing slash is stripped. Default
 // timeout is 30s; pass WithTimeout to change it.
+//
+// An empty baseURL yields a DISABLED client: every call is a graceful
+// no-op (reads return zero values, writes are accepted, neither errors),
+// and IsEnabled reports false. This lets a consumer treat Mnemos as
+// optional without guarding each call — see NewFromEnv.
 func New(baseURL string, opts ...Option) *Client {
 	c := &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
@@ -101,6 +111,55 @@ func New(baseURL string, opts ...Option) *Client {
 	}
 	return c
 }
+
+// NewFromEnv constructs a Client from the MNEMOS_URL environment variable,
+// with a sensible default retry policy (3 attempts, exponential backoff with
+// jitter) already applied — caller options are appended, so a WithRetry of
+// your own still wins.
+//
+// When MNEMOS_URL is unset the returned client is DISABLED: a safe no-op
+// whose IsEnabled reports false. A consumer for whom Mnemos is optional can
+// therefore wire the client unconditionally and never nil-check or
+// feature-flag at the call site.
+func NewFromEnv(opts ...Option) *Client {
+	defaults := []Option{WithRetry(retry.Config{
+		MaxAttempts:   3,
+		InitialDelay:  200 * time.Millisecond,
+		MaxDelay:      time.Second,
+		BackoffPolicy: retry.BackoffExponential,
+		Jitter:        true,
+	})}
+	return New(os.Getenv(EnvBaseURL), append(defaults, opts...)...)
+}
+
+// IsEnabled reports whether the client points at a registry. A nil client
+// or one built with an empty base URL (e.g. NewFromEnv with MNEMOS_URL
+// unset) is disabled — every call is a no-op.
+func (c *Client) IsEnabled() bool { return c != nil && c.baseURL != "" }
+
+// ForRun returns a view of the client pre-scoped to a single run_id — the
+// tenant/session/subject boundary. Its Events and Claims builders come with
+// the run_id filter already applied, so a caller partitioning memory by run
+// doesn't repeat .RunID(...) on every read. The view shares the parent's
+// transport, auth, retry, and disabled state.
+func (c *Client) ForRun(runID string) *ScopedClient {
+	return &ScopedClient{c: c, runID: runID}
+}
+
+// ScopedClient is a Client view bound to one run_id (see Client.ForRun).
+type ScopedClient struct {
+	c     *Client
+	runID string
+}
+
+// IsEnabled reports whether the underlying client is enabled.
+func (s *ScopedClient) IsEnabled() bool { return s.c.IsEnabled() }
+
+// Events returns an events builder pre-filtered to this view's run_id.
+func (s *ScopedClient) Events() *EventsBuilder { return s.c.Events().RunID(s.runID) }
+
+// Claims returns a claims builder pre-filtered to this view's run_id.
+func (s *ScopedClient) Claims() *ClaimsBuilder { return s.c.Claims().RunID(s.runID) }
 
 // Health hits GET /health.
 func (c *Client) Health(ctx context.Context) (*HealthResponse, error) {
@@ -235,6 +294,14 @@ func (c *Client) Context(ctx context.Context, runID string, opts ContextOptions)
 // applies cross-cutting concerns (logging + retry). All builder
 // terminal verbs funnel through here.
 func (c *Client) do(ctx context.Context, method, path string, body, dst any) error {
+	// Disabled (no base URL) or nil client: no-op. Every terminal verb
+	// funnels through here, so this is the single point that makes the whole
+	// client safe to call when Mnemos is optional/unconfigured — reads leave
+	// dst at its zero value, writes are accepted as no-ops, neither errors.
+	if c == nil || c.baseURL == "" {
+		return nil
+	}
+
 	var bodyBytes []byte
 	if body != nil {
 		var err error

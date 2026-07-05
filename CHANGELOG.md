@@ -10,6 +10,27 @@ notable changes.
 
 ### Added
 
+- **Client SDK: optional-by-default construction + run-scoped views.** Three
+  additions that move the "resilient, optional client" boilerplate every
+  HTTP-SDK consumer hand-rolls into the library itself:
+  - **`NewFromEnv(opts...)`** builds a client from `MNEMOS_URL` (exported as
+    `EnvBaseURL`) with a sensible default retry policy already applied (3
+    attempts, exponential backoff + jitter; caller `WithRetry` still wins).
+  - **Disabled / nil-safe no-op mode.** A client built with an empty base URL
+    (e.g. `NewFromEnv` when `MNEMOS_URL` is unset) — or a nil `*Client` — is
+    now a graceful no-op: reads return zero values, writes are accepted, none
+    error, and `IsEnabled()` reports false. A single guard in the request path
+    covers every endpoint, so a consumer for whom Mnemos is optional can wire
+    the client unconditionally and never nil-check or feature-flag at the call
+    site. (Previously a nil client panicked.)
+  - **`Client.ForRun(runID)`** returns a `ScopedClient` whose `Events()` and
+    `Claims()` come pre-filtered to that `run_id`, so a caller partitioning
+    memory by run (tenant/session/subject) stops repeating `.RunID(...)`.
+
+## [0.62.0] — 2026-07-05
+
+### Added
+
 - **Client SDK: server-side `run_id` filter on events and claims
   (`Events().RunID(id)`, `Claims().RunID(id)`).** The HTTP API already scoped both
   listings by `run_id` (events via `ListByRunID`; claims by resolving `run_id` →
