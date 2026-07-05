@@ -8,6 +8,21 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **REM-like recombination detector (`Memory.Recombinations`, T2.3).** Finds pairs of
+  high-salience, currently-valid claims that are topically related (Jaccard ≥
+  `RecombineSimilarityFloor`) yet NOT directly connected in the epistemic graph — the novel
+  juxtapositions the waking graph never made, ranked by similarity (`[]Recombination`).
+  Deterministic detection; naming the emergent schema/hypothesis is left to a human or an LLM
+  (proposals, never auto-promoted). Cost note: O(candidates²) over high-salience claims —
+  bounded by `RecombineSalienceFloor`; a large store would block by topic first.
+
+- **Schema-guided assimilation routing (`Memory.ClassifyClaim`, T2.4).** Routes a candidate
+  claim by fit to established knowledge: if the store already holds *sufficient* knowledge on
+  the topic it is **assimilation** (cheap to learn, against an existing anchor); otherwise
+  **novel accommodation** (`Assimilation{Kind, AnchorID, AnchorText, Confidence}`). Deterministic
+  (reuses the sufficiency signal). The conflict branch — a claim that contradicts a high-trust
+  schema — is served by the existing hypercorrection path once the claim is written.
+
 - **Confirmation routing (`ConsolidateOptions.ReinforceValidated`, T1.2).** The mirror of
   `ForgetRefuted`: the sleep pass freshens claims whose latest outcome verdict CONFIRMED them,
   so borne-out beliefs resist forgetting (the flashbulb effect). Together the two route the
