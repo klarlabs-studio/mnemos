@@ -113,6 +113,10 @@ Every other tier reads trust and corroboration. Harden them first.
   of a violated belief. This is what turns prediction-error from a metaphor into the
   *unified currency* — and it's the "dormant machinery" pattern: no new subsystem, a new
   input to knobs that already exist. *Deterministic. Low–medium effort once T1.1 lands.*
+  **SHIPPED (confirmation half) — v0.56.0 (`ConsolidateOptions.ReinforceValidated`).** The mirror
+  of ForgetRefuted: freshens claims whose latest outcome verdict CONFIRMED them (flashbulb effect),
+  so the sleep pass routes prediction-error BOTH ways. `Result.Validated`. Magnitude-weighted
+  surprise (vs binary validate/refute) awaits T1.1's structured predictions.
 - **T1.3 Curiosity / knowledge-gap detector.** A scheduled scan ranks the store's weak
   spots by expected information gain (crudely `salience × uncertainty × staleness`):
   dangling hypotheses with no validates/refutes, high-`contradicts`-density clusters,
@@ -120,6 +124,10 @@ Every other tier reads trust and corroboration. Harden them first.
   `open_question` proposals — *what to seek next* — surfaced at planning time. Memory turns
   from reactive to agenda-setting; mnemos proposes, the agent disposes. *Detection/ranking
   fully deterministic. Medium effort.*
+  **SHIPPED — v0.56.0 (`Memory.KnowledgeGaps` → `[]Gap`).** Scans for unresolved hypotheses (no
+  validates/refutes verdict) + contested claims (≥2 live contradictions), ranked by salience ×
+  uncertainty × staleness — an agenda of what to seek next. (Persisting as `open_question` candidates
+  is the follow-up; today it returns the ranked list.)
 
 ### Tier 2 — Gets better with use (the learning loop)
 
