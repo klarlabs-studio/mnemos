@@ -449,6 +449,21 @@ var ErrBlocksUnsupported = errors.New("mnemos: working-memory blocks not support
 // [WorkingMemoryBlockLimit]. AppendBlock never returns it — it evicts instead.
 var ErrBlockTooLarge = errors.New("mnemos: working-memory block exceeds size limit")
 
+// Conflict is one edge of the "contested frontier": a recalled claim that a
+// currently-valid claim contradicts. Surfaced by [Memory.RecallWithConflicts] so
+// a recall carries its own live counter-evidence — retrieval-as-reasoning that
+// never hides a dispute it knows about.
+type Conflict struct {
+	// ClaimID / ClaimText identify the recalled claim that is contested.
+	ClaimID   string
+	ClaimText string
+	// ContradictingID / ContradictingText / ContradictingTrust identify the
+	// currently-valid claim that contradicts it, and how trusted that challenger is.
+	ContradictingID    string
+	ContradictingText  string
+	ContradictingTrust float64
+}
+
 // Block is one of an agent's working-memory blocks — a bounded, labeled, mutable
 // piece of "core memory" the agent keeps always-loaded (persona, open threads,
 // current focus), distinct from the queried claim archive.
@@ -819,6 +834,15 @@ type Memory interface {
 	// is exactly Recall. Deterministic and best-effort: if the spread fails, the
 	// plain recall order is returned.
 	RecallWithContext(ctx context.Context, q Query, context string) ([]Result, error)
+
+	// RecallWithConflicts is Recall plus the "contested frontier": for each recalled
+	// claim, any currently-valid claim that CONTRADICTS it over the epistemic graph.
+	// So a recall carries its own live counter-evidence — the caller sees that a
+	// claim is disputed, and by what, before relying on it. Only unresolved
+	// contradictions surface (the contradicting claim must be valid and not
+	// superseded). The []Result is exactly what Recall returns; deterministic,
+	// best-effort (a graph-read failure yields the results with no conflicts).
+	RecallWithConflicts(ctx context.Context, q Query) ([]Result, []Conflict, error)
 
 	// Blocks returns an owner's working-memory blocks (its "core memory":
 	// bounded, labeled, mutable text), label-ordered. An owner with none gets an
