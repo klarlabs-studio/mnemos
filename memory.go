@@ -596,6 +596,22 @@ type ConsolidateOptions struct {
 	// refuted while still nominally trusted.
 	ForgetRefuted bool
 
+	// Synthesize, when true, re-derives the skill layer (lessons from
+	// actions-with-outcomes, then playbooks from lessons) during the sleep pass —
+	// the auto-trigger arrow of the skill loop, so skills stay current without a
+	// manual CLI run. Idempotent; a no-op without the action/lesson/playbook layer.
+	// Runs before ReinforcePlaybooks so freshly-derived playbooks tune in the same
+	// pass.
+	Synthesize bool
+
+	// ReplayTopK, when > 0, rehearses the K most important currently-valid claims
+	// during the sleep pass — prioritized experience replay. Claims are ranked by
+	// salience × recency (the surprise term folds in once the prediction loop
+	// lands) and the top K have their freshness bumped (a re-verification), so the
+	// memories that matter most resist the decay that prunes the mundane tail. The
+	// SWS rehearsal stage, fed by a scheduler instead of a uniform scan. 0 disables.
+	ReplayTopK int
+
 	// ReinforcePlaybooks bends each playbook's confidence toward the observed
 	// success rate of the outcomes recorded against the actions its lessons were
 	// derived from — the skill-learning half of the sleep pass. Synthesize writes
@@ -634,6 +650,22 @@ type ConsolidateResult struct {
 	// PlaybooksReinforced is the number of playbooks whose confidence was moved by
 	// observed outcomes — 0 unless ReinforcePlaybooks was set, and 0 on a dry run.
 	PlaybooksReinforced int
+	// Replayed is the number of high-priority claims rehearsed (freshness bumped) —
+	// 0 unless ReplayTopK was set, and 0 on a dry run.
+	Replayed int
+	// LessonsSynthesized / PlaybooksSynthesized count the skills (re-)derived — 0
+	// unless Synthesize was set, and 0 on a dry run.
+	LessonsSynthesized   int
+	PlaybooksSynthesized int
+}
+
+// SynthesizeResult reports what one [Memory.Synthesize] pass derived.
+type SynthesizeResult struct {
+	// LessonsDerived is the number of lessons emitted or refreshed from
+	// actions-with-outcomes.
+	LessonsDerived int
+	// PlaybooksDerived is the number of playbooks emitted or refreshed from lessons.
+	PlaybooksDerived int
 }
 
 // Hypercorrection is one metacognitive alert: a currently-valid contradiction of
@@ -834,6 +866,14 @@ type Memory interface {
 	// is exactly Recall. Deterministic and best-effort: if the spread fails, the
 	// plain recall order is returned.
 	RecallWithContext(ctx context.Context, q Query, context string) ([]Result, error)
+
+	// Synthesize derives the skill layer from experience: it clusters the store's
+	// actions-with-outcomes into lessons, then groups lessons into playbooks. Both
+	// steps are idempotent (upsert by cluster), so it is safe to run on a schedule —
+	// the auto-trigger that turns the skill loop from CLI-only into self-maintaining
+	// (also invokable inline via [ConsolidateOptions.Synthesize]). A no-op on
+	// backends without the action / lesson / playbook layer.
+	Synthesize(ctx context.Context) (SynthesizeResult, error)
 
 	// WhoKnows is the transactive "who-knows-what" directory: it ranks the workers
 	// whose memory is most relevant to a query by affinity (how strongly their

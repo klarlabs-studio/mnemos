@@ -922,6 +922,17 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.Refuted = refuted
 	}
+	// Skill synthesis: re-derive lessons + playbooks from accumulated experience —
+	// the auto-trigger arrow that keeps the skill layer current without a manual CLI
+	// run. Runs before reinforcement so freshly-derived playbooks tune this pass.
+	if opts.Synthesize {
+		sr, serr := m.Synthesize(ctx)
+		if serr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: synthesize: %w", serr)
+		}
+		res.LessonsSynthesized = sr.LessonsDerived
+		res.PlaybooksSynthesized = sr.PlaybooksDerived
+	}
 	// Skill reinforcement: bend each playbook's confidence toward the observed
 	// success rate of the outcomes on the actions its lessons were derived from —
 	// the learning half of the sleep pass, closing the loop so a write-once skill
@@ -934,7 +945,86 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.PlaybooksReinforced = reinforced
 	}
+	// Prioritized replay: rehearse the most important memories so they resist the
+	// decay that prunes the mundane — the SWS rehearsal stage. Forward-looking (it
+	// freshens for future passes), so it runs last.
+	if opts.ReplayTopK > 0 {
+		replayed, rperr := m.replayTopK(ctx, opts.ReplayTopK)
+		if rperr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: replay: %w", rperr)
+		}
+		res.Replayed = replayed
+	}
 	return res, nil
+}
+
+// replayRecencyHalfLifeDays sets how fast replay priority decays with a claim's
+// age — recent memories are rehearsed preferentially (recency-weighted replay).
+const replayRecencyHalfLifeDays = 30.0
+
+// replayTopK rehearses the K currently-valid claims of highest priority
+// (salience × recency) by bumping their freshness — prioritized experience replay.
+func (m *memory) replayTopK(ctx context.Context, k int) (int, error) {
+	if k <= 0 {
+		return 0, nil
+	}
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list claims: %w", err)
+	}
+	evidence, err := m.conn.Claims.ListAllEvidence(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list evidence: %w", err)
+	}
+	evidenceCount := make(map[string]int, len(all))
+	for _, e := range evidence {
+		evidenceCount[e.ClaimID]++
+	}
+	now := time.Now().UTC()
+	type pri struct {
+		id    string
+		score float64
+	}
+	ranked := make([]pri, 0, len(all))
+	for _, c := range all {
+		if !c.ValidTo.IsZero() {
+			continue // only rehearse currently-valid memories
+		}
+		ranked = append(ranked, pri{c.ID, trust.SalienceOf(c, evidenceCount[c.ID]) * replayRecency(c, now)})
+	}
+	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
+	if len(ranked) > k {
+		ranked = ranked[:k]
+	}
+	replayed := 0
+	for _, p := range ranked {
+		// Rehearse: bump last_verified (0 half-life keeps any existing override).
+		if err := m.conn.Claims.MarkVerified(ctx, p.id, now, 0); err != nil {
+			return replayed, fmt.Errorf("replay claim %s: %w", p.id, err)
+		}
+		replayed++
+	}
+	return replayed, nil
+}
+
+// replayRecency is a [0,1] recency weight for replay priority: exponential decay
+// over the age of the claim's freshest signal (last-verified / valid-from / created).
+func replayRecency(c domain.Claim, now time.Time) float64 {
+	ref := c.CreatedAt
+	if c.LastVerified.After(ref) {
+		ref = c.LastVerified
+	}
+	if c.ValidFrom.After(ref) {
+		ref = c.ValidFrom
+	}
+	if ref.IsZero() {
+		return 1.0
+	}
+	days := now.Sub(ref).Hours() / 24
+	if days <= 0 {
+		return 1.0
+	}
+	return math.Exp(-days / replayRecencyHalfLifeDays)
 }
 
 // refutedClaimIDs returns the ids of claims whose LATEST outcome verdict is

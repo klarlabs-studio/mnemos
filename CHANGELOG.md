@@ -8,6 +8,22 @@ Releases are tagged and published via GoReleaser; this file is the human-readabl
 
 ### Added
 
+- **Prioritized replay in the sleep pass (`ConsolidateOptions.ReplayTopK`, T2.1).** Rehearses
+  the K most important currently-valid claims — ranked by salience × recency (the surprise
+  term folds in once the prediction loop lands) — by bumping their freshness, so the memories
+  that matter most resist the decay that prunes the mundane tail. The SWS rehearsal stage, fed
+  by a scheduler instead of a uniform scan. `ConsolidateResult.Replayed` reports the count; 0
+  disables. Deterministic; reuses `trust.Salience` + the existing re-verify path.
+
+- **Auto-triggered skill synthesis (`Memory.Synthesize` + `ConsolidateOptions.Synthesize`,
+  T2.2 arrow a).** Exposes the previously CLI-only skill derivation on the public API: cluster
+  the store's actions-with-outcomes into lessons, then group lessons into playbooks
+  (`SynthesizeResult{LessonsDerived, PlaybooksDerived}`). Idempotent, so it runs safely inside
+  the sleep pass (`Synthesize: true`, before `ReinforcePlaybooks` so fresh playbooks tune the
+  same pass) — turning the skill loop from write-only-via-CLI into self-maintaining. Completes
+  T2.2: synthesis (arrow a) now feeds the outcome-reinforcement (arrow b, v0.46.0). A no-op on
+  backends without the action/lesson/playbook layer.
+
 - **Transactive "who-knows-what" directory (`Memory.WhoKnows`, T4.1).** Routes a knowledge
   gap to the right expert-memory instead of a flat search: ranks the workers whose claims
   are most relevant to a query by **affinity** (how much of the topic that worker's memory
