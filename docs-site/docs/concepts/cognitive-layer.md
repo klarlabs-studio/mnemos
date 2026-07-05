@@ -88,7 +88,49 @@ corrected most strongly.
 
 ---
 
+## Toward a brain — the prediction, learning, executive, and connected loops (v0.42–v0.60)
+
+The capabilities above are the *organs*. A second arc added the *nervous system*: one
+signal — **prediction error** — tying them into loops so the store gets *better with
+use*. All deterministic, no LLM. Full detail in
+[`RESEARCH-perfect-agent-brain.md`](https://github.com/klarlabs-studio/mnemos/blob/main/docs/RESEARCH-perfect-agent-brain.md).
+
+**Epistemic honesty.** Corroboration is graded by source **independence**
+(`EffectiveEvidenceCount`) so a single voice can't manufacture consensus, and
+calibration is **per-source** (`Calibration.Sources`) so an over-confident author is
+visible.
+
+**The prediction loop.** A claim can carry a numeric **expectation** —
+`mem.Expect(claimID, predicted, tolerance, horizon)`. When the value arrives,
+`RecordObservation` + `ReconcileExpectations` close it into a validates/refutes verdict
+and a **surprise** scalar, which the sleep pass routes both ways: confirmed beliefs kept
+fresh (`ReinforceValidated`), refuted ones forgotten (`ForgetRefuted`). `KnowledgeGaps`
+ranks the store's weak spots — unresolved hypotheses, contested claims — worth chasing next.
+
+**The learning loop.** The sleep pass rehearses the most salient memories (`ReplayTopK`),
+auto-derives skills from experience (`Synthesize`: actions-with-outcomes → lessons →
+playbooks), reinforces each playbook by its real outcome success rate
+(`ReinforcePlaybooks`), and surfaces novel recombinations and schema fits
+(`Recombinations`, `ClassifyClaim`).
+
+**The executive.** Bounded, always-loaded **working-memory blocks** (`mem.Blocks` /
+`SetBlock` / `AppendBlock`) — the agent's core memory. A **feeling-of-knowing** gate
+(`RecallWithSufficiency`) lets a caller abstain instead of confabulating when memory is
+thin. **Effort budgeting** (`RecallWithEffort`) spends retrieval in proportion to stakes ×
+uncertainty. **Spreading activation** (`RecallWithContext`) biases recall toward the
+current train of thought.
+
+**The connected brain.** A transactive **who-knows-what** directory (`WhoKnows`) routes a
+gap to the right expert-memory. **Analogical retrieval** (`AnalogousClaims`) finds past
+situations with the same *causal shape* via Weisfeiler-Lehman fingerprinting over the
+typed graph — something a pure-vector store cannot do. The **contested frontier**
+(`RecallWithConflicts`) makes a recall carry its own live counter-evidence, and
+`RecallIterative` runs recall as a bounded retrieve↔reason fixpoint.
+
+---
+
 The through-line: perception (temporal signals), encoding (salience), retrieval
-(hybrid + corrective), consolidation (sleep), and metacognition (hypercorrection)
-are the organs of a brain — and in Mnemos they run on your infrastructure, over
-your data, with no model calls required.
+(hybrid + corrective + contextual), consolidation (sleep), prediction (expectations →
+surprise), learning (skills), the executive (working memory + abstain + effort), and the
+connected brain (routing + analogy) are the organs *and nervous system* of a brain — and
+in Mnemos they run on your infrastructure, over your data, with no model calls required.

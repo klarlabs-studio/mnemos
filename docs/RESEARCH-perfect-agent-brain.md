@@ -91,12 +91,19 @@ Every other tier reads trust and corroboration. Harden them first.
   consensus. *Deterministic. Low–medium effort.* Risk: "independent" is hard to define;
   make it a graded shared-root *discount*, not a hard collapse, and require
   `SourceDocument` granularity at write time.
+  **SHIPPED — v0.45.0 (`domain.EffectiveEvidenceCount`, `EvidenceRepeatWeight`).** Corroboration is
+  graded by INDEPENDENCE — distinct evidence-author count, same-source repeats discounted — across
+  all four backends' RecomputeTrust; the trust formula + port signature are unchanged.
 - **T0.2 Per-source calibration.** Shard the global calibrator by `(CreatedBy, SourceType)`.
   Trust becomes `confidence × corroboration × freshness × source_reliability`, where each
   source earns its own Brier/hit-rate from the validates/refutes it accrues. A chronically
   over-confident source auto-discounts, no config. *Deterministic (a `GROUP BY` over the
   existing calibrator). Low–medium effort.* Risk: a miscalibrated per-source score fails
   silently per-worker — validate the curve empirically before trusting the multiplier.
+  **SHIPPED — v0.43.0 (`Calibration.Sources []SourceCalibration`).** Calibration is sharded per
+  `CreatedBy` — each source earns its own mean-confidence / accuracy / gap / Brier, so a chronically
+  over-confident source is visible (surfaced in Senat's DxMetrics). Feeding it into the trust
+  multiplier is the remaining step.
 
 ### Tier 1 — The prediction loop (mints the currency)
 

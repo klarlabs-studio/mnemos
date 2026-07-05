@@ -641,11 +641,42 @@ Mnemos has shipped a self-learning loop on top of the evidence layer:
 
 Marketing claim: *"evidence-based memory that learns from actions over time, with provable causality, scoped multi-tenancy, and a human-editable corrections loop."*
 
-### Cognitive layer (v0.35–v0.41)
+### Cognitive layer (v0.35–v0.60)
 
 Most memory systems only write and read. Mnemos also runs the background processes
 a brain runs — and all of it is deterministic, self-hostable, and needs **no LLM**.
-See [`docs-site/docs/concepts/cognitive-layer.md`](docs-site/docs/concepts/cognitive-layer.md) and the research synthesis in [`docs/RESEARCH-brain-enhancements.md`](docs/RESEARCH-brain-enhancements.md).
+See [`docs-site/docs/concepts/cognitive-layer.md`](docs-site/docs/concepts/cognitive-layer.md) and the research syntheses in [`docs/RESEARCH-brain-enhancements.md`](docs/RESEARCH-brain-enhancements.md) (arc 1) and [`docs/RESEARCH-perfect-agent-brain.md`](docs/RESEARCH-perfect-agent-brain.md) (arc 2, tiers 0–4 — all shipped).
+
+The first arc (below, v0.35–v0.41) gave mnemos organs. The second (v0.42–v0.60) added
+the nervous system — one signal, **prediction error**, tying them into loops so the
+store gets *better with use*:
+
+- **Epistemic honesty (tier 0).** Corroboration graded by source **independence**
+  (`domain.EffectiveEvidenceCount`) — a single voice can't manufacture consensus — and
+  **per-source calibration** (`Calibration.Sources`): each author earns its own
+  accuracy/Brier, so a chronically over-confident source is visible.
+- **The prediction loop (tier 1).** A claim can carry a structured numeric
+  **expectation** (`Memory.Expect`); `ReconcileExpectations` closes it against the
+  observed value into a validates/refutes verdict + a **surprise** scalar, which the
+  sleep pass routes both ways — confirmed beliefs kept fresh (`ReinforceValidated`),
+  refuted ones forgotten (`ForgetRefuted`). `KnowledgeGaps` ranks the weak spots worth
+  investigating next.
+- **The learning loop (tier 2).** The sleep pass rehearses the most salient memories
+  (`ReplayTopK`), auto-derives skills from experience (`Synthesize`: actions → lessons →
+  playbooks), reinforces playbooks by their real outcome success rate
+  (`ReinforcePlaybooks`), and finds novel recombinations + schema fits
+  (`Recombinations`, `ClassifyClaim`).
+- **The executive (tier 3).** Working-memory **blocks** (`Memory.Blocks`, always-loaded
+  core memory), a **feeling-of-knowing** abstain gate (`RecallWithSufficiency`), stakes-
+  scaled **effort budgeting** (`RecallWithEffort`), and **spreading activation** from the
+  current train of thought (`RecallWithContext`).
+- **The connected brain (tier 4).** A transactive **who-knows-what** directory
+  (`WhoKnows`), **analogical** retrieval by relational shape / Weisfeiler-Lehman
+  (`AnalogousClaims`, "we've seen this shape before"), the **contested frontier**
+  (`RecallWithConflicts`, a recall carrying its own counter-evidence), and an iterative
+  retrieve↔reason **fixpoint** (`RecallIterative`).
+
+The organs (arc 1):
 
 - **The sleep pass — consolidation + forgetting** (`Memory.Consolidate`). Off the
   hot path it collapses near-duplicate claims into one canonical claim (evidence
