@@ -129,6 +129,9 @@ Every other tier reads trust and corroboration. Harden them first.
   the scheduler instead of a uniform scan; interleaving old+new episodes is also the
   standard defense against catastrophic interference. *Deterministic. Low effort — a
   rewire of the pass you already run.*
+  **SHIPPED — v0.54.0 (`ConsolidateOptions.ReplayTopK`).** Rehearses the K most important
+  currently-valid claims (ranked by salience × recency; surprise folds in once T1 lands) by
+  bumping their freshness, so what matters most resists decay. `ConsolidateResult.Replayed`.
 - **T2.2 Close the skill loop (deterministic RL-lite) — highest ROI-per-effort in this
   tier.** Two arrows, no LLM: (a) auto-trigger `synthesize` on evidence pressure (N new
   corroborating claims, or a calibration miss), not just a cron; (b) reinforce a playbook's
@@ -142,8 +145,11 @@ Every other tier reads trust and corroboration. Harden them first.
   partial=0.5 / failure=0, "unknown" ignored, skipped below 2 scored outcomes). Signal is
   corroboration-by-underlying-evidence (reuses the links synthesize already writes — no new
   schema primitive), not decision-level attribution. Senat runs it nightly
-  (`REINFORCE_PLAYBOOKS=1`, v0.11.58). *Arrow (a) auto-trigger-synthesize is the open
-  remainder — synthesize is still CLI-only, so the loop is dormant in Senat until it runs.*
+  (`REINFORCE_PLAYBOOKS=1`, v0.11.58).
+  **SHIPPED (arrow a) — v0.54.0 (`Memory.Synthesize` + `ConsolidateOptions.Synthesize`).**
+  Exposes the previously CLI-only skill derivation (actions-with-outcomes → lessons →
+  playbooks; `SynthesizeResult`), idempotent, and runs it inside the sleep pass before
+  reinforcement — the skill loop is now self-maintaining, not CLI-only. **T2.2 complete.**
 - **T2.3 REM-like recombination (LLM-optional, lands as candidates).** A second offline
   stage: deterministic clustering picks high-salience pairs the waking graph never
   juxtaposed (distant in the graph, close in embedding); an LLM only *names* the candidate
