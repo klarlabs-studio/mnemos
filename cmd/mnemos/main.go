@@ -199,6 +199,8 @@ func main() {
 		handleOutcome(args, flags)
 	case "synthesize":
 		handleSynthesize(args, flags)
+	case "consolidate":
+		handleConsolidate(args, flags)
 	case "lessons":
 		handleLessons(args, flags)
 	case "verify":
@@ -1343,6 +1345,8 @@ func printUsage() {
 	fmt.Println("  reembed [--force] [--dry-run]        (Re)generate claim embeddings under the current embed config")
 	fmt.Println("  recompute-trust [--all]              Rebuild trust_score for every claim under the current policy")
 	fmt.Println("  dedup [--threshold T] [--force]      Merge near-duplicate claims by embedding similarity (dry-run by default)")
+	fmt.Println("  consolidate [--forget-below-trust T] The cognitive \"sleep\" pass: dedupe + refresh trust, and")
+	fmt.Println("    [--forget-refuted] [--synthesize]  optionally forget/reinforce/synthesize/replay. Deterministic.")
 	fmt.Println("")
 	fmt.Println("Flags:")
 	fmt.Println("  -h, --help     show this help message")

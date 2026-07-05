@@ -21,7 +21,11 @@ import (
 // surface is sufficient — currently the simpler temporal MCP tools —
 // routes through this helper instead.
 func newLibraryMemory(_ context.Context, actor string) (mnemos.Memory, error) {
-	opts := []mnemos.Option{}
+	// Pin the same canonical DSN the rest of cmd/mnemos uses (MNEMOS_DB_URL →
+	// resolveDSN), so a library-bridge Memory reads/writes the same store the
+	// serve command and store.Open callers do — not the library's MNEMOS_STORAGE
+	// default, which an operator running a subcommand won't have set.
+	opts := []mnemos.Option{mnemos.WithStorage(resolveDSN())}
 	if actor != "" {
 		opts = append(opts, mnemos.WithActor(actor))
 	}

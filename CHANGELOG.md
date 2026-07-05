@@ -8,7 +8,17 @@ notable changes.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **`mnemos consolidate` CLI command.** The cognitive "sleep" pass, previously
+  library-only (`Memory.Consolidate`), is now a one-shot CLI: `mnemos consolidate
+  [--forget-below-trust T] [--forget-refuted] [--reinforce-validated]
+  [--reinforce-playbooks] [--synthesize] [--replay-top-k N] [--dry-run]`. It opens
+  the store from the canonical DSN (`MNEMOS_DB_URL`) and runs the pass, emitting a
+  JSON summary. This unlocks the whole cognitive layer for **HTTP-service consumers**
+  (who run mnemos as a `serve` process and can now schedule the sleep pass as a Job/
+  cron) — not just Go-library consumers. Deterministic, no LLM. (`newLibraryMemory`
+  now pins the canonical DSN so subcommands hit the same store as `serve`.)
 
 ## [0.19.0 – 0.60.0] — 2026-06 – 2026-07
 
