@@ -163,10 +163,17 @@ Every other tier reads trust and corroboration. Harden them first.
   juxtaposed (distant in the graph, close in embedding); an LLM only *names* the candidate
   schema/hypothesis. Everything lands in the candidate table for human promotion — never
   auto-promoted. No key → skip REM, SWS still runs. *LLM-optional. Medium.*
+  **SHIPPED (deterministic detection) — v0.57.0 (`Memory.Recombinations` → `[]Recombination`).**
+  Finds high-salience, currently-valid claim pairs topically similar (Jaccard) yet NOT connected in
+  the graph — novel juxtapositions, ranked by similarity. Naming the emergent schema is left to a
+  human/LLM (proposals, never auto-promoted).
 - **T2.4 Schema-guided assimilation vs. accommodation.** Route a new claim by fit to
   existing gists: fits a schema → learn it cheaper (lower corroboration bar, fast-path);
   *violates* a high-trust schema → high prediction-error → straight into hypercorrection.
   *Routing deterministic; schema induction leans on T2.1/T2.3. Medium.*
+  **SHIPPED — v0.57.0 (`Memory.ClassifyClaim` → `Assimilation`).** Sufficient established knowledge on
+  the topic → assimilation (cheap, against an anchor); else novel accommodation. The conflict branch
+  (contradicts a high-trust schema) is served by the existing hypercorrection path on write.
 
 ### Tier 3 — The executive (control & working memory)
 
