@@ -123,6 +123,14 @@ var parityMatrix = []parityEntry{
 	{Capability: "incidents", MCPTool: parityNA, HTTPRoute: "/v1/incidents", GRPCMethod: parityNA},
 	{Capability: "incident subresources", MCPTool: parityNA, HTTPRoute: "/v1/incidents/", GRPCMethod: parityNA},
 
+	// Connected-brain reads (v0.66) — cognitive layer over HTTP. MCP/gRPC
+	// counterparts not (yet) exposed; the library is the in-process surface.
+	{Capability: "who-knows-what directory", MCPTool: parityNA, HTTPRoute: "/v1/who-knows", GRPCMethod: parityNA},
+	{Capability: "knowledge gaps", MCPTool: parityNA, HTTPRoute: "/v1/knowledge-gaps", GRPCMethod: parityNA},
+	{Capability: "confidence calibration", MCPTool: parityNA, HTTPRoute: "/v1/calibration", GRPCMethod: parityNA},
+	{Capability: "hypercorrections (contested established beliefs)", MCPTool: parityNA, HTTPRoute: "/v1/hypercorrections", GRPCMethod: parityNA},
+	{Capability: "recombinations (candidate novel connections)", MCPTool: parityNA, HTTPRoute: "/v1/recombinations", GRPCMethod: parityNA},
+
 	// Browse helpers (MCP-only).
 	{Capability: "list decisions (browse helper)", MCPTool: "list_decisions", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "list contradictions (browse helper)", MCPTool: "list_contradictions", HTTPRoute: parityNA, GRPCMethod: parityNA},

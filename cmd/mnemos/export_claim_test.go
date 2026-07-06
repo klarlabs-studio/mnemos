@@ -208,7 +208,7 @@ func TestEscalateClaimForAgent_DefaultReason(t *testing.T) {
 
 func TestServeClaimExportMD_NotFound(t *testing.T) {
 	_, conn := openTestStore(t)
-	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn))
+	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn), nil)
 	req := httptest.NewRequest(http.MethodGet, "/v1/claims/missing_claim/export.md", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -234,7 +234,7 @@ func TestServeClaimExportMD_ReturnsMarkdown(t *testing.T) {
 		t.Fatalf("seed claim: %v", err)
 	}
 
-	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn))
+	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn), nil)
 	req := httptest.NewRequest(http.MethodGet, "/v1/claims/cl_http_export_1/export.md", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -257,7 +257,7 @@ func TestServeClaimExportMD_ReturnsMarkdown(t *testing.T) {
 
 func TestServeClaimExportMD_MethodNotAllowed(t *testing.T) {
 	_, conn := openTestStore(t)
-	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn))
+	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn), nil)
 	req := httptest.NewRequest(http.MethodPost, "/v1/claims/any_id/export.md", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)

@@ -10,6 +10,26 @@ notable changes.
 
 ### Added
 
+- **Connected-brain reads over HTTP (cognitive layer, batch 1).** The library's
+  cognitive layer (research part 2, tiers 0–4) was reachable only in-process — an
+  out-of-process consumer over HTTP got storage, not the brain. `serve` now builds
+  a `Memory` facade over its store and delegates six read endpoints to it:
+  - `GET /v1/who-knows?query=&limit=` — the who-knows-what directory (ranked experts)
+  - `GET /v1/knowledge-gaps?limit=` — highest-value open questions
+  - `GET /v1/calibration` — confidence-vs-reality (ECE/Brier, bucketed + per source)
+  - `GET /v1/hypercorrections` — established beliefs a newer claim now contradicts
+  - `GET /v1/recombinations?limit=` — candidate novel connections
+  - `GET /v1/claims/{id}/analogous?limit=` — structurally analogous claims (WL)
+  SDK: `WhoKnows`, `KnowledgeGaps`, `Calibration`, `Hypercorrections`,
+  `Recombinations`, `AnalogousClaims` + result types. When the facade is
+  unavailable (e.g. no `MNEMOS_DB_URL`) the endpoints return 503 while storage
+  stays up. This is the first batch of a push to full HTTP↔library parity, so
+  any-language consumers get the same brain a Go-embedding consumer does.
+
+## [0.65.0] — 2026-07-06
+
+### Added
+
 - **Forward expectations over HTTP (predict + observe).** The library has had
   structured expectations since T1.1 (`Memory.Expect` / `RecordObservation` /
   `ReconcileExpectations`), but only in-process. Now the predict + observe half is
