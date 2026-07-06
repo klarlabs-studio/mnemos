@@ -15,6 +15,7 @@ import (
 
 	"go.klarlabs.de/bolt"
 	mcp "go.klarlabs.de/mcp"
+	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/govwrite"
@@ -342,6 +343,19 @@ func handleMCP() {
 		return watcher, watcherErr
 	}
 
+	// Lazily build the library Memory facade for the cognitive tools (who-knows,
+	// knowledge-gaps, calibration, …). Built once, reused across tool calls, and
+	// closed by the shutdown defer below.
+	var (
+		memOnce   sync.Once
+		memFacade mnemos.Memory
+		memErr    error
+	)
+	getMem := func() (mnemos.Memory, error) {
+		memOnce.Do(func() { memFacade, memErr = newLibraryMemory(context.Background(), mcpActor) })
+		return memFacade, memErr
+	}
+
 	// Build the axi-go kernel that wraps every MCP tool with effect
 	// gating, an evidence chain, and an execution budget. If the
 	// kernel fails to build the MCP server still starts — we fall
@@ -632,6 +646,77 @@ func handleMCP() {
 			return mcpRunRecallAtTime(ctx, input)
 		})
 
+	// --- Connected-brain cognitive tools (parity with HTTP/gRPC) ---
+	srv.Tool("who_knows").
+		Description("Rank the workers whose memory best matches a topic (who-knows-what directory).").
+		OutputSchema(mcpWhoKnowsOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpWhoKnowsInput) (mcpWhoKnowsOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpWhoKnowsOutput{}, err
+			}
+			return mcpWhoKnows(ctx, mem, input)
+		})
+
+	srv.Tool("knowledge_gaps").
+		Description("List the highest-value open questions (unresolved hypotheses / contested claims).").
+		OutputSchema(mcpKnowledgeGapsOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpKnowledgeGapsInput) (mcpKnowledgeGapsOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpKnowledgeGapsOutput{}, err
+			}
+			return mcpKnowledgeGaps(ctx, mem, input)
+		})
+
+	srv.Tool("calibration").
+		Description("Report how well stated confidence tracks reality (ECE/Brier, per source).").
+		OutputSchema(mcpCalibrationOutput{}).
+		Handler(func(ctx context.Context, _ struct{}) (mcpCalibrationOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpCalibrationOutput{}, err
+			}
+			return mcpCalibration(ctx, mem, struct{}{})
+		})
+
+	srv.Tool("hypercorrections").
+		Description("List established beliefs a newer claim now contradicts (worth re-examining).").
+		OutputSchema(mcpHypercorrectionsOutput{}).
+		Handler(func(ctx context.Context, _ struct{}) (mcpHypercorrectionsOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpHypercorrectionsOutput{}, err
+			}
+			return mcpHypercorrections(ctx, mem, struct{}{})
+		})
+
+	srv.Tool("recombinations").
+		Description("List topically-similar-but-unlinked claim pairs (candidate novel connections).").
+		OutputSchema(mcpRecombinationsOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpRecombinationsInput) (mcpRecombinationsOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpRecombinationsOutput{}, err
+			}
+			return mcpRecombinations(ctx, mem, input)
+		})
+
+	srv.Tool("analogous_claims").
+		Description("Return the claims most structurally analogous to a given one.").
+		OutputSchema(mcpAnalogousOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpAnalogousInput) (mcpAnalogousOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpAnalogousOutput{}, err
+			}
+			return mcpAnalogousClaims(ctx, mem, input)
+		})
+
 	// Wire signal handling so a SIGINT/SIGTERM cancels the parent
 	// context: ServeStdio observes the cancellation and returns,
 	// then we tear the watcher down. Without this, Ctrl+C would
@@ -659,6 +744,9 @@ func handleMCP() {
 		}
 		if watcherConn != nil {
 			_ = watcherConn.Close()
+		}
+		if memFacade != nil {
+			_ = memFacade.Close()
 		}
 	}()
 
