@@ -132,8 +132,11 @@ var parityMatrix = []parityEntry{
 	{Capability: "recombinations (candidate novel connections)", MCPTool: parityNA, HTTPRoute: "/v1/recombinations", GRPCMethod: "Recombinations"},
 	{Capability: "analogical retrieval", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AnalogousClaims"},
 
-	// Claim CRUD parity (v0.67).
-	{Capability: "classify claim novelty", MCPTool: parityNA, HTTPRoute: "/v1/classify", GRPCMethod: parityNA},
+	// Claim CRUD parity (v0.67 HTTP, gRPC parity added).
+	{Capability: "classify claim novelty", MCPTool: parityNA, HTTPRoute: "/v1/classify", GRPCMethod: "Classify"},
+	{Capability: "get single claim", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "GetClaim"},
+	{Capability: "set claim lifecycle", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "SetClaimLifecycle"},
+	{Capability: "get single decision", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "GetDecision"},
 	{Capability: "advanced recall (sufficiency/effort/context/conflicts/iterative)", MCPTool: parityNA, HTTPRoute: "/v1/recall", GRPCMethod: parityNA},
 
 	// Working memory + skill loop + temporal (v0.69).

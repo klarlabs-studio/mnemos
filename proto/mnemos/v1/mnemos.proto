@@ -94,6 +94,16 @@ service MnemosService {
   rpc Recombinations(RecombinationsRequest) returns (RecombinationsResponse);
   // AnalogousClaims returns the claims most structurally analogous to one.
   rpc AnalogousClaims(AnalogousClaimsRequest) returns (AnalogousClaimsResponse);
+
+  // --- Claim CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
+  // GetClaim returns a single claim's full detail.
+  rpc GetClaim(GetClaimRequest) returns (ClaimDetail);
+  // SetClaimLifecycle transitions a claim (candidate | promoted | superseded).
+  rpc SetClaimLifecycle(SetClaimLifecycleRequest) returns (SetClaimLifecycleResponse);
+  // Classify reports whether a candidate statement fits established knowledge or is novel.
+  rpc Classify(ClassifyRequest) returns (ClassifyResponse);
+  // GetDecision returns a single recorded decision by id.
+  rpc GetDecision(GetDecisionRequest) returns (Decision);
 }
 
 // ---------------------------------------------------------------------------
@@ -576,3 +586,39 @@ message AnalogousClaimsResponse {
   string           claim_id  = 1;
   repeated Analogy analogous = 2;
 }
+
+// ---------------------------------------------------------------------------
+// Claim CRUD (cognitive layer)
+// ---------------------------------------------------------------------------
+
+message GetClaimRequest { string claim_id = 1; }
+message ClaimDetail {
+  string                    id          = 1;
+  string                    statement   = 2;
+  string                    type        = 3;
+  double                    confidence  = 4;
+  double                    trust_score = 5;
+  string                    lifecycle   = 6;
+  google.protobuf.Timestamp valid_from  = 7;
+  google.protobuf.Timestamp valid_until = 8;
+  google.protobuf.Timestamp recorded_at = 9;
+}
+
+message SetClaimLifecycleRequest {
+  string claim_id  = 1;
+  string lifecycle = 2; // candidate | promoted | superseded
+}
+message SetClaimLifecycleResponse {
+  string claim_id  = 1;
+  string lifecycle = 2;
+}
+
+message ClassifyRequest { string text = 1; }
+message ClassifyResponse {
+  string kind        = 1; // AssimilationFits | AssimilationNovel
+  string anchor_id   = 2;
+  string anchor_text = 3;
+  double confidence  = 4;
+}
+
+message GetDecisionRequest { string id = 1; }
