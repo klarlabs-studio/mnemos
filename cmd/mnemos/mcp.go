@@ -766,6 +766,42 @@ func handleMCP() {
 			return mcpRecall(ctx, mem, input)
 		})
 
+	srv.Tool("get_blocks").
+		Description("Read an agent's working-memory blocks — its bounded, always-injected 'core memory' (persona, open_threads, ...).").
+		OutputSchema(mcpGetBlocksOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpGetBlocksInput) (mcpGetBlocksOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpGetBlocksOutput{}, err
+			}
+			return mcpGetBlocks(ctx, mem, input)
+		})
+
+	srv.Tool("set_block").
+		Description("Set or append an agent's working-memory block. append=true evicts oldest lines to stay within the attention budget; empty value replaces (clears) the block.").
+		OutputSchema(mcpSetBlockOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpSetBlockInput) (mcpSetBlockOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpSetBlockOutput{}, err
+			}
+			return mcpSetBlock(ctx, mem, input)
+		})
+
+	srv.Tool("signals").
+		Description("Detected temporal patterns (trend|spike|drop|stall|anomaly|...) over a run's event series — the 'what is changing?' reading that complements recall.").
+		OutputSchema(mcpSignalsOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpSignalsInput) (mcpSignalsOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpSignalsOutput{}, err
+			}
+			return mcpSignals(ctx, mem, input)
+		})
+
 	// Wire signal handling so a SIGINT/SIGTERM cancels the parent
 	// context: ServeStdio observes the cancellation and returns,
 	// then we tear the watcher down. Without this, Ctrl+C would
