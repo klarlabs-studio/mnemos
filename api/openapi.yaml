@@ -357,6 +357,402 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AppendSummary" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/who-knows:
+    get:
+      summary: Rank the workers most expert on a query
+      description: |
+        Connected-brain read: for a topic query, returns the workers ranked
+        by their affinity for it, along with a reliability signal and how
+        many claims back the expertise. Reads stay open (no token).
+      tags: [cognitive]
+      parameters:
+        - { name: query, in: query, required: true, schema: { type: string }, description: "Topic to rank experts for." }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 }, description: "Max experts to return (default 10)." }
+      responses:
+        "200":
+          description: Ranked experts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [query, experts]
+                properties:
+                  query: { type: string }
+                  experts:
+                    type: array
+                    items: { $ref: "#/components/schemas/Expert" }
+        "400":
+          description: Missing query
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/knowledge-gaps:
+    get:
+      summary: Surface the store's knowledge gaps
+      description: |
+        Connected-brain read: claims that are isolated, contested, or
+        otherwise flagged as gaps in the knowledge graph, scored by
+        severity. Reads stay open (no token).
+      tags: [cognitive]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 }, description: "Max gaps to return (default 20)." }
+      responses:
+        "200":
+          description: Knowledge gaps
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  gaps:
+                    type: array
+                    items: { $ref: "#/components/schemas/KnowledgeGap" }
+  /v1/calibration:
+    get:
+      summary: Confidence-calibration report
+      description: |
+        How well stated confidence matches observed accuracy — an overall
+        ECE + Brier score, per-confidence-bucket breakdown, and per-source
+        calibration. Reads stay open (no token).
+      tags: [cognitive]
+      responses:
+        "200":
+          description: Calibration report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Calibration" }
+  /v1/hypercorrections:
+    get:
+      summary: List detected hypercorrections
+      description: |
+        Cases where a lower-trust challenging claim overturned a previously
+        promoted, higher-trust claim — the store's "I was wrong about X"
+        record. Reads stay open (no token).
+      tags: [cognitive]
+      responses:
+        "200":
+          description: Hypercorrections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hypercorrections:
+                    type: array
+                    items: { $ref: "#/components/schemas/Hypercorrection" }
+  /v1/recombinations:
+    get:
+      summary: Suggest analogical claim recombinations
+      description: |
+        Pairs of claims that are structurally similar but not yet linked —
+        candidate analogies for creative recombination, scored by
+        similarity. Reads stay open (no token).
+      tags: [cognitive]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 }, description: "Max pairs to return (default 20)." }
+      responses:
+        "200":
+          description: Recombinations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recombinations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Recombination" }
+  /v1/classify:
+    get:
+      summary: Classify a candidate statement against the store
+      description: |
+        Novelty check: given free text, reports whether it is novel,
+        redundant, or a variant of an existing claim, with the matched
+        anchor claim and a confidence. A read (no side effects) → GET,
+        so it needs no token.
+      tags: [cognitive]
+      parameters:
+        - { name: text, in: query, required: true, schema: { type: string }, description: "Candidate statement to classify." }
+      responses:
+        "200":
+          description: Assimilation verdict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assimilation" }
+        "400":
+          description: Missing text
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/decisions:
+    get:
+      summary: List decisions
+      description: |
+        The decision browse surface: recorded decisions with their plan,
+        reasoning, risk level, considered alternatives, and (once observed)
+        the linked outcome. Reads stay open (no token).
+      tags: [cognitive]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 }, description: "Max decisions to return (default 50)." }
+      responses:
+        "200":
+          description: Decisions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decisions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Decision" }
+  /v1/decisions/{id}:
+    get:
+      summary: Get one decision
+      tags: [cognitive]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Decision" }
+        "404":
+          description: Decision not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/recall:
+    get:
+      summary: Epistemic-honesty recall variants
+      description: |
+        Advanced recall over the claim store. Unlike `/v1/search`, recall
+        also reports whether the retrieved set is SUFFICIENT, can spend a
+        stakes-scaled effort budget, bias by a context string, surface
+        CONFLICTS, or iterate retrieve↔reason rounds. The `mode` query param
+        selects the variant; the response carries only the fields relevant to
+        that mode. A read (no side effects) → GET, so it needs no token.
+      tags: [cognitive]
+      parameters:
+        - { name: query, in: query, required: true, schema: { type: string }, description: "Retrieval query text." }
+        - { name: mode, in: query, schema: { type: string, enum: [sufficiency, effort, context, conflicts, iterative], default: sufficiency }, description: "Recall variant. Governs which optional response fields are populated." }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 }, description: "Max results." }
+        - { name: hops, in: query, schema: { type: integer, minimum: 1 }, description: "Relationship-graph hop expansion depth." }
+        - { name: run_id, in: query, schema: { type: string }, description: "Restrict recall to one run." }
+        - { name: stakes, in: query, schema: { type: number, format: double, minimum: 0, maximum: 1 }, description: "mode=effort only — stakes level that scales the effort budget (default 0.5)." }
+        - { name: context, in: query, schema: { type: string }, description: "mode=context only — a context string that biases ranking." }
+        - { name: max_rounds, in: query, schema: { type: integer, minimum: 1 }, description: "mode=iterative only — max retrieve↔reason rounds (default 3)." }
+      responses:
+        "200":
+          description: Recall results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecallResponse" }
+        "400":
+          description: Missing query or invalid mode
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/blocks:
+    get:
+      summary: List a worker's working-memory blocks
+      description: |
+        The bounded, worker-scoped working-memory blocks injected verbatim
+        ahead of retrieval hints. Reads stay open (no token).
+      tags: [cognitive]
+      parameters:
+        - { name: owner, in: query, required: true, schema: { type: string }, description: "Block owner (worker id)." }
+      responses:
+        "200":
+          description: Working-memory blocks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [owner, blocks]
+                properties:
+                  owner: { type: string }
+                  blocks:
+                    type: array
+                    items: { $ref: "#/components/schemas/WorkingMemoryBlock" }
+        "400":
+          description: Missing owner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    post:
+      summary: Set or append a working-memory block
+      description: |
+        Sets a block's value, or appends to it when `append` is true.
+        A write → requires a bearer token.
+      tags: [cognitive]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [owner, label]
+              properties:
+                owner: { type: string }
+                label: { type: string }
+                value: { type: string }
+                append: { type: boolean, description: "Append to the block instead of replacing it." }
+      responses:
+        "200":
+          description: Block written
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  owner: { type: string }
+                  label: { type: string }
+        "400":
+          description: Missing owner/label or invalid body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/actions:
+    post:
+      summary: Record an action (skill loop)
+      description: |
+        Records an action taken by a worker; the nightly consolidate pass
+        synthesizes recorded actions + their outcomes into lessons and
+        playbooks. A write → requires a bearer token.
+      tags: [cognitive]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                id: { type: string, description: "Optional client-supplied id; server generates one when omitted." }
+                kind: { type: string, description: "Action kind (e.g. open_pr, post_finding, investigate)." }
+                subject: { type: string }
+                actor: { type: string, description: "Worker id that performed the action." }
+                metadata:
+                  type: object
+                  additionalProperties: { type: string }
+      responses:
+        "201":
+          description: Action recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+        "400":
+          description: Missing kind or invalid body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/actions/{id}/outcome:
+    post:
+      summary: Record an action's outcome (skill loop)
+      description: |
+        Attaches the observed result of a previously recorded action.
+        A write → requires a bearer token.
+      tags: [cognitive]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: "The action id to attach an outcome to." }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                result: { type: string, description: "Outcome result (e.g. success, failure)." }
+                metrics:
+                  type: object
+                  additionalProperties: { type: number, format: double }
+                notes: { type: string }
+      responses:
+        "200":
+          description: Outcome recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  action_id: { type: string }
+                  result: { type: string }
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/synthesize:
+    post:
+      summary: Run a synthesis pass (skill loop)
+      description: |
+        Synthesizes recorded actions + outcomes into lessons and playbooks,
+        returning how many of each were derived. A write → requires a bearer
+        token.
+      tags: [cognitive]
+      responses:
+        "200":
+          description: Synthesis summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lessons_derived: { type: integer }
+                  playbooks_derived: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/timeline:
+    get:
+      summary: Temporal event timeline
+      description: |
+        Events on the temporal axis, optionally filtered by run, time
+        window, and event types. Reads stay open (no token).
+      tags: [cognitive]
+      parameters:
+        - { name: run_id, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time }, description: "Lower time bound (inclusive)." }
+        - { name: to, in: query, schema: { type: string, format: date-time }, description: "Upper time bound (inclusive)." }
+        - { name: types, in: query, schema: { type: string }, description: "Comma-separated list of event types to include." }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 }, description: "Max events (default 50)." }
+      responses:
+        "200":
+          description: Timeline events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: "#/components/schemas/TimelineEvent" }
+  /v1/signals:
+    get:
+      summary: Temporal signals
+      description: |
+        Detected temporal patterns (recurrence, drift, bursts) with a
+        strength/confidence and detection window. Reads stay open (no token).
+      tags: [cognitive]
+      parameters:
+        - { name: run_id, in: query, schema: { type: string } }
+        - { name: min_confidence, in: query, schema: { type: number, format: double, minimum: 0, maximum: 1 }, description: "Drop signals below this confidence." }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 }, description: "Max signals (default 50)." }
+      responses:
+        "200":
+          description: Signals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signals:
+                    type: array
+                    items: { $ref: "#/components/schemas/Signal" }
 components:
   securitySchemes:
     bearerAuth:
@@ -468,3 +864,186 @@ components:
         claims_by_status:
           type: object
           additionalProperties: { type: integer }
+    Expert:
+      type: object
+      properties:
+        worker: { type: string }
+        affinity: { type: number, format: double }
+        reliability: { type: number, format: double }
+        claim_count: { type: integer }
+      required: [worker, affinity, reliability, claim_count]
+    KnowledgeGap:
+      type: object
+      properties:
+        claim_id: { type: string }
+        text: { type: string }
+        kind: { type: string }
+        score: { type: number, format: double }
+      required: [claim_id, text, kind, score]
+    CalibrationBucket:
+      type: object
+      properties:
+        lower: { type: number, format: double }
+        upper: { type: number, format: double }
+        count: { type: integer }
+        mean_confidence: { type: number, format: double }
+        accuracy: { type: number, format: double }
+      required: [lower, upper, count, mean_confidence, accuracy]
+    CalibrationSource:
+      type: object
+      properties:
+        source: { type: string }
+        samples: { type: integer }
+        mean_confidence: { type: number, format: double }
+        accuracy: { type: number, format: double }
+        gap: { type: number, format: double }
+        brier: { type: number, format: double }
+      required: [source, samples, mean_confidence, accuracy, gap, brier]
+    Calibration:
+      type: object
+      properties:
+        samples: { type: integer }
+        ece: { type: number, format: double }
+        brier: { type: number, format: double }
+        buckets:
+          type: array
+          nullable: true
+          items: { $ref: "#/components/schemas/CalibrationBucket" }
+        sources:
+          type: array
+          nullable: true
+          items: { $ref: "#/components/schemas/CalibrationSource" }
+      required: [samples, ece, brier]
+    Hypercorrection:
+      type: object
+      properties:
+        contradicted_claim_id: { type: string }
+        contradicted_text: { type: string }
+        contradicted_trust: { type: number, format: double }
+        contradicted_promoted: { type: boolean }
+        challenging_claim_id: { type: string }
+        challenging_text: { type: string }
+        detected_at: { type: string, format: date-time }
+      required: [contradicted_claim_id, challenging_claim_id]
+    Recombination:
+      type: object
+      properties:
+        claim_a: { type: string }
+        text_a: { type: string }
+        claim_b: { type: string }
+        text_b: { type: string }
+        similarity: { type: number, format: double }
+      required: [claim_a, text_a, claim_b, text_b, similarity]
+    Assimilation:
+      type: object
+      description: Novelty verdict for a candidate statement.
+      properties:
+        kind: { type: string }
+        anchor_id: { type: string }
+        anchor_text: { type: string }
+        confidence: { type: number, format: double }
+      required: [kind, confidence]
+    Decision:
+      type: object
+      properties:
+        id: { type: string }
+        statement: { type: string }
+        plan: { type: string }
+        reasoning: { type: string }
+        risk_level: { type: string }
+        beliefs:
+          type: array
+          items: { type: string }
+        alternatives:
+          type: array
+          items: { type: string }
+        outcome_id: { type: string }
+        chosen_at: { type: string, format: date-time }
+      required: [id, statement]
+    RecallResult:
+      type: object
+      properties:
+        claim_id: { type: string }
+        text: { type: string }
+        type: { type: string }
+        confidence: { type: number, format: double }
+        trust_score: { type: number, format: double }
+        hop_distance: { type: integer }
+        provenance: { type: string }
+      required: [claim_id, text, type, confidence, trust_score, hop_distance]
+    RecallSufficiency:
+      type: object
+      properties:
+        confidence: { type: number, format: double }
+        claim_count: { type: integer }
+        sufficient: { type: boolean }
+        floor: { type: number, format: double }
+      required: [confidence, claim_count, sufficient, floor]
+    RecallEffort:
+      type: object
+      properties:
+        budget: { type: number, format: double }
+        passes: { type: integer }
+        hops: { type: integer }
+        breadth: { type: integer }
+      required: [budget, passes, hops, breadth]
+    RecallConflict:
+      type: object
+      properties:
+        claim_id: { type: string }
+        claim_text: { type: string }
+        contradicting_id: { type: string }
+        contradicting_text: { type: string }
+        contradicting_trust: { type: number, format: double }
+      required: [claim_id, claim_text, contradicting_id, contradicting_text, contradicting_trust]
+    RecallResponse:
+      type: object
+      description: |
+        Union response for `/v1/recall`. `results` is always present; the
+        remaining fields are populated only for the matching `mode`:
+        `sufficiency` (mode=sufficiency or effort), `effort` (mode=effort),
+        `conflicts` (mode=conflicts), `rounds` (mode=iterative).
+      properties:
+        mode: { type: string, enum: [sufficiency, effort, context, conflicts, iterative] }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/RecallResult" }
+        sufficiency: { $ref: "#/components/schemas/RecallSufficiency" }
+        effort: { $ref: "#/components/schemas/RecallEffort" }
+        conflicts:
+          type: array
+          items: { $ref: "#/components/schemas/RecallConflict" }
+        rounds: { type: integer }
+      required: [mode, results]
+    WorkingMemoryBlock:
+      type: object
+      properties:
+        owner: { type: string }
+        label: { type: string }
+        value: { type: string }
+        updated_at: { type: string, format: date-time }
+      required: [owner, label, value]
+    TimelineEvent:
+      type: object
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        type: { type: string }
+        content: { type: string }
+        run_id: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+      required: [id, type, content]
+    Signal:
+      type: object
+      properties:
+        pattern: { type: string }
+        run_id: { type: string }
+        strength: { type: number, format: double }
+        confidence: { type: number, format: double }
+        class: { type: string }
+        detected_at: { type: string, format: date-time }
+        window_start: { type: string, format: date-time }
+        window_end: { type: string, format: date-time }
+      required: [pattern, strength, confidence]
