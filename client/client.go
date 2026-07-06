@@ -290,6 +290,46 @@ func (c *Client) Context(ctx context.Context, runID string, opts ContextOptions)
 	return out.Context, nil
 }
 
+// SetExpectation attaches (or replaces) a structured forward expectation on a
+// claim: its value should land within tolerance of predicted by horizon. Pass a
+// zero horizon to leave it open-ended. POST /v1/claims/{id}/expectation.
+func (c *Client) SetExpectation(ctx context.Context, claimID string, predicted, tolerance float64, horizon time.Time) (*Expectation, error) {
+	body := map[string]any{"predicted": predicted, "tolerance": tolerance}
+	if !horizon.IsZero() {
+		body["horizon"] = horizon.UTC().Format(time.RFC3339)
+	}
+	var out Expectation
+	if err := c.do(ctx, http.MethodPost, "/v1/claims/"+url.PathEscape(claimID)+"/expectation", body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RecordObservation records the observed value against a claim's expectation, so
+// the nightly consolidate can reconcile it into a validates/refutes verdict.
+// POST /v1/claims/{id}/observation.
+func (c *Client) RecordObservation(ctx context.Context, claimID string, observed float64) (*Expectation, error) {
+	var out Expectation
+	if err := c.do(ctx, http.MethodPost, "/v1/claims/"+url.PathEscape(claimID)+"/observation", map[string]any{"observed": observed}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Expectation returns a claim's forward expectation (predicted vs observed), or
+// nil when none is set. GET /v1/claims/{id}/expectation.
+func (c *Client) Expectation(ctx context.Context, claimID string) (*Expectation, error) {
+	var out Expectation
+	if err := c.do(ctx, http.MethodGet, "/v1/claims/"+url.PathEscape(claimID)+"/expectation", nil, &out); err != nil {
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &out, nil
+}
+
 // do is the single point that sends a request, decodes a response, and
 // applies cross-cutting concerns (logging + retry). All builder
 // terminal verbs funnel through here.

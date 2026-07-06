@@ -43,6 +43,21 @@ type Claim struct {
 	Visibility string `json:"visibility,omitempty"`
 }
 
+// Expectation is a structured forward expectation attached to a claim (T1.1):
+// "this claim's value should land within Tolerance of Predicted by Horizon".
+// Observed/HasObservation are set once the real value arrives; Resolved is true
+// after the nightly consolidate reconciles it into a validates/refutes verdict.
+type Expectation struct {
+	ClaimID        string  `json:"claim_id"`
+	Predicted      float64 `json:"predicted"`
+	Tolerance      float64 `json:"tolerance"`
+	Horizon        string  `json:"horizon,omitempty"` // RFC3339
+	Observed       float64 `json:"observed,omitempty"`
+	HasObservation bool    `json:"has_observation"`
+	Resolved       bool    `json:"resolved"`
+	CreatedAt      string  `json:"created_at,omitempty"`
+}
+
 // EvidenceLink ties a claim to one of the events it was extracted from.
 type EvidenceLink struct {
 	ClaimID string `json:"claim_id"`
