@@ -104,6 +104,11 @@ service MnemosService {
   rpc Classify(ClassifyRequest) returns (ClassifyResponse);
   // GetDecision returns a single recorded decision by id.
   rpc GetDecision(GetDecisionRequest) returns (Decision);
+
+  // --- Advanced recall (cognitive layer; parity with HTTP GET /v1/recall) ---
+  // Recall runs advanced retrieval; mode selects the epistemic-honesty variant
+  // (sufficiency | effort | context | conflicts | iterative).
+  rpc Recall(RecallRequest) returns (RecallResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -622,3 +627,54 @@ message ClassifyResponse {
 }
 
 message GetDecisionRequest { string id = 1; }
+
+// ---------------------------------------------------------------------------
+// Advanced recall (cognitive layer)
+// ---------------------------------------------------------------------------
+
+message RecallRequest {
+  string query      = 1;
+  string run_id     = 2;
+  int32  limit      = 3;
+  int32  hops       = 4;
+  string mode       = 5; // sufficiency | effort | context | conflicts | iterative
+  double stakes     = 6; // effort mode
+  string context    = 7; // context mode
+  int32  max_rounds = 8; // iterative mode
+}
+message RecallResult {
+  string claim_id     = 1;
+  string text         = 2;
+  string type         = 3;
+  double confidence   = 4;
+  double trust_score  = 5;
+  int32  hop_distance = 6;
+  string provenance   = 7;
+}
+message RecallSufficiency {
+  double confidence  = 1;
+  int32  claim_count = 2;
+  bool   sufficient  = 3;
+  double floor       = 4;
+}
+message RecallEffort {
+  double budget  = 1;
+  int32  passes  = 2;
+  int32  hops    = 3;
+  int32  breadth = 4;
+}
+message RecallConflict {
+  string claim_id            = 1;
+  string claim_text          = 2;
+  string contradicting_id    = 3;
+  string contradicting_text  = 4;
+  double contradicting_trust = 5;
+}
+message RecallResponse {
+  string                  mode        = 1;
+  repeated RecallResult   results     = 2;
+  RecallSufficiency       sufficiency = 3; // sufficiency + effort modes
+  RecallEffort            effort      = 4; // effort mode
+  repeated RecallConflict conflicts   = 5; // conflicts mode
+  int32                   rounds      = 6; // iterative mode
+}
