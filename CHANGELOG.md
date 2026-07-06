@@ -10,6 +10,16 @@ notable changes.
 
 ### Added
 
+- **MCP parity: claim reads + advanced recall (cognitive layer, MCP batch 2).**
+  New agent-facing MCP tools: `get_claim` (full detail), `classify` (novelty),
+  `get_decision` (single decision), and `recall` (advanced retrieval; `mode` =
+  sufficiency | effort | context | conflicts | iterative, union output). All
+  delegate to the lazily-built `Memory` facade.
+
+## [0.74.0] — 2026-07-06
+
+### Added
+
 - **MCP parity: connected-brain tools (cognitive layer, MCP batch 1).** The
   connected-brain reads are now agent-facing MCP tools too, closing the third
   transport: `who_knows`, `knowledge_gaps`, `calibration`, `hypercorrections`,
