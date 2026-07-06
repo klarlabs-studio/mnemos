@@ -717,6 +717,55 @@ func handleMCP() {
 			return mcpAnalogousClaims(ctx, mem, input)
 		})
 
+	// --- Claim reads + advanced recall (parity with HTTP/gRPC) ---
+	srv.Tool("get_claim").
+		Description("Fetch a single claim's full detail (statement, trust, lifecycle, validity).").
+		OutputSchema(mcpClaimDetailOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpGetClaimInput) (mcpClaimDetailOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpClaimDetailOutput{}, err
+			}
+			return mcpGetClaim(ctx, mem, input)
+		})
+
+	srv.Tool("classify").
+		Description("Report whether a candidate statement fits established knowledge or is novel.").
+		OutputSchema(mcpClassifyOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpClassifyInput) (mcpClassifyOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpClassifyOutput{}, err
+			}
+			return mcpClassify(ctx, mem, input)
+		})
+
+	srv.Tool("get_decision").
+		Description("Fetch a single recorded decision by id.").
+		OutputSchema(mcpDecisionOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpGetDecisionInput) (mcpDecisionOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpDecisionOutput{}, err
+			}
+			return mcpGetDecision(ctx, mem, input)
+		})
+
+	srv.Tool("recall").
+		Description("Advanced retrieval; mode selects the epistemic-honesty variant (sufficiency|effort|context|conflicts|iterative).").
+		OutputSchema(mcpRecallOutput{}).
+		ValidateInput().
+		Handler(func(ctx context.Context, input mcpRecallInput) (mcpRecallOutput, error) {
+			mem, err := getMem()
+			if err != nil {
+				return mcpRecallOutput{}, err
+			}
+			return mcpRecall(ctx, mem, input)
+		})
+
 	// Wire signal handling so a SIGINT/SIGTERM cancels the parent
 	// context: ServeStdio observes the cancellation and returns,
 	// then we tear the watcher down. Without this, Ctrl+C would
