@@ -52,6 +52,11 @@ const (
 	MnemosService_Classify_FullMethodName                  = "/mnemos.v1.MnemosService/Classify"
 	MnemosService_GetDecision_FullMethodName               = "/mnemos.v1.MnemosService/GetDecision"
 	MnemosService_Recall_FullMethodName                    = "/mnemos.v1.MnemosService/Recall"
+	MnemosService_GetBlocks_FullMethodName                 = "/mnemos.v1.MnemosService/GetBlocks"
+	MnemosService_SetBlock_FullMethodName                  = "/mnemos.v1.MnemosService/SetBlock"
+	MnemosService_Synthesize_FullMethodName                = "/mnemos.v1.MnemosService/Synthesize"
+	MnemosService_Timeline_FullMethodName                  = "/mnemos.v1.MnemosService/Timeline"
+	MnemosService_Signals_FullMethodName                   = "/mnemos.v1.MnemosService/Signals"
 )
 
 // MnemosServiceClient is the client API for MnemosService service.
@@ -141,6 +146,17 @@ type MnemosServiceClient interface {
 	// Recall runs advanced retrieval; mode selects the epistemic-honesty variant
 	// (sufficiency | effort | context | conflicts | iterative).
 	Recall(ctx context.Context, in *RecallRequest, opts ...grpc.CallOption) (*RecallResponse, error)
+	// --- Working memory + skill loop + temporal (cognitive layer) ---
+	// GetBlocks returns an owner's working-memory blocks.
+	GetBlocks(ctx context.Context, in *GetBlocksRequest, opts ...grpc.CallOption) (*GetBlocksResponse, error)
+	// SetBlock sets or appends a working-memory block.
+	SetBlock(ctx context.Context, in *SetBlockRequest, opts ...grpc.CallOption) (*SetBlockResponse, error)
+	// Synthesize runs a synthesis pass (actions -> lessons + playbooks).
+	Synthesize(ctx context.Context, in *SynthesizeRequest, opts ...grpc.CallOption) (*SynthesizeResponse, error)
+	// Timeline returns events on the temporal timeline.
+	Timeline(ctx context.Context, in *TimelineRequest, opts ...grpc.CallOption) (*TimelineResponse, error)
+	// Signals returns detected temporal patterns.
+	Signals(ctx context.Context, in *SignalsRequest, opts ...grpc.CallOption) (*SignalsResponse, error)
 }
 
 type mnemosServiceClient struct {
@@ -481,6 +497,56 @@ func (c *mnemosServiceClient) Recall(ctx context.Context, in *RecallRequest, opt
 	return out, nil
 }
 
+func (c *mnemosServiceClient) GetBlocks(ctx context.Context, in *GetBlocksRequest, opts ...grpc.CallOption) (*GetBlocksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBlocksResponse)
+	err := c.cc.Invoke(ctx, MnemosService_GetBlocks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) SetBlock(ctx context.Context, in *SetBlockRequest, opts ...grpc.CallOption) (*SetBlockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetBlockResponse)
+	err := c.cc.Invoke(ctx, MnemosService_SetBlock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Synthesize(ctx context.Context, in *SynthesizeRequest, opts ...grpc.CallOption) (*SynthesizeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SynthesizeResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Synthesize_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Timeline(ctx context.Context, in *TimelineRequest, opts ...grpc.CallOption) (*TimelineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TimelineResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Timeline_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Signals(ctx context.Context, in *SignalsRequest, opts ...grpc.CallOption) (*SignalsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SignalsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Signals_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MnemosServiceServer is the server API for MnemosService service.
 // All implementations must embed UnimplementedMnemosServiceServer
 // for forward compatibility.
@@ -568,6 +634,17 @@ type MnemosServiceServer interface {
 	// Recall runs advanced retrieval; mode selects the epistemic-honesty variant
 	// (sufficiency | effort | context | conflicts | iterative).
 	Recall(context.Context, *RecallRequest) (*RecallResponse, error)
+	// --- Working memory + skill loop + temporal (cognitive layer) ---
+	// GetBlocks returns an owner's working-memory blocks.
+	GetBlocks(context.Context, *GetBlocksRequest) (*GetBlocksResponse, error)
+	// SetBlock sets or appends a working-memory block.
+	SetBlock(context.Context, *SetBlockRequest) (*SetBlockResponse, error)
+	// Synthesize runs a synthesis pass (actions -> lessons + playbooks).
+	Synthesize(context.Context, *SynthesizeRequest) (*SynthesizeResponse, error)
+	// Timeline returns events on the temporal timeline.
+	Timeline(context.Context, *TimelineRequest) (*TimelineResponse, error)
+	// Signals returns detected temporal patterns.
+	Signals(context.Context, *SignalsRequest) (*SignalsResponse, error)
 	mustEmbedUnimplementedMnemosServiceServer()
 }
 
@@ -676,6 +753,21 @@ func (UnimplementedMnemosServiceServer) GetDecision(context.Context, *GetDecisio
 }
 func (UnimplementedMnemosServiceServer) Recall(context.Context, *RecallRequest) (*RecallResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Recall not implemented")
+}
+func (UnimplementedMnemosServiceServer) GetBlocks(context.Context, *GetBlocksRequest) (*GetBlocksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBlocks not implemented")
+}
+func (UnimplementedMnemosServiceServer) SetBlock(context.Context, *SetBlockRequest) (*SetBlockResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetBlock not implemented")
+}
+func (UnimplementedMnemosServiceServer) Synthesize(context.Context, *SynthesizeRequest) (*SynthesizeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Synthesize not implemented")
+}
+func (UnimplementedMnemosServiceServer) Timeline(context.Context, *TimelineRequest) (*TimelineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Timeline not implemented")
+}
+func (UnimplementedMnemosServiceServer) Signals(context.Context, *SignalsRequest) (*SignalsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Signals not implemented")
 }
 func (UnimplementedMnemosServiceServer) mustEmbedUnimplementedMnemosServiceServer() {}
 func (UnimplementedMnemosServiceServer) testEmbeddedByValue()                       {}
@@ -1292,6 +1384,96 @@ func _MnemosService_Recall_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_GetBlocks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBlocksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).GetBlocks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_GetBlocks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).GetBlocks(ctx, req.(*GetBlocksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_SetBlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetBlockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).SetBlock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_SetBlock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).SetBlock(ctx, req.(*SetBlockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Synthesize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SynthesizeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Synthesize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Synthesize_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Synthesize(ctx, req.(*SynthesizeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Timeline_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TimelineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Timeline(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Timeline_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Timeline(ctx, req.(*TimelineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Signals_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignalsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Signals(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Signals_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Signals(ctx, req.(*SignalsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MnemosService_ServiceDesc is the grpc.ServiceDesc for MnemosService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1430,6 +1612,26 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Recall",
 			Handler:    _MnemosService_Recall_Handler,
+		},
+		{
+			MethodName: "GetBlocks",
+			Handler:    _MnemosService_GetBlocks_Handler,
+		},
+		{
+			MethodName: "SetBlock",
+			Handler:    _MnemosService_SetBlock_Handler,
+		},
+		{
+			MethodName: "Synthesize",
+			Handler:    _MnemosService_Synthesize_Handler,
+		},
+		{
+			MethodName: "Timeline",
+			Handler:    _MnemosService_Timeline_Handler,
+		},
+		{
+			MethodName: "Signals",
+			Handler:    _MnemosService_Signals_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
