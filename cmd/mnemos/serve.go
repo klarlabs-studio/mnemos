@@ -330,6 +330,10 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory) http.Handler {
 	mux.HandleFunc("/v1/calibration", makeCalibrationHandler(mem))
 	mux.HandleFunc("/v1/hypercorrections", makeHypercorrectionsHandler(mem))
 	mux.HandleFunc("/v1/recombinations", makeRecombinationsHandler(mem))
+	// Claim CRUD parity (v0.67): novelty classification + decision browse surface.
+	mux.HandleFunc("/v1/classify", makeClassifyHandler(mem))
+	mux.HandleFunc("/v1/decisions", makeDecisionsHandler(mem))
+	mux.HandleFunc("/v1/decisions/", makeDecisionSubresourceHandler(mem))
 	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
@@ -2218,6 +2222,11 @@ func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnem
 		// Strip the prefix so we can parse id + subresource.
 		tail := strings.TrimPrefix(r.URL.Path, "/v1/claims/")
 		parts := strings.SplitN(tail, "/", 2)
+		// Bare /v1/claims/<id> (no subresource) → single-claim Get (v0.67).
+		if len(parts) == 1 && parts[0] != "" {
+			makeGetClaimHandler(mem, parts[0])(w, r)
+			return
+		}
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 			writeError(w, http.StatusNotFound, "not found")
 			return
@@ -2225,6 +2234,8 @@ func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnem
 		claimID, subresource := parts[0], parts[1]
 
 		switch subresource {
+		case "lifecycle":
+			makeLifecycleHandler(mem, claimID)(w, r)
 		case "provenance":
 			makeProvenanceHandler(conn, claimID)(w, r)
 		case "export.md":
