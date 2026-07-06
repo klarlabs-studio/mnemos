@@ -55,7 +55,7 @@ jobs:
       # the GitHub release alongside the archives.
       - name: Install nox
         env:
-          NOX_VERSION: 0.10.1
+          NOX_VERSION: 1.7.0
         run: |
           set -euo pipefail
           if command -v nox >/dev/null 2>&1; then
