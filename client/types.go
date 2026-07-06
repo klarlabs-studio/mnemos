@@ -58,6 +58,43 @@ type Expectation struct {
 	CreatedAt      string  `json:"created_at,omitempty"`
 }
 
+// ClaimDetail is the full view of a single claim (GET /v1/claims/{id}) — the
+// library's richer shape (statement, trust, lifecycle, validity window), distinct
+// from the append/list Claim.
+type ClaimDetail struct {
+	ID         string  `json:"id"`
+	Statement  string  `json:"statement"`
+	Type       string  `json:"type"`
+	Confidence float64 `json:"confidence"`
+	TrustScore float64 `json:"trust_score"`
+	Lifecycle  string  `json:"lifecycle,omitempty"`
+	ValidFrom  string  `json:"valid_from,omitempty"`
+	ValidUntil string  `json:"valid_until,omitempty"`
+	RecordedAt string  `json:"recorded_at,omitempty"`
+}
+
+// Assimilation is the novelty verdict for a candidate statement (POST /v1/classify):
+// whether it Fits established knowledge (with the anchor it matches) or is Novel.
+type Assimilation struct {
+	Kind       string  `json:"kind"`
+	AnchorID   string  `json:"anchor_id,omitempty"`
+	AnchorText string  `json:"anchor_text,omitempty"`
+	Confidence float64 `json:"confidence"`
+}
+
+// Decision is a recorded decision (GET /v1/decisions[/{id}]).
+type Decision struct {
+	ID           string   `json:"id"`
+	Statement    string   `json:"statement"`
+	Plan         string   `json:"plan,omitempty"`
+	Reasoning    string   `json:"reasoning,omitempty"`
+	RiskLevel    string   `json:"risk_level,omitempty"`
+	Beliefs      []string `json:"beliefs,omitempty"`
+	Alternatives []string `json:"alternatives,omitempty"`
+	OutcomeID    string   `json:"outcome_id,omitempty"`
+	ChosenAt     string   `json:"chosen_at,omitempty"`
+}
+
 // Expert is one worker's standing in the who-knows-what directory for a query:
 // how strongly its memory matches (Affinity), how trustworthy those matching
 // claims are (Reliability), and how many it authored (ClaimCount).

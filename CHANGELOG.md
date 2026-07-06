@@ -10,6 +10,24 @@ notable changes.
 
 ### Added
 
+- **Claim CRUD parity over HTTP (cognitive layer, batch 2).** The reads/writes an
+  out-of-process consumer previously couldn't reach:
+  - `GET /v1/claims/{id}` — a single claim's full detail (statement, trust,
+    lifecycle, validity window); 404 when absent.
+  - `POST /v1/claims/{id}/lifecycle` `{lifecycle}` — transition candidate |
+    promoted | superseded (write; needs a token).
+  - `GET /v1/classify?text=` — novelty verdict for a candidate statement (fits an
+    established anchor, or novel) — deduplication/assimilation.
+  - `GET /v1/decisions?limit=` + `GET /v1/decisions/{id}` — the decision browse
+    surface.
+  SDK: `GetClaim` (nil on 404), `SetClaimLifecycle`, `Classify`, `ListDecisions`,
+  `GetDecision` (nil on 404) + `ClaimDetail`/`Assimilation`/`Decision` types.
+  Batch 2 of the HTTP↔library parity push; delegates to the same facade as batch 1.
+
+## [0.66.0] — 2026-07-06
+
+### Added
+
 - **Connected-brain reads over HTTP (cognitive layer, batch 1).** The library's
   cognitive layer (research part 2, tiers 0–4) was reachable only in-process — an
   out-of-process consumer over HTTP got storage, not the brain. `serve` now builds

@@ -131,8 +131,12 @@ var parityMatrix = []parityEntry{
 	{Capability: "hypercorrections (contested established beliefs)", MCPTool: parityNA, HTTPRoute: "/v1/hypercorrections", GRPCMethod: parityNA},
 	{Capability: "recombinations (candidate novel connections)", MCPTool: parityNA, HTTPRoute: "/v1/recombinations", GRPCMethod: parityNA},
 
+	// Claim CRUD parity (v0.67).
+	{Capability: "classify claim novelty", MCPTool: parityNA, HTTPRoute: "/v1/classify", GRPCMethod: parityNA},
+	{Capability: "decision subresources", MCPTool: parityNA, HTTPRoute: "/v1/decisions/", GRPCMethod: parityNA},
+
 	// Browse helpers (MCP-only).
-	{Capability: "list decisions (browse helper)", MCPTool: "list_decisions", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "list decisions (browse helper)", MCPTool: "list_decisions", HTTPRoute: "/v1/decisions", GRPCMethod: parityNA},
 	{Capability: "list contradictions (browse helper)", MCPTool: "list_contradictions", HTTPRoute: parityNA, GRPCMethod: parityNA},
 
 	// Pipeline (MCP-only — agent action surface).
