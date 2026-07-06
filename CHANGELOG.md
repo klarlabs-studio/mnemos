@@ -10,6 +10,18 @@ notable changes.
 
 ### Added
 
+- **MCP parity: connected-brain tools (cognitive layer, MCP batch 1).** The
+  connected-brain reads are now agent-facing MCP tools too, closing the third
+  transport: `who_knows`, `knowledge_gaps`, `calibration`, `hypercorrections`,
+  `recombinations`, `analogous_claims`. The MCP server lazily builds the library
+  `Memory` facade (once, reused across calls, closed on shutdown) and the tools
+  delegate to it. With this the connected-brain layer is at parity across all
+  three transports (HTTP + gRPC + MCP).
+
+## [0.73.0] — 2026-07-06
+
+### Added
+
 - **gRPC parity: working memory + skill loop + temporal (cognitive layer, gRPC
   batch 4 — completes gRPC parity).** New RPCs on `MnemosService`: `GetBlocks` /
   `SetBlock` (working memory), `Synthesize` (→ lessons/playbooks), `Timeline`,

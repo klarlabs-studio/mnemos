@@ -125,12 +125,12 @@ var parityMatrix = []parityEntry{
 
 	// Connected-brain reads (v0.66 HTTP, gRPC parity added). MCP counterparts
 	// not exposed; the library is the in-process surface.
-	{Capability: "who-knows-what directory", MCPTool: parityNA, HTTPRoute: "/v1/who-knows", GRPCMethod: "WhoKnows"},
-	{Capability: "knowledge gaps", MCPTool: parityNA, HTTPRoute: "/v1/knowledge-gaps", GRPCMethod: "KnowledgeGaps"},
-	{Capability: "confidence calibration", MCPTool: parityNA, HTTPRoute: "/v1/calibration", GRPCMethod: "Calibration"},
-	{Capability: "hypercorrections (contested established beliefs)", MCPTool: parityNA, HTTPRoute: "/v1/hypercorrections", GRPCMethod: "Hypercorrections"},
-	{Capability: "recombinations (candidate novel connections)", MCPTool: parityNA, HTTPRoute: "/v1/recombinations", GRPCMethod: "Recombinations"},
-	{Capability: "analogical retrieval", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AnalogousClaims"},
+	{Capability: "who-knows-what directory", MCPTool: "who_knows", HTTPRoute: "/v1/who-knows", GRPCMethod: "WhoKnows"},
+	{Capability: "knowledge gaps", MCPTool: "knowledge_gaps", HTTPRoute: "/v1/knowledge-gaps", GRPCMethod: "KnowledgeGaps"},
+	{Capability: "confidence calibration", MCPTool: "calibration", HTTPRoute: "/v1/calibration", GRPCMethod: "Calibration"},
+	{Capability: "hypercorrections (contested established beliefs)", MCPTool: "hypercorrections", HTTPRoute: "/v1/hypercorrections", GRPCMethod: "Hypercorrections"},
+	{Capability: "recombinations (candidate novel connections)", MCPTool: "recombinations", HTTPRoute: "/v1/recombinations", GRPCMethod: "Recombinations"},
+	{Capability: "analogical retrieval", MCPTool: "analogous_claims", HTTPRoute: parityNA, GRPCMethod: "AnalogousClaims"},
 
 	// Claim CRUD parity (v0.67 HTTP, gRPC parity added).
 	{Capability: "classify claim novelty", MCPTool: parityNA, HTTPRoute: "/v1/classify", GRPCMethod: "Classify"},
