@@ -99,8 +99,21 @@ Without a provider, extraction and contradiction detection still work via rule-b
 ### Optional: MCP server for AI agents
 
 ```bash
-mnemos mcp   # Exposes query_knowledge, process_text, and knowledge_metrics over stdio
+mnemos mcp   # Exposes the full tool surface over stdio
 ```
+
+Beyond the basics (`query_knowledge`, `process_text`, `knowledge_metrics`,
+`remember`, `recall`, `search_memory`, git/file ingestion), `mnemos mcp` exposes
+the **cognitive layer** (tiers 0–4) so an out-of-process agent gets the brain, not
+a bucket — at parity with the HTTP and gRPC transports:
+
+- **Connected brain** — `who_knows`, `knowledge_gaps`, `calibration`,
+  `hypercorrections`, `recombinations`, `analogous_claims`
+- **Claims + advanced recall** — `get_claim`, `classify`, `get_decision`,
+  `recall` (`mode` = sufficiency | effort | context | conflicts | iterative)
+- **Working memory + skill/temporal loops** — `get_blocks`, `set_block`,
+  `signals`, `record_action`, `record_outcome`, `synthesize_lessons`,
+  `synthesize_playbooks`, `timeline_query`
 
 ### Wrap a LangGraph / CrewAI / MCP agent for audit + replay
 
@@ -286,7 +299,9 @@ Full HTTP schema: [`api/openapi.yaml`](api/openapi.yaml).
 
 ### gRPC (alongside HTTP)
 
-`mnemos serve --grpc-port 7778` exposes the same registry surface over gRPC for typed, streaming-capable clients. Schema: [`proto/mnemos/v1/mnemos.proto`](proto/mnemos/v1/mnemos.proto). The service mirrors HTTP and covers Phase 2-7 entities: `ListEvents/AppendEvents`, `ListClaims/AppendClaims`, `ListRelationships/AppendRelationships`, `ListEmbeddings/AppendEmbeddings`, `Metrics`, plus `List*/Append*` for `Actions`, `Outcomes`, `Lessons`, `Decisions`, `Playbooks`, `EntityRelationships`. Auth uses the JWT verifier (`MNEMOS_JWT_SECRET` or `MNEMOS_AUTH_DIR`); send `authorization: Bearer <jwt>` metadata. With no verifier configured, auth is disabled — appropriate for local development only.
+`mnemos serve --grpc-port 7778` exposes the same registry surface over gRPC for typed, streaming-capable clients. Schema: [`proto/mnemos/v1/mnemos.proto`](proto/mnemos/v1/mnemos.proto). The service mirrors HTTP and covers Phase 2-7 entities: `ListEvents/AppendEvents`, `ListClaims/AppendClaims`, `ListRelationships/AppendRelationships`, `ListEmbeddings/AppendEmbeddings`, `Metrics`, plus `List*/Append*` for `Actions`, `Outcomes`, `Lessons`, `Decisions`, `Playbooks`, `EntityRelationships`. It also carries the full **cognitive layer** at parity with HTTP and MCP: `WhoKnows`, `KnowledgeGaps`, `Calibration`, `Hypercorrections`, `Recombinations`, `AnalogousClaims`, `Get`, `ClassifyClaim`, `GetDecision`, `SetClaimLifecycle`, `Recall*` (sufficiency/effort/context/conflicts/iterative), `GetBlocks`, `SetBlock`, `Synthesize`, `Timeline`, and `Signals`. Auth uses the JWT verifier (`MNEMOS_JWT_SECRET` or `MNEMOS_AUTH_DIR`); send `authorization: Bearer <jwt>` metadata. With no verifier configured, auth is disabled — appropriate for local development only.
+
+Surface parity across the three transports (MCP tools ↔ HTTP routes ↔ gRPC methods) is guarded by `TestAPISurfaceParity` (`cmd/mnemos/api_parity_test.go`): the build fails if a handler is added to one transport without recording the deliberate presence/absence on the others.
 
 ### Integrating Mnemos in your app
 
