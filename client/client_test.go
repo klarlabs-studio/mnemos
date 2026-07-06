@@ -364,6 +364,68 @@ func TestForRun_ScopesRunIDOnEventsAndClaims(t *testing.T) {
 	}
 }
 
+func TestExpectations_SetObserveRead(t *testing.T) {
+	// A tiny in-memory expectation store behind the three endpoints.
+	var stored *client.Expectation
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/expectation") && r.Method == http.MethodPost:
+			var body client.Expectation
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			body.ClaimID = "cl1"
+			stored = &body
+			writeJSON(w, http.StatusCreated, stored)
+		case strings.HasSuffix(r.URL.Path, "/observation") && r.Method == http.MethodPost:
+			var body struct {
+				Observed float64 `json:"observed"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			stored.Observed = body.Observed
+			stored.HasObservation = true
+			writeJSON(w, http.StatusOK, stored)
+		case strings.HasSuffix(r.URL.Path, "/expectation") && r.Method == http.MethodGet:
+			if stored == nil {
+				http.Error(w, `{"error":"none"}`, http.StatusNotFound)
+				return
+			}
+			writeJSON(w, http.StatusOK, stored)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	ctx := context.Background()
+
+	set, err := c.SetExpectation(ctx, "cl1", 100, 10, time.Time{})
+	if err != nil || set == nil || set.Predicted != 100 || set.Tolerance != 10 {
+		t.Fatalf("SetExpectation: %v %+v", err, set)
+	}
+	obs, err := c.RecordObservation(ctx, "cl1", 104)
+	if err != nil || obs == nil || !obs.HasObservation || obs.Observed != 104 {
+		t.Fatalf("RecordObservation: %v %+v", err, obs)
+	}
+	got, err := c.Expectation(ctx, "cl1")
+	if err != nil || got == nil || got.Predicted != 100 || got.Observed != 104 {
+		t.Fatalf("Expectation: %v %+v", err, got)
+	}
+}
+
+func TestExpectation_NotFoundReturnsNil(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"error":"none"}`, http.StatusNotFound)
+	}))
+	defer srv.Close()
+	got, err := client.New(srv.URL).Expectation(context.Background(), "missing")
+	if err != nil {
+		t.Fatalf("404 should be nil,nil not error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil expectation, got %+v", got)
+	}
+}
+
 func TestClaims_AppendSendsCreatedBy(t *testing.T) {
 	reg := &fakeRegistry{}
 	srv := httptest.NewServer(reg.handler())

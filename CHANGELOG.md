@@ -10,6 +10,26 @@ notable changes.
 
 ### Added
 
+- **Forward expectations over HTTP (predict + observe).** The library has had
+  structured expectations since T1.1 (`Memory.Expect` / `RecordObservation` /
+  `ReconcileExpectations`), but only in-process. Now the predict + observe half is
+  exposed to HTTP-service consumers:
+  - `POST /v1/claims/{id}/expectation` `{predicted, tolerance, horizon}` — attach a
+    forward expectation ("this claim's value should land within tolerance of
+    predicted by horizon"). `GET` reads it back (404 when none).
+  - `POST /v1/claims/{id}/observation` `{observed}` — record the value that arrived.
+  - SDK: `Client.SetExpectation`, `Client.RecordObservation`, `Client.Expectation`
+    (nil on 404); `client.Expectation` type.
+  Reconciliation into validates/refutes verdicts + the trust feedback continues to
+  run in the nightly consolidate pass — these endpoints record and read the
+  prediction so a consumer can surface the surprise (predicted vs observed). This
+  is the substrate for the prediction loop in HTTP-service consumers (e.g. a
+  coaching platform scoring "planned vs actual tonnage").
+
+## [0.64.0] — 2026-07-05
+
+### Added
+
 - **Per-claim author attribution over HTTP (`Claim.CreatedBy` +
   `created_by` on append).** The library has had per-claim authorship
   (`ClaimItem.CreatedBy`, v0.59) — a trusted service attributing a claim to its

@@ -2205,6 +2205,10 @@ func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.Han
 			makeFeedbackHandler(conn, gw, claimID)(w, r)
 		case "history":
 			makeClaimHistoryHandler(conn, claimID)(w, r)
+		case "expectation":
+			makeExpectationHandler(conn, claimID)(w, r)
+		case "observation":
+			makeObservationHandler(conn, claimID)(w, r)
 		default:
 			writeError(w, http.StatusNotFound, fmt.Sprintf("unknown subresource %q", subresource))
 		}
