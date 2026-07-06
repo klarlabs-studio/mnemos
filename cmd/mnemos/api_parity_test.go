@@ -133,6 +133,7 @@ var parityMatrix = []parityEntry{
 
 	// Claim CRUD parity (v0.67).
 	{Capability: "classify claim novelty", MCPTool: parityNA, HTTPRoute: "/v1/classify", GRPCMethod: parityNA},
+	{Capability: "advanced recall (sufficiency/effort/context/conflicts/iterative)", MCPTool: parityNA, HTTPRoute: "/v1/recall", GRPCMethod: parityNA},
 	{Capability: "decision subresources", MCPTool: parityNA, HTTPRoute: "/v1/decisions/", GRPCMethod: parityNA},
 
 	// Browse helpers (MCP-only).

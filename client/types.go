@@ -58,6 +58,54 @@ type Expectation struct {
 	CreatedAt      string  `json:"created_at,omitempty"`
 }
 
+// RecallResult is one retrieved claim from /v1/recall.
+type RecallResult struct {
+	ClaimID     string  `json:"claim_id"`
+	Text        string  `json:"text"`
+	Type        string  `json:"type"`
+	Confidence  float64 `json:"confidence"`
+	TrustScore  float64 `json:"trust_score"`
+	HopDistance int     `json:"hop_distance"`
+	Provenance  string  `json:"provenance,omitempty"`
+}
+
+// Sufficiency reports whether a recall's retrieved set is enough to answer
+// (Sufficient) and how confident/how many claims back it.
+type Sufficiency struct {
+	Confidence float64 `json:"confidence"`
+	ClaimCount int     `json:"claim_count"`
+	Sufficient bool    `json:"sufficient"`
+	Floor      float64 `json:"floor"`
+}
+
+// EffortReport is what a stakes-scaled recall actually spent.
+type EffortReport struct {
+	Budget  float64 `json:"budget"`
+	Passes  int     `json:"passes"`
+	Hops    int     `json:"hops"`
+	Breadth int     `json:"breadth"`
+}
+
+// Conflict is a retrieved claim paired with a claim that contradicts it.
+type Conflict struct {
+	ClaimID            string  `json:"claim_id"`
+	ClaimText          string  `json:"claim_text"`
+	ContradictingID    string  `json:"contradicting_id"`
+	ContradictingText  string  `json:"contradicting_text"`
+	ContradictingTrust float64 `json:"contradicting_trust"`
+}
+
+// RecallResponse is the union result of /v1/recall — Results always, plus the
+// mode-specific extras (Sufficiency/Effort/Conflicts/Rounds).
+type RecallResponse struct {
+	Mode        string         `json:"mode"`
+	Results     []RecallResult `json:"results"`
+	Sufficiency *Sufficiency   `json:"sufficiency,omitempty"`
+	Effort      *EffortReport  `json:"effort,omitempty"`
+	Conflicts   []Conflict     `json:"conflicts,omitempty"`
+	Rounds      int            `json:"rounds,omitempty"`
+}
+
 // ClaimDetail is the full view of a single claim (GET /v1/claims/{id}) — the
 // library's richer shape (statement, trust, lifecycle, validity window), distinct
 // from the append/list Claim.

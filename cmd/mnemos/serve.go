@@ -334,6 +334,8 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory) http.Handler {
 	mux.HandleFunc("/v1/classify", makeClassifyHandler(mem))
 	mux.HandleFunc("/v1/decisions", makeDecisionsHandler(mem))
 	mux.HandleFunc("/v1/decisions/", makeDecisionSubresourceHandler(mem))
+	// Advanced recall (v0.68): epistemic-honesty variants of retrieval.
+	mux.HandleFunc("/v1/recall", makeRecallHandler(mem))
 	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
