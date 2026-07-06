@@ -17,6 +17,7 @@ func (s *Server) brainUnavailable() error {
 	return status.Error(codes.Unavailable, "cognitive layer unavailable (no memory facade)")
 }
 
+// WhoKnows ranks the workers whose memory best matches a query.
 func (s *Server) WhoKnows(ctx context.Context, req *mnemosv1.WhoKnowsRequest) (*mnemosv1.WhoKnowsResponse, error) {
 	if s.mem == nil {
 		return nil, s.brainUnavailable()
@@ -38,6 +39,7 @@ func (s *Server) WhoKnows(ctx context.Context, req *mnemosv1.WhoKnowsRequest) (*
 	return out, nil
 }
 
+// KnowledgeGaps lists the store's highest-value open questions.
 func (s *Server) KnowledgeGaps(ctx context.Context, req *mnemosv1.KnowledgeGapsRequest) (*mnemosv1.KnowledgeGapsResponse, error) {
 	if s.mem == nil {
 		return nil, s.brainUnavailable()
@@ -57,6 +59,7 @@ func (s *Server) KnowledgeGaps(ctx context.Context, req *mnemosv1.KnowledgeGapsR
 	return out, nil
 }
 
+// Calibration reports how well stated confidence tracks reality across the store.
 func (s *Server) Calibration(ctx context.Context, _ *mnemosv1.CalibrationRequest) (*mnemosv1.CalibrationResponse, error) {
 	if s.mem == nil {
 		return nil, s.brainUnavailable()
@@ -79,6 +82,7 @@ func (s *Server) Calibration(ctx context.Context, _ *mnemosv1.CalibrationRequest
 	return out, nil
 }
 
+// Hypercorrections lists established beliefs a newer claim now contradicts.
 func (s *Server) Hypercorrections(ctx context.Context, _ *mnemosv1.HypercorrectionsRequest) (*mnemosv1.HypercorrectionsResponse, error) {
 	if s.mem == nil {
 		return nil, s.brainUnavailable()
@@ -105,6 +109,7 @@ func (s *Server) Hypercorrections(ctx context.Context, _ *mnemosv1.Hypercorrecti
 	return out, nil
 }
 
+// Recombinations lists topically-similar-but-unlinked claim pairs.
 func (s *Server) Recombinations(ctx context.Context, req *mnemosv1.RecombinationsRequest) (*mnemosv1.RecombinationsResponse, error) {
 	if s.mem == nil {
 		return nil, s.brainUnavailable()
@@ -126,6 +131,7 @@ func (s *Server) Recombinations(ctx context.Context, req *mnemosv1.Recombination
 	return out, nil
 }
 
+// AnalogousClaims returns the claims most structurally analogous to a given one.
 func (s *Server) AnalogousClaims(ctx context.Context, req *mnemosv1.AnalogousClaimsRequest) (*mnemosv1.AnalogousClaimsResponse, error) {
 	if s.mem == nil {
 		return nil, s.brainUnavailable()
