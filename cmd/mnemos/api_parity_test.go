@@ -140,12 +140,13 @@ var parityMatrix = []parityEntry{
 	{Capability: "advanced recall (sufficiency/effort/context/conflicts/iterative)", MCPTool: parityNA, HTTPRoute: "/v1/recall", GRPCMethod: "Recall"},
 
 	// Working memory + skill loop + temporal (v0.69).
-	{Capability: "working-memory blocks", MCPTool: parityNA, HTTPRoute: "/v1/blocks", GRPCMethod: parityNA},
+	{Capability: "working-memory blocks (read)", MCPTool: parityNA, HTTPRoute: "/v1/blocks", GRPCMethod: "GetBlocks"},
+	{Capability: "working-memory blocks (write)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "SetBlock"},
 	{Capability: "record action (skill loop)", MCPTool: parityNA, HTTPRoute: "/v1/actions", GRPCMethod: parityNA},
 	{Capability: "action outcome (skill loop)", MCPTool: parityNA, HTTPRoute: "/v1/actions/", GRPCMethod: parityNA},
-	{Capability: "synthesize lessons/playbooks", MCPTool: parityNA, HTTPRoute: "/v1/synthesize", GRPCMethod: parityNA},
-	{Capability: "temporal timeline", MCPTool: parityNA, HTTPRoute: "/v1/timeline", GRPCMethod: parityNA},
-	{Capability: "temporal signals", MCPTool: parityNA, HTTPRoute: "/v1/signals", GRPCMethod: parityNA},
+	{Capability: "synthesize lessons/playbooks", MCPTool: parityNA, HTTPRoute: "/v1/synthesize", GRPCMethod: "Synthesize"},
+	{Capability: "temporal timeline", MCPTool: parityNA, HTTPRoute: "/v1/timeline", GRPCMethod: "Timeline"},
+	{Capability: "temporal signals", MCPTool: parityNA, HTTPRoute: "/v1/signals", GRPCMethod: "Signals"},
 	{Capability: "decision subresources", MCPTool: parityNA, HTTPRoute: "/v1/decisions/", GRPCMethod: parityNA},
 
 	// Browse helpers (MCP-only).

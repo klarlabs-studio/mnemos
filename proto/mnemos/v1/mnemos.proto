@@ -109,6 +109,18 @@ service MnemosService {
   // Recall runs advanced retrieval; mode selects the epistemic-honesty variant
   // (sufficiency | effort | context | conflicts | iterative).
   rpc Recall(RecallRequest) returns (RecallResponse);
+
+  // --- Working memory + skill loop + temporal (cognitive layer) ---
+  // GetBlocks returns an owner's working-memory blocks.
+  rpc GetBlocks(GetBlocksRequest) returns (GetBlocksResponse);
+  // SetBlock sets or appends a working-memory block.
+  rpc SetBlock(SetBlockRequest) returns (SetBlockResponse);
+  // Synthesize runs a synthesis pass (actions -> lessons + playbooks).
+  rpc Synthesize(SynthesizeRequest) returns (SynthesizeResponse);
+  // Timeline returns events on the temporal timeline.
+  rpc Timeline(TimelineRequest) returns (TimelineResponse);
+  // Signals returns detected temporal patterns.
+  rpc Signals(SignalsRequest) returns (SignalsResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -678,3 +690,69 @@ message RecallResponse {
   repeated RecallConflict conflicts   = 5; // conflicts mode
   int32                   rounds      = 6; // iterative mode
 }
+
+// ---------------------------------------------------------------------------
+// Working memory + skill loop + temporal (cognitive layer)
+// ---------------------------------------------------------------------------
+
+message MemoryBlock {
+  string                    owner      = 1;
+  string                    label      = 2;
+  string                    value      = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+message GetBlocksRequest { string owner = 1; }
+message GetBlocksResponse {
+  string               owner  = 1;
+  repeated MemoryBlock blocks = 2;
+}
+message SetBlockRequest {
+  string owner  = 1;
+  string label  = 2;
+  string value  = 3;
+  bool   append = 4; // true -> AppendBlock, else SetBlock
+}
+message SetBlockResponse {
+  string owner = 1;
+  string label = 2;
+}
+
+message SynthesizeRequest {}
+message SynthesizeResponse {
+  int32 lessons_derived   = 1;
+  int32 playbooks_derived = 2;
+}
+
+message TimelineEvent {
+  string                    id       = 1;
+  google.protobuf.Timestamp at       = 2;
+  string                    type     = 3;
+  string                    content  = 4;
+  string                    run_id   = 5;
+  map<string, string>       metadata = 6;
+}
+message TimelineRequest {
+  string                    run_id = 1;
+  google.protobuf.Timestamp from   = 2;
+  google.protobuf.Timestamp to     = 3;
+  repeated string           types  = 4;
+  int32                     limit  = 5;
+}
+message TimelineResponse { repeated TimelineEvent events = 1; }
+
+message MemorySignal {
+  string                    pattern      = 1;
+  string                    run_id       = 2;
+  double                    strength     = 3;
+  double                    confidence   = 4;
+  string                    signal_class = 5;
+  google.protobuf.Timestamp detected_at  = 6;
+  google.protobuf.Timestamp window_start = 7;
+  google.protobuf.Timestamp window_end   = 8;
+}
+message SignalsRequest {
+  string run_id         = 1;
+  double min_confidence = 2;
+  int32  limit          = 3;
+}
+message SignalsResponse { repeated MemorySignal signals = 1; }

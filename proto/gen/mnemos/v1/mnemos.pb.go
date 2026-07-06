@@ -5319,6 +5319,786 @@ func (x *RecallResponse) GetRounds() int32 {
 	return 0
 }
 
+type MemoryBlock struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Owner         string                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MemoryBlock) Reset() {
+	*x = MemoryBlock{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[81]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryBlock) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryBlock) ProtoMessage() {}
+
+func (x *MemoryBlock) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[81]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryBlock.ProtoReflect.Descriptor instead.
+func (*MemoryBlock) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{81}
+}
+
+func (x *MemoryBlock) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *MemoryBlock) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *MemoryBlock) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *MemoryBlock) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type GetBlocksRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Owner         string                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBlocksRequest) Reset() {
+	*x = GetBlocksRequest{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[82]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBlocksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBlocksRequest) ProtoMessage() {}
+
+func (x *GetBlocksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[82]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBlocksRequest.ProtoReflect.Descriptor instead.
+func (*GetBlocksRequest) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{82}
+}
+
+func (x *GetBlocksRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+type GetBlocksResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Owner         string                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Blocks        []*MemoryBlock         `protobuf:"bytes,2,rep,name=blocks,proto3" json:"blocks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBlocksResponse) Reset() {
+	*x = GetBlocksResponse{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[83]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBlocksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBlocksResponse) ProtoMessage() {}
+
+func (x *GetBlocksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[83]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBlocksResponse.ProtoReflect.Descriptor instead.
+func (*GetBlocksResponse) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{83}
+}
+
+func (x *GetBlocksResponse) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *GetBlocksResponse) GetBlocks() []*MemoryBlock {
+	if x != nil {
+		return x.Blocks
+	}
+	return nil
+}
+
+type SetBlockRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Owner         string                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Append        bool                   `protobuf:"varint,4,opt,name=append,proto3" json:"append,omitempty"` // true -> AppendBlock, else SetBlock
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetBlockRequest) Reset() {
+	*x = SetBlockRequest{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[84]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetBlockRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetBlockRequest) ProtoMessage() {}
+
+func (x *SetBlockRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[84]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetBlockRequest.ProtoReflect.Descriptor instead.
+func (*SetBlockRequest) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{84}
+}
+
+func (x *SetBlockRequest) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *SetBlockRequest) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *SetBlockRequest) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *SetBlockRequest) GetAppend() bool {
+	if x != nil {
+		return x.Append
+	}
+	return false
+}
+
+type SetBlockResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Owner         string                 `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetBlockResponse) Reset() {
+	*x = SetBlockResponse{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[85]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetBlockResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetBlockResponse) ProtoMessage() {}
+
+func (x *SetBlockResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[85]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetBlockResponse.ProtoReflect.Descriptor instead.
+func (*SetBlockResponse) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{85}
+}
+
+func (x *SetBlockResponse) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *SetBlockResponse) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+type SynthesizeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SynthesizeRequest) Reset() {
+	*x = SynthesizeRequest{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SynthesizeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SynthesizeRequest) ProtoMessage() {}
+
+func (x *SynthesizeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SynthesizeRequest.ProtoReflect.Descriptor instead.
+func (*SynthesizeRequest) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{86}
+}
+
+type SynthesizeResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	LessonsDerived   int32                  `protobuf:"varint,1,opt,name=lessons_derived,json=lessonsDerived,proto3" json:"lessons_derived,omitempty"`
+	PlaybooksDerived int32                  `protobuf:"varint,2,opt,name=playbooks_derived,json=playbooksDerived,proto3" json:"playbooks_derived,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SynthesizeResponse) Reset() {
+	*x = SynthesizeResponse{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[87]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SynthesizeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SynthesizeResponse) ProtoMessage() {}
+
+func (x *SynthesizeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[87]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SynthesizeResponse.ProtoReflect.Descriptor instead.
+func (*SynthesizeResponse) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{87}
+}
+
+func (x *SynthesizeResponse) GetLessonsDerived() int32 {
+	if x != nil {
+		return x.LessonsDerived
+	}
+	return 0
+}
+
+func (x *SynthesizeResponse) GetPlaybooksDerived() int32 {
+	if x != nil {
+		return x.PlaybooksDerived
+	}
+	return 0
+}
+
+type TimelineEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	At            *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=at,proto3" json:"at,omitempty"`
+	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Content       string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	RunId         string                 `protobuf:"bytes,5,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Metadata      map[string]string      `protobuf:"bytes,6,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TimelineEvent) Reset() {
+	*x = TimelineEvent{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[88]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TimelineEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TimelineEvent) ProtoMessage() {}
+
+func (x *TimelineEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[88]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TimelineEvent.ProtoReflect.Descriptor instead.
+func (*TimelineEvent) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{88}
+}
+
+func (x *TimelineEvent) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *TimelineEvent) GetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
+func (x *TimelineEvent) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *TimelineEvent) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *TimelineEvent) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *TimelineEvent) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+type TimelineRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	From          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To            *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Types         []string               `protobuf:"bytes,4,rep,name=types,proto3" json:"types,omitempty"`
+	Limit         int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TimelineRequest) Reset() {
+	*x = TimelineRequest{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[89]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TimelineRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TimelineRequest) ProtoMessage() {}
+
+func (x *TimelineRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[89]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TimelineRequest.ProtoReflect.Descriptor instead.
+func (*TimelineRequest) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{89}
+}
+
+func (x *TimelineRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *TimelineRequest) GetFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.From
+	}
+	return nil
+}
+
+func (x *TimelineRequest) GetTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.To
+	}
+	return nil
+}
+
+func (x *TimelineRequest) GetTypes() []string {
+	if x != nil {
+		return x.Types
+	}
+	return nil
+}
+
+func (x *TimelineRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type TimelineResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Events        []*TimelineEvent       `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TimelineResponse) Reset() {
+	*x = TimelineResponse{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[90]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TimelineResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TimelineResponse) ProtoMessage() {}
+
+func (x *TimelineResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[90]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TimelineResponse.ProtoReflect.Descriptor instead.
+func (*TimelineResponse) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{90}
+}
+
+func (x *TimelineResponse) GetEvents() []*TimelineEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+type MemorySignal struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pattern       string                 `protobuf:"bytes,1,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Strength      float64                `protobuf:"fixed64,3,opt,name=strength,proto3" json:"strength,omitempty"`
+	Confidence    float64                `protobuf:"fixed64,4,opt,name=confidence,proto3" json:"confidence,omitempty"`
+	SignalClass   string                 `protobuf:"bytes,5,opt,name=signal_class,json=signalClass,proto3" json:"signal_class,omitempty"`
+	DetectedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=detected_at,json=detectedAt,proto3" json:"detected_at,omitempty"`
+	WindowStart   *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=window_start,json=windowStart,proto3" json:"window_start,omitempty"`
+	WindowEnd     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=window_end,json=windowEnd,proto3" json:"window_end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MemorySignal) Reset() {
+	*x = MemorySignal{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[91]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemorySignal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemorySignal) ProtoMessage() {}
+
+func (x *MemorySignal) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[91]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemorySignal.ProtoReflect.Descriptor instead.
+func (*MemorySignal) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{91}
+}
+
+func (x *MemorySignal) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+func (x *MemorySignal) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *MemorySignal) GetStrength() float64 {
+	if x != nil {
+		return x.Strength
+	}
+	return 0
+}
+
+func (x *MemorySignal) GetConfidence() float64 {
+	if x != nil {
+		return x.Confidence
+	}
+	return 0
+}
+
+func (x *MemorySignal) GetSignalClass() string {
+	if x != nil {
+		return x.SignalClass
+	}
+	return ""
+}
+
+func (x *MemorySignal) GetDetectedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DetectedAt
+	}
+	return nil
+}
+
+func (x *MemorySignal) GetWindowStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.WindowStart
+	}
+	return nil
+}
+
+func (x *MemorySignal) GetWindowEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.WindowEnd
+	}
+	return nil
+}
+
+type SignalsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	MinConfidence float64                `protobuf:"fixed64,2,opt,name=min_confidence,json=minConfidence,proto3" json:"min_confidence,omitempty"`
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalsRequest) Reset() {
+	*x = SignalsRequest{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[92]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalsRequest) ProtoMessage() {}
+
+func (x *SignalsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[92]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalsRequest.ProtoReflect.Descriptor instead.
+func (*SignalsRequest) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{92}
+}
+
+func (x *SignalsRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *SignalsRequest) GetMinConfidence() float64 {
+	if x != nil {
+		return x.MinConfidence
+	}
+	return 0
+}
+
+func (x *SignalsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type SignalsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Signals       []*MemorySignal        `protobuf:"bytes,1,rep,name=signals,proto3" json:"signals,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SignalsResponse) Reset() {
+	*x = SignalsResponse{}
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[93]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SignalsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SignalsResponse) ProtoMessage() {}
+
+func (x *SignalsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mnemos_v1_mnemos_proto_msgTypes[93]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SignalsResponse.ProtoReflect.Descriptor instead.
+func (*SignalsResponse) Descriptor() ([]byte, []int) {
+	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{93}
+}
+
+func (x *SignalsResponse) GetSignals() []*MemorySignal {
+	if x != nil {
+		return x.Signals
+	}
+	return nil
+}
+
 var File_mnemos_v1_mnemos_proto protoreflect.FileDescriptor
 
 const file_mnemos_v1_mnemos_proto_rawDesc = "" +
@@ -5800,7 +6580,67 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\vsufficiency\x18\x03 \x01(\v2\x1c.mnemos.v1.RecallSufficiencyR\vsufficiency\x12/\n" +
 	"\x06effort\x18\x04 \x01(\v2\x17.mnemos.v1.RecallEffortR\x06effort\x127\n" +
 	"\tconflicts\x18\x05 \x03(\v2\x19.mnemos.v1.RecallConflictR\tconflicts\x12\x16\n" +
-	"\x06rounds\x18\x06 \x01(\x05R\x06rounds2\xf2\x14\n" +
+	"\x06rounds\x18\x06 \x01(\x05R\x06rounds\"\x8a\x01\n" +
+	"\vMemoryBlock\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\x129\n" +
+	"\n" +
+	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"(\n" +
+	"\x10GetBlocksRequest\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\"Y\n" +
+	"\x11GetBlocksResponse\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12.\n" +
+	"\x06blocks\x18\x02 \x03(\v2\x16.mnemos.v1.MemoryBlockR\x06blocks\"k\n" +
+	"\x0fSetBlockRequest\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\x12\x16\n" +
+	"\x06append\x18\x04 \x01(\bR\x06append\">\n" +
+	"\x10SetBlockResponse\x12\x14\n" +
+	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"\x13\n" +
+	"\x11SynthesizeRequest\"j\n" +
+	"\x12SynthesizeResponse\x12'\n" +
+	"\x0flessons_derived\x18\x01 \x01(\x05R\x0elessonsDerived\x12+\n" +
+	"\x11playbooks_derived\x18\x02 \x01(\x05R\x10playbooksDerived\"\x91\x02\n" +
+	"\rTimelineEvent\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
+	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x15\n" +
+	"\x06run_id\x18\x05 \x01(\tR\x05runId\x12B\n" +
+	"\bmetadata\x18\x06 \x03(\v2&.mnemos.v1.TimelineEvent.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb0\x01\n" +
+	"\x0fTimelineRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12.\n" +
+	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
+	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x14\n" +
+	"\x05types\x18\x04 \x03(\tR\x05types\x12\x14\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\"D\n" +
+	"\x10TimelineResponse\x120\n" +
+	"\x06events\x18\x01 \x03(\v2\x18.mnemos.v1.TimelineEventR\x06events\"\xd5\x02\n" +
+	"\fMemorySignal\x12\x18\n" +
+	"\apattern\x18\x01 \x01(\tR\apattern\x12\x15\n" +
+	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x1a\n" +
+	"\bstrength\x18\x03 \x01(\x01R\bstrength\x12\x1e\n" +
+	"\n" +
+	"confidence\x18\x04 \x01(\x01R\n" +
+	"confidence\x12!\n" +
+	"\fsignal_class\x18\x05 \x01(\tR\vsignalClass\x12;\n" +
+	"\vdetected_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"detectedAt\x12=\n" +
+	"\fwindow_start\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vwindowStart\x129\n" +
+	"\n" +
+	"window_end\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\twindowEnd\"d\n" +
+	"\x0eSignalsRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12%\n" +
+	"\x0emin_confidence\x18\x02 \x01(\x01R\rminConfidence\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"D\n" +
+	"\x0fSignalsResponse\x121\n" +
+	"\asignals\x18\x01 \x03(\v2\x17.mnemos.v1.MemorySignalR\asignals2\xd1\x17\n" +
 	"\rMnemosService\x12=\n" +
 	"\x06Health\x12\x18.mnemos.v1.HealthRequest\x1a\x19.mnemos.v1.HealthResponse\x12I\n" +
 	"\n" +
@@ -5836,7 +6676,13 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x11SetClaimLifecycle\x12#.mnemos.v1.SetClaimLifecycleRequest\x1a$.mnemos.v1.SetClaimLifecycleResponse\x12C\n" +
 	"\bClassify\x12\x1a.mnemos.v1.ClassifyRequest\x1a\x1b.mnemos.v1.ClassifyResponse\x12A\n" +
 	"\vGetDecision\x12\x1d.mnemos.v1.GetDecisionRequest\x1a\x13.mnemos.v1.Decision\x12=\n" +
-	"\x06Recall\x12\x18.mnemos.v1.RecallRequest\x1a\x19.mnemos.v1.RecallResponseB4Z2go.klarlabs.de/mnemos/proto/gen/mnemos/v1;mnemosv1b\x06proto3"
+	"\x06Recall\x12\x18.mnemos.v1.RecallRequest\x1a\x19.mnemos.v1.RecallResponse\x12F\n" +
+	"\tGetBlocks\x12\x1b.mnemos.v1.GetBlocksRequest\x1a\x1c.mnemos.v1.GetBlocksResponse\x12C\n" +
+	"\bSetBlock\x12\x1a.mnemos.v1.SetBlockRequest\x1a\x1b.mnemos.v1.SetBlockResponse\x12I\n" +
+	"\n" +
+	"Synthesize\x12\x1c.mnemos.v1.SynthesizeRequest\x1a\x1d.mnemos.v1.SynthesizeResponse\x12C\n" +
+	"\bTimeline\x12\x1a.mnemos.v1.TimelineRequest\x1a\x1b.mnemos.v1.TimelineResponse\x12@\n" +
+	"\aSignals\x12\x19.mnemos.v1.SignalsRequest\x1a\x1a.mnemos.v1.SignalsResponseB4Z2go.klarlabs.de/mnemos/proto/gen/mnemos/v1;mnemosv1b\x06proto3"
 
 var (
 	file_mnemos_v1_mnemos_proto_rawDescOnce sync.Once
@@ -5850,7 +6696,7 @@ func file_mnemos_v1_mnemos_proto_rawDescGZIP() []byte {
 	return file_mnemos_v1_mnemos_proto_rawDescData
 }
 
-var file_mnemos_v1_mnemos_proto_msgTypes = make([]protoimpl.MessageInfo, 84)
+var file_mnemos_v1_mnemos_proto_msgTypes = make([]protoimpl.MessageInfo, 98)
 var file_mnemos_v1_mnemos_proto_goTypes = []any{
 	(*Pagination)(nil),                       // 0: mnemos.v1.Pagination
 	(*HealthRequest)(nil),                    // 1: mnemos.v1.HealthRequest
@@ -5933,65 +6779,79 @@ var file_mnemos_v1_mnemos_proto_goTypes = []any{
 	(*RecallEffort)(nil),                     // 78: mnemos.v1.RecallEffort
 	(*RecallConflict)(nil),                   // 79: mnemos.v1.RecallConflict
 	(*RecallResponse)(nil),                   // 80: mnemos.v1.RecallResponse
-	nil,                                      // 81: mnemos.v1.Event.MetadataEntry
-	nil,                                      // 82: mnemos.v1.Action.MetadataEntry
-	nil,                                      // 83: mnemos.v1.Outcome.MetricsEntry
-	(*timestamppb.Timestamp)(nil),            // 84: google.protobuf.Timestamp
+	(*MemoryBlock)(nil),                      // 81: mnemos.v1.MemoryBlock
+	(*GetBlocksRequest)(nil),                 // 82: mnemos.v1.GetBlocksRequest
+	(*GetBlocksResponse)(nil),                // 83: mnemos.v1.GetBlocksResponse
+	(*SetBlockRequest)(nil),                  // 84: mnemos.v1.SetBlockRequest
+	(*SetBlockResponse)(nil),                 // 85: mnemos.v1.SetBlockResponse
+	(*SynthesizeRequest)(nil),                // 86: mnemos.v1.SynthesizeRequest
+	(*SynthesizeResponse)(nil),               // 87: mnemos.v1.SynthesizeResponse
+	(*TimelineEvent)(nil),                    // 88: mnemos.v1.TimelineEvent
+	(*TimelineRequest)(nil),                  // 89: mnemos.v1.TimelineRequest
+	(*TimelineResponse)(nil),                 // 90: mnemos.v1.TimelineResponse
+	(*MemorySignal)(nil),                     // 91: mnemos.v1.MemorySignal
+	(*SignalsRequest)(nil),                   // 92: mnemos.v1.SignalsRequest
+	(*SignalsResponse)(nil),                  // 93: mnemos.v1.SignalsResponse
+	nil,                                      // 94: mnemos.v1.Event.MetadataEntry
+	nil,                                      // 95: mnemos.v1.Action.MetadataEntry
+	nil,                                      // 96: mnemos.v1.Outcome.MetricsEntry
+	nil,                                      // 97: mnemos.v1.TimelineEvent.MetadataEntry
+	(*timestamppb.Timestamp)(nil),            // 98: google.protobuf.Timestamp
 }
 var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
-	84,  // 0: mnemos.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
-	81,  // 1: mnemos.v1.Event.metadata:type_name -> mnemos.v1.Event.MetadataEntry
-	84,  // 2: mnemos.v1.Event.ingested_at:type_name -> google.protobuf.Timestamp
+	98,  // 0: mnemos.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
+	94,  // 1: mnemos.v1.Event.metadata:type_name -> mnemos.v1.Event.MetadataEntry
+	98,  // 2: mnemos.v1.Event.ingested_at:type_name -> google.protobuf.Timestamp
 	0,   // 3: mnemos.v1.ListEventsRequest.pagination:type_name -> mnemos.v1.Pagination
 	3,   // 4: mnemos.v1.ListEventsResponse.events:type_name -> mnemos.v1.Event
 	3,   // 5: mnemos.v1.AppendEventsRequest.events:type_name -> mnemos.v1.Event
-	84,  // 6: mnemos.v1.Claim.created_at:type_name -> google.protobuf.Timestamp
+	98,  // 6: mnemos.v1.Claim.created_at:type_name -> google.protobuf.Timestamp
 	0,   // 7: mnemos.v1.ListClaimsRequest.pagination:type_name -> mnemos.v1.Pagination
-	84,  // 8: mnemos.v1.ListClaimsRequest.as_of:type_name -> google.protobuf.Timestamp
-	84,  // 9: mnemos.v1.ListClaimsRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
+	98,  // 8: mnemos.v1.ListClaimsRequest.as_of:type_name -> google.protobuf.Timestamp
+	98,  // 9: mnemos.v1.ListClaimsRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
 	7,   // 10: mnemos.v1.ListClaimsResponse.claims:type_name -> mnemos.v1.Claim
 	8,   // 11: mnemos.v1.ListClaimsResponse.evidence:type_name -> mnemos.v1.ClaimEvidence
 	7,   // 12: mnemos.v1.AppendClaimsRequest.claims:type_name -> mnemos.v1.Claim
 	8,   // 13: mnemos.v1.AppendClaimsRequest.evidence:type_name -> mnemos.v1.ClaimEvidence
-	84,  // 14: mnemos.v1.Relationship.created_at:type_name -> google.protobuf.Timestamp
+	98,  // 14: mnemos.v1.Relationship.created_at:type_name -> google.protobuf.Timestamp
 	0,   // 15: mnemos.v1.ListRelationshipsRequest.pagination:type_name -> mnemos.v1.Pagination
 	12,  // 16: mnemos.v1.ListRelationshipsResponse.relationships:type_name -> mnemos.v1.Relationship
 	12,  // 17: mnemos.v1.AppendRelationshipsRequest.relationships:type_name -> mnemos.v1.Relationship
 	0,   // 18: mnemos.v1.ListEmbeddingsRequest.pagination:type_name -> mnemos.v1.Pagination
 	16,  // 19: mnemos.v1.ListEmbeddingsResponse.embeddings:type_name -> mnemos.v1.Embedding
 	16,  // 20: mnemos.v1.AppendEmbeddingsRequest.embeddings:type_name -> mnemos.v1.Embedding
-	84,  // 21: mnemos.v1.Action.at:type_name -> google.protobuf.Timestamp
-	82,  // 22: mnemos.v1.Action.metadata:type_name -> mnemos.v1.Action.MetadataEntry
-	84,  // 23: mnemos.v1.Action.created_at:type_name -> google.protobuf.Timestamp
+	98,  // 21: mnemos.v1.Action.at:type_name -> google.protobuf.Timestamp
+	95,  // 22: mnemos.v1.Action.metadata:type_name -> mnemos.v1.Action.MetadataEntry
+	98,  // 23: mnemos.v1.Action.created_at:type_name -> google.protobuf.Timestamp
 	0,   // 24: mnemos.v1.ListActionsRequest.pagination:type_name -> mnemos.v1.Pagination
 	23,  // 25: mnemos.v1.ListActionsResponse.actions:type_name -> mnemos.v1.Action
 	23,  // 26: mnemos.v1.AppendActionsRequest.actions:type_name -> mnemos.v1.Action
-	83,  // 27: mnemos.v1.Outcome.metrics:type_name -> mnemos.v1.Outcome.MetricsEntry
-	84,  // 28: mnemos.v1.Outcome.observed_at:type_name -> google.protobuf.Timestamp
-	84,  // 29: mnemos.v1.Outcome.created_at:type_name -> google.protobuf.Timestamp
+	96,  // 27: mnemos.v1.Outcome.metrics:type_name -> mnemos.v1.Outcome.MetricsEntry
+	98,  // 28: mnemos.v1.Outcome.observed_at:type_name -> google.protobuf.Timestamp
+	98,  // 29: mnemos.v1.Outcome.created_at:type_name -> google.protobuf.Timestamp
 	0,   // 30: mnemos.v1.ListOutcomesRequest.pagination:type_name -> mnemos.v1.Pagination
 	27,  // 31: mnemos.v1.ListOutcomesResponse.outcomes:type_name -> mnemos.v1.Outcome
 	27,  // 32: mnemos.v1.AppendOutcomesRequest.outcomes:type_name -> mnemos.v1.Outcome
 	31,  // 33: mnemos.v1.Lesson.scope:type_name -> mnemos.v1.Scope
-	84,  // 34: mnemos.v1.Lesson.derived_at:type_name -> google.protobuf.Timestamp
-	84,  // 35: mnemos.v1.Lesson.last_verified:type_name -> google.protobuf.Timestamp
+	98,  // 34: mnemos.v1.Lesson.derived_at:type_name -> google.protobuf.Timestamp
+	98,  // 35: mnemos.v1.Lesson.last_verified:type_name -> google.protobuf.Timestamp
 	0,   // 36: mnemos.v1.ListLessonsRequest.pagination:type_name -> mnemos.v1.Pagination
 	32,  // 37: mnemos.v1.ListLessonsResponse.lessons:type_name -> mnemos.v1.Lesson
 	32,  // 38: mnemos.v1.AppendLessonsRequest.lessons:type_name -> mnemos.v1.Lesson
 	31,  // 39: mnemos.v1.Decision.scope:type_name -> mnemos.v1.Scope
-	84,  // 40: mnemos.v1.Decision.chosen_at:type_name -> google.protobuf.Timestamp
-	84,  // 41: mnemos.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
+	98,  // 40: mnemos.v1.Decision.chosen_at:type_name -> google.protobuf.Timestamp
+	98,  // 41: mnemos.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
 	0,   // 42: mnemos.v1.ListDecisionsRequest.pagination:type_name -> mnemos.v1.Pagination
 	36,  // 43: mnemos.v1.ListDecisionsResponse.decisions:type_name -> mnemos.v1.Decision
 	36,  // 44: mnemos.v1.AppendDecisionsRequest.decisions:type_name -> mnemos.v1.Decision
 	31,  // 45: mnemos.v1.Playbook.scope:type_name -> mnemos.v1.Scope
 	40,  // 46: mnemos.v1.Playbook.steps:type_name -> mnemos.v1.PlaybookStep
-	84,  // 47: mnemos.v1.Playbook.derived_at:type_name -> google.protobuf.Timestamp
-	84,  // 48: mnemos.v1.Playbook.last_verified:type_name -> google.protobuf.Timestamp
+	98,  // 47: mnemos.v1.Playbook.derived_at:type_name -> google.protobuf.Timestamp
+	98,  // 48: mnemos.v1.Playbook.last_verified:type_name -> google.protobuf.Timestamp
 	0,   // 49: mnemos.v1.ListPlaybooksRequest.pagination:type_name -> mnemos.v1.Pagination
 	41,  // 50: mnemos.v1.ListPlaybooksResponse.playbooks:type_name -> mnemos.v1.Playbook
 	41,  // 51: mnemos.v1.AppendPlaybooksRequest.playbooks:type_name -> mnemos.v1.Playbook
-	84,  // 52: mnemos.v1.EntityRelationship.created_at:type_name -> google.protobuf.Timestamp
+	98,  // 52: mnemos.v1.EntityRelationship.created_at:type_name -> google.protobuf.Timestamp
 	0,   // 53: mnemos.v1.ListEntityRelationshipsRequest.pagination:type_name -> mnemos.v1.Pagination
 	45,  // 54: mnemos.v1.ListEntityRelationshipsResponse.edges:type_name -> mnemos.v1.EntityRelationship
 	45,  // 55: mnemos.v1.AppendEntityRelationshipsRequest.edges:type_name -> mnemos.v1.EntityRelationship
@@ -5999,88 +6859,109 @@ var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
 	53,  // 57: mnemos.v1.KnowledgeGapsResponse.gaps:type_name -> mnemos.v1.Gap
 	56,  // 58: mnemos.v1.CalibrationResponse.buckets:type_name -> mnemos.v1.CalibrationBucket
 	57,  // 59: mnemos.v1.CalibrationResponse.sources:type_name -> mnemos.v1.CalibrationSource
-	84,  // 60: mnemos.v1.Hypercorrection.detected_at:type_name -> google.protobuf.Timestamp
+	98,  // 60: mnemos.v1.Hypercorrection.detected_at:type_name -> google.protobuf.Timestamp
 	60,  // 61: mnemos.v1.HypercorrectionsResponse.hypercorrections:type_name -> mnemos.v1.Hypercorrection
 	63,  // 62: mnemos.v1.RecombinationsResponse.recombinations:type_name -> mnemos.v1.Recombination
 	66,  // 63: mnemos.v1.AnalogousClaimsResponse.analogous:type_name -> mnemos.v1.Analogy
-	84,  // 64: mnemos.v1.ClaimDetail.valid_from:type_name -> google.protobuf.Timestamp
-	84,  // 65: mnemos.v1.ClaimDetail.valid_until:type_name -> google.protobuf.Timestamp
-	84,  // 66: mnemos.v1.ClaimDetail.recorded_at:type_name -> google.protobuf.Timestamp
+	98,  // 64: mnemos.v1.ClaimDetail.valid_from:type_name -> google.protobuf.Timestamp
+	98,  // 65: mnemos.v1.ClaimDetail.valid_until:type_name -> google.protobuf.Timestamp
+	98,  // 66: mnemos.v1.ClaimDetail.recorded_at:type_name -> google.protobuf.Timestamp
 	76,  // 67: mnemos.v1.RecallResponse.results:type_name -> mnemos.v1.RecallResult
 	77,  // 68: mnemos.v1.RecallResponse.sufficiency:type_name -> mnemos.v1.RecallSufficiency
 	78,  // 69: mnemos.v1.RecallResponse.effort:type_name -> mnemos.v1.RecallEffort
 	79,  // 70: mnemos.v1.RecallResponse.conflicts:type_name -> mnemos.v1.RecallConflict
-	1,   // 71: mnemos.v1.MnemosService.Health:input_type -> mnemos.v1.HealthRequest
-	4,   // 72: mnemos.v1.MnemosService.ListEvents:input_type -> mnemos.v1.ListEventsRequest
-	6,   // 73: mnemos.v1.MnemosService.AppendEvents:input_type -> mnemos.v1.AppendEventsRequest
-	9,   // 74: mnemos.v1.MnemosService.ListClaims:input_type -> mnemos.v1.ListClaimsRequest
-	11,  // 75: mnemos.v1.MnemosService.AppendClaims:input_type -> mnemos.v1.AppendClaimsRequest
-	13,  // 76: mnemos.v1.MnemosService.ListRelationships:input_type -> mnemos.v1.ListRelationshipsRequest
-	15,  // 77: mnemos.v1.MnemosService.AppendRelationships:input_type -> mnemos.v1.AppendRelationshipsRequest
-	17,  // 78: mnemos.v1.MnemosService.ListEmbeddings:input_type -> mnemos.v1.ListEmbeddingsRequest
-	19,  // 79: mnemos.v1.MnemosService.AppendEmbeddings:input_type -> mnemos.v1.AppendEmbeddingsRequest
-	21,  // 80: mnemos.v1.MnemosService.Metrics:input_type -> mnemos.v1.MetricsRequest
-	24,  // 81: mnemos.v1.MnemosService.ListActions:input_type -> mnemos.v1.ListActionsRequest
-	26,  // 82: mnemos.v1.MnemosService.AppendActions:input_type -> mnemos.v1.AppendActionsRequest
-	28,  // 83: mnemos.v1.MnemosService.ListOutcomes:input_type -> mnemos.v1.ListOutcomesRequest
-	30,  // 84: mnemos.v1.MnemosService.AppendOutcomes:input_type -> mnemos.v1.AppendOutcomesRequest
-	33,  // 85: mnemos.v1.MnemosService.ListLessons:input_type -> mnemos.v1.ListLessonsRequest
-	35,  // 86: mnemos.v1.MnemosService.AppendLessons:input_type -> mnemos.v1.AppendLessonsRequest
-	37,  // 87: mnemos.v1.MnemosService.ListDecisions:input_type -> mnemos.v1.ListDecisionsRequest
-	39,  // 88: mnemos.v1.MnemosService.AppendDecisions:input_type -> mnemos.v1.AppendDecisionsRequest
-	42,  // 89: mnemos.v1.MnemosService.ListPlaybooks:input_type -> mnemos.v1.ListPlaybooksRequest
-	44,  // 90: mnemos.v1.MnemosService.AppendPlaybooks:input_type -> mnemos.v1.AppendPlaybooksRequest
-	46,  // 91: mnemos.v1.MnemosService.ListEntityRelationships:input_type -> mnemos.v1.ListEntityRelationshipsRequest
-	48,  // 92: mnemos.v1.MnemosService.AppendEntityRelationships:input_type -> mnemos.v1.AppendEntityRelationshipsRequest
-	49,  // 93: mnemos.v1.MnemosService.WhoKnows:input_type -> mnemos.v1.WhoKnowsRequest
-	52,  // 94: mnemos.v1.MnemosService.KnowledgeGaps:input_type -> mnemos.v1.KnowledgeGapsRequest
-	55,  // 95: mnemos.v1.MnemosService.Calibration:input_type -> mnemos.v1.CalibrationRequest
-	59,  // 96: mnemos.v1.MnemosService.Hypercorrections:input_type -> mnemos.v1.HypercorrectionsRequest
-	62,  // 97: mnemos.v1.MnemosService.Recombinations:input_type -> mnemos.v1.RecombinationsRequest
-	65,  // 98: mnemos.v1.MnemosService.AnalogousClaims:input_type -> mnemos.v1.AnalogousClaimsRequest
-	68,  // 99: mnemos.v1.MnemosService.GetClaim:input_type -> mnemos.v1.GetClaimRequest
-	70,  // 100: mnemos.v1.MnemosService.SetClaimLifecycle:input_type -> mnemos.v1.SetClaimLifecycleRequest
-	72,  // 101: mnemos.v1.MnemosService.Classify:input_type -> mnemos.v1.ClassifyRequest
-	74,  // 102: mnemos.v1.MnemosService.GetDecision:input_type -> mnemos.v1.GetDecisionRequest
-	75,  // 103: mnemos.v1.MnemosService.Recall:input_type -> mnemos.v1.RecallRequest
-	2,   // 104: mnemos.v1.MnemosService.Health:output_type -> mnemos.v1.HealthResponse
-	5,   // 105: mnemos.v1.MnemosService.ListEvents:output_type -> mnemos.v1.ListEventsResponse
-	20,  // 106: mnemos.v1.MnemosService.AppendEvents:output_type -> mnemos.v1.AppendResponse
-	10,  // 107: mnemos.v1.MnemosService.ListClaims:output_type -> mnemos.v1.ListClaimsResponse
-	20,  // 108: mnemos.v1.MnemosService.AppendClaims:output_type -> mnemos.v1.AppendResponse
-	14,  // 109: mnemos.v1.MnemosService.ListRelationships:output_type -> mnemos.v1.ListRelationshipsResponse
-	20,  // 110: mnemos.v1.MnemosService.AppendRelationships:output_type -> mnemos.v1.AppendResponse
-	18,  // 111: mnemos.v1.MnemosService.ListEmbeddings:output_type -> mnemos.v1.ListEmbeddingsResponse
-	20,  // 112: mnemos.v1.MnemosService.AppendEmbeddings:output_type -> mnemos.v1.AppendResponse
-	22,  // 113: mnemos.v1.MnemosService.Metrics:output_type -> mnemos.v1.MetricsResponse
-	25,  // 114: mnemos.v1.MnemosService.ListActions:output_type -> mnemos.v1.ListActionsResponse
-	20,  // 115: mnemos.v1.MnemosService.AppendActions:output_type -> mnemos.v1.AppendResponse
-	29,  // 116: mnemos.v1.MnemosService.ListOutcomes:output_type -> mnemos.v1.ListOutcomesResponse
-	20,  // 117: mnemos.v1.MnemosService.AppendOutcomes:output_type -> mnemos.v1.AppendResponse
-	34,  // 118: mnemos.v1.MnemosService.ListLessons:output_type -> mnemos.v1.ListLessonsResponse
-	20,  // 119: mnemos.v1.MnemosService.AppendLessons:output_type -> mnemos.v1.AppendResponse
-	38,  // 120: mnemos.v1.MnemosService.ListDecisions:output_type -> mnemos.v1.ListDecisionsResponse
-	20,  // 121: mnemos.v1.MnemosService.AppendDecisions:output_type -> mnemos.v1.AppendResponse
-	43,  // 122: mnemos.v1.MnemosService.ListPlaybooks:output_type -> mnemos.v1.ListPlaybooksResponse
-	20,  // 123: mnemos.v1.MnemosService.AppendPlaybooks:output_type -> mnemos.v1.AppendResponse
-	47,  // 124: mnemos.v1.MnemosService.ListEntityRelationships:output_type -> mnemos.v1.ListEntityRelationshipsResponse
-	20,  // 125: mnemos.v1.MnemosService.AppendEntityRelationships:output_type -> mnemos.v1.AppendResponse
-	51,  // 126: mnemos.v1.MnemosService.WhoKnows:output_type -> mnemos.v1.WhoKnowsResponse
-	54,  // 127: mnemos.v1.MnemosService.KnowledgeGaps:output_type -> mnemos.v1.KnowledgeGapsResponse
-	58,  // 128: mnemos.v1.MnemosService.Calibration:output_type -> mnemos.v1.CalibrationResponse
-	61,  // 129: mnemos.v1.MnemosService.Hypercorrections:output_type -> mnemos.v1.HypercorrectionsResponse
-	64,  // 130: mnemos.v1.MnemosService.Recombinations:output_type -> mnemos.v1.RecombinationsResponse
-	67,  // 131: mnemos.v1.MnemosService.AnalogousClaims:output_type -> mnemos.v1.AnalogousClaimsResponse
-	69,  // 132: mnemos.v1.MnemosService.GetClaim:output_type -> mnemos.v1.ClaimDetail
-	71,  // 133: mnemos.v1.MnemosService.SetClaimLifecycle:output_type -> mnemos.v1.SetClaimLifecycleResponse
-	73,  // 134: mnemos.v1.MnemosService.Classify:output_type -> mnemos.v1.ClassifyResponse
-	36,  // 135: mnemos.v1.MnemosService.GetDecision:output_type -> mnemos.v1.Decision
-	80,  // 136: mnemos.v1.MnemosService.Recall:output_type -> mnemos.v1.RecallResponse
-	104, // [104:137] is the sub-list for method output_type
-	71,  // [71:104] is the sub-list for method input_type
-	71,  // [71:71] is the sub-list for extension type_name
-	71,  // [71:71] is the sub-list for extension extendee
-	0,   // [0:71] is the sub-list for field type_name
+	98,  // 71: mnemos.v1.MemoryBlock.updated_at:type_name -> google.protobuf.Timestamp
+	81,  // 72: mnemos.v1.GetBlocksResponse.blocks:type_name -> mnemos.v1.MemoryBlock
+	98,  // 73: mnemos.v1.TimelineEvent.at:type_name -> google.protobuf.Timestamp
+	97,  // 74: mnemos.v1.TimelineEvent.metadata:type_name -> mnemos.v1.TimelineEvent.MetadataEntry
+	98,  // 75: mnemos.v1.TimelineRequest.from:type_name -> google.protobuf.Timestamp
+	98,  // 76: mnemos.v1.TimelineRequest.to:type_name -> google.protobuf.Timestamp
+	88,  // 77: mnemos.v1.TimelineResponse.events:type_name -> mnemos.v1.TimelineEvent
+	98,  // 78: mnemos.v1.MemorySignal.detected_at:type_name -> google.protobuf.Timestamp
+	98,  // 79: mnemos.v1.MemorySignal.window_start:type_name -> google.protobuf.Timestamp
+	98,  // 80: mnemos.v1.MemorySignal.window_end:type_name -> google.protobuf.Timestamp
+	91,  // 81: mnemos.v1.SignalsResponse.signals:type_name -> mnemos.v1.MemorySignal
+	1,   // 82: mnemos.v1.MnemosService.Health:input_type -> mnemos.v1.HealthRequest
+	4,   // 83: mnemos.v1.MnemosService.ListEvents:input_type -> mnemos.v1.ListEventsRequest
+	6,   // 84: mnemos.v1.MnemosService.AppendEvents:input_type -> mnemos.v1.AppendEventsRequest
+	9,   // 85: mnemos.v1.MnemosService.ListClaims:input_type -> mnemos.v1.ListClaimsRequest
+	11,  // 86: mnemos.v1.MnemosService.AppendClaims:input_type -> mnemos.v1.AppendClaimsRequest
+	13,  // 87: mnemos.v1.MnemosService.ListRelationships:input_type -> mnemos.v1.ListRelationshipsRequest
+	15,  // 88: mnemos.v1.MnemosService.AppendRelationships:input_type -> mnemos.v1.AppendRelationshipsRequest
+	17,  // 89: mnemos.v1.MnemosService.ListEmbeddings:input_type -> mnemos.v1.ListEmbeddingsRequest
+	19,  // 90: mnemos.v1.MnemosService.AppendEmbeddings:input_type -> mnemos.v1.AppendEmbeddingsRequest
+	21,  // 91: mnemos.v1.MnemosService.Metrics:input_type -> mnemos.v1.MetricsRequest
+	24,  // 92: mnemos.v1.MnemosService.ListActions:input_type -> mnemos.v1.ListActionsRequest
+	26,  // 93: mnemos.v1.MnemosService.AppendActions:input_type -> mnemos.v1.AppendActionsRequest
+	28,  // 94: mnemos.v1.MnemosService.ListOutcomes:input_type -> mnemos.v1.ListOutcomesRequest
+	30,  // 95: mnemos.v1.MnemosService.AppendOutcomes:input_type -> mnemos.v1.AppendOutcomesRequest
+	33,  // 96: mnemos.v1.MnemosService.ListLessons:input_type -> mnemos.v1.ListLessonsRequest
+	35,  // 97: mnemos.v1.MnemosService.AppendLessons:input_type -> mnemos.v1.AppendLessonsRequest
+	37,  // 98: mnemos.v1.MnemosService.ListDecisions:input_type -> mnemos.v1.ListDecisionsRequest
+	39,  // 99: mnemos.v1.MnemosService.AppendDecisions:input_type -> mnemos.v1.AppendDecisionsRequest
+	42,  // 100: mnemos.v1.MnemosService.ListPlaybooks:input_type -> mnemos.v1.ListPlaybooksRequest
+	44,  // 101: mnemos.v1.MnemosService.AppendPlaybooks:input_type -> mnemos.v1.AppendPlaybooksRequest
+	46,  // 102: mnemos.v1.MnemosService.ListEntityRelationships:input_type -> mnemos.v1.ListEntityRelationshipsRequest
+	48,  // 103: mnemos.v1.MnemosService.AppendEntityRelationships:input_type -> mnemos.v1.AppendEntityRelationshipsRequest
+	49,  // 104: mnemos.v1.MnemosService.WhoKnows:input_type -> mnemos.v1.WhoKnowsRequest
+	52,  // 105: mnemos.v1.MnemosService.KnowledgeGaps:input_type -> mnemos.v1.KnowledgeGapsRequest
+	55,  // 106: mnemos.v1.MnemosService.Calibration:input_type -> mnemos.v1.CalibrationRequest
+	59,  // 107: mnemos.v1.MnemosService.Hypercorrections:input_type -> mnemos.v1.HypercorrectionsRequest
+	62,  // 108: mnemos.v1.MnemosService.Recombinations:input_type -> mnemos.v1.RecombinationsRequest
+	65,  // 109: mnemos.v1.MnemosService.AnalogousClaims:input_type -> mnemos.v1.AnalogousClaimsRequest
+	68,  // 110: mnemos.v1.MnemosService.GetClaim:input_type -> mnemos.v1.GetClaimRequest
+	70,  // 111: mnemos.v1.MnemosService.SetClaimLifecycle:input_type -> mnemos.v1.SetClaimLifecycleRequest
+	72,  // 112: mnemos.v1.MnemosService.Classify:input_type -> mnemos.v1.ClassifyRequest
+	74,  // 113: mnemos.v1.MnemosService.GetDecision:input_type -> mnemos.v1.GetDecisionRequest
+	75,  // 114: mnemos.v1.MnemosService.Recall:input_type -> mnemos.v1.RecallRequest
+	82,  // 115: mnemos.v1.MnemosService.GetBlocks:input_type -> mnemos.v1.GetBlocksRequest
+	84,  // 116: mnemos.v1.MnemosService.SetBlock:input_type -> mnemos.v1.SetBlockRequest
+	86,  // 117: mnemos.v1.MnemosService.Synthesize:input_type -> mnemos.v1.SynthesizeRequest
+	89,  // 118: mnemos.v1.MnemosService.Timeline:input_type -> mnemos.v1.TimelineRequest
+	92,  // 119: mnemos.v1.MnemosService.Signals:input_type -> mnemos.v1.SignalsRequest
+	2,   // 120: mnemos.v1.MnemosService.Health:output_type -> mnemos.v1.HealthResponse
+	5,   // 121: mnemos.v1.MnemosService.ListEvents:output_type -> mnemos.v1.ListEventsResponse
+	20,  // 122: mnemos.v1.MnemosService.AppendEvents:output_type -> mnemos.v1.AppendResponse
+	10,  // 123: mnemos.v1.MnemosService.ListClaims:output_type -> mnemos.v1.ListClaimsResponse
+	20,  // 124: mnemos.v1.MnemosService.AppendClaims:output_type -> mnemos.v1.AppendResponse
+	14,  // 125: mnemos.v1.MnemosService.ListRelationships:output_type -> mnemos.v1.ListRelationshipsResponse
+	20,  // 126: mnemos.v1.MnemosService.AppendRelationships:output_type -> mnemos.v1.AppendResponse
+	18,  // 127: mnemos.v1.MnemosService.ListEmbeddings:output_type -> mnemos.v1.ListEmbeddingsResponse
+	20,  // 128: mnemos.v1.MnemosService.AppendEmbeddings:output_type -> mnemos.v1.AppendResponse
+	22,  // 129: mnemos.v1.MnemosService.Metrics:output_type -> mnemos.v1.MetricsResponse
+	25,  // 130: mnemos.v1.MnemosService.ListActions:output_type -> mnemos.v1.ListActionsResponse
+	20,  // 131: mnemos.v1.MnemosService.AppendActions:output_type -> mnemos.v1.AppendResponse
+	29,  // 132: mnemos.v1.MnemosService.ListOutcomes:output_type -> mnemos.v1.ListOutcomesResponse
+	20,  // 133: mnemos.v1.MnemosService.AppendOutcomes:output_type -> mnemos.v1.AppendResponse
+	34,  // 134: mnemos.v1.MnemosService.ListLessons:output_type -> mnemos.v1.ListLessonsResponse
+	20,  // 135: mnemos.v1.MnemosService.AppendLessons:output_type -> mnemos.v1.AppendResponse
+	38,  // 136: mnemos.v1.MnemosService.ListDecisions:output_type -> mnemos.v1.ListDecisionsResponse
+	20,  // 137: mnemos.v1.MnemosService.AppendDecisions:output_type -> mnemos.v1.AppendResponse
+	43,  // 138: mnemos.v1.MnemosService.ListPlaybooks:output_type -> mnemos.v1.ListPlaybooksResponse
+	20,  // 139: mnemos.v1.MnemosService.AppendPlaybooks:output_type -> mnemos.v1.AppendResponse
+	47,  // 140: mnemos.v1.MnemosService.ListEntityRelationships:output_type -> mnemos.v1.ListEntityRelationshipsResponse
+	20,  // 141: mnemos.v1.MnemosService.AppendEntityRelationships:output_type -> mnemos.v1.AppendResponse
+	51,  // 142: mnemos.v1.MnemosService.WhoKnows:output_type -> mnemos.v1.WhoKnowsResponse
+	54,  // 143: mnemos.v1.MnemosService.KnowledgeGaps:output_type -> mnemos.v1.KnowledgeGapsResponse
+	58,  // 144: mnemos.v1.MnemosService.Calibration:output_type -> mnemos.v1.CalibrationResponse
+	61,  // 145: mnemos.v1.MnemosService.Hypercorrections:output_type -> mnemos.v1.HypercorrectionsResponse
+	64,  // 146: mnemos.v1.MnemosService.Recombinations:output_type -> mnemos.v1.RecombinationsResponse
+	67,  // 147: mnemos.v1.MnemosService.AnalogousClaims:output_type -> mnemos.v1.AnalogousClaimsResponse
+	69,  // 148: mnemos.v1.MnemosService.GetClaim:output_type -> mnemos.v1.ClaimDetail
+	71,  // 149: mnemos.v1.MnemosService.SetClaimLifecycle:output_type -> mnemos.v1.SetClaimLifecycleResponse
+	73,  // 150: mnemos.v1.MnemosService.Classify:output_type -> mnemos.v1.ClassifyResponse
+	36,  // 151: mnemos.v1.MnemosService.GetDecision:output_type -> mnemos.v1.Decision
+	80,  // 152: mnemos.v1.MnemosService.Recall:output_type -> mnemos.v1.RecallResponse
+	83,  // 153: mnemos.v1.MnemosService.GetBlocks:output_type -> mnemos.v1.GetBlocksResponse
+	85,  // 154: mnemos.v1.MnemosService.SetBlock:output_type -> mnemos.v1.SetBlockResponse
+	87,  // 155: mnemos.v1.MnemosService.Synthesize:output_type -> mnemos.v1.SynthesizeResponse
+	90,  // 156: mnemos.v1.MnemosService.Timeline:output_type -> mnemos.v1.TimelineResponse
+	93,  // 157: mnemos.v1.MnemosService.Signals:output_type -> mnemos.v1.SignalsResponse
+	120, // [120:158] is the sub-list for method output_type
+	82,  // [82:120] is the sub-list for method input_type
+	82,  // [82:82] is the sub-list for extension type_name
+	82,  // [82:82] is the sub-list for extension extendee
+	0,   // [0:82] is the sub-list for field type_name
 }
 
 func init() { file_mnemos_v1_mnemos_proto_init() }
@@ -6094,7 +6975,7 @@ func file_mnemos_v1_mnemos_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mnemos_v1_mnemos_proto_rawDesc), len(file_mnemos_v1_mnemos_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   84,
+			NumMessages:   98,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

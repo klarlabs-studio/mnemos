@@ -10,6 +10,18 @@ notable changes.
 
 ### Added
 
+- **gRPC parity: working memory + skill loop + temporal (cognitive layer, gRPC
+  batch 4 — completes gRPC parity).** New RPCs on `MnemosService`: `GetBlocks` /
+  `SetBlock` (working memory), `Synthesize` (→ lessons/playbooks), `Timeline`,
+  `Signals`. (Action/outcome writes were already on gRPC via `AppendActions` /
+  `AppendOutcomes`.) Nil facade → `codes.Unavailable`. **With this the full
+  cognitive layer is at parity across HTTP *and* gRPC** — the whole public
+  `Memory` surface is reachable over both transports.
+
+## [0.72.0] — 2026-07-06
+
+### Added
+
 - **gRPC parity: advanced recall (cognitive layer, gRPC batch 3).** New
   `Recall(RecallRequest) returns (RecallResponse)` RPC — `mode` selects the
   epistemic-honesty variant (sufficiency | effort | context | conflicts |
