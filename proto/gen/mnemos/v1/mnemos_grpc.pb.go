@@ -47,6 +47,10 @@ const (
 	MnemosService_Hypercorrections_FullMethodName          = "/mnemos.v1.MnemosService/Hypercorrections"
 	MnemosService_Recombinations_FullMethodName            = "/mnemos.v1.MnemosService/Recombinations"
 	MnemosService_AnalogousClaims_FullMethodName           = "/mnemos.v1.MnemosService/AnalogousClaims"
+	MnemosService_GetClaim_FullMethodName                  = "/mnemos.v1.MnemosService/GetClaim"
+	MnemosService_SetClaimLifecycle_FullMethodName         = "/mnemos.v1.MnemosService/SetClaimLifecycle"
+	MnemosService_Classify_FullMethodName                  = "/mnemos.v1.MnemosService/Classify"
+	MnemosService_GetDecision_FullMethodName               = "/mnemos.v1.MnemosService/GetDecision"
 )
 
 // MnemosServiceClient is the client API for MnemosService service.
@@ -123,6 +127,15 @@ type MnemosServiceClient interface {
 	Recombinations(ctx context.Context, in *RecombinationsRequest, opts ...grpc.CallOption) (*RecombinationsResponse, error)
 	// AnalogousClaims returns the claims most structurally analogous to one.
 	AnalogousClaims(ctx context.Context, in *AnalogousClaimsRequest, opts ...grpc.CallOption) (*AnalogousClaimsResponse, error)
+	// --- Claim CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
+	// GetClaim returns a single claim's full detail.
+	GetClaim(ctx context.Context, in *GetClaimRequest, opts ...grpc.CallOption) (*ClaimDetail, error)
+	// SetClaimLifecycle transitions a claim (candidate | promoted | superseded).
+	SetClaimLifecycle(ctx context.Context, in *SetClaimLifecycleRequest, opts ...grpc.CallOption) (*SetClaimLifecycleResponse, error)
+	// Classify reports whether a candidate statement fits established knowledge or is novel.
+	Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error)
+	// GetDecision returns a single recorded decision by id.
+	GetDecision(ctx context.Context, in *GetDecisionRequest, opts ...grpc.CallOption) (*Decision, error)
 }
 
 type mnemosServiceClient struct {
@@ -413,6 +426,46 @@ func (c *mnemosServiceClient) AnalogousClaims(ctx context.Context, in *Analogous
 	return out, nil
 }
 
+func (c *mnemosServiceClient) GetClaim(ctx context.Context, in *GetClaimRequest, opts ...grpc.CallOption) (*ClaimDetail, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClaimDetail)
+	err := c.cc.Invoke(ctx, MnemosService_GetClaim_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) SetClaimLifecycle(ctx context.Context, in *SetClaimLifecycleRequest, opts ...grpc.CallOption) (*SetClaimLifecycleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetClaimLifecycleResponse)
+	err := c.cc.Invoke(ctx, MnemosService_SetClaimLifecycle_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClassifyResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Classify_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) GetDecision(ctx context.Context, in *GetDecisionRequest, opts ...grpc.CallOption) (*Decision, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Decision)
+	err := c.cc.Invoke(ctx, MnemosService_GetDecision_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MnemosServiceServer is the server API for MnemosService service.
 // All implementations must embed UnimplementedMnemosServiceServer
 // for forward compatibility.
@@ -487,6 +540,15 @@ type MnemosServiceServer interface {
 	Recombinations(context.Context, *RecombinationsRequest) (*RecombinationsResponse, error)
 	// AnalogousClaims returns the claims most structurally analogous to one.
 	AnalogousClaims(context.Context, *AnalogousClaimsRequest) (*AnalogousClaimsResponse, error)
+	// --- Claim CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
+	// GetClaim returns a single claim's full detail.
+	GetClaim(context.Context, *GetClaimRequest) (*ClaimDetail, error)
+	// SetClaimLifecycle transitions a claim (candidate | promoted | superseded).
+	SetClaimLifecycle(context.Context, *SetClaimLifecycleRequest) (*SetClaimLifecycleResponse, error)
+	// Classify reports whether a candidate statement fits established knowledge or is novel.
+	Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error)
+	// GetDecision returns a single recorded decision by id.
+	GetDecision(context.Context, *GetDecisionRequest) (*Decision, error)
 	mustEmbedUnimplementedMnemosServiceServer()
 }
 
@@ -580,6 +642,18 @@ func (UnimplementedMnemosServiceServer) Recombinations(context.Context, *Recombi
 }
 func (UnimplementedMnemosServiceServer) AnalogousClaims(context.Context, *AnalogousClaimsRequest) (*AnalogousClaimsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AnalogousClaims not implemented")
+}
+func (UnimplementedMnemosServiceServer) GetClaim(context.Context, *GetClaimRequest) (*ClaimDetail, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetClaim not implemented")
+}
+func (UnimplementedMnemosServiceServer) SetClaimLifecycle(context.Context, *SetClaimLifecycleRequest) (*SetClaimLifecycleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetClaimLifecycle not implemented")
+}
+func (UnimplementedMnemosServiceServer) Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Classify not implemented")
+}
+func (UnimplementedMnemosServiceServer) GetDecision(context.Context, *GetDecisionRequest) (*Decision, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDecision not implemented")
 }
 func (UnimplementedMnemosServiceServer) mustEmbedUnimplementedMnemosServiceServer() {}
 func (UnimplementedMnemosServiceServer) testEmbeddedByValue()                       {}
@@ -1106,6 +1180,78 @@ func _MnemosService_AnalogousClaims_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_GetClaim_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetClaimRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).GetClaim(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_GetClaim_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).GetClaim(ctx, req.(*GetClaimRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_SetClaimLifecycle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetClaimLifecycleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).SetClaimLifecycle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_SetClaimLifecycle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).SetClaimLifecycle(ctx, req.(*SetClaimLifecycleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Classify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClassifyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Classify(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Classify_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Classify(ctx, req.(*ClassifyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_GetDecision_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDecisionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).GetDecision(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_GetDecision_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).GetDecision(ctx, req.(*GetDecisionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MnemosService_ServiceDesc is the grpc.ServiceDesc for MnemosService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1224,6 +1370,22 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AnalogousClaims",
 			Handler:    _MnemosService_AnalogousClaims_Handler,
+		},
+		{
+			MethodName: "GetClaim",
+			Handler:    _MnemosService_GetClaim_Handler,
+		},
+		{
+			MethodName: "SetClaimLifecycle",
+			Handler:    _MnemosService_SetClaimLifecycle_Handler,
+		},
+		{
+			MethodName: "Classify",
+			Handler:    _MnemosService_Classify_Handler,
+		},
+		{
+			MethodName: "GetDecision",
+			Handler:    _MnemosService_GetDecision_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

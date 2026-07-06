@@ -10,6 +10,17 @@ notable changes.
 
 ### Added
 
+- **gRPC parity: claim CRUD (cognitive layer, gRPC batch 2).** New RPCs on
+  `MnemosService`, delegating to the same `Memory` facade: `GetClaim`
+  (full claim detail; `codes.NotFound` when absent), `SetClaimLifecycle`
+  (candidate | promoted | superseded; `InvalidArgument` on a bad value),
+  `Classify` (novelty verdict; `InvalidArgument` on empty text), `GetDecision`
+  (single decision; `NotFound` when absent). Nil facade → `codes.Unavailable`.
+
+## [0.70.0] — 2026-07-06
+
+### Added
+
 - **gRPC parity: connected-brain reads (cognitive layer, gRPC batch 1).** The
   cognitive layer is now on gRPC too, not just HTTP — `serve` threads the same
   `Memory` facade into the gRPC server. New RPCs on `MnemosService`: `WhoKnows`,
