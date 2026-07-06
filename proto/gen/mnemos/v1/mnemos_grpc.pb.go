@@ -41,6 +41,12 @@ const (
 	MnemosService_AppendPlaybooks_FullMethodName           = "/mnemos.v1.MnemosService/AppendPlaybooks"
 	MnemosService_ListEntityRelationships_FullMethodName   = "/mnemos.v1.MnemosService/ListEntityRelationships"
 	MnemosService_AppendEntityRelationships_FullMethodName = "/mnemos.v1.MnemosService/AppendEntityRelationships"
+	MnemosService_WhoKnows_FullMethodName                  = "/mnemos.v1.MnemosService/WhoKnows"
+	MnemosService_KnowledgeGaps_FullMethodName             = "/mnemos.v1.MnemosService/KnowledgeGaps"
+	MnemosService_Calibration_FullMethodName               = "/mnemos.v1.MnemosService/Calibration"
+	MnemosService_Hypercorrections_FullMethodName          = "/mnemos.v1.MnemosService/Hypercorrections"
+	MnemosService_Recombinations_FullMethodName            = "/mnemos.v1.MnemosService/Recombinations"
+	MnemosService_AnalogousClaims_FullMethodName           = "/mnemos.v1.MnemosService/AnalogousClaims"
 )
 
 // MnemosServiceClient is the client API for MnemosService service.
@@ -104,6 +110,19 @@ type MnemosServiceClient interface {
 	ListEntityRelationships(ctx context.Context, in *ListEntityRelationshipsRequest, opts ...grpc.CallOption) (*ListEntityRelationshipsResponse, error)
 	// AppendEntityRelationships writes polymorphic edges idempotently.
 	AppendEntityRelationships(ctx context.Context, in *AppendEntityRelationshipsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	// --- Connected brain (cognitive layer; parity with HTTP /v1/who-knows etc.) ---
+	// WhoKnows ranks the workers whose memory best matches a query.
+	WhoKnows(ctx context.Context, in *WhoKnowsRequest, opts ...grpc.CallOption) (*WhoKnowsResponse, error)
+	// KnowledgeGaps lists the store's highest-value open questions.
+	KnowledgeGaps(ctx context.Context, in *KnowledgeGapsRequest, opts ...grpc.CallOption) (*KnowledgeGapsResponse, error)
+	// Calibration reports how well stated confidence tracks reality.
+	Calibration(ctx context.Context, in *CalibrationRequest, opts ...grpc.CallOption) (*CalibrationResponse, error)
+	// Hypercorrections lists established beliefs a newer claim contradicts.
+	Hypercorrections(ctx context.Context, in *HypercorrectionsRequest, opts ...grpc.CallOption) (*HypercorrectionsResponse, error)
+	// Recombinations lists topically-similar-but-unlinked claim pairs.
+	Recombinations(ctx context.Context, in *RecombinationsRequest, opts ...grpc.CallOption) (*RecombinationsResponse, error)
+	// AnalogousClaims returns the claims most structurally analogous to one.
+	AnalogousClaims(ctx context.Context, in *AnalogousClaimsRequest, opts ...grpc.CallOption) (*AnalogousClaimsResponse, error)
 }
 
 type mnemosServiceClient struct {
@@ -334,6 +353,66 @@ func (c *mnemosServiceClient) AppendEntityRelationships(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *mnemosServiceClient) WhoKnows(ctx context.Context, in *WhoKnowsRequest, opts ...grpc.CallOption) (*WhoKnowsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WhoKnowsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_WhoKnows_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) KnowledgeGaps(ctx context.Context, in *KnowledgeGapsRequest, opts ...grpc.CallOption) (*KnowledgeGapsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KnowledgeGapsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_KnowledgeGaps_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Calibration(ctx context.Context, in *CalibrationRequest, opts ...grpc.CallOption) (*CalibrationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CalibrationResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Calibration_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Hypercorrections(ctx context.Context, in *HypercorrectionsRequest, opts ...grpc.CallOption) (*HypercorrectionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HypercorrectionsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Hypercorrections_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Recombinations(ctx context.Context, in *RecombinationsRequest, opts ...grpc.CallOption) (*RecombinationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecombinationsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Recombinations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) AnalogousClaims(ctx context.Context, in *AnalogousClaimsRequest, opts ...grpc.CallOption) (*AnalogousClaimsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AnalogousClaimsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_AnalogousClaims_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MnemosServiceServer is the server API for MnemosService service.
 // All implementations must embed UnimplementedMnemosServiceServer
 // for forward compatibility.
@@ -395,6 +474,19 @@ type MnemosServiceServer interface {
 	ListEntityRelationships(context.Context, *ListEntityRelationshipsRequest) (*ListEntityRelationshipsResponse, error)
 	// AppendEntityRelationships writes polymorphic edges idempotently.
 	AppendEntityRelationships(context.Context, *AppendEntityRelationshipsRequest) (*AppendResponse, error)
+	// --- Connected brain (cognitive layer; parity with HTTP /v1/who-knows etc.) ---
+	// WhoKnows ranks the workers whose memory best matches a query.
+	WhoKnows(context.Context, *WhoKnowsRequest) (*WhoKnowsResponse, error)
+	// KnowledgeGaps lists the store's highest-value open questions.
+	KnowledgeGaps(context.Context, *KnowledgeGapsRequest) (*KnowledgeGapsResponse, error)
+	// Calibration reports how well stated confidence tracks reality.
+	Calibration(context.Context, *CalibrationRequest) (*CalibrationResponse, error)
+	// Hypercorrections lists established beliefs a newer claim contradicts.
+	Hypercorrections(context.Context, *HypercorrectionsRequest) (*HypercorrectionsResponse, error)
+	// Recombinations lists topically-similar-but-unlinked claim pairs.
+	Recombinations(context.Context, *RecombinationsRequest) (*RecombinationsResponse, error)
+	// AnalogousClaims returns the claims most structurally analogous to one.
+	AnalogousClaims(context.Context, *AnalogousClaimsRequest) (*AnalogousClaimsResponse, error)
 	mustEmbedUnimplementedMnemosServiceServer()
 }
 
@@ -470,6 +562,24 @@ func (UnimplementedMnemosServiceServer) ListEntityRelationships(context.Context,
 }
 func (UnimplementedMnemosServiceServer) AppendEntityRelationships(context.Context, *AppendEntityRelationshipsRequest) (*AppendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AppendEntityRelationships not implemented")
+}
+func (UnimplementedMnemosServiceServer) WhoKnows(context.Context, *WhoKnowsRequest) (*WhoKnowsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WhoKnows not implemented")
+}
+func (UnimplementedMnemosServiceServer) KnowledgeGaps(context.Context, *KnowledgeGapsRequest) (*KnowledgeGapsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method KnowledgeGaps not implemented")
+}
+func (UnimplementedMnemosServiceServer) Calibration(context.Context, *CalibrationRequest) (*CalibrationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Calibration not implemented")
+}
+func (UnimplementedMnemosServiceServer) Hypercorrections(context.Context, *HypercorrectionsRequest) (*HypercorrectionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Hypercorrections not implemented")
+}
+func (UnimplementedMnemosServiceServer) Recombinations(context.Context, *RecombinationsRequest) (*RecombinationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Recombinations not implemented")
+}
+func (UnimplementedMnemosServiceServer) AnalogousClaims(context.Context, *AnalogousClaimsRequest) (*AnalogousClaimsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AnalogousClaims not implemented")
 }
 func (UnimplementedMnemosServiceServer) mustEmbedUnimplementedMnemosServiceServer() {}
 func (UnimplementedMnemosServiceServer) testEmbeddedByValue()                       {}
@@ -888,6 +998,114 @@ func _MnemosService_AppendEntityRelationships_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_WhoKnows_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WhoKnowsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).WhoKnows(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_WhoKnows_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).WhoKnows(ctx, req.(*WhoKnowsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_KnowledgeGaps_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KnowledgeGapsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).KnowledgeGaps(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_KnowledgeGaps_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).KnowledgeGaps(ctx, req.(*KnowledgeGapsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Calibration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CalibrationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Calibration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Calibration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Calibration(ctx, req.(*CalibrationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Hypercorrections_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HypercorrectionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Hypercorrections(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Hypercorrections_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Hypercorrections(ctx, req.(*HypercorrectionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Recombinations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecombinationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Recombinations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Recombinations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Recombinations(ctx, req.(*RecombinationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_AnalogousClaims_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnalogousClaimsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).AnalogousClaims(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_AnalogousClaims_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).AnalogousClaims(ctx, req.(*AnalogousClaimsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MnemosService_ServiceDesc is the grpc.ServiceDesc for MnemosService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -982,6 +1200,30 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AppendEntityRelationships",
 			Handler:    _MnemosService_AppendEntityRelationships_Handler,
+		},
+		{
+			MethodName: "WhoKnows",
+			Handler:    _MnemosService_WhoKnows_Handler,
+		},
+		{
+			MethodName: "KnowledgeGaps",
+			Handler:    _MnemosService_KnowledgeGaps_Handler,
+		},
+		{
+			MethodName: "Calibration",
+			Handler:    _MnemosService_Calibration_Handler,
+		},
+		{
+			MethodName: "Hypercorrections",
+			Handler:    _MnemosService_Hypercorrections_Handler,
+		},
+		{
+			MethodName: "Recombinations",
+			Handler:    _MnemosService_Recombinations_Handler,
+		},
+		{
+			MethodName: "AnalogousClaims",
+			Handler:    _MnemosService_AnalogousClaims_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

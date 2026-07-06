@@ -52,4 +52,9 @@ jobs:
 
       - name: Breaking-change check (against main)
         if: github.ref != 'refs/heads/main'
-        run: buf breaking --against ".git#branch=main"
+        # The PR checkout is a detached HEAD with no local `main` branch, so
+        # buf's `.git#branch=main` can't resolve it. Materialise a local main
+        # ref from origin first (fetch-depth: 0 already has the commits).
+        run: |
+          git fetch origin main:main 2>/dev/null || git branch -f main origin/main
+          buf breaking --against ".git#branch=main"
