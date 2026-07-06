@@ -10,6 +10,23 @@ notable changes.
 
 ### Added
 
+- **Advanced recall over HTTP (cognitive layer, batch 3).** Basic hybrid
+  retrieval is `/v1/search`; the epistemic-honesty variants now land at
+  `GET /v1/recall?query=&mode=`:
+  - `mode=sufficiency` (default) — results + whether the set is *enough* to answer
+  - `mode=effort&stakes=` — spends a stakes-scaled retrieval budget; adds an effort report
+  - `mode=context&context=` — biases retrieval by a context string
+  - `mode=conflicts` — surfaces contradictions among the results
+  - `mode=iterative&max_rounds=` — retrieve↔reason rounds until it converges
+  A read (no side effects) → GET, no token. SDK: `Client.Recall(RecallRequest)`
+  returning a union `RecallResponse` (Results + mode-specific Sufficiency / Effort
+  / Conflicts / Rounds) + `RecallResult`/`Sufficiency`/`EffortReport`/`Conflict`
+  types. Batch 3 of the HTTP↔library parity push.
+
+## [0.67.0] — 2026-07-06
+
+### Added
+
 - **Claim CRUD parity over HTTP (cognitive layer, batch 2).** The reads/writes an
   out-of-process consumer previously couldn't reach:
   - `GET /v1/claims/{id}` — a single claim's full detail (statement, trust,
