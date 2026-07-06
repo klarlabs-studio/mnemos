@@ -368,7 +368,6 @@ func handleMCP() {
 	srv.Tool("query_knowledge").
 		Description("Query the Mnemos knowledge base and return evidence-backed results.").
 		OutputSchema(mcpQueryOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpQueryOutput](ctx, kernel, nil, "query_knowledge", input)
@@ -379,7 +378,6 @@ func handleMCP() {
 	srv.Tool("process_text").
 		Description("Ingest raw text, extract claims, detect relationships, and optionally generate embeddings.").
 		OutputSchema(mcpProcessTextOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpProcessTextInput) (mcpProcessTextOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpProcessTextOutput](ctx, kernel, nil, "process_text", input)
@@ -400,7 +398,6 @@ func handleMCP() {
 	srv.Tool("list_claims").
 		Description("List claims with optional type/status filtering and pagination. Useful for browsing the knowledge base without a specific question.").
 		OutputSchema(mcpListClaimsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpListClaimsInput) (mcpListClaimsOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpListClaimsOutput](ctx, kernel, nil, "list_claims", input)
@@ -411,7 +408,6 @@ func handleMCP() {
 	srv.Tool("list_decisions").
 		Description("List claims classified as decisions (shorthand for list_claims with type=decision).").
 		OutputSchema(mcpListClaimsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpListClaimsInput) (mcpListClaimsOutput, error) {
 			input.Type = string(domain.ClaimTypeDecision)
 			if kernel != nil {
@@ -423,7 +419,6 @@ func handleMCP() {
 	srv.Tool("list_contradictions").
 		Description("List contradiction relationships hydrated with both claims' text. Pagination supported.").
 		OutputSchema(mcpListContradictionsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpListContradictionsInput) (mcpListContradictionsOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpListContradictionsOutput](ctx, kernel, nil, "list_contradictions", input)
@@ -434,7 +429,6 @@ func handleMCP() {
 	srv.Tool("ingest_git_prs").
 		Description("Ingest merged GitHub pull requests from the project as events. Requires gh CLI authenticated for the repo's remote. Idempotent — already-ingested PR numbers are skipped.").
 		OutputSchema(mcpIngestGitPRsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpIngestGitPRsInput) (mcpIngestGitPRsOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpIngestGitPRsOutput](ctx, kernel, nil, "ingest_git_prs", input)
@@ -445,7 +439,6 @@ func handleMCP() {
 	srv.Tool("ingest_git_log").
 		Description("Ingest recent git commits from the project repository as events so they appear in queries. Idempotent — already-ingested commits are skipped by SHA.").
 		OutputSchema(mcpIngestGitLogOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpIngestGitLogInput) (mcpIngestGitLogOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpIngestGitLogOutput](ctx, kernel, nil, "ingest_git_log", input)
@@ -456,7 +449,6 @@ func handleMCP() {
 	srv.Tool("record_action").
 		Description("Record an operational action (deploy, rollback, scale, etc.) so it can be paired with later Outcomes for the synthesis layer. Idempotent on id.").
 		OutputSchema(mcpRecordActionOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpRecordActionInput) (mcpRecordActionOutput, error) {
 			return mcpRunRecordAction(ctx, mcpActor, input)
 		})
@@ -464,7 +456,6 @@ func handleMCP() {
 	srv.Tool("record_outcome").
 		Description("Record the observed outcome of a previously recorded Action, including numeric metrics. Idempotent on id.").
 		OutputSchema(mcpRecordOutcomeOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpRecordOutcomeInput) (mcpRecordOutcomeOutput, error) {
 			return mcpRunRecordOutcome(ctx, mcpActor, input)
 		})
@@ -472,7 +463,6 @@ func handleMCP() {
 	srv.Tool("synthesize_lessons").
 		Description("Run one full synthesis pass over actions+outcomes and emit derived Lessons. Idempotent: re-running on the same data refreshes confidence without churning ids.").
 		OutputSchema(mcpSynthesizeOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpSynthesizeInput) (mcpSynthesizeOutput, error) {
 			return mcpRunSynthesize(ctx, input)
 		})
@@ -480,7 +470,6 @@ func handleMCP() {
 	srv.Tool("query_lessons").
 		Description("Return validated lessons (synthesised operational knowledge) optionally filtered by service or trigger. Lessons are evidence-backed: each carries the action ids that corroborated it and a confidence in [0, 1].").
 		OutputSchema(mcpQueryLessonsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpQueryLessonsInput) (mcpQueryLessonsOutput, error) {
 			return mcpRunQueryLessons(ctx, input)
 		})
@@ -488,7 +477,6 @@ func handleMCP() {
 	srv.Tool("which_test_to_trust").
 		Description("Rank every test_result claim sharing a TestRequirementRef by epistemic credibility (recency, pass-ratio, authority, citations) and return the winner with rationale. Use when CI shows divergent results for the same requirement and the agent must decide which test to believe.").
 		OutputSchema(mcpWhichTestToTrustOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpWhichTestToTrustInput) (mcpWhichTestToTrustOutput, error) {
 			return mcpRunWhichTestToTrust(ctx, input)
 		})
@@ -496,7 +484,6 @@ func handleMCP() {
 	srv.Tool("record_decision").
 		Description("Record a decision: the belief claims that justified it, the plan chosen, the alternatives considered, and the risk level. Optional outcomeId attaches an already-observed Outcome.").
 		OutputSchema(mcpRecordDecisionOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpRecordDecisionInput) (mcpRecordDecisionOutput, error) {
 			return mcpRunRecordDecision(ctx, mcpActor, input)
 		})
@@ -504,7 +491,6 @@ func handleMCP() {
 	srv.Tool("query_decisions").
 		Description("Return recorded decisions newest-first, optionally filtered by risk level. Each decision carries its belief claim ids, alternatives, and (when attached) the linked Outcome.").
 		OutputSchema(mcpQueryDecisionsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpQueryDecisionsInput) (mcpQueryDecisionsOutput, error) {
 			return mcpRunQueryDecisions(ctx, input)
 		})
@@ -512,7 +498,6 @@ func handleMCP() {
 	srv.Tool("query_playbook").
 		Description("Return playbooks (steps-only operational intelligence) by trigger or service scope. Mnemos returns steps; execution is the caller's responsibility — Praxis consumes this contract.").
 		OutputSchema(mcpQueryPlaybookOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpQueryPlaybookInput) (mcpQueryPlaybookOutput, error) {
 			return mcpRunQueryPlaybook(ctx, input)
 		})
@@ -520,7 +505,6 @@ func handleMCP() {
 	srv.Tool("synthesize_playbooks").
 		Description("Run one full playbook-synthesis pass over the lessons store and emit derived Playbooks. Idempotent: re-running on the same lessons refreshes confidence without churning ids.").
 		OutputSchema(mcpSynthesizePlaybooksOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpSynthesizePlaybooksInput) (mcpSynthesizePlaybooksOutput, error) {
 			return mcpRunSynthesizePlaybooks(ctx, input)
 		})
@@ -528,7 +512,6 @@ func handleMCP() {
 	srv.Tool("watch_file").
 		Description("Register a file to be re-ingested when its content changes. Polls every few seconds; in-memory only — restart drops all watches.").
 		OutputSchema(mcpWatchFileOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpWatchFileInput) (mcpWatchFileOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpWatchFileOutput](ctx, kernel, nil, "watch_file", input)
@@ -544,7 +527,6 @@ func handleMCP() {
 	srv.Tool("memory_deprecate").
 		Description("Mark a claim as deprecated when the agent finds it stale or wrong. Records the rationale on the status transition; existing evidence + history stay queryable.").
 		OutputSchema(mcpMemoryDeprecateOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpMemoryDeprecateInput) (mcpMemoryDeprecateOutput, error) {
 			return mcpRunMemoryDeprecate(ctx, mcpActor, input)
 		})
@@ -552,7 +534,6 @@ func handleMCP() {
 	srv.Tool("memory_resolve_contradiction").
 		Description("Pick the winner of two contradicting claims. Winner moves to status=resolved; loser to status=deprecated. Both transitions carry the rationale.").
 		OutputSchema(mcpMemoryResolveOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpMemoryResolveInput) (mcpMemoryResolveOutput, error) {
 			return mcpRunMemoryResolve(ctx, mcpActor, input)
 		})
@@ -560,7 +541,6 @@ func handleMCP() {
 	srv.Tool("memory_escalate").
 		Description("Signal that the agent cannot resolve a claim autonomously and requests human review. Records an escalation Verdict on the claim with the agent-provided reason so the audit trail captures who escalated and why.").
 		OutputSchema(mcpMemoryEscalateOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpMemoryEscalateInput) (mcpMemoryEscalateOutput, error) {
 			return mcpRunMemoryEscalate(ctx, mcpActor, input)
 		})
@@ -568,7 +548,6 @@ func handleMCP() {
 	srv.Tool("memory_promote").
 		Description("Re-verify a claim against fresh evidence. Bumps last_verified, increments verify_count — the trust score follows.").
 		OutputSchema(mcpMemoryPromoteOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpMemoryPromoteInput) (mcpMemoryPromoteOutput, error) {
 			return mcpRunMemoryPromote(ctx, mcpActor, input)
 		})
@@ -576,7 +555,6 @@ func handleMCP() {
 	srv.Tool("memory_context").
 		Description("Render the system-prompt-ready Context Block for a run: top claims by trust, surfaced contradictions, footer with counts. Drop directly into the agent's prompt at the start of each turn.").
 		OutputSchema(mcpMemoryContextOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpMemoryContextInput) (mcpMemoryContextOutput, error) {
 			return mcpRunMemoryContext(ctx, input)
 		})
@@ -585,7 +563,6 @@ func handleMCP() {
 	srv.Tool("remember").
 		Description("Store a single fact as a claim, scoped to a run_id, with an event + evidence link so it is auditable. Use this when the agent decides to commit something to long-term memory.").
 		OutputSchema(mcpRememberOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpRememberInput) (mcpRememberOutput, error) {
 			return mcpRunRemember(ctx, mcpActor, input)
 		})
@@ -593,7 +570,6 @@ func handleMCP() {
 	srv.Tool("forget").
 		Description("Soft-delete a claim by flipping its status to deprecated. The claim and its evidence stay queryable for audit; future recall paths exclude it from active context.").
 		OutputSchema(mcpForgetOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpForgetInput) (mcpForgetOutput, error) {
 			return mcpRunForget(ctx, mcpActor, input)
 		})
@@ -601,7 +577,6 @@ func handleMCP() {
 	srv.Tool("update").
 		Description("Rewrite a claim's text (and optionally its confidence) when the agent's understanding refines. The reason is recorded in the status history.").
 		OutputSchema(mcpUpdateOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpUpdateInput) (mcpUpdateOutput, error) {
 			return mcpRunUpdate(ctx, mcpActor, input)
 		})
@@ -609,7 +584,6 @@ func handleMCP() {
 	srv.Tool("search_memory").
 		Description("Semantic search over the agent's memory: embeds the query, ranks claims by cosine similarity, scoped to a run_id (tenant boundary).").
 		OutputSchema(mcpSearchMemoryOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpSearchMemoryInput) (mcpSearchMemoryOutput, error) {
 			return mcpRunSearchMemory(ctx, input)
 		})
@@ -617,7 +591,6 @@ func handleMCP() {
 	srv.Tool("remember_event").
 		Description("Store a temporal event (deployment, incident, decision, ...) with a wall-clock timestamp.").
 		OutputSchema(mcpRememberEventOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpRememberEventInput) (mcpRememberEventOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpRememberEventOutput](ctx, kernel, nil, "remember_event", input)
@@ -638,7 +611,6 @@ func handleMCP() {
 	srv.Tool("recall_at_time").
 		Description("Answer a question against the state of the knowledge base at a historical instant.").
 		OutputSchema(mcpQueryOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpRecallAtTimeInput) (mcpQueryOutput, error) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpQueryOutput](ctx, kernel, nil, "recall_at_time", input)
@@ -650,7 +622,6 @@ func handleMCP() {
 	srv.Tool("who_knows").
 		Description("Rank the workers whose memory best matches a topic (who-knows-what directory).").
 		OutputSchema(mcpWhoKnowsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpWhoKnowsInput) (mcpWhoKnowsOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -662,7 +633,6 @@ func handleMCP() {
 	srv.Tool("knowledge_gaps").
 		Description("List the highest-value open questions (unresolved hypotheses / contested claims).").
 		OutputSchema(mcpKnowledgeGapsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpKnowledgeGapsInput) (mcpKnowledgeGapsOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -696,7 +666,6 @@ func handleMCP() {
 	srv.Tool("recombinations").
 		Description("List topically-similar-but-unlinked claim pairs (candidate novel connections).").
 		OutputSchema(mcpRecombinationsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpRecombinationsInput) (mcpRecombinationsOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -708,7 +677,6 @@ func handleMCP() {
 	srv.Tool("analogous_claims").
 		Description("Return the claims most structurally analogous to a given one.").
 		OutputSchema(mcpAnalogousOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpAnalogousInput) (mcpAnalogousOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -721,7 +689,6 @@ func handleMCP() {
 	srv.Tool("get_claim").
 		Description("Fetch a single claim's full detail (statement, trust, lifecycle, validity).").
 		OutputSchema(mcpClaimDetailOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpGetClaimInput) (mcpClaimDetailOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -733,7 +700,6 @@ func handleMCP() {
 	srv.Tool("classify").
 		Description("Report whether a candidate statement fits established knowledge or is novel.").
 		OutputSchema(mcpClassifyOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpClassifyInput) (mcpClassifyOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -745,7 +711,6 @@ func handleMCP() {
 	srv.Tool("get_decision").
 		Description("Fetch a single recorded decision by id.").
 		OutputSchema(mcpDecisionOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpGetDecisionInput) (mcpDecisionOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -757,7 +722,6 @@ func handleMCP() {
 	srv.Tool("recall").
 		Description("Advanced retrieval; mode selects the epistemic-honesty variant (sufficiency|effort|context|conflicts|iterative).").
 		OutputSchema(mcpRecallOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpRecallInput) (mcpRecallOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -769,7 +733,6 @@ func handleMCP() {
 	srv.Tool("get_blocks").
 		Description("Read an agent's working-memory blocks — its bounded, always-injected 'core memory' (persona, open_threads, ...).").
 		OutputSchema(mcpGetBlocksOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpGetBlocksInput) (mcpGetBlocksOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -781,7 +744,6 @@ func handleMCP() {
 	srv.Tool("set_block").
 		Description("Set or append an agent's working-memory block. append=true evicts oldest lines to stay within the attention budget; empty value replaces (clears) the block.").
 		OutputSchema(mcpSetBlockOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpSetBlockInput) (mcpSetBlockOutput, error) {
 			mem, err := getMem()
 			if err != nil {
@@ -793,7 +755,6 @@ func handleMCP() {
 	srv.Tool("signals").
 		Description("Detected temporal patterns (trend|spike|drop|stall|anomaly|...) over a run's event series — the 'what is changing?' reading that complements recall.").
 		OutputSchema(mcpSignalsOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, input mcpSignalsInput) (mcpSignalsOutput, error) {
 			mem, err := getMem()
 			if err != nil {

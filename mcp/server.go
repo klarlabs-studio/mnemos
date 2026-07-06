@@ -144,7 +144,6 @@ func registerTools(srv *Server, store mnemos.Store) {
 	srv.Tool("remember").
 		Description("Ingest text, extract claims, and persist them with evidence links.").
 		OutputSchema(statusOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, in rememberInput) (statusOutput, error) {
 			if err := store.Remember(ctx, mnemos.Item{
 				Type:    in.Type,
@@ -160,7 +159,6 @@ func registerTools(srv *Server, store mnemos.Store) {
 	srv.Tool("remember_claim").
 		Description("Persist a pre-built claim. Claims require evidence: supply event_ids.").
 		OutputSchema(claimIDOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, in rememberClaimInput) (claimIDOutput, error) {
 			id, err := store.RememberClaim(ctx, mnemos.ClaimItem{
 				Text:       in.Text,
@@ -178,7 +176,6 @@ func registerTools(srv *Server, store mnemos.Store) {
 	srv.Tool("remember_event").
 		Description("Append a temporal event to the timeline.").
 		OutputSchema(eventIDOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, in rememberEventInput) (eventIDOutput, error) {
 			at, err := parseTime(in.At)
 			if err != nil {
@@ -200,7 +197,6 @@ func registerTools(srv *Server, store mnemos.Store) {
 	srv.Tool("recall").
 		Description("Answer a query against stored memory. Supports bitemporal as_of (valid time) and recorded_as_of (transaction time).").
 		OutputSchema(recallOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, in recallInput) (recallOutput, error) {
 			q := mnemos.Query{
 				Text:  in.Text,
@@ -241,7 +237,6 @@ func registerTools(srv *Server, store mnemos.Store) {
 	srv.Tool("get").
 		Description("Exact claim lookup by id.").
 		OutputSchema(claimView{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, in getInput) (claimView, error) {
 			c, err := store.Get(ctx, in.ClaimID)
 			if err != nil {
@@ -253,7 +248,6 @@ func registerTools(srv *Server, store mnemos.Store) {
 	srv.Tool("scan").
 		Description("Return claims whose valid time overlaps the requested window.").
 		OutputSchema(scanOutput{}).
-		ValidateInput().
 		Handler(func(ctx context.Context, in scanInput) (scanOutput, error) {
 			var q mnemos.ScanQuery
 			q.Limit = in.Limit

@@ -17,6 +17,16 @@ notable changes.
   patterns over a run's event series). The cognitive layer (tiers 0–4) is now at
   full parity across all three transports — HTTP, gRPC, and MCP.
 
+### Changed
+
+- **Dependencies updated to latest.** Notably `go.klarlabs.de/mcp` v1.15.0 →
+  v1.21.0, `go.klarlabs.de/bolt` v1.5.2 → v1.6.0, `go.klarlabs.de/statekit`
+  v1.9.0 → v1.11.1, `go.klarlabs.de/fortify` v1.7.0 → v1.8.1, `google.golang.org/grpc`
+  v1.81.1 → v1.82.0, `modernc.org/sqlite` v1.50.1 → v1.53.0, plus x/* and indirect
+  bumps. The mcp bump makes input validation default-on, so the now-redundant
+  `.ValidateInput()` calls were dropped from the tool registrations (no behaviour
+  change — validation still runs). Full suite + vet + lint green.
+
 ## [0.75.0] — 2026-07-06
 
 ### Added
