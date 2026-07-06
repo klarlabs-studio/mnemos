@@ -336,6 +336,13 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory) http.Handler {
 	mux.HandleFunc("/v1/decisions/", makeDecisionSubresourceHandler(mem))
 	// Advanced recall (v0.68): epistemic-honesty variants of retrieval.
 	mux.HandleFunc("/v1/recall", makeRecallHandler(mem))
+	// Working memory + skill loop + temporal (v0.69): the last of the cognitive layer.
+	mux.HandleFunc("/v1/blocks", makeBlocksHandler(mem))
+	mux.HandleFunc("/v1/actions", makeActionsHandler(mem))
+	mux.HandleFunc("/v1/actions/", makeActionSubresourceHandler(mem))
+	mux.HandleFunc("/v1/synthesize", makeSynthesizeHandler(mem))
+	mux.HandleFunc("/v1/timeline", makeTimelineHandler(mem))
+	mux.HandleFunc("/v1/signals", makeSignalsHandler(mem))
 	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))

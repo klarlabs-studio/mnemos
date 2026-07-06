@@ -58,6 +58,42 @@ type Expectation struct {
 	CreatedAt      string  `json:"created_at,omitempty"`
 }
 
+// Block is one working-memory block for an owner (GET/POST /v1/blocks).
+type Block struct {
+	Owner     string `json:"owner"`
+	Label     string `json:"label"`
+	Value     string `json:"value"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+// SynthesizeResult reports what a synthesize pass derived.
+type SynthesizeResult struct {
+	LessonsDerived   int `json:"lessons_derived"`
+	PlaybooksDerived int `json:"playbooks_derived"`
+}
+
+// TimelineEvent is one event on the temporal timeline (GET /v1/timeline).
+type TimelineEvent struct {
+	ID       string            `json:"id"`
+	At       string            `json:"at,omitempty"`
+	Type     string            `json:"type"`
+	Content  string            `json:"content"`
+	RunID    string            `json:"run_id,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// Signal is a detected temporal pattern (GET /v1/signals).
+type Signal struct {
+	Pattern     string  `json:"pattern"`
+	RunID       string  `json:"run_id,omitempty"`
+	Strength    float64 `json:"strength"`
+	Confidence  float64 `json:"confidence"`
+	Class       string  `json:"class,omitempty"`
+	DetectedAt  string  `json:"detected_at,omitempty"`
+	WindowStart string  `json:"window_start,omitempty"`
+	WindowEnd   string  `json:"window_end,omitempty"`
+}
+
 // RecallResult is one retrieved claim from /v1/recall.
 type RecallResult struct {
 	ClaimID     string  `json:"claim_id"`

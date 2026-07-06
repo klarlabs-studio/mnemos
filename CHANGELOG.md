@@ -10,6 +10,27 @@ notable changes.
 
 ### Added
 
+- **Working memory + skill loop + temporal over HTTP (cognitive layer, batch 4 —
+  completes HTTP↔library parity).** The last of the cognitive layer over HTTP:
+  - `GET /v1/blocks?owner=` / `POST /v1/blocks` `{owner,label,value,append?}` —
+    working-memory blocks (Blocks / SetBlock / AppendBlock).
+  - `POST /v1/actions` `{kind,subject,actor,metadata}` → `{id}` and
+    `POST /v1/actions/{id}/outcome` `{result,metrics,notes}` — the skill-loop
+    substrate (RecordAction / RecordActionOutcome).
+  - `POST /v1/synthesize` → `{lessons_derived,playbooks_derived}` (Synthesize).
+  - `GET /v1/timeline?run_id=&from=&to=&types=&limit=` (Timeline) and
+    `GET /v1/signals?run_id=&min_confidence=&limit=` (Signals).
+  Reads are GET (no token); writes are POST (token). SDK: `Blocks`/`SetBlock`/
+  `AppendBlock`/`RecordAction`/`RecordActionOutcome`/`Synthesize`/`Timeline`/
+  `Signals` + `Block`/`SynthesizeResult`/`TimelineEvent`/`Signal` types. **With
+  this the full public `Memory` surface is reachable over HTTP** — an
+  out-of-process consumer in any language gets the same brain a Go-embedding
+  consumer does.
+
+## [0.68.0] — 2026-07-06
+
+### Added
+
 - **Advanced recall over HTTP (cognitive layer, batch 3).** Basic hybrid
   retrieval is `/v1/search`; the epistemic-honesty variants now land at
   `GET /v1/recall?query=&mode=`:
