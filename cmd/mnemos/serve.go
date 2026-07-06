@@ -147,7 +147,7 @@ func handleServe(args []string, _ Flags) {
 
 	var grpcSrv *grpc.Server
 	if grpcPort > 0 {
-		grpcSrv = startGRPCServer(grpcPort, conn)
+		grpcSrv = startGRPCServer(grpcPort, conn, mem)
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -203,7 +203,7 @@ func handleServe(args []string, _ Flags) {
 
 // startGRPCServer creates and starts a gRPC server on the given port.
 // It shares the store.Conn and auth verifier with the HTTP surface.
-func startGRPCServer(port int, conn *store.Conn) *grpc.Server {
+func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory) *grpc.Server {
 	_, projectRoot, _ := findProjectDB()
 	secretPath := auth.DefaultSecretPath(projectRoot)
 	secret, _, err := auth.LoadOrCreateSecret(secretPath)
@@ -219,7 +219,7 @@ func startGRPCServer(port int, conn *store.Conn) *grpc.Server {
 	verifier := auth.NewVerifierWithPrevious(secret, prev, conn.RevokedTokens)
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 
-	mnemosSrv := mnemosgrpc.NewServer(conn, verifier, logger, version)
+	mnemosSrv := mnemosgrpc.NewServerWithMemory(conn, mem, verifier, logger, version)
 	grpcOpts := []grpc.ServerOption{grpc.UnaryInterceptor(mnemosSrv.UnaryInterceptor())}
 	if cert, key := os.Getenv("MNEMOS_TLS_CERT_FILE"), os.Getenv("MNEMOS_TLS_KEY_FILE"); cert != "" && key != "" {
 		creds, err := buildServerCreds(cert, key, os.Getenv("MNEMOS_MTLS_CLIENT_CA_FILE"))

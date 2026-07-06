@@ -80,6 +80,20 @@ service MnemosService {
   rpc ListEntityRelationships(ListEntityRelationshipsRequest) returns (ListEntityRelationshipsResponse);
   // AppendEntityRelationships writes polymorphic edges idempotently.
   rpc AppendEntityRelationships(AppendEntityRelationshipsRequest) returns (AppendResponse);
+
+  // --- Connected brain (cognitive layer; parity with HTTP /v1/who-knows etc.) ---
+  // WhoKnows ranks the workers whose memory best matches a query.
+  rpc WhoKnows(WhoKnowsRequest) returns (WhoKnowsResponse);
+  // KnowledgeGaps lists the store's highest-value open questions.
+  rpc KnowledgeGaps(KnowledgeGapsRequest) returns (KnowledgeGapsResponse);
+  // Calibration reports how well stated confidence tracks reality.
+  rpc Calibration(CalibrationRequest) returns (CalibrationResponse);
+  // Hypercorrections lists established beliefs a newer claim contradicts.
+  rpc Hypercorrections(HypercorrectionsRequest) returns (HypercorrectionsResponse);
+  // Recombinations lists topically-similar-but-unlinked claim pairs.
+  rpc Recombinations(RecombinationsRequest) returns (RecombinationsResponse);
+  // AnalogousClaims returns the claims most structurally analogous to one.
+  rpc AnalogousClaims(AnalogousClaimsRequest) returns (AnalogousClaimsResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -474,3 +488,91 @@ message ListEntityRelationshipsResponse {
 }
 
 message AppendEntityRelationshipsRequest { repeated EntityRelationship edges = 1; }
+
+// ---------------------------------------------------------------------------
+// Connected brain (cognitive layer)
+// ---------------------------------------------------------------------------
+
+message WhoKnowsRequest {
+  string query = 1;
+  int32  limit = 2;
+}
+message Expert {
+  string worker      = 1;
+  double affinity    = 2;
+  double reliability = 3;
+  int32  claim_count = 4;
+}
+message WhoKnowsResponse {
+  string          query   = 1;
+  repeated Expert experts = 2;
+}
+
+message KnowledgeGapsRequest { int32 limit = 1; }
+message Gap {
+  string claim_id = 1;
+  string text     = 2;
+  string kind     = 3;
+  double score    = 4;
+}
+message KnowledgeGapsResponse { repeated Gap gaps = 1; }
+
+message CalibrationRequest {}
+message CalibrationBucket {
+  double lower           = 1;
+  double upper           = 2;
+  int32  count           = 3;
+  double mean_confidence = 4;
+  double accuracy        = 5;
+}
+message CalibrationSource {
+  string source          = 1;
+  int32  samples         = 2;
+  double mean_confidence = 3;
+  double accuracy        = 4;
+  double gap             = 5;
+  double brier           = 6;
+}
+message CalibrationResponse {
+  int32                      samples = 1;
+  double                     ece     = 2;
+  double                     brier   = 3;
+  repeated CalibrationBucket buckets = 4;
+  repeated CalibrationSource sources = 5;
+}
+
+message HypercorrectionsRequest {}
+message Hypercorrection {
+  string                    contradicted_claim_id = 1;
+  string                    contradicted_text     = 2;
+  double                    contradicted_trust    = 3;
+  bool                      contradicted_promoted = 4;
+  string                    challenging_claim_id  = 5;
+  string                    challenging_text      = 6;
+  google.protobuf.Timestamp detected_at           = 7;
+}
+message HypercorrectionsResponse { repeated Hypercorrection hypercorrections = 1; }
+
+message RecombinationsRequest { int32 limit = 1; }
+message Recombination {
+  string claim_a    = 1;
+  string text_a     = 2;
+  string claim_b    = 3;
+  string text_b     = 4;
+  double similarity = 5;
+}
+message RecombinationsResponse { repeated Recombination recombinations = 1; }
+
+message AnalogousClaimsRequest {
+  string claim_id = 1;
+  int32  limit    = 2;
+}
+message Analogy {
+  string claim_id   = 1;
+  string text       = 2;
+  double similarity = 3;
+}
+message AnalogousClaimsResponse {
+  string           claim_id  = 1;
+  repeated Analogy analogous = 2;
+}

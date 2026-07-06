@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/bolt"
+	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
@@ -32,6 +33,10 @@ type Server struct {
 	verifier *auth.Verifier
 	logger   *bolt.Logger
 	version  string
+	// mem is the library Memory facade for the cognitive-layer RPCs (parity
+	// with the HTTP surface). Nil when the facade couldn't be built — those
+	// RPCs then return codes.Unavailable while storage RPCs stay up.
+	mem mnemos.Memory
 }
 
 // NewServer returns a gRPC server backed by the given store Conn.
@@ -44,6 +49,13 @@ type Server struct {
 // directly. The Writer borrows the conn — the caller keeps ownership and
 // its existing close discipline.
 func NewServer(conn *store.Conn, verifier *auth.Verifier, logger *bolt.Logger, version string) *Server {
+	return NewServerWithMemory(conn, nil, verifier, logger, version)
+}
+
+// NewServerWithMemory is NewServer plus the library Memory facade used by the
+// cognitive-layer RPCs. Pass nil mem to leave those RPCs returning
+// codes.Unavailable (storage RPCs are unaffected).
+func NewServerWithMemory(conn *store.Conn, mem mnemos.Memory, verifier *auth.Verifier, logger *bolt.Logger, version string) *Server {
 	w, err := govwrite.Wrap(conn, logger)
 	if err != nil {
 		// Wrap fails only on a nil conn or a static plugin-registration
@@ -51,7 +63,7 @@ func NewServer(conn *store.Conn, verifier *auth.Verifier, logger *bolt.Logger, v
 		// than silently degrade to an ungoverned write path.
 		panic(fmt.Sprintf("grpc: build governed writer: %v", err))
 	}
-	return &Server{conn: conn, writer: w, verifier: verifier, logger: logger, version: version}
+	return &Server{conn: conn, writer: w, verifier: verifier, logger: logger, version: version, mem: mem}
 }
 
 // Register registers the Mnemos service on the provided gRPC server.

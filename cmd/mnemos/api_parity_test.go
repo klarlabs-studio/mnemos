@@ -123,13 +123,14 @@ var parityMatrix = []parityEntry{
 	{Capability: "incidents", MCPTool: parityNA, HTTPRoute: "/v1/incidents", GRPCMethod: parityNA},
 	{Capability: "incident subresources", MCPTool: parityNA, HTTPRoute: "/v1/incidents/", GRPCMethod: parityNA},
 
-	// Connected-brain reads (v0.66) — cognitive layer over HTTP. MCP/gRPC
-	// counterparts not (yet) exposed; the library is the in-process surface.
-	{Capability: "who-knows-what directory", MCPTool: parityNA, HTTPRoute: "/v1/who-knows", GRPCMethod: parityNA},
-	{Capability: "knowledge gaps", MCPTool: parityNA, HTTPRoute: "/v1/knowledge-gaps", GRPCMethod: parityNA},
-	{Capability: "confidence calibration", MCPTool: parityNA, HTTPRoute: "/v1/calibration", GRPCMethod: parityNA},
-	{Capability: "hypercorrections (contested established beliefs)", MCPTool: parityNA, HTTPRoute: "/v1/hypercorrections", GRPCMethod: parityNA},
-	{Capability: "recombinations (candidate novel connections)", MCPTool: parityNA, HTTPRoute: "/v1/recombinations", GRPCMethod: parityNA},
+	// Connected-brain reads (v0.66 HTTP, gRPC parity added). MCP counterparts
+	// not exposed; the library is the in-process surface.
+	{Capability: "who-knows-what directory", MCPTool: parityNA, HTTPRoute: "/v1/who-knows", GRPCMethod: "WhoKnows"},
+	{Capability: "knowledge gaps", MCPTool: parityNA, HTTPRoute: "/v1/knowledge-gaps", GRPCMethod: "KnowledgeGaps"},
+	{Capability: "confidence calibration", MCPTool: parityNA, HTTPRoute: "/v1/calibration", GRPCMethod: "Calibration"},
+	{Capability: "hypercorrections (contested established beliefs)", MCPTool: parityNA, HTTPRoute: "/v1/hypercorrections", GRPCMethod: "Hypercorrections"},
+	{Capability: "recombinations (candidate novel connections)", MCPTool: parityNA, HTTPRoute: "/v1/recombinations", GRPCMethod: "Recombinations"},
+	{Capability: "analogical retrieval", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AnalogousClaims"},
 
 	// Claim CRUD parity (v0.67).
 	{Capability: "classify claim novelty", MCPTool: parityNA, HTTPRoute: "/v1/classify", GRPCMethod: parityNA},

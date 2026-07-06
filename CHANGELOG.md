@@ -10,6 +10,18 @@ notable changes.
 
 ### Added
 
+- **gRPC parity: connected-brain reads (cognitive layer, gRPC batch 1).** The
+  cognitive layer is now on gRPC too, not just HTTP — `serve` threads the same
+  `Memory` facade into the gRPC server. New RPCs on `MnemosService`: `WhoKnows`,
+  `KnowledgeGaps`, `Calibration`, `Hypercorrections`, `Recombinations`,
+  `AnalogousClaims` (+ their proto messages). When the facade is unavailable they
+  return `codes.Unavailable` while the storage RPCs stay up. `NewServerWithMemory`
+  is the facade-aware constructor; `NewServer` delegates with a nil facade.
+
+## [0.69.0] — 2026-07-06
+
+### Added
+
 - **Working memory + skill loop + temporal over HTTP (cognitive layer, batch 4 —
   completes HTTP↔library parity).** The last of the cognitive layer over HTTP:
   - `GET /v1/blocks?owner=` / `POST /v1/blocks` `{owner,label,value,append?}` —
