@@ -555,6 +555,11 @@ Once connected, the AI agent can:
 1. **Ingest context** -- process meeting notes, design docs, or ADRs into the knowledge base during a conversation.
 2. **Query with evidence** -- ask questions and get back claims with confidence scores and contradiction flags instead of raw text.
 3. **Check knowledge health** -- call `knowledge_metrics` to see how many claims exist, how many are contested, and whether the knowledge base needs updating.
+4. **Reason over the connected brain** -- `who_knows` (which agent is the expert on a topic), `knowledge_gaps`, `calibration`, `hypercorrections`, `recombinations`, and `analogous_claims` (transfer from a solved problem to a new one).
+5. **Recall with epistemic honesty** -- `recall` with `mode` = sufficiency (is this enough to answer?), effort (scale the budget to the stakes), context (bias by situation), conflicts (surface contradictions inline), or iterative (multi-round expansion).
+6. **Carry working memory + learn** -- `get_blocks`/`set_block` for an agent's bounded "core memory," `record_action`/`record_outcome` + `synthesize_lessons`/`synthesize_playbooks` for the skill loop, and `signals` for temporal patterns over a run's events.
+
+The MCP tool surface is at full parity with the HTTP and gRPC transports (same cognitive layer, tiers 0–4), so the choice of transport is a deployment detail, not a capability trade-off.
 
 Example agent interaction:
 
