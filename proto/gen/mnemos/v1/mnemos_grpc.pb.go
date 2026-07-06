@@ -51,6 +51,7 @@ const (
 	MnemosService_SetClaimLifecycle_FullMethodName         = "/mnemos.v1.MnemosService/SetClaimLifecycle"
 	MnemosService_Classify_FullMethodName                  = "/mnemos.v1.MnemosService/Classify"
 	MnemosService_GetDecision_FullMethodName               = "/mnemos.v1.MnemosService/GetDecision"
+	MnemosService_Recall_FullMethodName                    = "/mnemos.v1.MnemosService/Recall"
 )
 
 // MnemosServiceClient is the client API for MnemosService service.
@@ -136,6 +137,10 @@ type MnemosServiceClient interface {
 	Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error)
 	// GetDecision returns a single recorded decision by id.
 	GetDecision(ctx context.Context, in *GetDecisionRequest, opts ...grpc.CallOption) (*Decision, error)
+	// --- Advanced recall (cognitive layer; parity with HTTP GET /v1/recall) ---
+	// Recall runs advanced retrieval; mode selects the epistemic-honesty variant
+	// (sufficiency | effort | context | conflicts | iterative).
+	Recall(ctx context.Context, in *RecallRequest, opts ...grpc.CallOption) (*RecallResponse, error)
 }
 
 type mnemosServiceClient struct {
@@ -466,6 +471,16 @@ func (c *mnemosServiceClient) GetDecision(ctx context.Context, in *GetDecisionRe
 	return out, nil
 }
 
+func (c *mnemosServiceClient) Recall(ctx context.Context, in *RecallRequest, opts ...grpc.CallOption) (*RecallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecallResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Recall_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MnemosServiceServer is the server API for MnemosService service.
 // All implementations must embed UnimplementedMnemosServiceServer
 // for forward compatibility.
@@ -549,6 +564,10 @@ type MnemosServiceServer interface {
 	Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error)
 	// GetDecision returns a single recorded decision by id.
 	GetDecision(context.Context, *GetDecisionRequest) (*Decision, error)
+	// --- Advanced recall (cognitive layer; parity with HTTP GET /v1/recall) ---
+	// Recall runs advanced retrieval; mode selects the epistemic-honesty variant
+	// (sufficiency | effort | context | conflicts | iterative).
+	Recall(context.Context, *RecallRequest) (*RecallResponse, error)
 	mustEmbedUnimplementedMnemosServiceServer()
 }
 
@@ -654,6 +673,9 @@ func (UnimplementedMnemosServiceServer) Classify(context.Context, *ClassifyReque
 }
 func (UnimplementedMnemosServiceServer) GetDecision(context.Context, *GetDecisionRequest) (*Decision, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDecision not implemented")
+}
+func (UnimplementedMnemosServiceServer) Recall(context.Context, *RecallRequest) (*RecallResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Recall not implemented")
 }
 func (UnimplementedMnemosServiceServer) mustEmbedUnimplementedMnemosServiceServer() {}
 func (UnimplementedMnemosServiceServer) testEmbeddedByValue()                       {}
@@ -1252,6 +1274,24 @@ func _MnemosService_GetDecision_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_Recall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Recall(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Recall_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Recall(ctx, req.(*RecallRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MnemosService_ServiceDesc is the grpc.ServiceDesc for MnemosService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1386,6 +1426,10 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDecision",
 			Handler:    _MnemosService_GetDecision_Handler,
+		},
+		{
+			MethodName: "Recall",
+			Handler:    _MnemosService_Recall_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

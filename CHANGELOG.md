@@ -10,6 +10,18 @@ notable changes.
 
 ### Added
 
+- **gRPC parity: advanced recall (cognitive layer, gRPC batch 3).** New
+  `Recall(RecallRequest) returns (RecallResponse)` RPC — `mode` selects the
+  epistemic-honesty variant (sufficiency | effort | context | conflicts |
+  iterative), and the union response carries Results always plus the
+  mode-specific extras (RecallSufficiency / RecallEffort / RecallConflict /
+  rounds). Empty query or unknown mode → `InvalidArgument`; nil facade →
+  `codes.Unavailable`. Mirrors HTTP `GET /v1/recall`.
+
+## [0.71.0] — 2026-07-06
+
+### Added
+
 - **gRPC parity: claim CRUD (cognitive layer, gRPC batch 2).** New RPCs on
   `MnemosService`, delegating to the same `Memory` facade: `GetClaim`
   (full claim detail; `codes.NotFound` when absent), `SetClaimLifecycle`

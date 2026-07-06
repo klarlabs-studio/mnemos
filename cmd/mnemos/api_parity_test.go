@@ -137,7 +137,7 @@ var parityMatrix = []parityEntry{
 	{Capability: "get single claim", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "GetClaim"},
 	{Capability: "set claim lifecycle", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "SetClaimLifecycle"},
 	{Capability: "get single decision", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "GetDecision"},
-	{Capability: "advanced recall (sufficiency/effort/context/conflicts/iterative)", MCPTool: parityNA, HTTPRoute: "/v1/recall", GRPCMethod: parityNA},
+	{Capability: "advanced recall (sufficiency/effort/context/conflicts/iterative)", MCPTool: parityNA, HTTPRoute: "/v1/recall", GRPCMethod: "Recall"},
 
 	// Working memory + skill loop + temporal (v0.69).
 	{Capability: "working-memory blocks", MCPTool: parityNA, HTTPRoute: "/v1/blocks", GRPCMethod: parityNA},
