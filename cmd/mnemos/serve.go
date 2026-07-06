@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/bolt"
+	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
@@ -124,9 +125,19 @@ func handleServe(args []string, _ Flags) {
 	}
 	defer closeConn(conn)
 
+	// Build a Memory facade over the same store so the connected-brain
+	// endpoints can delegate to the library's cognitive layer. Best-effort:
+	// on failure the brain endpoints return 503 while storage stays up.
+	mem, memErr := newLibraryMemory(context.Background(), "")
+	if memErr != nil {
+		fmt.Fprintf(os.Stderr, "serve: cognitive layer disabled (facade: %v)\n", memErr)
+	} else {
+		defer func() { _ = mem.Close() }()
+	}
+
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           newServerMux(conn),
+		Handler:           newServerMuxWithMemory(conn, mem),
 		ReadTimeout:       serveReadTimeout,
 		ReadHeaderTimeout: serveReadHeaderTimeout,
 		WriteTimeout:      serveWriteTimeout,
@@ -241,7 +252,17 @@ func startGRPCServer(port int, conn *store.Conn) *grpc.Server {
 // JWT signed with the server secret. The secret is resolved from
 // MNEMOS_JWT_SECRET or a per-install file (auto-created on first boot).
 // Revoked JTIs are honored via the RevokedTokenRepository denylist.
+// newServerMux builds the HTTP surface with only the store-backed endpoints
+// (no cognitive facade). Kept for tests + callers that don't need the brain.
 func newServerMux(conn *store.Conn) http.Handler {
+	return newServerMuxWithMemory(conn, nil)
+}
+
+// newServerMuxWithMemory builds the full HTTP surface. When mem is non-nil the
+// connected-brain endpoints (who-knows, knowledge-gaps, calibration,
+// hypercorrections, recombinations, analogous) delegate to it; when nil they
+// return 503.
+func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory) http.Handler {
 	_, projectRoot, _ := findProjectDB()
 	secretPath := auth.DefaultSecretPath(projectRoot)
 	secret, created, err := auth.LoadOrCreateSecret(secretPath)
@@ -298,10 +319,17 @@ func newServerMux(conn *store.Conn) http.Handler {
 	mux.HandleFunc("/v1/metrics", makeMetricsHandler(conn))
 	mux.HandleFunc("/v1/context", makeContextHandler(conn))
 	mux.HandleFunc("/v1/search", makeSearchHandler(conn))
-	mux.HandleFunc("/v1/claims/", makeClaimSubresourceHandler(conn, gw))
+	mux.HandleFunc("/v1/claims/", makeClaimSubresourceHandler(conn, gw, mem))
 	mux.HandleFunc("/v1/incidents", makeIncidentsHandler(conn, gw))
 	mux.HandleFunc("/v1/federation/export", makeFederationExportHandler(conn))
 	mux.HandleFunc("/v1/incidents/", makeIncidentSubresourceHandler(conn, gw))
+	// Connected-brain reads (v0.66): the library's cognitive layer over HTTP.
+	// Delegate to the Memory facade; 503 when it's unavailable.
+	mux.HandleFunc("/v1/who-knows", makeWhoKnowsHandler(mem))
+	mux.HandleFunc("/v1/knowledge-gaps", makeKnowledgeGapsHandler(mem))
+	mux.HandleFunc("/v1/calibration", makeCalibrationHandler(mem))
+	mux.HandleFunc("/v1/hypercorrections", makeHypercorrectionsHandler(mem))
+	mux.HandleFunc("/v1/recombinations", makeRecombinationsHandler(mem))
 	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
@@ -2184,7 +2212,7 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 //
 //	GET /v1/claims/<id>/provenance  → trust provenance report for the claim
 //	GET /v1/claims/<id>/export.md   → human-readable markdown export with provenance annotations
-func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
+func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// path: /v1/claims/<id>/<subresource>
 		// Strip the prefix so we can parse id + subresource.
@@ -2209,6 +2237,8 @@ func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.Han
 			makeExpectationHandler(conn, claimID)(w, r)
 		case "observation":
 			makeObservationHandler(conn, claimID)(w, r)
+		case "analogous":
+			makeAnalogousHandler(mem, claimID)(w, r)
 		default:
 			writeError(w, http.StatusNotFound, fmt.Sprintf("unknown subresource %q", subresource))
 		}

@@ -58,6 +58,86 @@ type Expectation struct {
 	CreatedAt      string  `json:"created_at,omitempty"`
 }
 
+// Expert is one worker's standing in the who-knows-what directory for a query:
+// how strongly its memory matches (Affinity), how trustworthy those matching
+// claims are (Reliability), and how many it authored (ClaimCount).
+type Expert struct {
+	Worker      string  `json:"worker"`
+	Affinity    float64 `json:"affinity"`
+	Reliability float64 `json:"reliability"`
+	ClaimCount  int     `json:"claim_count"`
+}
+
+// Gap is a knowledge gap — an unresolved hypothesis or contested claim worth
+// resolving, ranked by expected information gain (Score).
+type Gap struct {
+	ClaimID string  `json:"claim_id"`
+	Text    string  `json:"text"`
+	Kind    string  `json:"kind"`
+	Score   float64 `json:"score"`
+}
+
+// CalibrationBucket partitions adjudicated claims by stated confidence and
+// reports how often that confidence was borne out.
+type CalibrationBucket struct {
+	Lower          float64 `json:"lower"`
+	Upper          float64 `json:"upper"`
+	Count          int     `json:"count"`
+	MeanConfidence float64 `json:"mean_confidence"`
+	Accuracy       float64 `json:"accuracy"`
+}
+
+// CalibrationSource breaks calibration down by claim author — Gap > 0 means the
+// source is over-confident.
+type CalibrationSource struct {
+	Source         string  `json:"source"`
+	Samples        int     `json:"samples"`
+	MeanConfidence float64 `json:"mean_confidence"`
+	Accuracy       float64 `json:"accuracy"`
+	Gap            float64 `json:"gap"`
+	Brier          float64 `json:"brier"`
+}
+
+// Calibration reports how well stated confidence tracks reality across the
+// store (ECE/Brier), bucketed and broken down by source.
+type Calibration struct {
+	Samples int                 `json:"samples"`
+	ECE     float64             `json:"ece"`
+	Brier   float64             `json:"brier"`
+	Buckets []CalibrationBucket `json:"buckets"`
+	Sources []CalibrationSource `json:"sources"`
+}
+
+// Hypercorrection flags an established (often promoted, high-trust) claim that a
+// newer claim now contradicts — a belief worth re-examining.
+type Hypercorrection struct {
+	ContradictedClaimID  string  `json:"contradicted_claim_id"`
+	ContradictedText     string  `json:"contradicted_text"`
+	ContradictedTrust    float64 `json:"contradicted_trust"`
+	ContradictedPromoted bool    `json:"contradicted_promoted"`
+	ChallengingClaimID   string  `json:"challenging_claim_id"`
+	ChallengingText      string  `json:"challenging_text"`
+	DetectedAt           string  `json:"detected_at,omitempty"`
+}
+
+// Recombination is a topically-similar claim pair the store hasn't yet linked —
+// a candidate novel connection.
+type Recombination struct {
+	ClaimA     string  `json:"claim_a"`
+	TextA      string  `json:"text_a"`
+	ClaimB     string  `json:"claim_b"`
+	TextB      string  `json:"text_b"`
+	Similarity float64 `json:"similarity"`
+}
+
+// Analogy is a claim structurally similar to a query claim (Weisfeiler-Lehman
+// similarity over the evidence subgraph).
+type Analogy struct {
+	ClaimID    string  `json:"claim_id"`
+	Text       string  `json:"text"`
+	Similarity float64 `json:"similarity"`
+}
+
 // EvidenceLink ties a claim to one of the events it was extracted from.
 type EvidenceLink struct {
 	ClaimID string `json:"claim_id"`
