@@ -10,6 +10,17 @@ notable changes.
 
 ### Added
 
+- **MCP parity: working memory + temporal signals (cognitive layer, MCP batch 3
+  — completes MCP parity).** New agent-facing MCP tools: `get_blocks` (an agent's
+  bounded "core memory" blocks), `set_block` (replace or `append`, evicting oldest
+  lines to stay within the attention budget), and `signals` (detected temporal
+  patterns over a run's event series). The cognitive layer (tiers 0–4) is now at
+  full parity across all three transports — HTTP, gRPC, and MCP.
+
+## [0.75.0] — 2026-07-06
+
+### Added
+
 - **MCP parity: claim reads + advanced recall (cognitive layer, MCP batch 2).**
   New agent-facing MCP tools: `get_claim` (full detail), `classify` (novelty),
   `get_decision` (single decision), and `recall` (advanced retrieval; `mode` =
