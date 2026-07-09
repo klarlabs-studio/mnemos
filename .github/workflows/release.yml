@@ -131,6 +131,16 @@ jobs:
   slsa-provenance:
     name: SLSA build provenance
     needs: [goreleaser]
+    # DISABLED: slsa-github-generator v2.1.0 (its latest release) breaks on
+    # GitHub's now-forced Node24 runners ("Input required and not supplied:
+    # path"), and no newer release exists yet — it fails every release and
+    # `continue-on-error` isn't allowed on reusable-workflow jobs. The release
+    # already carries GitHub-native build-provenance attestation (the goreleaser
+    # job's actions/attest-build-provenance step, verifiable with
+    # `gh attestation verify`), which covers provenance meanwhile. Re-enable by
+    # setting repo variable ENABLE_SLSA_PROVENANCE=true (and bump the pin) once
+    # upstream ships a Node24-compatible generator. Tracked in issue #147.
+    if: ${{ vars.ENABLE_SLSA_PROVENANCE == 'true' }}
     permissions:
       actions: read
       id-token: write
