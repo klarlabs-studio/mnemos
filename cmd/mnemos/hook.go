@@ -155,7 +155,7 @@ func hookBrief(ev hookEvent) {
 	if ev.Source == "clear" || ev.Source == "compact" {
 		return
 	}
-	m, err := mcpRunMetrics()
+	m, err := mcpRunMetrics(context.Background())
 	if err != nil {
 		return
 	}

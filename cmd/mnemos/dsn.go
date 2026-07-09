@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -100,6 +101,14 @@ func openConn(ctx context.Context) (*store.Conn, error) {
 	return c, nil
 }
 
+// openBaseConn opens the process's base store connection (the unscoped DSN, no
+// request tenant), for infrastructure that is NOT tenant-scoped — e.g. the auth
+// revocation store, whose tables are excluded from RLS (ADR 0007). Unlike
+// openConn it never fail-closes on the multi-tenant requirement.
+func openBaseConn(ctx context.Context) (*store.Conn, error) {
+	return store.Open(ctx, resolveDSN())
+}
+
 // resolveDSNForContext returns the DSN for this request, scoped to the
 // effective tenant when the request carries one (multi-tenant HTTP MCP mode).
 // It appends `?tenant=<id>` so the Postgres provider pins the mnemos.tenant GUC
@@ -109,10 +118,20 @@ func resolveDSNForContext(ctx context.Context) (string, error) {
 	dsn := resolveDSN()
 	tenant, ok := tenantFromContext(ctx)
 	if !ok {
+		// Fail closed: in multi-tenant mode a request that reached here without
+		// a tenant must NOT fall back to the reserved __default__ partition.
+		if mcpTenantRequired {
+			return "", fmt.Errorf("multi-tenant mode: request has no tenant; refusing to serve the default partition")
+		}
 		return dsn, nil
 	}
 	if !isPostgresDSN(dsn) {
 		return "", fmt.Errorf("tenant scoping requires a postgres backend (this store is not postgres)")
+	}
+	// Defense in depth: never interpolate an unvalidated tenant into the DSN /
+	// the `SET mnemos.tenant` the provider runs.
+	if !validTenantID(tenant) {
+		return "", fmt.Errorf("invalid tenant id in request context")
 	}
 	sep := "?"
 	if strings.Contains(dsn, "?") {
@@ -124,6 +143,32 @@ func resolveDSNForContext(ctx context.Context) (string, error) {
 // isPostgresDSN reports whether a DSN targets the Postgres backend.
 func isPostgresDSN(dsn string) bool {
 	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
+}
+
+// mcpTenantRequired records that the process is serving in multi-tenant mode
+// (`mcp --http --require-tenant`). It makes resolveDSNForContext fail closed
+// instead of defaulting to the __default__ partition when a request somehow
+// lacks a tenant.
+var mcpTenantRequired bool
+
+// setMCPTenantRequired latches multi-tenant mode on. Call once at startup.
+func setMCPTenantRequired() { mcpTenantRequired = true }
+
+// dsnHasTenantParam reports whether a DSN already carries a ?tenant= query
+// parameter. In multi-tenant mode this must be rejected: Postgres ParseDSN
+// reads the FIRST tenant value, so a base-DSN tenant would override every
+// request's tenant and collapse all tenants into one.
+func dsnHasTenantParam(dsn string) bool {
+	_, query, ok := strings.Cut(dsn, "?")
+	if !ok {
+		return false
+	}
+	q, err := url.ParseQuery(query)
+	if err != nil {
+		return false
+	}
+	_, has := q["tenant"]
+	return has
 }
 
 // closeConn closes a *store.Conn, logging any error.

@@ -89,6 +89,23 @@ const defaultNamespace = "mnemos"
 // mnemos root package's defaultTenant so unscoped data stays reachable.
 const defaultTenant = "__default__"
 
+// dsnPasswordRE matches the "://user:password@" segment of a URL DSN so a
+// password can be masked when the DSN is unparseable (best-effort fallback).
+var dsnPasswordRE = regexp.MustCompile(`(://[^:/@]+:)[^@/]*(@)`)
+
+// redactDSN masks the password in a URL-form DSN so it is safe to include in
+// error messages and logs. Never returns the original password.
+func redactDSN(dsn string) string {
+	if u, err := url.Parse(dsn); err == nil && u.User != nil {
+		if _, has := u.User.Password(); has {
+			u.User = url.UserPassword(u.User.Username(), "***")
+			return u.String()
+		}
+		return dsn
+	}
+	return dsnPasswordRE.ReplaceAllString(dsn, "${1}***${2}")
+}
+
 // ParseDSN extracts the namespace + tenant and produces a libpq-compatible
 // DSN with those query parameters stripped.
 func ParseDSN(dsn string) (DSN, error) {
@@ -97,7 +114,7 @@ func ParseDSN(dsn string) (DSN, error) {
 	}
 	u, err := url.Parse(dsn)
 	if err != nil {
-		return DSN{}, fmt.Errorf("postgres: parse dsn: %w", err)
+		return DSN{}, fmt.Errorf("postgres: malformed dsn %s", redactDSN(dsn))
 	}
 
 	q := u.Query()
@@ -166,7 +183,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("postgres: ping: %w (dsn=%s)", err, parsed.LibpqDSN)
+		return nil, fmt.Errorf("postgres: ping: %w (dsn=%s)", err, redactDSN(parsed.LibpqDSN))
 	}
 
 	if err := bootstrap(ctx, db, parsed.Namespace); err != nil {

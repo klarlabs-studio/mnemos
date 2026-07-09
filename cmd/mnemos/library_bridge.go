@@ -20,12 +20,26 @@ import (
 // useEmbeddings switches on process_text). New code where the public
 // surface is sufficient — currently the simpler temporal MCP tools —
 // routes through this helper instead.
-func newLibraryMemory(_ context.Context, actor string) (mnemos.Memory, error) {
-	// Pin the same canonical DSN the rest of cmd/mnemos uses (MNEMOS_DB_URL →
-	// resolveDSN), so a library-bridge Memory reads/writes the same store the
-	// serve command and store.Open callers do — not the library's MNEMOS_STORAGE
-	// default, which an operator running a subcommand won't have set.
-	opts := []mnemos.Option{mnemos.WithStorage(resolveDSN())}
+func newLibraryMemory(ctx context.Context, actor string) (mnemos.Memory, error) {
+	// Tenant-scope the DSN when the request carries a tenant (multi-tenant HTTP
+	// MCP mode), so a library-bridge Memory (temporal tools, etc.) is isolated
+	// by RLS exactly like the openConn path — and fails closed if a request in
+	// multi-tenant mode somehow lacks a tenant. With no tenant in ctx (CLI,
+	// serve) this is the plain resolveDSN.
+	dsn, err := resolveDSNForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return newLibraryMemoryForDSN(dsn, actor)
+}
+
+// newLibraryMemoryForDSN builds a library Memory bound to an explicit DSN,
+// bypassing the request-scoped fail-closed logic. Used to construct the base
+// (unscoped) facade that the multi-tenant cognitive path calls `.Tenant(id)`
+// on — that facade must build even under --require-tenant, where a
+// tenant-less request DSN is (correctly) refused.
+func newLibraryMemoryForDSN(dsn, actor string) (mnemos.Memory, error) {
+	opts := []mnemos.Option{mnemos.WithStorage(dsn)}
 	if actor != "" {
 		opts = append(opts, mnemos.WithActor(actor))
 	}

@@ -371,12 +371,19 @@ func handleMCP(args []string) {
 	// mode it returns a per-tenant view (memFacade.Tenant), cached so each
 	// tenant reuses one pool for the life of the server.
 	getMem := func(ctx context.Context) (mnemos.Memory, error) {
-		memOnce.Do(func() { memFacade, memErr = newLibraryMemory(context.Background(), mcpActor) })
+		// Base (unscoped) facade uses the plain DSN — never fail-closed — since
+		// in multi-tenant mode it is only a handle to call .Tenant(id) on.
+		memOnce.Do(func() { memFacade, memErr = newLibraryMemoryForDSN(resolveDSN(), mcpActor) })
 		if memErr != nil {
 			return nil, memErr
 		}
 		tenant, ok := tenantFromContext(ctx)
 		if !ok {
+			// Fail closed: never hand a cognitive tool the unscoped __default__
+			// facade in multi-tenant mode.
+			if mcpTenantRequired {
+				return nil, errors.New("multi-tenant mode: request has no tenant")
+			}
 			return memFacade, nil
 		}
 		tenantMu.Lock()
@@ -428,7 +435,7 @@ func handleMCP(args []string) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpMetricsOutput](ctx, kernel, nil, "knowledge_metrics", struct{}{})
 			}
-			return mcpRunMetrics()
+			return mcpRunMetrics(ctx)
 		})
 
 	srv.Tool("configure_environment").
@@ -556,6 +563,12 @@ func handleMCP(args []string) {
 		Description("Register a file to be re-ingested when its content changes. Polls every few seconds; in-memory only — restart drops all watches.").
 		OutputSchema(mcpWatchFileOutput{}).
 		Handler(func(ctx context.Context, input mcpWatchFileInput) (mcpWatchFileOutput, error) {
+			// watch_file re-ingests a server-local file through a process
+			// singleton bound to the default partition — meaningless and
+			// cross-tenant-leaky on a multi-tenant server. Refuse it there.
+			if mcpTenantRequired {
+				return mcpWatchFileOutput{}, errors.New("watch_file is not available on a multi-tenant server")
+			}
 			if kernel != nil {
 				return dispatchAxiTool[mcpWatchFileOutput](ctx, kernel, nil, "watch_file", input)
 			}
@@ -849,9 +862,19 @@ func handleMCP(args []string) {
 	if serveCfg.httpAddr != "" {
 		// Multi-tenant scoping is enforced by Postgres RLS; refuse to start in
 		// that mode on any other backend rather than silently share data.
-		if serveCfg.requireTenant && !isPostgresDSN(resolveDSN()) {
-			exitWithMnemosError(false, NewUserError("--require-tenant needs a postgres backend (set MNEMOS_DB_URL=postgres://…); RLS enforces tenant isolation (ADR 0007)"))
-			return
+		if serveCfg.requireTenant {
+			base := resolveDSN()
+			if !isPostgresDSN(base) {
+				exitWithMnemosError(false, NewUserError("--require-tenant needs a postgres backend (set MNEMOS_DB_URL=postgres://…); RLS enforces tenant isolation (ADR 0007)"))
+				return
+			}
+			// A base DSN with its own ?tenant= would override every request's
+			// tenant (ParseDSN reads the first value) and collapse all tenants.
+			if dsnHasTenantParam(base) {
+				exitWithMnemosError(false, NewUserError("--require-tenant: MNEMOS_DB_URL must not set ?tenant= — the per-request token supplies the tenant"))
+				return
+			}
+			setMCPTenantRequired()
 		}
 		if err := serveMCPHTTP(rootCtx, srv, serveCfg.httpAddr, serveCfg.requireAuth, serveCfg.requireTenant, mw); err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatal(err)
@@ -1007,9 +1030,10 @@ func resolveMCPActor() string {
 }
 
 func mcpRunQuery(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
-	// Enforce the token's run allowlist when a specific run is requested.
-	if rid := strings.TrimSpace(input.RunID); rid != "" && !mcpRunAllowed(ctx, rid) {
-		return mcpQueryOutput{}, fmt.Errorf("not authorized for run %q", rid)
+	// Enforce the token's run allowlist: deny a disallowed run, and deny an
+	// unscoped query from a run-restricted token (which would span every run).
+	if err := enforceRunScope(ctx, input.RunID); err != nil {
+		return mcpQueryOutput{}, err
 	}
 	conn, err := openConn(ctx)
 	if err != nil {
@@ -1199,8 +1223,7 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 	return result, nil
 }
 
-func mcpRunMetrics() (mcpMetricsOutput, error) {
-	ctx := context.Background()
+func mcpRunMetrics(ctx context.Context) (mcpMetricsOutput, error) {
 	conn, err := openConn(ctx)
 	if err != nil {
 		return mcpMetricsOutput{}, err
@@ -1720,6 +1743,9 @@ func mcpRunMemoryContext(ctx context.Context, input mcpMemoryContextInput) (mcpM
 	if input.RunID == "" {
 		return mcpMemoryContextOutput{}, fmt.Errorf("run_id is required")
 	}
+	if err := enforceRunScope(ctx, input.RunID); err != nil {
+		return mcpMemoryContextOutput{}, err
+	}
 	conn, err := openConn(ctx)
 	if err != nil {
 		return mcpMemoryContextOutput{}, err
@@ -1809,6 +1835,9 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 	}
 	if runID == "" {
 		return mcpRememberOutput{}, fmt.Errorf("run_id is required")
+	}
+	if err := enforceRunScope(ctx, runID); err != nil {
+		return mcpRememberOutput{}, err
 	}
 	kind := domain.ClaimType(strings.TrimSpace(input.Kind))
 	if kind == "" {
@@ -1974,6 +2003,9 @@ func mcpRunSearchMemory(ctx context.Context, input mcpSearchMemoryInput) (mcpSea
 	}
 	if runID == "" {
 		return mcpSearchMemoryOutput{}, fmt.Errorf("run_id is required (tenant boundary)")
+	}
+	if err := enforceRunScope(ctx, runID); err != nil {
+		return mcpSearchMemoryOutput{}, err
 	}
 	topK := input.TopK
 	if topK == 0 {

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -12,9 +14,14 @@ import (
 // quote/backslash-free charset safe to interpolate into `SET mnemos.tenant`.
 var tenantIDRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
-// validTenantID reports whether id is a well-formed tenant identifier.
+// reservedDefaultTenant is the unscoped partition. A bearer token must never be
+// scoped to it (that would grant access to the global/default data), so it is
+// rejected as an explicit tenant even though it matches the charset.
+const reservedDefaultTenant = "__default__"
+
+// validTenantID reports whether id is a well-formed, non-reserved tenant id.
 func validTenantID(id string) bool {
-	return tenantIDRE.MatchString(id)
+	return id != reservedDefaultTenant && tenantIDRE.MatchString(id)
 }
 
 // Per-request identity for the HTTP MCP transport. When `mnemos mcp --http`
@@ -80,4 +87,32 @@ func mcpRunAllowed(ctx context.Context, runID string) bool {
 		return c.AllowsRun(runID)
 	}
 	return true
+}
+
+// mcpRunRestricted reports whether the request's token carries a non-empty run
+// allowlist (so an unscoped, all-runs operation must be refused).
+func mcpRunRestricted(ctx context.Context) bool {
+	if c, ok := claimsFromContext(ctx); ok {
+		return len(c.Runs) > 0
+	}
+	return false
+}
+
+// enforceRunScope is the single guard every run-carrying tool calls. It denies
+// a request that targets a run outside the token's allowlist, AND — fail-closed
+// — denies an unscoped (empty run) operation from a run-restricted token, which
+// would otherwise read or write across every run. Unauthenticated / unrestricted
+// callers pass through unchanged.
+func enforceRunScope(ctx context.Context, runID string) error {
+	runID = strings.TrimSpace(runID)
+	if runID != "" {
+		if !mcpRunAllowed(ctx, runID) {
+			return fmt.Errorf("not authorized for run %q", runID)
+		}
+		return nil
+	}
+	if mcpRunRestricted(ctx) {
+		return errors.New("this token is restricted to specific runs; specify a run_id within your allowlist")
+	}
+	return nil
 }

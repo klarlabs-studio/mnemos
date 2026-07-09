@@ -67,10 +67,72 @@ func TestValidTenantID(t *testing.T) {
 			t.Errorf("%q should be valid", ok)
 		}
 	}
-	for _, bad := range []string{"", "has space", "quote'", "back\\slash", string(make([]byte, 129))} {
+	// Reserved default and malformed ids are rejected.
+	for _, bad := range []string{"", "__default__", "has space", "quote'", "back\\slash", string(make([]byte, 129))} {
 		if validTenantID(bad) {
 			t.Errorf("%q should be invalid", bad)
 		}
+	}
+}
+
+func TestEnforceRunScope(t *testing.T) {
+	bg := context.Background()
+
+	// Unauthenticated / no restriction: anything allowed, scoped or not.
+	if err := enforceRunScope(bg, "anything"); err != nil {
+		t.Errorf("unauthenticated should pass: %v", err)
+	}
+	if err := enforceRunScope(bg, ""); err != nil {
+		t.Errorf("unauthenticated unscoped should pass: %v", err)
+	}
+
+	// Run-restricted token.
+	ctx := withClaims(bg, &auth.Claims{Runs: []string{"alpha"}})
+	if err := enforceRunScope(ctx, "alpha"); err != nil {
+		t.Errorf("allowed run should pass: %v", err)
+	}
+	if err := enforceRunScope(ctx, "beta"); err == nil {
+		t.Error("disallowed run must be denied")
+	}
+	if err := enforceRunScope(ctx, ""); err == nil {
+		t.Error("unscoped op from a run-restricted token must be denied (fail-closed)")
+	}
+
+	// Authenticated but unrestricted (empty Runs): unscoped allowed.
+	ctx2 := withClaims(bg, &auth.Claims{})
+	if err := enforceRunScope(ctx2, ""); err != nil {
+		t.Errorf("unrestricted token unscoped should pass: %v", err)
+	}
+}
+
+func TestResolveDSNForContextFailClosed(t *testing.T) {
+	t.Setenv("MNEMOS_DB_URL", "postgres://h/db")
+	mcpTenantRequired = true
+	t.Cleanup(func() { mcpTenantRequired = false })
+
+	// require-tenant + no tenant in context → fail closed (no __default__).
+	if _, err := resolveDSNForContext(context.Background()); err == nil {
+		t.Error("multi-tenant mode with no tenant must fail closed")
+	}
+	// With a tenant → scoped DSN.
+	got, err := resolveDSNForContext(withTenant(context.Background(), "acme"))
+	if err != nil || got != "postgres://h/db?tenant=acme" {
+		t.Errorf("got %q, %v", got, err)
+	}
+}
+
+func TestDSNHasTenantParam(t *testing.T) {
+	if !dsnHasTenantParam("postgres://h/db?tenant=x") {
+		t.Error("should detect tenant param")
+	}
+	if !dsnHasTenantParam("postgres://h/db?sslmode=require&tenant=x") {
+		t.Error("should detect tenant param among others")
+	}
+	if dsnHasTenantParam("postgres://h/db?sslmode=require") {
+		t.Error("should not report tenant when absent")
+	}
+	if dsnHasTenantParam("postgres://h/db") {
+		t.Error("no query string → no tenant")
 	}
 }
 

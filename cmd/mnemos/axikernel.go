@@ -107,7 +107,7 @@ func mcpExecutorMap(actor string, getWatcher func() (*Watcher, error)) map[strin
 		"exec.process_text": toolExecutor[mcpProcessTextInput, mcpProcessTextOutput]{run: func(ctx context.Context, in mcpProcessTextInput) (mcpProcessTextOutput, error) {
 			return mcpRunProcessText(ctx, mcpActorFor(ctx, actor), in)
 		}, summary: processTextSummary, evidence: processTextEvidence},
-		"exec.knowledge_metrics": toolExecutor[struct{}, mcpMetricsOutput]{run: func(_ context.Context, _ struct{}) (mcpMetricsOutput, error) { return mcpRunMetrics() }, summary: metricsSummary},
+		"exec.knowledge_metrics": toolExecutor[struct{}, mcpMetricsOutput]{run: func(ctx context.Context, _ struct{}) (mcpMetricsOutput, error) { return mcpRunMetrics(ctx) }, summary: metricsSummary},
 		"exec.list_claims": toolExecutor[mcpListClaimsInput, mcpListClaimsOutput]{run: func(ctx context.Context, in mcpListClaimsInput) (mcpListClaimsOutput, error) {
 			return mcpRunListClaims(ctx, in)
 		}, summary: listClaimsSummary},
