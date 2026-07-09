@@ -6,10 +6,46 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
 )
+
+// Read-connection cache. A long-lived server (the MCP transport) opens a store
+// connection per request; for Postgres that means creating and pinging a fresh
+// pool every time. When enabled, openConn reuses one cached *store.Conn per
+// resolved DSN — and the resolved DSN includes ?tenant=<id>, so each tenant
+// gets its own pool (RLS isolation is unchanged) that is reused across the
+// tenant's requests instead of recreated. Only reads are cached; writes
+// (openWriter) stay per-request. Cached conns are closed at server shutdown.
+//
+// The CLI never enables this (short-lived commands), so its behavior is
+// unchanged.
+var (
+	connCacheEnabled bool
+	connCacheMu      sync.Mutex
+	connCache        = map[string]*store.Conn{}
+	cachedConns      = map[*store.Conn]bool{}
+)
+
+// enableConnCache turns on read-connection caching for the life of the process.
+// Call once, before serving requests.
+func enableConnCache() { connCacheEnabled = true }
+
+// closeConnCache closes every cached connection and resets the cache. Call at
+// server shutdown.
+func closeConnCache() {
+	connCacheMu.Lock()
+	defer connCacheMu.Unlock()
+	for _, c := range connCache {
+		if err := c.Close(); err != nil {
+			log.Printf("close cached conn: %v", err)
+		}
+	}
+	connCache = map[string]*store.Conn{}
+	cachedConns = map[*store.Conn]bool{}
+}
 
 // resolveDSN returns the canonical store DSN for this process. It is
 // the single point that translates the environment + on-disk
@@ -47,7 +83,21 @@ func openConn(ctx context.Context) (*store.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return store.Open(ctx, dsn)
+	if !connCacheEnabled {
+		return store.Open(ctx, dsn)
+	}
+	connCacheMu.Lock()
+	defer connCacheMu.Unlock()
+	if c, ok := connCache[dsn]; ok {
+		return c, nil
+	}
+	c, err := store.Open(ctx, dsn)
+	if err != nil {
+		return nil, err
+	}
+	connCache[dsn] = c
+	cachedConns[c] = true
+	return c, nil
 }
 
 // resolveDSNForContext returns the DSN for this request, scoped to the
@@ -79,6 +129,17 @@ func isPostgresDSN(dsn string) bool {
 // closeConn closes a *store.Conn, logging any error.
 // Use as: defer closeConn(conn)
 func closeConn(conn *store.Conn) {
+	// A cached connection is owned by the cache and closed at shutdown; a
+	// per-request closeConn on it must be a no-op or later requests would reuse
+	// a closed pool.
+	if connCacheEnabled {
+		connCacheMu.Lock()
+		cached := cachedConns[conn]
+		connCacheMu.Unlock()
+		if cached {
+			return
+		}
+	}
 	if err := conn.Close(); err != nil {
 		log.Printf("close store conn: %v", err)
 	}

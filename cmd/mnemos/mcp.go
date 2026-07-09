@@ -283,6 +283,11 @@ func handleMCP(args []string) {
 
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 
+	// Reuse one read pool per (tenant-scoped) DSN across requests instead of
+	// opening a fresh one each call. Isolation is unchanged — the cache key is
+	// the resolved DSN, which includes ?tenant=. Closed by the shutdown defer.
+	enableConnCache()
+
 	// Resolve the actor once at startup from MNEMOS_USER_ID; every
 	// persistence path below stamps it as created_by / changed_by. We
 	// only validate against the DB when the env var is non-empty — an
@@ -837,6 +842,7 @@ func handleMCP(args []string) {
 			_ = tm.Close()
 		}
 		tenantMu.Unlock()
+		closeConnCache()
 	}()
 
 	mw := mcp.WithMiddleware(mcp.DefaultMiddlewareWithTimeout(mcpBoltLogger{logger: logger}, 30*time.Second)...)
