@@ -391,7 +391,7 @@ func handleMCP(args []string) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpProcessTextOutput](ctx, kernel, nil, "process_text", input)
 			}
-			return mcpRunProcessText(ctx, mcpActor, input)
+			return mcpRunProcessText(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("knowledge_metrics").
@@ -449,7 +449,7 @@ func handleMCP(args []string) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpIngestGitPRsOutput](ctx, kernel, nil, "ingest_git_prs", input)
 			}
-			return mcpRunIngestGitPRs(ctx, mcpActor, input)
+			return mcpRunIngestGitPRs(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("ingest_git_log").
@@ -459,21 +459,21 @@ func handleMCP(args []string) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpIngestGitLogOutput](ctx, kernel, nil, "ingest_git_log", input)
 			}
-			return mcpRunIngestGitLog(ctx, mcpActor, input)
+			return mcpRunIngestGitLog(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("record_action").
 		Description("Record an operational action (deploy, rollback, scale, etc.) so it can be paired with later Outcomes for the synthesis layer. Idempotent on id.").
 		OutputSchema(mcpRecordActionOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordActionInput) (mcpRecordActionOutput, error) {
-			return mcpRunRecordAction(ctx, mcpActor, input)
+			return mcpRunRecordAction(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("record_outcome").
 		Description("Record the observed outcome of a previously recorded Action, including numeric metrics. Idempotent on id.").
 		OutputSchema(mcpRecordOutcomeOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordOutcomeInput) (mcpRecordOutcomeOutput, error) {
-			return mcpRunRecordOutcome(ctx, mcpActor, input)
+			return mcpRunRecordOutcome(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("synthesize_lessons").
@@ -501,7 +501,7 @@ func handleMCP(args []string) {
 		Description("Record a decision: the belief claims that justified it, the plan chosen, the alternatives considered, and the risk level. Optional outcomeId attaches an already-observed Outcome.").
 		OutputSchema(mcpRecordDecisionOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordDecisionInput) (mcpRecordDecisionOutput, error) {
-			return mcpRunRecordDecision(ctx, mcpActor, input)
+			return mcpRunRecordDecision(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("query_decisions").
@@ -544,28 +544,28 @@ func handleMCP(args []string) {
 		Description("Mark a claim as deprecated when the agent finds it stale or wrong. Records the rationale on the status transition; existing evidence + history stay queryable.").
 		OutputSchema(mcpMemoryDeprecateOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryDeprecateInput) (mcpMemoryDeprecateOutput, error) {
-			return mcpRunMemoryDeprecate(ctx, mcpActor, input)
+			return mcpRunMemoryDeprecate(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("memory_resolve_contradiction").
 		Description("Pick the winner of two contradicting claims. Winner moves to status=resolved; loser to status=deprecated. Both transitions carry the rationale.").
 		OutputSchema(mcpMemoryResolveOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryResolveInput) (mcpMemoryResolveOutput, error) {
-			return mcpRunMemoryResolve(ctx, mcpActor, input)
+			return mcpRunMemoryResolve(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("memory_escalate").
 		Description("Signal that the agent cannot resolve a claim autonomously and requests human review. Records an escalation Verdict on the claim with the agent-provided reason so the audit trail captures who escalated and why.").
 		OutputSchema(mcpMemoryEscalateOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryEscalateInput) (mcpMemoryEscalateOutput, error) {
-			return mcpRunMemoryEscalate(ctx, mcpActor, input)
+			return mcpRunMemoryEscalate(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("memory_promote").
 		Description("Re-verify a claim against fresh evidence. Bumps last_verified, increments verify_count — the trust score follows.").
 		OutputSchema(mcpMemoryPromoteOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryPromoteInput) (mcpMemoryPromoteOutput, error) {
-			return mcpRunMemoryPromote(ctx, mcpActor, input)
+			return mcpRunMemoryPromote(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("memory_context").
@@ -580,21 +580,21 @@ func handleMCP(args []string) {
 		Description("Store a single fact as a claim, scoped to a run_id, with an event + evidence link so it is auditable. Use this when the agent decides to commit something to long-term memory.").
 		OutputSchema(mcpRememberOutput{}).
 		Handler(func(ctx context.Context, input mcpRememberInput) (mcpRememberOutput, error) {
-			return mcpRunRemember(ctx, mcpActor, input)
+			return mcpRunRemember(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("forget").
 		Description("Soft-delete a claim by flipping its status to deprecated. The claim and its evidence stay queryable for audit; future recall paths exclude it from active context.").
 		OutputSchema(mcpForgetOutput{}).
 		Handler(func(ctx context.Context, input mcpForgetInput) (mcpForgetOutput, error) {
-			return mcpRunForget(ctx, mcpActor, input)
+			return mcpRunForget(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("update").
 		Description("Rewrite a claim's text (and optionally its confidence) when the agent's understanding refines. The reason is recorded in the status history.").
 		OutputSchema(mcpUpdateOutput{}).
 		Handler(func(ctx context.Context, input mcpUpdateInput) (mcpUpdateOutput, error) {
-			return mcpRunUpdate(ctx, mcpActor, input)
+			return mcpRunUpdate(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("search_memory").
@@ -611,7 +611,7 @@ func handleMCP(args []string) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpRememberEventOutput](ctx, kernel, nil, "remember_event", input)
 			}
-			return mcpRunRememberEvent(ctx, mcpActor, input)
+			return mcpRunRememberEvent(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("timeline_query").
@@ -968,6 +968,10 @@ func resolveMCPActor() string {
 }
 
 func mcpRunQuery(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
+	// Enforce the token's run allowlist when a specific run is requested.
+	if rid := strings.TrimSpace(input.RunID); rid != "" && !mcpRunAllowed(ctx, rid) {
+		return mcpQueryOutput{}, fmt.Errorf("not authorized for run %q", rid)
+	}
 	conn, err := openConn(ctx)
 	if err != nil {
 		return mcpQueryOutput{}, err

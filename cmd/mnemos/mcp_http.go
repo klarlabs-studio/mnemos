@@ -30,6 +30,7 @@ func serveMCPHTTP(ctx context.Context, srv *mcp.Server, addr string, requireAuth
 		if err != nil {
 			return fmt.Errorf("mcp http auth: %w", err)
 		}
+		// Reject unauthenticated/invalid requests before they reach a handler.
 		opts = append(opts, mcptransport.WithAuthorize(func(r *http.Request) error {
 			tok := bearerToken(r.Header.Get("Authorization"))
 			if tok == "" {
@@ -39,6 +40,16 @@ func serveMCPHTTP(ctx context.Context, srv *mcp.Server, addr string, requireAuth
 				return fmt.Errorf("invalid token: %w", err)
 			}
 			return nil
+		}))
+		// Thread the validated claims into each request's context so handlers
+		// attribute writes to the token subject and honor its run allowlist.
+		opts = append(opts, mcptransport.WithRequestContextFn(func(reqCtx context.Context, r *http.Request) context.Context {
+			if tok := bearerToken(r.Header.Get("Authorization")); tok != "" {
+				if claims, err := verifier.ParseAndValidate(r.Context(), tok); err == nil {
+					return withClaims(reqCtx, claims)
+				}
+			}
+			return reqCtx
 		}))
 	}
 
