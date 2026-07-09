@@ -1,5 +1,11 @@
 name: Mutation
 
+# Mutation testing is expensive; cancel a superseded run so only the latest
+# push/PR head is analysed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]

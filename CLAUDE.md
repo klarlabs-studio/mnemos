@@ -76,14 +76,17 @@ All domain types have `Validate()` methods. Contradictions are first-class conce
 ### Entrypoints
 
 - `cmd/mnemos/` — CLI subcommands:
+  - Setup: `init` (system-detecting one-command bootstrap: brain + config + MCP registration + Claude Code hooks; `--project`, `--dry-run`, `--yes`, `--no-hooks`, `--hooks`, `--no-mcp`, `--db <dsn>`, `--force`; `--url <endpoint> [--token]` registers a remote HTTP MCP server for a hosted brain, no local brain/hooks; `--service [--out]` scaffolds a `mnemos serve` deployment bundle via `scaffoldService`), `setup` (minimal MCP-only registration), `hook <recall|brief|capture>` (internal Claude Code hook handlers, read event JSON on stdin, fail-open). `init --db` accepts any store DSN (sqlite/postgres/mysql/libsql); it opens the DSN first (connectivity check + schema bootstrap) and fails fast if unreachable (unless `--force`). Credential hygiene: a credential-free DSN (local SQLite/memory) is inlined into Claude's config; a networked DSN with a password is written to the 0600 config file (via `config.SetValues`) and discovered by the server/hooks, never inlined into `~/.claude.json`/`settings.json`. Setup logic lives in `init.go`/`setup.go`/`detect.go`/`hooks_install.go`; the same plan/apply engine backs the `configure_environment` MCP tool.
   - Core: `ingest`, `extract` (supports `--run`), `relate`, `process`, `query`, `metrics`, `verify`
   - Phase 2: `action record/list`, `outcome record/list`
   - Phase 3: `synthesize`, `lessons [--service|--trigger]`
   - Phase 5: `decision record/list/show/attach-outcome`
   - Phase 6: `playbook synthesize/list/show/<trigger>`
   - Phase 7: `export --kind=lesson|playbook`, `import <file.md>`, `history --kind=lesson|playbook`
-- `mnemos mcp` — MCP server exposing `query_knowledge`, `process_text`, `knowledge_metrics`, `record_action`, `record_outcome`, `synthesize_lessons`, `query_lessons`, `record_decision`, `query_decisions`, `query_playbook`, `synthesize_playbooks`, `list_claims`, `list_decisions`, `list_contradictions`, `watch_file`, `ingest_git_log`, `ingest_git_prs` over stdio
-- `mnemos serve [--grpc-port N]` — HTTP REST + optional gRPC API alongside
+- `mnemos mcp` — MCP server exposing `query_knowledge`, `process_text`, `knowledge_metrics`, `configure_environment`, `record_action`, `record_outcome`, `synthesize_lessons`, `query_lessons`, `record_decision`, `query_decisions`, `query_playbook`, `synthesize_playbooks`, `list_claims`, `list_decisions`, `list_contradictions`, `watch_file`, `ingest_git_log`, `ingest_git_prs`. Default transport is stdio (local Claude Code). `mnemos mcp --http <addr> [--auth|--no-auth]` serves the identical tool set over Streamable HTTP so remote MCP clients can reach a hosted brain — `--auth` (default for `--http`) gates every request behind a bearer JWT via the mcp-go `transport.WithAuthorize` hook (`serveMCPHTTP` in `cmd/mnemos/mcp_http.go`, reusing the same `auth.Verifier` as `serve`'s gRPC); TLS from `MNEMOS_TLS_*`. Per-request identity: `transport.WithRequestContextFn` stashes the validated `*auth.Claims` in each request's context (`mcp_identity.go`); write handlers attribute `created_by` to the token subject via `mcpActorFor(ctx, fallback)` (through both the direct and axi-kernel executor paths), and run-scoped reads enforce the token's run allowlist via `mcpRunAllowed`. Stdio has no claims, so both fall back to the process actor / no restriction — unchanged.
+
+**Multi-tenant per server (ADR 0007, Phase 1):** `mcp --http --require-tenant` serves many tenants from one process. The JWT carries a `tnt` claim (`Claims.Tenant`; mint with `token issue --tenant` / `agent token issue --tenant`). In this mode the auth hook **denies** a token without a valid tenant (fail-closed), `withTenant` stashes the effective tenant, and `resolveDSNForContext` appends `?tenant=<id>` so the Postgres provider pins the `mnemos.tenant` GUC and RLS isolates the request; the cognitive path routes through a per-tenant `memFacade.Tenant()` cache. `--require-tenant` requires a Postgres backend (refuses to start otherwise) and a non-superuser role (RLS is bypassed by superusers). **Connection reuse:** the MCP server caches one read pool per tenant-scoped DSN (`enableConnCache` in `dsn.go`; keyed by the resolved DSN incl. `?tenant=`, so tenants never share a pool and RLS is unchanged) — reads reuse a pooled conn instead of opening one per request. Writes (`openWriter`) stay per-request. **Phase 2 (not done):** a single shared pool for *all* tenants via per-transaction `SET LOCAL mnemos.tenant` (the ADR's named optimization) — that removes the per-tenant pool count entirely but is a Postgres-repository-layer refactor with real leak surface, best done behind the store-level isolation test.
+- `mnemos serve [--grpc-port N]` — REST + gRPC API service (the "as a service" surface; JWT auth, TLS/mTLS, multi-tenant namespace/RLS). Distinct from the MCP surface; API parity across MCP/HTTP/gRPC is enforced by `TestAPISurfaceParity`.
 
 ### Internal Libraries (owned by same author)
 
@@ -125,9 +128,24 @@ Embeddings are stored as little-endian float32 binary BLOBs, encoded/decoded via
 
 **A new Postgres table LEAKS across tenants unless you register it in the ADR-0007 RLS `scoped` array in `internal/store/postgres/schema.sql` — not just its `CREATE TABLE`.** Per-tenant isolation within a namespace is applied by the `DO $mnemos_rls$` block, which iterates a `scoped text[]` list and, for each table, adds a `tenant` column (defaulted from the `mnemos.tenant` GUC), a tenant index, and a `FORCE ROW LEVEL SECURITY` `tenant_isolation` policy. A table absent from that list gets **no** tenant column and **no** policy, so every tenant sees every row. When you add a table used across tenants (side tables like `working_memory_blocks`, `claim_expectations` did this), add its name to `scoped`. Auth-infra tables (`users`, `revoked_tokens`) are deliberately excluded. Verify with the live-Postgres integration test (a fresh namespace should isolate).
 
+## Configuration (env vars + YAML file)
+
+Every setting below can come from a `MNEMOS_*` environment variable **or** a
+YAML config file — mix freely. Precedence is 12-factor: an exported env var
+always overrides the file; the file only fills gaps. The loader
+(`internal/config`) discovers the file via `--config <path>` → `MNEMOS_CONFIG`
+→ nearest `.mnemos/mnemos.yaml` (walked up from CWD) → `~/.config/mnemos/config.yaml`,
+then hydrates unset `MNEMOS_*` vars in `main()` before any package reads them —
+so all the `os.Getenv("MNEMOS_...")` call sites stay unchanged. An explicit
+(`--config`/`MNEMOS_CONFIG`) missing or malformed file is fatal (exit `ExitConfig`);
+implicit-discovery misses are silent. Unknown YAML keys are rejected. Each YAML
+leaf maps to exactly one env var — see `Config.EnvOverrides` and
+`mnemos.example.yaml`.
+
 ## Environment Variables
 
 ```
+MNEMOS_CONFIG          # Explicit path to the YAML config file (overridden by --config).
 MNEMOS_DB_URL          # Storage DSN; any registered backend (sqlite://, memory://, postgres://, mysql://, libsql://). When unset: ./.mnemos/mnemos.db (walked up) → ~/.local/share/mnemos/mnemos.db.
 MNEMOS_LLM_PROVIDER    # anthropic, openai, gemini, ollama, openai-compat
 MNEMOS_LLM_API_KEY     # API key for cloud providers

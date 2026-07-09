@@ -199,6 +199,7 @@ func handleAgentToken(args []string) {
 	args = args[1:]
 
 	agentID := ""
+	tenant := ""
 	ttl := defaultTokenTTL
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -208,6 +209,13 @@ func handleAgentToken(args []string) {
 				return
 			}
 			agentID = args[i+1]
+			i++
+		case "--tenant":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--tenant requires a value"))
+				return
+			}
+			tenant = args[i+1]
 			i++
 		case "--ttl":
 			if i+1 >= len(args) {
@@ -234,6 +242,11 @@ func handleAgentToken(args []string) {
 		exitWithMnemosError(false, NewUserError("--agent is required"))
 		return
 	}
+	tenant = strings.TrimSpace(tenant)
+	if tenant != "" && !validTenantID(tenant) {
+		exitWithMnemosError(false, NewUserError("invalid --tenant %q (allowed: letters, digits, . _ : -, max 128)", tenant))
+		return
+	}
 
 	conn, err := openConn(context.Background())
 	if err != nil {
@@ -257,7 +270,7 @@ func handleAgentToken(args []string) {
 		exitWithMnemosError(false, NewSystemError(err, "load JWT secret"))
 		return
 	}
-	token, jti, err := auth.NewIssuer(secret).IssueAgentTokenWithScopesAndRuns(agent.ID, agent.Scopes, agent.AllowedRuns, ttl)
+	token, jti, err := auth.NewIssuer(secret).IssueAgentTokenFull(agent.ID, agent.Scopes, agent.AllowedRuns, tenant, ttl)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "issue token"))
 		return

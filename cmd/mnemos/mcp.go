@@ -269,10 +269,24 @@ type mcpSynthesizePlaybooksOutput struct {
 	PlaybookIDs      []string `json:"playbook_ids"`
 }
 
-// handleMCP starts the MCP server over stdio. This is a long-lived process
-// that blocks until the connection is closed.
-func handleMCP() {
+// handleMCP starts the MCP server. By default it serves over stdio (for a
+// local Claude Code); with `--http <addr>` it serves the same tool set over
+// Streamable HTTP so a hosted Mnemos can be reached by remote MCP clients. It
+// is a long-lived process that blocks until the connection is closed or the
+// process is signalled.
+func handleMCP(args []string) {
+	serveCfg, err := parseMCPArgs(args)
+	if err != nil {
+		exitWithMnemosError(false, err)
+		return
+	}
+
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
+
+	// Reuse one read pool per (tenant-scoped) DSN across requests instead of
+	// opening a fresh one each call. Isolation is unchanged — the cache key is
+	// the resolved DSN, which includes ?tenant=. Closed by the shutdown defer.
+	enableConnCache()
 
 	// Resolve the actor once at startup from MNEMOS_USER_ID; every
 	// persistence path below stamps it as created_by / changed_by. We
@@ -347,13 +361,35 @@ func handleMCP() {
 	// knowledge-gaps, calibration, …). Built once, reused across tool calls, and
 	// closed by the shutdown defer below.
 	var (
-		memOnce   sync.Once
-		memFacade mnemos.Memory
-		memErr    error
+		memOnce    sync.Once
+		memFacade  mnemos.Memory
+		memErr     error
+		tenantMu   sync.Mutex
+		tenantMems = map[string]mnemos.Memory{}
 	)
-	getMem := func() (mnemos.Memory, error) {
+	// getMem returns the cognitive-layer Memory for a request. In multi-tenant
+	// mode it returns a per-tenant view (memFacade.Tenant), cached so each
+	// tenant reuses one pool for the life of the server.
+	getMem := func(ctx context.Context) (mnemos.Memory, error) {
 		memOnce.Do(func() { memFacade, memErr = newLibraryMemory(context.Background(), mcpActor) })
-		return memFacade, memErr
+		if memErr != nil {
+			return nil, memErr
+		}
+		tenant, ok := tenantFromContext(ctx)
+		if !ok {
+			return memFacade, nil
+		}
+		tenantMu.Lock()
+		defer tenantMu.Unlock()
+		if m, cached := tenantMems[tenant]; cached {
+			return m, nil
+		}
+		tm, err := memFacade.Tenant(tenant)
+		if err != nil {
+			return nil, err
+		}
+		tenantMems[tenant] = tm
+		return tm, nil
 	}
 
 	// Build the axi-go kernel that wraps every MCP tool with effect
@@ -382,7 +418,7 @@ func handleMCP() {
 			if kernel != nil {
 				return dispatchAxiTool[mcpProcessTextOutput](ctx, kernel, nil, "process_text", input)
 			}
-			return mcpRunProcessText(ctx, mcpActor, input)
+			return mcpRunProcessText(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("knowledge_metrics").
@@ -393,6 +429,13 @@ func handleMCP() {
 				return dispatchAxiTool[mcpMetricsOutput](ctx, kernel, nil, "knowledge_metrics", struct{}{})
 			}
 			return mcpRunMetrics()
+		})
+
+	srv.Tool("configure_environment").
+		Description("Finish wiring Mnemos into Claude Code: detect the host and install the recall/brief/capture hooks (and a starter config) so memory is automatic. The MCP server itself is already registered. Ask the user before calling if they didn't request setup.").
+		OutputSchema(mcpConfigureOutput{}).
+		Handler(func(_ context.Context, input mcpConfigureInput) (mcpConfigureOutput, error) {
+			return mcpRunConfigure(input)
 		})
 
 	srv.Tool("list_claims").
@@ -433,7 +476,7 @@ func handleMCP() {
 			if kernel != nil {
 				return dispatchAxiTool[mcpIngestGitPRsOutput](ctx, kernel, nil, "ingest_git_prs", input)
 			}
-			return mcpRunIngestGitPRs(ctx, mcpActor, input)
+			return mcpRunIngestGitPRs(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("ingest_git_log").
@@ -443,21 +486,21 @@ func handleMCP() {
 			if kernel != nil {
 				return dispatchAxiTool[mcpIngestGitLogOutput](ctx, kernel, nil, "ingest_git_log", input)
 			}
-			return mcpRunIngestGitLog(ctx, mcpActor, input)
+			return mcpRunIngestGitLog(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("record_action").
 		Description("Record an operational action (deploy, rollback, scale, etc.) so it can be paired with later Outcomes for the synthesis layer. Idempotent on id.").
 		OutputSchema(mcpRecordActionOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordActionInput) (mcpRecordActionOutput, error) {
-			return mcpRunRecordAction(ctx, mcpActor, input)
+			return mcpRunRecordAction(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("record_outcome").
 		Description("Record the observed outcome of a previously recorded Action, including numeric metrics. Idempotent on id.").
 		OutputSchema(mcpRecordOutcomeOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordOutcomeInput) (mcpRecordOutcomeOutput, error) {
-			return mcpRunRecordOutcome(ctx, mcpActor, input)
+			return mcpRunRecordOutcome(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("synthesize_lessons").
@@ -485,7 +528,7 @@ func handleMCP() {
 		Description("Record a decision: the belief claims that justified it, the plan chosen, the alternatives considered, and the risk level. Optional outcomeId attaches an already-observed Outcome.").
 		OutputSchema(mcpRecordDecisionOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordDecisionInput) (mcpRecordDecisionOutput, error) {
-			return mcpRunRecordDecision(ctx, mcpActor, input)
+			return mcpRunRecordDecision(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("query_decisions").
@@ -528,28 +571,28 @@ func handleMCP() {
 		Description("Mark a claim as deprecated when the agent finds it stale or wrong. Records the rationale on the status transition; existing evidence + history stay queryable.").
 		OutputSchema(mcpMemoryDeprecateOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryDeprecateInput) (mcpMemoryDeprecateOutput, error) {
-			return mcpRunMemoryDeprecate(ctx, mcpActor, input)
+			return mcpRunMemoryDeprecate(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("memory_resolve_contradiction").
 		Description("Pick the winner of two contradicting claims. Winner moves to status=resolved; loser to status=deprecated. Both transitions carry the rationale.").
 		OutputSchema(mcpMemoryResolveOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryResolveInput) (mcpMemoryResolveOutput, error) {
-			return mcpRunMemoryResolve(ctx, mcpActor, input)
+			return mcpRunMemoryResolve(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("memory_escalate").
 		Description("Signal that the agent cannot resolve a claim autonomously and requests human review. Records an escalation Verdict on the claim with the agent-provided reason so the audit trail captures who escalated and why.").
 		OutputSchema(mcpMemoryEscalateOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryEscalateInput) (mcpMemoryEscalateOutput, error) {
-			return mcpRunMemoryEscalate(ctx, mcpActor, input)
+			return mcpRunMemoryEscalate(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("memory_promote").
 		Description("Re-verify a claim against fresh evidence. Bumps last_verified, increments verify_count — the trust score follows.").
 		OutputSchema(mcpMemoryPromoteOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryPromoteInput) (mcpMemoryPromoteOutput, error) {
-			return mcpRunMemoryPromote(ctx, mcpActor, input)
+			return mcpRunMemoryPromote(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("memory_context").
@@ -564,21 +607,21 @@ func handleMCP() {
 		Description("Store a single fact as a claim, scoped to a run_id, with an event + evidence link so it is auditable. Use this when the agent decides to commit something to long-term memory.").
 		OutputSchema(mcpRememberOutput{}).
 		Handler(func(ctx context.Context, input mcpRememberInput) (mcpRememberOutput, error) {
-			return mcpRunRemember(ctx, mcpActor, input)
+			return mcpRunRemember(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("forget").
 		Description("Soft-delete a claim by flipping its status to deprecated. The claim and its evidence stay queryable for audit; future recall paths exclude it from active context.").
 		OutputSchema(mcpForgetOutput{}).
 		Handler(func(ctx context.Context, input mcpForgetInput) (mcpForgetOutput, error) {
-			return mcpRunForget(ctx, mcpActor, input)
+			return mcpRunForget(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("update").
 		Description("Rewrite a claim's text (and optionally its confidence) when the agent's understanding refines. The reason is recorded in the status history.").
 		OutputSchema(mcpUpdateOutput{}).
 		Handler(func(ctx context.Context, input mcpUpdateInput) (mcpUpdateOutput, error) {
-			return mcpRunUpdate(ctx, mcpActor, input)
+			return mcpRunUpdate(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("search_memory").
@@ -595,7 +638,7 @@ func handleMCP() {
 			if kernel != nil {
 				return dispatchAxiTool[mcpRememberEventOutput](ctx, kernel, nil, "remember_event", input)
 			}
-			return mcpRunRememberEvent(ctx, mcpActor, input)
+			return mcpRunRememberEvent(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("timeline_query").
@@ -623,7 +666,7 @@ func handleMCP() {
 		Description("Rank the workers whose memory best matches a topic (who-knows-what directory).").
 		OutputSchema(mcpWhoKnowsOutput{}).
 		Handler(func(ctx context.Context, input mcpWhoKnowsInput) (mcpWhoKnowsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpWhoKnowsOutput{}, err
 			}
@@ -634,7 +677,7 @@ func handleMCP() {
 		Description("List the highest-value open questions (unresolved hypotheses / contested claims).").
 		OutputSchema(mcpKnowledgeGapsOutput{}).
 		Handler(func(ctx context.Context, input mcpKnowledgeGapsInput) (mcpKnowledgeGapsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpKnowledgeGapsOutput{}, err
 			}
@@ -645,7 +688,7 @@ func handleMCP() {
 		Description("Report how well stated confidence tracks reality (ECE/Brier, per source).").
 		OutputSchema(mcpCalibrationOutput{}).
 		Handler(func(ctx context.Context, _ struct{}) (mcpCalibrationOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpCalibrationOutput{}, err
 			}
@@ -656,7 +699,7 @@ func handleMCP() {
 		Description("List established beliefs a newer claim now contradicts (worth re-examining).").
 		OutputSchema(mcpHypercorrectionsOutput{}).
 		Handler(func(ctx context.Context, _ struct{}) (mcpHypercorrectionsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpHypercorrectionsOutput{}, err
 			}
@@ -667,7 +710,7 @@ func handleMCP() {
 		Description("List topically-similar-but-unlinked claim pairs (candidate novel connections).").
 		OutputSchema(mcpRecombinationsOutput{}).
 		Handler(func(ctx context.Context, input mcpRecombinationsInput) (mcpRecombinationsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpRecombinationsOutput{}, err
 			}
@@ -678,7 +721,7 @@ func handleMCP() {
 		Description("Return the claims most structurally analogous to a given one.").
 		OutputSchema(mcpAnalogousOutput{}).
 		Handler(func(ctx context.Context, input mcpAnalogousInput) (mcpAnalogousOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpAnalogousOutput{}, err
 			}
@@ -690,7 +733,7 @@ func handleMCP() {
 		Description("Fetch a single claim's full detail (statement, trust, lifecycle, validity).").
 		OutputSchema(mcpClaimDetailOutput{}).
 		Handler(func(ctx context.Context, input mcpGetClaimInput) (mcpClaimDetailOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpClaimDetailOutput{}, err
 			}
@@ -701,7 +744,7 @@ func handleMCP() {
 		Description("Report whether a candidate statement fits established knowledge or is novel.").
 		OutputSchema(mcpClassifyOutput{}).
 		Handler(func(ctx context.Context, input mcpClassifyInput) (mcpClassifyOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpClassifyOutput{}, err
 			}
@@ -712,7 +755,7 @@ func handleMCP() {
 		Description("Fetch a single recorded decision by id.").
 		OutputSchema(mcpDecisionOutput{}).
 		Handler(func(ctx context.Context, input mcpGetDecisionInput) (mcpDecisionOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpDecisionOutput{}, err
 			}
@@ -723,7 +766,7 @@ func handleMCP() {
 		Description("Advanced retrieval; mode selects the epistemic-honesty variant (sufficiency|effort|context|conflicts|iterative).").
 		OutputSchema(mcpRecallOutput{}).
 		Handler(func(ctx context.Context, input mcpRecallInput) (mcpRecallOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpRecallOutput{}, err
 			}
@@ -734,7 +777,7 @@ func handleMCP() {
 		Description("Read an agent's working-memory blocks — its bounded, always-injected 'core memory' (persona, open_threads, ...).").
 		OutputSchema(mcpGetBlocksOutput{}).
 		Handler(func(ctx context.Context, input mcpGetBlocksInput) (mcpGetBlocksOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpGetBlocksOutput{}, err
 			}
@@ -745,7 +788,7 @@ func handleMCP() {
 		Description("Set or append an agent's working-memory block. append=true evicts oldest lines to stay within the attention budget; empty value replaces (clears) the block.").
 		OutputSchema(mcpSetBlockOutput{}).
 		Handler(func(ctx context.Context, input mcpSetBlockInput) (mcpSetBlockOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpSetBlockOutput{}, err
 			}
@@ -756,7 +799,7 @@ func handleMCP() {
 		Description("Detected temporal patterns (trend|spike|drop|stall|anomaly|...) over a run's event series — the 'what is changing?' reading that complements recall.").
 		OutputSchema(mcpSignalsOutput{}).
 		Handler(func(ctx context.Context, input mcpSignalsInput) (mcpSignalsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpSignalsOutput{}, err
 			}
@@ -794,9 +837,28 @@ func handleMCP() {
 		if memFacade != nil {
 			_ = memFacade.Close()
 		}
+		tenantMu.Lock()
+		for _, tm := range tenantMems {
+			_ = tm.Close()
+		}
+		tenantMu.Unlock()
+		closeConnCache()
 	}()
 
-	if err := mcp.ServeStdio(rootCtx, srv, mcp.WithMiddleware(mcp.DefaultMiddlewareWithTimeout(mcpBoltLogger{logger: logger}, 30*time.Second)...)); err != nil && !errors.Is(err, context.Canceled) {
+	mw := mcp.WithMiddleware(mcp.DefaultMiddlewareWithTimeout(mcpBoltLogger{logger: logger}, 30*time.Second)...)
+	if serveCfg.httpAddr != "" {
+		// Multi-tenant scoping is enforced by Postgres RLS; refuse to start in
+		// that mode on any other backend rather than silently share data.
+		if serveCfg.requireTenant && !isPostgresDSN(resolveDSN()) {
+			exitWithMnemosError(false, NewUserError("--require-tenant needs a postgres backend (set MNEMOS_DB_URL=postgres://…); RLS enforces tenant isolation (ADR 0007)"))
+			return
+		}
+		if err := serveMCPHTTP(rootCtx, srv, serveCfg.httpAddr, serveCfg.requireAuth, serveCfg.requireTenant, mw); err != nil && !errors.Is(err, context.Canceled) {
+			log.Fatal(err)
+		}
+		return
+	}
+	if err := mcp.ServeStdio(rootCtx, srv, mw); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal(err)
 	}
 }
@@ -945,6 +1007,10 @@ func resolveMCPActor() string {
 }
 
 func mcpRunQuery(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
+	// Enforce the token's run allowlist when a specific run is requested.
+	if rid := strings.TrimSpace(input.RunID); rid != "" && !mcpRunAllowed(ctx, rid) {
+		return mcpQueryOutput{}, fmt.Errorf("not authorized for run %q", rid)
+	}
 	conn, err := openConn(ctx)
 	if err != nil {
 		return mcpQueryOutput{}, err

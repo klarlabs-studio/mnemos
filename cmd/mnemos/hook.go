@@ -1,0 +1,314 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"time"
+)
+
+// Claude Code hook handlers: `mnemos hook <recall|brief|capture>`.
+//
+// Each reads the hook event JSON from stdin and, for recall/brief, writes a
+// JSON payload with hookSpecificOutput.additionalContext to stdout so Claude
+// Code injects Mnemos knowledge into the model's context. capture is a
+// side-effect-only SessionEnd handler that records the session into the brain.
+//
+// These run inside the user's editor loop, so they are FAIL-OPEN: any error
+// (no brain yet, DB locked, bad stdin) results in exit 0 with no injected
+// context. A hook must never block the user or crash their session — an
+// unavailable brain simply means "no memory this turn".
+
+// hookEvent is the subset of the Claude Code hook stdin payload we read.
+// Fields not sent for a given event stay zero.
+type hookEvent struct {
+	SessionID      string `json:"session_id"`
+	TranscriptPath string `json:"transcript_path"`
+	Cwd            string `json:"cwd"`
+	HookEventName  string `json:"hook_event_name"`
+	Prompt         string `json:"prompt"` // UserPromptSubmit
+	Source         string `json:"source"` // SessionStart: startup|resume|clear|compact
+	Reason         string `json:"reason"` // SessionEnd
+}
+
+// hookContextOutput injects additional context back into Claude Code.
+type hookContextOutput struct {
+	HookSpecificOutput hookSpecificOutput `json:"hookSpecificOutput"`
+}
+
+type hookSpecificOutput struct {
+	HookEventName     string `json:"hookEventName"`
+	AdditionalContext string `json:"additionalContext,omitempty"`
+}
+
+// handleHook dispatches `mnemos hook <name>`. It always exits 0; failures
+// degrade to "no context injected" rather than surfacing to the user.
+func handleHook(args []string) {
+	name := ""
+	dbOverride := ""
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--db":
+			if i+1 < len(args) {
+				dbOverride = args[i+1]
+				i++
+			}
+		default:
+			if name == "" && !strings.HasPrefix(args[i], "-") {
+				name = args[i]
+			}
+		}
+	}
+	// Pin the brain the integration was set up against, regardless of the
+	// project directory Claude Code launched the hook from.
+	if dbOverride != "" {
+		_ = os.Setenv("MNEMOS_DB_URL", dbOverride)
+	}
+
+	ev := readHookEvent(os.Stdin)
+
+	switch name {
+	case "recall", "prompt-submitted":
+		hookRecall(ev)
+	case "brief", "session-start":
+		hookBrief(ev)
+	case "capture", "session-end":
+		hookCapture(ev)
+	default:
+		// Unknown hook name: nothing to do, but don't fail the session.
+	}
+	os.Exit(int(ExitSuccess))
+}
+
+// readHookEvent decodes the hook payload, tolerating an empty or malformed
+// stdin (returns a zero event).
+func readHookEvent(r io.Reader) hookEvent {
+	var ev hookEvent
+	data, err := io.ReadAll(io.LimitReader(r, 1<<20))
+	if err != nil || len(data) == 0 {
+		return ev
+	}
+	_ = json.Unmarshal(data, &ev)
+	return ev
+}
+
+// emitContext writes the additionalContext injection payload. Empty context
+// emits nothing (a bare exit 0), which Claude Code treats as "no output".
+func emitContext(eventName, context string) {
+	context = strings.TrimSpace(context)
+	if context == "" {
+		return
+	}
+	out := hookContextOutput{HookSpecificOutput: hookSpecificOutput{
+		HookEventName:     eventName,
+		AdditionalContext: context,
+	}}
+	_ = json.NewEncoder(os.Stdout).Encode(out)
+}
+
+// hookRecall (UserPromptSubmit) surfaces claims relevant to the user's prompt.
+func hookRecall(ev hookEvent) {
+	q := strings.TrimSpace(ev.Prompt)
+	if q == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+
+	out, err := mcpRunQuery(ctx, mcpQueryInput{Question: q})
+	if err != nil {
+		return // fail-open
+	}
+	ctxText := formatRecall(out)
+	emitContext("UserPromptSubmit", ctxText)
+}
+
+// formatRecall renders a compact, citation-friendly context block. It caps the
+// claim list so the injection stays small.
+func formatRecall(out mcpQueryOutput) string {
+	if len(out.Claims) == 0 && strings.TrimSpace(out.Answer) == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Relevant knowledge from Mnemos (your long-term memory):\n")
+	const maxClaims = 6
+	for i, c := range out.Claims {
+		if i >= maxClaims {
+			fmt.Fprintf(&b, "  …and %d more (use the query_knowledge tool for the full set)\n", len(out.Claims)-maxClaims)
+			break
+		}
+		fmt.Fprintf(&b, "  - [%s] %s (trust %.2f)\n", c.Type, strings.TrimSpace(c.Text), c.TrustScore)
+	}
+	if len(out.Contradictions) > 0 {
+		fmt.Fprintf(&b, "  ⚠ %d contradiction(s) recorded on this topic — verify before relying.\n", len(out.Contradictions))
+	}
+	b.WriteString("If this contradicts newer information, prefer the newer and note the conflict.")
+	return b.String()
+}
+
+// hookBrief (SessionStart) injects a short brain summary at session start.
+func hookBrief(ev hookEvent) {
+	// Skip on /clear and compaction resumes to avoid re-injecting every time.
+	if ev.Source == "clear" || ev.Source == "compact" {
+		return
+	}
+	m, err := mcpRunMetrics()
+	if err != nil {
+		return
+	}
+	if m.Claims == 0 {
+		return // empty brain: nothing worth announcing
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Mnemos brain connected: %d claims across %d runs", m.Claims, m.Runs)
+	if m.Contradictions > 0 {
+		fmt.Fprintf(&b, ", %d open contradiction(s)", m.Contradictions)
+	}
+	b.WriteString(".\n")
+	b.WriteString("Use query_knowledge before answering questions about past decisions, and record new decisions/facts with process_text or record_decision.")
+	emitContext("SessionStart", b.String())
+}
+
+// hookCapture (SessionEnd) distills the session transcript into the brain.
+// SessionEnd ignores hook stdout, so this is pure side effect. It reads the
+// JSONL transcript, extracts the conversational text, caps the size, and runs
+// it through the standard ingest→extract→relate pipeline tagged with the
+// session id so the run is traceable and de-duplicated on replay.
+func hookCapture(ev hookEvent) {
+	if strings.TrimSpace(ev.TranscriptPath) == "" {
+		return
+	}
+	text := extractTranscriptText(ev.TranscriptPath, 20*1024)
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	// Auto-enable LLM/embeddings when a provider is configured; the pipeline
+	// degrades to rule-based extraction otherwise.
+	useLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
+	actor := "claude-code"
+	_, _ = mcpRunProcessText(ctx, actor, mcpProcessTextInput{
+		Text:          text,
+		UseLLM:        useLLM,
+		UseEmbeddings: useLLM,
+	})
+}
+
+// transcriptLine is the lenient shape we read from each JSONL transcript row.
+// Claude Code's transcript schema varies by version, so we decode defensively:
+// role/type plus a content field that may be a string or an array of blocks.
+type transcriptLine struct {
+	Type    string          `json:"type"`
+	Role    string          `json:"role"`
+	Message json.RawMessage `json:"message"`
+	Content json.RawMessage `json:"content"`
+}
+
+// extractTranscriptText pulls user prompts and assistant text out of a JSONL
+// transcript, newest content first, stopping once maxBytes is reached.
+func extractTranscriptText(path string, maxBytes int) string {
+	f, err := os.Open(path) //nolint:gosec // path supplied by Claude Code hook payload
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+
+	data, err := io.ReadAll(io.LimitReader(f, 4<<20))
+	if err != nil {
+		return ""
+	}
+	var b strings.Builder
+	for raw := range strings.SplitSeq(string(data), "\n") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		var line transcriptLine
+		if err := json.Unmarshal([]byte(raw), &line); err != nil {
+			continue
+		}
+		role := line.Role
+		if role == "" {
+			role = line.Type
+		}
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		body := line.Message
+		if len(body) == 0 {
+			body = line.Content
+		}
+		if txt := extractMessageText(body, line.Content); txt != "" {
+			b.WriteString(txt)
+			b.WriteByte('\n')
+			if b.Len() >= maxBytes {
+				break
+			}
+		}
+	}
+	return b.String()
+}
+
+// extractMessageText coaxes plain text out of a message payload that may be a
+// string, an object with a content field (itself a string or block array), or
+// a bare array of {type,text} blocks.
+func extractMessageText(message, content json.RawMessage) string {
+	for _, raw := range []json.RawMessage{message, content} {
+		if t := textFromAny(raw); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+// textFromAny recursively resolves text from a raw JSON value that may be a
+// string, a block array, or an object with text/content fields.
+func textFromAny(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return strings.TrimSpace(s)
+	}
+	if t := extractBlocks(raw); t != "" {
+		return t
+	}
+	var obj struct {
+		Content json.RawMessage `json:"content"`
+		Text    string          `json:"text"`
+	}
+	if json.Unmarshal(raw, &obj) == nil {
+		if strings.TrimSpace(obj.Text) != "" {
+			return obj.Text
+		}
+		if t := textFromAny(obj.Content); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+// extractBlocks joins the text of an Anthropic-style content-block array,
+// skipping non-text blocks (tool_use, tool_result, images).
+func extractBlocks(raw json.RawMessage) string {
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &blocks) != nil {
+		return ""
+	}
+	var parts []string
+	for _, blk := range blocks {
+		if blk.Type == "text" && strings.TrimSpace(blk.Text) != "" {
+			parts = append(parts, blk.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}

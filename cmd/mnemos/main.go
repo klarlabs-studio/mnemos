@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/config"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/extract"
@@ -47,6 +48,14 @@ func resolveDBPath() string {
 	if p, _, ok := findProjectDB(); ok {
 		return p
 	}
+	return globalDBPath()
+}
+
+// globalDBPath returns the XDG-compliant global SQLite path
+// (~/.local/share/mnemos/mnemos.db, honoring XDG_DATA_HOME) without any
+// project walk-up. This is the "central brain" location shared across every
+// working directory — used by `mnemos setup` and as resolveDBPath's fallback.
+func globalDBPath() string {
 	dataHome := os.Getenv("XDG_DATA_HOME")
 	if dataHome == "" {
 		home, err := os.UserHomeDir()
@@ -111,6 +120,17 @@ func main() {
 
 	flags, args := ParseFlags(os.Args[1:])
 
+	// Layer the YAML config file under the environment before anything
+	// reads MNEMOS_* variables. Exported env vars always win; the file only
+	// fills gaps. A missing explicit --config/MNEMOS_CONFIG file is fatal;
+	// an implicit discovery miss is silently fine.
+	if path, applied, err := config.LoadAndHydrate(flags.Config); err != nil {
+		fmt.Fprintf(os.Stderr, "config: %s\n", err)
+		os.Exit(int(ExitConfig))
+	} else if path != "" && flags.Verbose {
+		printProgress("config: loaded %s (%d value(s) applied)", path, len(applied))
+	}
+
 	// Default to human-readable output in interactive terminals.
 	if !flags.Human && !flags.JSON {
 		if fileInfo, _ := os.Stdout.Stat(); fileInfo != nil && fileInfo.Mode()&os.ModeCharDevice != 0 {
@@ -139,6 +159,8 @@ func main() {
 	args = args[1:]
 
 	switch command {
+	case "setup":
+		handleSetup(args, flags)
 	case "init":
 		handleInit(args, flags)
 	case "ingest":
@@ -153,8 +175,10 @@ func main() {
 		handleQuery(args, flags)
 	case "metrics":
 		handleMetrics(args, flags)
+	case "hook":
+		handleHook(args)
 	case "mcp":
-		handleMCP()
+		handleMCP(args)
 	case "serve":
 		handleServe(args, flags)
 	case "registry":
@@ -230,38 +254,6 @@ func main() {
 		printUsage()
 		os.Exit(int(ExitUsage))
 	}
-}
-
-func handleInit(args []string, _ Flags) {
-	if len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "error: init takes no arguments")
-		fmt.Fprintln(os.Stderr, "  mnemos init")
-		os.Exit(int(ExitUsage))
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		exitWithMnemosError(false, NewSystemError(err, "failed to determine working directory"))
-		return
-	}
-
-	dir := filepath.Join(cwd, ".mnemos")
-	dbPath := filepath.Join(dir, "mnemos.db")
-
-	if info, err := os.Stat(dir); err == nil && info.IsDir() {
-		fmt.Printf("already initialized: %s\n", dir)
-		fmt.Printf("db=%s\n", dbPath)
-		os.Exit(int(ExitSuccess))
-	}
-
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		exitWithMnemosError(false, NewSystemError(err, "failed to create %s", dir))
-		return
-	}
-
-	fmt.Printf("initialized empty mnemos project in %s\n", dir)
-	fmt.Printf("db=%s\n", dbPath)
-	fmt.Println("\nNext: 'mnemos process <path>' to ingest content, or 'mnemos mcp' to start the server.")
 }
 
 func handleIngest(args []string, f Flags) {
@@ -1286,9 +1278,28 @@ func printUsage() {
 	fmt.Println("Mnemos CLI — local-first knowledge engine")
 	fmt.Println("")
 	fmt.Println("Quick Start:")
-	fmt.Println("  mnemos init                          Create .mnemos/ in the current directory")
+	fmt.Println("  mnemos init                          Detect your system and wire Mnemos into Claude Code (one command)")
 	fmt.Println("  mnemos process --text \"Your text here\"")
 	fmt.Println("  mnemos query --human \"Your question\"")
+	fmt.Println("")
+	fmt.Println("Setup:")
+	fmt.Println("  init                                 Central brain: brain + config + MCP server + auto hooks (recall/brief/capture)")
+	fmt.Println("  init --dry-run                       Preview everything init would write; change nothing")
+	fmt.Println("  init --yes                           Apply without the confirmation prompt")
+	fmt.Println("  init --project                       Scope the brain + hooks to this project instead of global")
+	fmt.Println("  init --no-hooks                      Register the MCP server + config without installing hooks")
+	fmt.Println("  init --hooks recall,capture          Install only the named hooks (of recall,brief,capture)")
+	fmt.Println("  init --db <dsn>                      Use a specific backend (sqlite/postgres/mysql/libsql)")
+	fmt.Println("  init --url <url> [--token <jwt>]     Connect Claude Code to a hosted mnemos (HTTP MCP endpoint)")
+	fmt.Println("  init --service [--out <dir>]         Scaffold a hosted `mnemos serve` deployment (compose+config)")
+	fmt.Println("  setup                                Minimal: register only the MCP server (no hooks/config)")
+	fmt.Println("")
+	fmt.Println("Serving:")
+	fmt.Println("  mcp                                  MCP server over stdio (default, for local Claude Code)")
+	fmt.Println("  mcp --http <addr> [--auth]           MCP server over HTTP for remote clients (JWT auth by default)")
+	fmt.Println("  mcp --http <addr> --require-tenant   Multi-tenant: every request needs a token with a tenant (postgres, RLS-isolated)")
+	fmt.Println("  serve [--grpc-port N]                REST + gRPC API service")
+	fmt.Println("  token issue --user <id> [--tenant T] Mint a user JWT (optionally scoped to tenant T)")
 	fmt.Println("")
 	fmt.Println("Pipeline Commands:")
 	fmt.Println("  ingest <path>                        Ingest a file as events")
@@ -1361,6 +1372,12 @@ func printUsage() {
 	fmt.Println("  --dry-run      report what would change without writing")
 	fmt.Println("  --min-trust X  query: only return claims with trust_score ≥ X (X in [0, 1])")
 	fmt.Println("  -y, --yes      with reset: skip the confirmation prompt")
+	fmt.Println("  --config PATH  YAML config file (else MNEMOS_CONFIG, then .mnemos/mnemos.yaml, then ~/.config/mnemos/config.yaml)")
+	fmt.Println("")
+	fmt.Println("Configuration:")
+	fmt.Println("  Settings come from the environment and/or a YAML config file.")
+	fmt.Println("  An exported MNEMOS_* variable always overrides the file. See")
+	fmt.Println("  mnemos.example.yaml for every supported key.")
 	fmt.Println("")
 	fmt.Println("Environment Variables:")
 	fmt.Println("  MNEMOS_DB_URL          full storage DSN (any registered backend)")

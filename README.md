@@ -448,10 +448,61 @@ internal/
   server/            # HTTP REST + gRPC server wiring
 ```
 
+## Configuration
+
+Every setting below can be supplied two ways, and you can mix them freely:
+
+1. **Environment variables** — the `MNEMOS_*` variables in the table below.
+2. **A YAML config file** — grouped, self-documenting, and convenient for
+   self-hosting instead of exporting a dozen variables.
+
+**Precedence follows 12-factor:** an exported environment variable always wins;
+the YAML file only fills gaps. So you can keep the bulk of your config in a
+committed file and override individual values (or inject secrets) via the
+environment in CI/production.
+
+### Config file
+
+Mnemos discovers the file in this order (first match wins):
+
+1. `--config <path>` flag
+2. `MNEMOS_CONFIG` environment variable
+3. the nearest `.mnemos/mnemos.yaml`, walking up from the working directory
+   (the same project boundary used to locate `.mnemos/mnemos.db`)
+4. `~/.config/mnemos/config.yaml` (honors `XDG_CONFIG_HOME`)
+
+A file requested explicitly (via `--config` or `MNEMOS_CONFIG`) that is missing
+or malformed is a fatal error; an implicit-discovery miss is silently fine.
+Unknown keys are rejected so typos surface instead of being ignored.
+
+```yaml
+# mnemos.yaml — every key is optional; omit what you don't need.
+db:
+  url: postgres://mnemos@localhost:5432/mnemos
+  max_conns: 25
+llm:
+  provider: anthropic
+  api_key: sk-ant-...        # better: leave unset and export MNEMOS_LLM_API_KEY
+  model: claude-opus-4-8
+  timeout: 5m
+embed:
+  provider: openai
+  model: text-embedding-3-small
+serve:
+  port: 8080
+  tls_cert_file: /etc/mnemos/tls.crt
+  tls_key_file: /etc/mnemos/tls.key
+telemetry:
+  optin: false
+```
+
+See [`mnemos.example.yaml`](mnemos.example.yaml) for every supported key.
+
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
+| `MNEMOS_CONFIG` | Explicit path to the YAML config file (see [Configuration](#configuration)). Overridden by `--config`. |
 | `MNEMOS_DB_URL` | Storage DSN dispatched by URL scheme: `sqlite:///var/lib/mnemos/mnemos.db`, `memory://`, `postgres://...`, `mysql://...`, `libsql://...`. When unset, Mnemos walks up from CWD looking for `.mnemos/mnemos.db`, falling back to `~/.local/share/mnemos/mnemos.db`. See [ADR 0001](docs/adr/0001-multi-backend-storage.md). |
 | `MNEMOS_LLM_PROVIDER` | `anthropic`, `openai`, `gemini`, `ollama`, `openai-compat` |
 | `MNEMOS_LLM_API_KEY` | API key (required for cloud providers) |

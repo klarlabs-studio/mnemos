@@ -15,6 +15,7 @@ const (
 	ExitError    ExitCode = 1
 	ExitUsage    ExitCode = 2
 	ExitNotFound ExitCode = 3
+	ExitConfig   ExitCode = 4
 )
 
 // MnemosError is a structured error carrying an exit code, user message, and optional hint.

@@ -1,0 +1,322 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+// handleSetup implements `mnemos setup [claude-code]` — the one-command path
+// from a fresh binary to a working "central brain" wired into Claude Code.
+//
+// It does three things so the user doesn't hand-edit any JSON:
+//  1. ensures the knowledge-base directory exists (global by default,
+//     ./.mnemos with --project),
+//  2. registers the `mnemos mcp` stdio server with Claude Code (user scope by
+//     default, so every project shares one brain), and
+//  3. runs the doctor probes and prints exactly what to do next.
+//
+// Everything is idempotent: re-running reports "already registered" rather
+// than erroring, and --force replaces an existing registration.
+func handleSetup(args []string, f Flags) {
+	opts, err := parseSetupArgs(args)
+	if err != nil {
+		exitWithMnemosError(false, err)
+		return
+	}
+	// --force and --dry-run are global flags stripped by ParseFlags, so they
+	// arrive via f rather than args. Fold them into the local options.
+	opts.force = opts.force || f.Force
+	opts.print = opts.print || f.DryRun
+
+	switch opts.target {
+	case "claude-code":
+		runSetupClaudeCode(opts)
+	default:
+		exitWithMnemosError(false, NewUserError(
+			"unsupported setup target %q (supported: claude-code)", opts.target))
+	}
+}
+
+type setupOpts struct {
+	target  string // integration to wire up (default "claude-code")
+	project bool   // scope the brain to ./.mnemos instead of the global default
+	force   bool   // replace an existing MCP registration
+	print   bool   // show the plan without applying it
+	dsn     string // explicit DB DSN override
+}
+
+func parseSetupArgs(args []string) (setupOpts, error) {
+	opts := setupOpts{target: "claude-code"}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "--project":
+			opts.project = true
+		case "--print":
+			opts.print = true
+		case "--db":
+			if i+1 >= len(args) {
+				return opts, NewUserError("--db requires a DSN value")
+			}
+			opts.dsn = args[i+1]
+			i++
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return opts, NewUserError("unknown setup flag %q", arg)
+			}
+			opts.target = arg
+		}
+	}
+	return opts, nil
+}
+
+func runSetupClaudeCode(opts setupOpts) {
+	scope := "user"
+	dsn := opts.dsn
+	if dsn == "" {
+		if opts.project {
+			dsn = "sqlite://" + projectDBPath()
+		} else {
+			dsn = "sqlite://" + globalDBPath()
+		}
+	}
+	if opts.project {
+		scope = "project"
+	}
+
+	fmt.Println("Setting up Mnemos as a central brain for Claude Code")
+	fmt.Printf("  scope:  %s (%s)\n", scope, ternary(opts.project, "this project", "all projects"))
+	fmt.Printf("  brain:  %s\n\n", dsn)
+
+	// 1. Make sure the storage directory exists so the first write succeeds.
+	if !opts.print {
+		if err := ensureDBDir(dsn); err != nil {
+			exitWithMnemosError(false, err)
+			return
+		}
+	}
+
+	// 2. Register the MCP server with Claude Code. setup targets the local
+	// SQLite brain, so the DSN is safe to inline.
+	bin := selfPath()
+	if err := registerClaudeCode(bin, dsn, scope, dsnInlineSafe(dsn), opts.force, opts.print); err != nil {
+		exitWithMnemosError(false, err)
+		return
+	}
+
+	if opts.print {
+		return
+	}
+
+	// 3. Verify and tell the user what's next.
+	fmt.Println("\nVerifying...")
+	report := runDoctorChecks(context.Background())
+	printDoctorHuman(report)
+
+	printSetupNextSteps(scope)
+}
+
+// registerClaudeCode wires `mnemos mcp` into Claude Code via the `claude` CLI.
+// When the CLI isn't on PATH it falls back to printing the exact command and a
+// project-scoped .mcp.json the user can drop in.
+//
+// inlineDSN controls whether the brain DSN is pinned into Claude's config via
+// `-e MNEMOS_DB_URL=…`. It is true for local SQLite (no secret, keeps the brain
+// deterministic regardless of cwd) and false for DSNs with credentials, which
+// live in the 0600 config file the server discovers instead.
+func registerClaudeCode(bin, dsn, scope string, inlineDSN, force, printOnly bool) error {
+	claude, lookErr := exec.LookPath("claude")
+
+	// The server name must precede -e: Claude's --env flag is variadic and
+	// would otherwise swallow the name as a second KEY=value.
+	addArgs := []string{"mcp", "add", "--scope", scope, "--transport", "stdio", "mnemos"}
+	if inlineDSN {
+		addArgs = append(addArgs, "-e", "MNEMOS_DB_URL="+dsn)
+	}
+	addArgs = append(addArgs, "--", bin, "mcp")
+
+	if printOnly || lookErr != nil {
+		fmt.Println("Register the MCP server by running:")
+		fmt.Printf("  claude %s\n", strings.Join(addArgs, " "))
+		if lookErr != nil {
+			fmt.Println("\n(the `claude` CLI was not found on your PATH; run the command above once it is available,")
+			fmt.Println(" or add the JSON below to a .mcp.json at your project root)")
+			fmt.Println(mcpJSONSnippet(bin, dsn, inlineDSN))
+		}
+		return nil
+	}
+
+	// Idempotency: if already registered, treat as success unless --force.
+	if mcpServerExists(claude) {
+		if !force {
+			fmt.Println("✓ mnemos MCP server already registered (re-run with --force to replace)")
+			return nil
+		}
+		fmt.Println("· removing existing mnemos registration (--force)")
+		_ = runClaude(claude, "mcp", "remove", "--scope", scope, "mnemos")
+	}
+
+	if out, err := runClaudeOutput(claude, addArgs...); err != nil {
+		return NewSystemError(err, "failed to register MCP server with Claude Code:\n%s", strings.TrimSpace(out))
+	}
+	fmt.Println("✓ registered mnemos MCP server with Claude Code")
+	return nil
+}
+
+// registerClaudeCodeHTTP registers a REMOTE Mnemos MCP server (HTTP transport)
+// in Claude Code, for a hosted `mnemos mcp --http` endpoint. The bearer token,
+// when given, is sent as an Authorization header.
+func registerClaudeCodeHTTP(url, token, scope string, force, printOnly bool) error {
+	claude, lookErr := exec.LookPath("claude")
+
+	addArgs := []string{"mcp", "add", "--scope", scope, "--transport", "http", "mnemos", url}
+	if token != "" {
+		addArgs = append(addArgs, "--header", "Authorization: Bearer "+token)
+	}
+
+	if printOnly || lookErr != nil {
+		fmt.Println("Register the remote MCP server by running:")
+		fmt.Printf("  claude %s\n", strings.Join(addArgs, " "))
+		return nil
+	}
+
+	if mcpServerExists(claude) {
+		if !force {
+			fmt.Println("✓ mnemos MCP server already registered (re-run with --force to replace)")
+			return nil
+		}
+		fmt.Println("· removing existing mnemos registration (--force)")
+		_ = runClaude(claude, "mcp", "remove", "--scope", scope, "mnemos")
+	}
+
+	if out, err := runClaudeOutput(claude, addArgs...); err != nil {
+		return NewSystemError(err, "failed to register remote MCP server:\n%s", strings.TrimSpace(out))
+	}
+	fmt.Println("✓ registered remote mnemos MCP server with Claude Code")
+	return nil
+}
+
+// mcpServerExists reports whether Claude Code already knows a server named
+// "mnemos" (any scope). `claude mcp get` exits non-zero when it doesn't.
+func mcpServerExists(claude string) bool {
+	return runClaude(claude, "mcp", "get", "mnemos") == nil
+}
+
+func runClaude(claude string, args ...string) error {
+	_, err := runClaudeOutput(claude, args...)
+	return err
+}
+
+func runClaudeOutput(claude string, args ...string) (string, error) {
+	cmd := exec.Command(claude, args...) //nolint:gosec // fixed binary, controlled args
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func mcpJSONSnippet(bin, dsn string, inlineDSN bool) string {
+	env := ""
+	if inlineDSN {
+		env = fmt.Sprintf("\n      \"env\": { \"MNEMOS_DB_URL\": %q },", dsn)
+	}
+	return fmt.Sprintf(`
+{
+  "mcpServers": {
+    "mnemos": {
+      "type": "stdio",
+      "command": %q,%s
+      "args": ["mcp"]
+    }
+  }
+}`, bin, env)
+}
+
+func printSetupNextSteps(scope string) {
+	fmt.Println("\nNext steps:")
+	fmt.Println("  1. Restart Claude Code (stdio servers reconnect on a fresh session).")
+	if scope == "project" {
+		fmt.Println("     Project-scoped servers prompt for workspace trust on first launch.")
+	}
+	fmt.Println("  2. Run  claude mcp list  or the  /mcp  slash command to confirm mnemos is connected.")
+	fmt.Println("  3. In a session, ask Claude to use the mnemos tools, e.g.")
+	fmt.Println("       \"remember that we chose Postgres for the billing service\"  (process_text / record_decision)")
+	fmt.Println("       \"what do we know about the billing service?\"                (query_knowledge)")
+	fmt.Println()
+	fmt.Println("Tip: to make Claude record and recall automatically, add a line to your CLAUDE.md, e.g.")
+	fmt.Println("  \"Use the mnemos MCP tools as long-term memory: record decisions/facts and query before answering.\"")
+	fmt.Println()
+	fmt.Println("Mnemos runs zero-config with rule-based extraction. For LLM-powered extraction and")
+	fmt.Println("semantic search, add ~/.config/mnemos/config.yaml (see mnemos.example.yaml).")
+}
+
+// ensureDBDir creates the parent directory of a sqlite:// DSN so the first
+// write doesn't fail on a missing path. Non-sqlite DSNs need no local dir.
+func ensureDBDir(dsn string) error {
+	path, ok := sqliteFilePath(dsn)
+	if !ok {
+		return nil
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return NewSystemError(err, "failed to create brain directory %s", dir)
+	}
+	return nil
+}
+
+// dsnInlineSafe reports whether a DSN can be embedded directly into Claude
+// Code's config files (MCP `-e` / hook `--db`) without leaking a secret. Local
+// SQLite and in-memory DSNs carry no credentials; networked backends
+// (postgres/mysql/libsql) do, so those are stored in the 0600 config file
+// instead and discovered by the server/hooks at runtime.
+func dsnInlineSafe(dsn string) bool {
+	if _, ok := sqliteFilePath(dsn); ok {
+		return true
+	}
+	return strings.HasPrefix(dsn, "memory://")
+}
+
+// sqliteFilePath extracts the on-disk path from a sqlite DSN, returning
+// (path, true) only for file-backed sqlite schemes.
+func sqliteFilePath(dsn string) (string, bool) {
+	for _, scheme := range []string{"sqlite://", "sqlite3://", "file://"} {
+		if rest, ok := strings.CutPrefix(dsn, scheme); ok {
+			// Strip any ?query parameters (e.g. ?_journal=WAL).
+			if q := strings.IndexByte(rest, '?'); q >= 0 {
+				rest = rest[:q]
+			}
+			if rest == "" || rest == ":memory:" {
+				return "", false
+			}
+			return rest, true
+		}
+	}
+	return "", false
+}
+
+// projectDBPath returns the absolute ./.mnemos/mnemos.db for the current
+// working directory. Absolute so the registered MCP server resolves the same
+// brain regardless of the directory Claude Code launches it from.
+func projectDBPath() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return filepath.Join(".mnemos", "mnemos.db")
+	}
+	return filepath.Join(cwd, ".mnemos", "mnemos.db")
+}
+
+// selfPath returns the absolute path to this binary so the registration keeps
+// working even when Claude Code launches with a different PATH. Falls back to
+// the bare name (PATH lookup) if the executable path can't be determined.
+func selfPath() string {
+	exe, err := os.Executable()
+	if err != nil || exe == "" {
+		return "mnemos"
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		return resolved
+	}
+	return exe
+}

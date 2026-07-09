@@ -105,7 +105,7 @@ func mcpExecutorMap(actor string, getWatcher func() (*Watcher, error)) map[strin
 	return map[string]domain.ActionExecutor{
 		"exec.query_knowledge": toolExecutor[mcpQueryInput, mcpQueryOutput]{run: func(ctx context.Context, in mcpQueryInput) (mcpQueryOutput, error) { return mcpRunQuery(ctx, in) }, summary: querySummary},
 		"exec.process_text": toolExecutor[mcpProcessTextInput, mcpProcessTextOutput]{run: func(ctx context.Context, in mcpProcessTextInput) (mcpProcessTextOutput, error) {
-			return mcpRunProcessText(ctx, actor, in)
+			return mcpRunProcessText(ctx, mcpActorFor(ctx, actor), in)
 		}, summary: processTextSummary, evidence: processTextEvidence},
 		"exec.knowledge_metrics": toolExecutor[struct{}, mcpMetricsOutput]{run: func(_ context.Context, _ struct{}) (mcpMetricsOutput, error) { return mcpRunMetrics() }, summary: metricsSummary},
 		"exec.list_claims": toolExecutor[mcpListClaimsInput, mcpListClaimsOutput]{run: func(ctx context.Context, in mcpListClaimsInput) (mcpListClaimsOutput, error) {
@@ -119,10 +119,10 @@ func mcpExecutorMap(actor string, getWatcher func() (*Watcher, error)) map[strin
 			return mcpRunListContradictions(ctx, in)
 		}, summary: listContradictionsSummary},
 		"exec.ingest_git_log": toolExecutor[mcpIngestGitLogInput, mcpIngestGitLogOutput]{run: func(ctx context.Context, in mcpIngestGitLogInput) (mcpIngestGitLogOutput, error) {
-			return mcpRunIngestGitLog(ctx, actor, in)
+			return mcpRunIngestGitLog(ctx, mcpActorFor(ctx, actor), in)
 		}, summary: ingestGitLogSummary, evidence: ingestGitLogEvidence},
 		"exec.ingest_git_prs": toolExecutor[mcpIngestGitPRsInput, mcpIngestGitPRsOutput]{run: func(ctx context.Context, in mcpIngestGitPRsInput) (mcpIngestGitPRsOutput, error) {
-			return mcpRunIngestGitPRs(ctx, actor, in)
+			return mcpRunIngestGitPRs(ctx, mcpActorFor(ctx, actor), in)
 		}, summary: ingestGitPRsSummary, evidence: ingestGitPRsEvidence},
 		"exec.watch_file": toolExecutor[mcpWatchFileInput, mcpWatchFileOutput]{run: func(_ context.Context, in mcpWatchFileInput) (mcpWatchFileOutput, error) {
 			return runWatchFileTool(in, getWatcher)

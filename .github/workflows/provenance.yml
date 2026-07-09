@@ -1,4 +1,11 @@
 name: Provenance
+
+# Cancel a superseded run when a PR gets a new commit — only the latest head
+# needs provenance verification.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches: [main]
