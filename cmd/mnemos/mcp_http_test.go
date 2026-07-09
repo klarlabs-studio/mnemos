@@ -18,6 +18,8 @@ func TestParseMCPArgs(t *testing.T) {
 		{name: "unknown flag", args: []string{"--nope"}, wantErr: true},
 		// Auth flags are meaningless without --http and must not imply a listener.
 		{name: "auth without http stays stdio", args: []string{"--auth"}, wantAddr: "", wantAuth: false},
+		{name: "require-tenant implies auth", args: []string{"--http", ":8081", "--require-tenant"}, wantAddr: ":8081", wantAuth: true},
+		{name: "require-tenant conflicts with no-auth", args: []string{"--http", ":8081", "--require-tenant", "--no-auth"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -36,6 +38,21 @@ func TestParseMCPArgs(t *testing.T) {
 					tt.args, cfg.httpAddr, cfg.requireAuth, tt.wantAddr, tt.wantAuth)
 			}
 		})
+	}
+}
+
+func TestParseMCPArgsRequireTenant(t *testing.T) {
+	cfg, err := parseMCPArgs([]string{"--http", ":9", "--require-tenant"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.requireTenant || !cfg.requireAuth {
+		t.Errorf("require-tenant should imply auth: %+v", cfg)
+	}
+	// Without --http, tenancy is meaningless and must be off.
+	cfg, _ = parseMCPArgs([]string{"--require-tenant"})
+	if cfg.requireTenant {
+		t.Error("require-tenant without --http must not enable tenancy")
 	}
 }
 

@@ -53,6 +53,12 @@ type Claims struct {
 	Kind   TokenKind `json:"knd"`
 	Scopes []string  `json:"scp,omitempty"`
 	Runs   []string  `json:"run,omitempty"`
+	// Tenant is the fine-grained isolation boundary (ADR 0007). When set, a
+	// multi-tenant server scopes the bearer's reads/writes to this tenant via
+	// the Postgres `mnemos.tenant` GUC + row-level security. Empty means the
+	// token carries no tenant (a multi-tenant server denies it; a single-tenant
+	// server ignores it).
+	Tenant string `json:"tnt,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -166,11 +172,17 @@ func NewVerifierWithKeyring(keyring *Keyring, revoked ports.RevokedTokenReposito
 // user's recorded Scopes; an empty list is treated as the legacy
 // wildcard so users created before F.3 keep working.
 func (i *Issuer) IssueUserToken(user domain.User, ttl time.Duration) (token, jti string, err error) {
+	return i.IssueUserTokenWithTenant(user, "", ttl)
+}
+
+// IssueUserTokenWithTenant mints a user JWT scoped to a tenant (ADR 0007). An
+// empty tenant behaves exactly like IssueUserToken.
+func (i *Issuer) IssueUserTokenWithTenant(user domain.User, tenant string, ttl time.Duration) (token, jti string, err error) {
 	scopes := user.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{"*"}
 	}
-	return i.issue(user.ID, TokenKindUser, append([]string(nil), scopes...), nil, ttl)
+	return i.issue(user.ID, TokenKindUser, append([]string(nil), scopes...), nil, tenant, ttl)
 }
 
 // IssueAgentToken mints a JWT for an automated agent, valid for ttl.
@@ -179,7 +191,7 @@ func (i *Issuer) IssueUserToken(user domain.User, ttl time.Duration) (token, jti
 // prefer IssueAgentTokenWithScopes so each agent's authority is
 // explicit.
 func (i *Issuer) IssueAgentToken(agentID string, ttl time.Duration) (token, jti string, err error) {
-	return i.issue(agentID, TokenKindAgent, []string{"*"}, nil, ttl)
+	return i.issue(agentID, TokenKindAgent, []string{"*"}, nil, "", ttl)
 }
 
 // IssueAgentTokenWithScopes mints an agent JWT carrying the supplied
@@ -188,7 +200,7 @@ func (i *Issuer) IssueAgentToken(agentID string, ttl time.Duration) (token, jti 
 // scope (e.g., "events:write"). The run whitelist is empty (every
 // run allowed) — use IssueAgentTokenWithScopesAndRuns to restrict.
 func (i *Issuer) IssueAgentTokenWithScopes(agentID string, scopes []string, ttl time.Duration) (token, jti string, err error) {
-	return i.issueAgent(agentID, scopes, nil, ttl)
+	return i.issueAgent(agentID, scopes, nil, "", ttl)
 }
 
 // IssueAgentTokenWithScopesAndRuns mints an agent JWT with an
@@ -196,14 +208,20 @@ func (i *Issuer) IssueAgentTokenWithScopes(agentID string, scopes []string, ttl 
 // "every run allowed" posture; a non-empty slice restricts writes
 // to those run_ids.
 func (i *Issuer) IssueAgentTokenWithScopesAndRuns(agentID string, scopes, runs []string, ttl time.Duration) (token, jti string, err error) {
-	return i.issueAgent(agentID, scopes, runs, ttl)
+	return i.issueAgent(agentID, scopes, runs, "", ttl)
 }
 
-func (i *Issuer) issueAgent(agentID string, scopes, runs []string, ttl time.Duration) (string, string, error) {
-	return i.issue(agentID, TokenKindAgent, append([]string(nil), scopes...), append([]string(nil), runs...), ttl)
+// IssueAgentTokenFull mints an agent JWT with scopes, a run whitelist, and a
+// tenant (ADR 0007). Empty tenant keeps the token tenant-less.
+func (i *Issuer) IssueAgentTokenFull(agentID string, scopes, runs []string, tenant string, ttl time.Duration) (token, jti string, err error) {
+	return i.issueAgent(agentID, scopes, runs, tenant, ttl)
 }
 
-func (i *Issuer) issue(subject string, kind TokenKind, scopes, runs []string, ttl time.Duration) (string, string, error) {
+func (i *Issuer) issueAgent(agentID string, scopes, runs []string, tenant string, ttl time.Duration) (string, string, error) {
+	return i.issue(agentID, TokenKindAgent, append([]string(nil), scopes...), append([]string(nil), runs...), tenant, ttl)
+}
+
+func (i *Issuer) issue(subject string, kind TokenKind, scopes, runs []string, tenant string, ttl time.Duration) (string, string, error) {
 	if subject == "" {
 		return "", "", errors.New("subject is required")
 	}
@@ -220,6 +238,7 @@ func (i *Issuer) issue(subject string, kind TokenKind, scopes, runs []string, tt
 		Kind:   kind,
 		Scopes: scopes,
 		Runs:   runs,
+		Tenant: tenant,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(now),

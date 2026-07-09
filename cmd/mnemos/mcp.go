@@ -356,13 +356,35 @@ func handleMCP(args []string) {
 	// knowledge-gaps, calibration, …). Built once, reused across tool calls, and
 	// closed by the shutdown defer below.
 	var (
-		memOnce   sync.Once
-		memFacade mnemos.Memory
-		memErr    error
+		memOnce    sync.Once
+		memFacade  mnemos.Memory
+		memErr     error
+		tenantMu   sync.Mutex
+		tenantMems = map[string]mnemos.Memory{}
 	)
-	getMem := func() (mnemos.Memory, error) {
+	// getMem returns the cognitive-layer Memory for a request. In multi-tenant
+	// mode it returns a per-tenant view (memFacade.Tenant), cached so each
+	// tenant reuses one pool for the life of the server.
+	getMem := func(ctx context.Context) (mnemos.Memory, error) {
 		memOnce.Do(func() { memFacade, memErr = newLibraryMemory(context.Background(), mcpActor) })
-		return memFacade, memErr
+		if memErr != nil {
+			return nil, memErr
+		}
+		tenant, ok := tenantFromContext(ctx)
+		if !ok {
+			return memFacade, nil
+		}
+		tenantMu.Lock()
+		defer tenantMu.Unlock()
+		if m, cached := tenantMems[tenant]; cached {
+			return m, nil
+		}
+		tm, err := memFacade.Tenant(tenant)
+		if err != nil {
+			return nil, err
+		}
+		tenantMems[tenant] = tm
+		return tm, nil
 	}
 
 	// Build the axi-go kernel that wraps every MCP tool with effect
@@ -639,7 +661,7 @@ func handleMCP(args []string) {
 		Description("Rank the workers whose memory best matches a topic (who-knows-what directory).").
 		OutputSchema(mcpWhoKnowsOutput{}).
 		Handler(func(ctx context.Context, input mcpWhoKnowsInput) (mcpWhoKnowsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpWhoKnowsOutput{}, err
 			}
@@ -650,7 +672,7 @@ func handleMCP(args []string) {
 		Description("List the highest-value open questions (unresolved hypotheses / contested claims).").
 		OutputSchema(mcpKnowledgeGapsOutput{}).
 		Handler(func(ctx context.Context, input mcpKnowledgeGapsInput) (mcpKnowledgeGapsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpKnowledgeGapsOutput{}, err
 			}
@@ -661,7 +683,7 @@ func handleMCP(args []string) {
 		Description("Report how well stated confidence tracks reality (ECE/Brier, per source).").
 		OutputSchema(mcpCalibrationOutput{}).
 		Handler(func(ctx context.Context, _ struct{}) (mcpCalibrationOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpCalibrationOutput{}, err
 			}
@@ -672,7 +694,7 @@ func handleMCP(args []string) {
 		Description("List established beliefs a newer claim now contradicts (worth re-examining).").
 		OutputSchema(mcpHypercorrectionsOutput{}).
 		Handler(func(ctx context.Context, _ struct{}) (mcpHypercorrectionsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpHypercorrectionsOutput{}, err
 			}
@@ -683,7 +705,7 @@ func handleMCP(args []string) {
 		Description("List topically-similar-but-unlinked claim pairs (candidate novel connections).").
 		OutputSchema(mcpRecombinationsOutput{}).
 		Handler(func(ctx context.Context, input mcpRecombinationsInput) (mcpRecombinationsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpRecombinationsOutput{}, err
 			}
@@ -694,7 +716,7 @@ func handleMCP(args []string) {
 		Description("Return the claims most structurally analogous to a given one.").
 		OutputSchema(mcpAnalogousOutput{}).
 		Handler(func(ctx context.Context, input mcpAnalogousInput) (mcpAnalogousOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpAnalogousOutput{}, err
 			}
@@ -706,7 +728,7 @@ func handleMCP(args []string) {
 		Description("Fetch a single claim's full detail (statement, trust, lifecycle, validity).").
 		OutputSchema(mcpClaimDetailOutput{}).
 		Handler(func(ctx context.Context, input mcpGetClaimInput) (mcpClaimDetailOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpClaimDetailOutput{}, err
 			}
@@ -717,7 +739,7 @@ func handleMCP(args []string) {
 		Description("Report whether a candidate statement fits established knowledge or is novel.").
 		OutputSchema(mcpClassifyOutput{}).
 		Handler(func(ctx context.Context, input mcpClassifyInput) (mcpClassifyOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpClassifyOutput{}, err
 			}
@@ -728,7 +750,7 @@ func handleMCP(args []string) {
 		Description("Fetch a single recorded decision by id.").
 		OutputSchema(mcpDecisionOutput{}).
 		Handler(func(ctx context.Context, input mcpGetDecisionInput) (mcpDecisionOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpDecisionOutput{}, err
 			}
@@ -739,7 +761,7 @@ func handleMCP(args []string) {
 		Description("Advanced retrieval; mode selects the epistemic-honesty variant (sufficiency|effort|context|conflicts|iterative).").
 		OutputSchema(mcpRecallOutput{}).
 		Handler(func(ctx context.Context, input mcpRecallInput) (mcpRecallOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpRecallOutput{}, err
 			}
@@ -750,7 +772,7 @@ func handleMCP(args []string) {
 		Description("Read an agent's working-memory blocks — its bounded, always-injected 'core memory' (persona, open_threads, ...).").
 		OutputSchema(mcpGetBlocksOutput{}).
 		Handler(func(ctx context.Context, input mcpGetBlocksInput) (mcpGetBlocksOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpGetBlocksOutput{}, err
 			}
@@ -761,7 +783,7 @@ func handleMCP(args []string) {
 		Description("Set or append an agent's working-memory block. append=true evicts oldest lines to stay within the attention budget; empty value replaces (clears) the block.").
 		OutputSchema(mcpSetBlockOutput{}).
 		Handler(func(ctx context.Context, input mcpSetBlockInput) (mcpSetBlockOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpSetBlockOutput{}, err
 			}
@@ -772,7 +794,7 @@ func handleMCP(args []string) {
 		Description("Detected temporal patterns (trend|spike|drop|stall|anomaly|...) over a run's event series — the 'what is changing?' reading that complements recall.").
 		OutputSchema(mcpSignalsOutput{}).
 		Handler(func(ctx context.Context, input mcpSignalsInput) (mcpSignalsOutput, error) {
-			mem, err := getMem()
+			mem, err := getMem(ctx)
 			if err != nil {
 				return mcpSignalsOutput{}, err
 			}
@@ -810,11 +832,22 @@ func handleMCP(args []string) {
 		if memFacade != nil {
 			_ = memFacade.Close()
 		}
+		tenantMu.Lock()
+		for _, tm := range tenantMems {
+			_ = tm.Close()
+		}
+		tenantMu.Unlock()
 	}()
 
 	mw := mcp.WithMiddleware(mcp.DefaultMiddlewareWithTimeout(mcpBoltLogger{logger: logger}, 30*time.Second)...)
 	if serveCfg.httpAddr != "" {
-		if err := serveMCPHTTP(rootCtx, srv, serveCfg.httpAddr, serveCfg.requireAuth, mw); err != nil && !errors.Is(err, context.Canceled) {
+		// Multi-tenant scoping is enforced by Postgres RLS; refuse to start in
+		// that mode on any other backend rather than silently share data.
+		if serveCfg.requireTenant && !isPostgresDSN(resolveDSN()) {
+			exitWithMnemosError(false, NewUserError("--require-tenant needs a postgres backend (set MNEMOS_DB_URL=postgres://…); RLS enforces tenant isolation (ADR 0007)"))
+			return
+		}
+		if err := serveMCPHTTP(rootCtx, srv, serveCfg.httpAddr, serveCfg.requireAuth, serveCfg.requireTenant, mw); err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatal(err)
 		}
 		return

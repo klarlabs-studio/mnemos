@@ -60,3 +60,58 @@ func TestClaimsFromContextAbsent(t *testing.T) {
 		t.Error("withClaims(nil) should not register claims")
 	}
 }
+
+func TestValidTenantID(t *testing.T) {
+	for _, ok := range []string{"acme", "org-123", "a.b:c_d", "T"} {
+		if !validTenantID(ok) {
+			t.Errorf("%q should be valid", ok)
+		}
+	}
+	for _, bad := range []string{"", "has space", "quote'", "back\\slash", string(make([]byte, 129))} {
+		if validTenantID(bad) {
+			t.Errorf("%q should be invalid", bad)
+		}
+	}
+}
+
+func TestTenantFromContext(t *testing.T) {
+	bg := context.Background()
+	if _, ok := tenantFromContext(bg); ok {
+		t.Error("bare context should carry no tenant")
+	}
+	if _, ok := tenantFromContext(withTenant(bg, "")); ok {
+		t.Error("empty tenant must not register")
+	}
+	if tn, ok := tenantFromContext(withTenant(bg, "acme")); !ok || tn != "acme" {
+		t.Errorf("tenant roundtrip failed: %q %v", tn, ok)
+	}
+}
+
+func TestResolveDSNForContext(t *testing.T) {
+	// No tenant → DSN unchanged.
+	t.Setenv("MNEMOS_DB_URL", "sqlite:///tmp/a.db")
+	if got, err := resolveDSNForContext(context.Background()); err != nil || got != "sqlite:///tmp/a.db" {
+		t.Errorf("no tenant: got %q, %v", got, err)
+	}
+
+	// Tenant on postgres → appended.
+	t.Setenv("MNEMOS_DB_URL", "postgres://h/db")
+	ctx := withTenant(context.Background(), "acme")
+	got, err := resolveDSNForContext(ctx)
+	if err != nil || got != "postgres://h/db?tenant=acme" {
+		t.Errorf("postgres tenant: got %q, %v", got, err)
+	}
+
+	// Tenant appended after an existing query string.
+	t.Setenv("MNEMOS_DB_URL", "postgres://h/db?sslmode=require")
+	got, _ = resolveDSNForContext(ctx)
+	if got != "postgres://h/db?sslmode=require&tenant=acme" {
+		t.Errorf("existing query: got %q", got)
+	}
+
+	// Tenant on a non-postgres backend → fail closed.
+	t.Setenv("MNEMOS_DB_URL", "sqlite:///tmp/a.db")
+	if _, err := resolveDSNForContext(ctx); err == nil {
+		t.Error("tenant on non-postgres must error (fail closed)")
+	}
+}

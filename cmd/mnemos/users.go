@@ -185,6 +185,7 @@ func handleToken(args []string, _ Flags) {
 
 func handleTokenIssue(args []string) {
 	userID := ""
+	tenant := ""
 	ttl := defaultTokenTTL
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -194,6 +195,13 @@ func handleTokenIssue(args []string) {
 				return
 			}
 			userID = args[i+1]
+			i++
+		case "--tenant":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--tenant requires a value"))
+				return
+			}
+			tenant = args[i+1]
 			i++
 		case "--ttl":
 			if i+1 >= len(args) {
@@ -220,6 +228,11 @@ func handleTokenIssue(args []string) {
 		exitWithMnemosError(false, NewUserError("--user is required"))
 		return
 	}
+	tenant = strings.TrimSpace(tenant)
+	if tenant != "" && !validTenantID(tenant) {
+		exitWithMnemosError(false, NewUserError("invalid --tenant %q (allowed: letters, digits, . _ : -, max 128)", tenant))
+		return
+	}
 
 	conn, err := openConn(context.Background())
 	if err != nil {
@@ -243,13 +256,17 @@ func handleTokenIssue(args []string) {
 		exitWithMnemosError(false, NewSystemError(err, "load JWT secret"))
 		return
 	}
-	token, jti, err := auth.NewIssuer(secret).IssueUserToken(user, ttl)
+	token, jti, err := auth.NewIssuer(secret).IssueUserTokenWithTenant(user, tenant, ttl)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "issue token"))
 		return
 	}
 
-	fmt.Printf("user=%s jti=%s expires_in=%s\n", user.ID, jti, ttl)
+	tenantDisplay := tenant
+	if tenantDisplay == "" {
+		tenantDisplay = "(none)"
+	}
+	fmt.Printf("user=%s tenant=%s jti=%s expires_in=%s\n", user.ID, tenantDisplay, jti, ttl)
 	fmt.Println("\nToken (save this — it will not be shown again):")
 	fmt.Println(token)
 }

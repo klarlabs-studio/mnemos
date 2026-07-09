@@ -31,6 +31,35 @@ func (f *fakeRevokedRepo) PurgeExpired(_ context.Context, _ time.Time) (int, err
 	return 0, nil
 }
 
+func TestIssueWithTenant_RoundTrip(t *testing.T) {
+	secret, err := GenerateSecret()
+	if err != nil {
+		t.Fatalf("GenerateSecret: %v", err)
+	}
+	revoked := newFakeRevoked()
+	user := domain.User{ID: "usr_t", Status: domain.UserStatusActive, CreatedAt: time.Now()}
+
+	// Tenant-scoped user token carries the tnt claim.
+	tok, _, err := NewIssuer(secret).IssueUserTokenWithTenant(user, "acme", time.Hour)
+	if err != nil {
+		t.Fatalf("IssueUserTokenWithTenant: %v", err)
+	}
+	claims, err := NewVerifier(secret, revoked).ParseAndValidate(context.Background(), tok)
+	if err != nil {
+		t.Fatalf("ParseAndValidate: %v", err)
+	}
+	if claims.Tenant != "acme" {
+		t.Errorf("Tenant = %q, want acme", claims.Tenant)
+	}
+
+	// A plain token has an empty tenant.
+	tok2, _, _ := NewIssuer(secret).IssueUserToken(user, time.Hour)
+	claims2, _ := NewVerifier(secret, revoked).ParseAndValidate(context.Background(), tok2)
+	if claims2.Tenant != "" {
+		t.Errorf("plain token tenant = %q, want empty", claims2.Tenant)
+	}
+}
+
 func TestIssueAndValidate_RoundTrip(t *testing.T) {
 	secret, err := GenerateSecret()
 	if err != nil {

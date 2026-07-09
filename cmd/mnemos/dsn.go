@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -41,7 +43,37 @@ func resolveDSN() string {
 // Provider-specific access (e.g. the *sql.DB needed for the deep
 // health probe) is available through Conn.Raw when required.
 func openConn(ctx context.Context) (*store.Conn, error) {
-	return store.Open(ctx, resolveDSN())
+	dsn, err := resolveDSNForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return store.Open(ctx, dsn)
+}
+
+// resolveDSNForContext returns the DSN for this request, scoped to the
+// effective tenant when the request carries one (multi-tenant HTTP MCP mode).
+// It appends `?tenant=<id>` so the Postgres provider pins the mnemos.tenant GUC
+// and RLS isolates the request (ADR 0007). Tenant scoping requires a Postgres
+// backend; anything else fails closed rather than silently sharing data.
+func resolveDSNForContext(ctx context.Context) (string, error) {
+	dsn := resolveDSN()
+	tenant, ok := tenantFromContext(ctx)
+	if !ok {
+		return dsn, nil
+	}
+	if !isPostgresDSN(dsn) {
+		return "", fmt.Errorf("tenant scoping requires a postgres backend (this store is not postgres)")
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep + "tenant=" + tenant, nil
+}
+
+// isPostgresDSN reports whether a DSN targets the Postgres backend.
+func isPostgresDSN(dsn string) bool {
+	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
 }
 
 // closeConn closes a *store.Conn, logging any error.
@@ -61,7 +93,11 @@ func closeConn(conn *store.Conn) {
 //	w, err := openWriter(ctx)
 //	defer closeWriter(w)
 func openWriter(ctx context.Context) (*govwrite.Writer, error) {
-	return govwrite.New(ctx, resolveDSN(), nil)
+	dsn, err := resolveDSNForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return govwrite.New(ctx, dsn, nil)
 }
 
 // closeWriter closes a *govwrite.Writer (and the store connection it
