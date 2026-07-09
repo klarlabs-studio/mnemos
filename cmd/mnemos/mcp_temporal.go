@@ -73,6 +73,9 @@ func mcpRunRememberEvent(ctx context.Context, actor string, input mcpRememberEve
 	if strings.TrimSpace(input.Content) == "" {
 		return mcpRememberEventOutput{}, errors.New("content is required")
 	}
+	if err := enforceRunScope(ctx, input.RunID); err != nil {
+		return mcpRememberEventOutput{}, err
+	}
 	at, err := time.Parse(time.RFC3339, strings.TrimSpace(input.At))
 	if err != nil {
 		return mcpRememberEventOutput{}, fmt.Errorf("invalid at timestamp: %w", err)

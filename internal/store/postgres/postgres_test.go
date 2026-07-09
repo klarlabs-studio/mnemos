@@ -124,3 +124,15 @@ func TestSupportedSchemes_IncludesPostgres(t *testing.T) {
 		}
 	}
 }
+
+// A malformed DSN must never echo the password back in the error (redaction).
+func TestParseDSNRedactsPasswordOnError(t *testing.T) {
+	// A space in the host makes url.Parse fail, exercising the error path.
+	_, err := postgres.ParseDSN("postgres://user:supersecret@ho st/db")
+	if err == nil {
+		t.Fatal("expected a parse error for a malformed DSN")
+	}
+	if strings.Contains(err.Error(), "supersecret") {
+		t.Errorf("password leaked in error: %v", err)
+	}
+}

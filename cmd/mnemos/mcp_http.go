@@ -108,8 +108,10 @@ func buildMCPVerifier(ctx context.Context) (*auth.Verifier, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load previous signing secret: %w", err)
 	}
-	// Held for the life of the server so revocation checks stay live.
-	conn, err := openConn(ctx)
+	// Held for the life of the server so revocation checks stay live. Uses the
+	// base (unscoped) connection: revoked_tokens is auth-infra, excluded from
+	// RLS (ADR 0007), so it must not be tenant-scoped or fail-closed.
+	conn, err := openBaseConn(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open store for revocation checks: %w", err)
 	}
