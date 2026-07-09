@@ -473,6 +473,7 @@ Mnemos includes an MCP server (`mnemos mcp`) that exposes three tools over stdio
 | `query_knowledge` | Query the knowledge base with evidence-backed results | `question` (required), `runId` (optional) |
 | `process_text` | Ingest raw text, extract claims, detect relationships | `text` (required), `useLlm` (optional), `useEmbeddings` (optional) |
 | `knowledge_metrics` | Return counts and statistics about the knowledge base | (none) |
+| `configure_environment` | Finish wiring Mnemos into Claude Code (install recall/brief/capture hooks + starter config) from inside a session | `hooks` (optional), `project` (optional), `force` (optional) |
 
 ### Claude Desktop
 
@@ -512,7 +513,70 @@ If `mnemos` is not on your `PATH`, use the absolute path:
 
 ### Claude Code
 
-Add to `~/.claude/mcp.json` (global) or `.claude/mcp.json` (per-project):
+**One command — recommended:**
+
+```bash
+mnemos init
+```
+
+`init` detects your system (OS, the `claude` CLI, a local Ollama, any vendor keys), then previews and applies a complete "central brain" setup:
+
+- creates the global brain (`~/.local/share/mnemos/mnemos.db`),
+- writes a starter `~/.config/mnemos/config.yaml` when a key-free local Ollama is available,
+- registers the `mnemos mcp` stdio server with Claude Code (user scope — all projects),
+- installs three hooks into `~/.claude/settings.json` so memory is automatic:
+  - **recall** (`UserPromptSubmit`) — injects claims relevant to your prompt before Claude answers,
+  - **brief** (`SessionStart`) — injects a one-line brain summary at session start,
+  - **capture** (`SessionEnd`) — distills the finished session into the brain.
+
+It asks before writing (skip with `--yes`), previews with `--dry-run`, and backs up `settings.json` before editing. It is idempotent and preserves any hooks you already have.
+
+**Choosing the storage backend.** `init` works with any registered backend — pass `--db` with a DSN and it wires the MCP server *and* the hooks to that brain:
+
+```bash
+mnemos init                                              # local SQLite (default)
+mnemos init --db 'postgres://mnemos:pw@localhost:5432/mnemos'   # local Postgres (docker/native)
+mnemos init --db 'postgres://…@db.host/mnemos?namespace=team'   # hosted Postgres (Neon, etc.)
+mnemos init --db 'libsql://…turso.io?authToken=…'              # hosted libSQL / Turso
+```
+
+`init` **connects to the DSN first** (which also runs the idempotent schema bootstrap) and fails fast if it's unreachable — so it never wires hooks at a brain that can't be reached. Use `--force` to wire anyway.
+
+**Credential handling.** For local SQLite the DSN is inlined into Claude's config (no secret). For a networked DSN that carries a password, `init` writes it to `~/.config/mnemos/config.yaml` (mode 0600) instead, and the MCP server + hooks discover it there — the credential never lands in `~/.claude.json` or `settings.json`.
+
+Other variants:
+
+```bash
+mnemos init --dry-run              # preview only, write nothing
+mnemos init --project              # scope brain + hooks to ./.mnemos and ./.claude
+mnemos init --no-hooks             # register the MCP server + config, no hooks
+mnemos init --hooks recall,capture # install only the named hooks
+mnemos setup                       # minimal: register only the MCP server
+```
+
+Once connected, Claude can finish or adjust setup itself via the **`configure_environment`** MCP tool (e.g. "install the mnemos hooks").
+
+**Connecting to a hosted Mnemos (remote MCP over HTTP).** When the brain runs as a shared service rather than on your machine, expose the MCP surface over HTTP and point Claude Code at the URL:
+
+```bash
+# On the server (or in front of `mnemos serve`): serve MCP over HTTP with JWT auth.
+mnemos mcp --http :8081 --auth        # bearer JWT required (default for --http); --no-auth for trusted nets
+
+# On each client: register the remote endpoint in Claude Code.
+mnemos init --url https://mnemos.pet-medical.example/mcp --token <jwt>
+```
+
+`init --url` pings the endpoint (fail-fast if unreachable) and registers it as an HTTP-transport MCP server (`claude mcp add --transport http … --header "Authorization: Bearer …"`). The full tool set (`query_knowledge`, `process_text`, …) is available over HTTP; the automatic recall/brief/capture **hooks are local-brain only** for now, so hosted mode relies on the MCP tools. `--url` and `--db` are mutually exclusive — the former is a hosted service, the latter a (local or hosted) database.
+
+**Standing up the hosted service.** Scaffold a ready-to-run deployment:
+
+```bash
+mnemos init --service --out deploy   # writes docker-compose.yml, mnemos.yaml, .env.example, README
+```
+
+The bundle runs `mnemos serve` + Postgres; fill in `.env` (Postgres password + `MNEMOS_JWT_SECRET`), `docker compose up -d`, then clients consume it via REST/gRPC (SDK) or via `mnemos init --url` as above.
+
+**Manual alternative** — add to `~/.claude/mcp.json` (global) or `.claude/mcp.json` (per-project):
 
 ```json
 {

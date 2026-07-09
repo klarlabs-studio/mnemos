@@ -269,9 +269,18 @@ type mcpSynthesizePlaybooksOutput struct {
 	PlaybookIDs      []string `json:"playbook_ids"`
 }
 
-// handleMCP starts the MCP server over stdio. This is a long-lived process
-// that blocks until the connection is closed.
-func handleMCP() {
+// handleMCP starts the MCP server. By default it serves over stdio (for a
+// local Claude Code); with `--http <addr>` it serves the same tool set over
+// Streamable HTTP so a hosted Mnemos can be reached by remote MCP clients. It
+// is a long-lived process that blocks until the connection is closed or the
+// process is signalled.
+func handleMCP(args []string) {
+	serveCfg, err := parseMCPArgs(args)
+	if err != nil {
+		exitWithMnemosError(false, err)
+		return
+	}
+
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 
 	// Resolve the actor once at startup from MNEMOS_USER_ID; every
@@ -393,6 +402,13 @@ func handleMCP() {
 				return dispatchAxiTool[mcpMetricsOutput](ctx, kernel, nil, "knowledge_metrics", struct{}{})
 			}
 			return mcpRunMetrics()
+		})
+
+	srv.Tool("configure_environment").
+		Description("Finish wiring Mnemos into Claude Code: detect the host and install the recall/brief/capture hooks (and a starter config) so memory is automatic. The MCP server itself is already registered. Ask the user before calling if they didn't request setup.").
+		OutputSchema(mcpConfigureOutput{}).
+		Handler(func(_ context.Context, input mcpConfigureInput) (mcpConfigureOutput, error) {
+			return mcpRunConfigure(input)
 		})
 
 	srv.Tool("list_claims").
@@ -796,7 +812,14 @@ func handleMCP() {
 		}
 	}()
 
-	if err := mcp.ServeStdio(rootCtx, srv, mcp.WithMiddleware(mcp.DefaultMiddlewareWithTimeout(mcpBoltLogger{logger: logger}, 30*time.Second)...)); err != nil && !errors.Is(err, context.Canceled) {
+	mw := mcp.WithMiddleware(mcp.DefaultMiddlewareWithTimeout(mcpBoltLogger{logger: logger}, 30*time.Second)...)
+	if serveCfg.httpAddr != "" {
+		if err := serveMCPHTTP(rootCtx, srv, serveCfg.httpAddr, serveCfg.requireAuth, mw); err != nil && !errors.Is(err, context.Canceled) {
+			log.Fatal(err)
+		}
+		return
+	}
+	if err := mcp.ServeStdio(rootCtx, srv, mw); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal(err)
 	}
 }

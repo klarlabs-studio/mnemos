@@ -123,6 +123,11 @@ var parityMatrix = []parityEntry{
 	{Capability: "incidents", MCPTool: parityNA, HTTPRoute: "/v1/incidents", GRPCMethod: parityNA},
 	{Capability: "incident subresources", MCPTool: parityNA, HTTPRoute: "/v1/incidents/", GRPCMethod: parityNA},
 
+	// Local host setup: detect the machine and install hooks/config. MCP-only
+	// by design — it mutates the caller's Claude Code settings, which is
+	// meaningless over a remote HTTP/gRPC transport.
+	{Capability: "configure Claude Code integration", MCPTool: "configure_environment", HTTPRoute: parityNA, GRPCMethod: parityNA},
+
 	// Connected-brain reads (v0.66 HTTP, gRPC parity added). MCP counterparts
 	// not exposed; the library is the in-process surface.
 	{Capability: "who-knows-what directory", MCPTool: "who_knows", HTTPRoute: "/v1/who-knows", GRPCMethod: "WhoKnows"},

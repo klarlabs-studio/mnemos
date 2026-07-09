@@ -1,0 +1,69 @@
+# Mnemos configuration file.
+#
+# Copy to one of the discovered locations and edit:
+#   .mnemos/mnemos.yaml        (per project, walked up from CWD)
+#   ~/.config/mnemos/config.yaml   (per user, XDG)
+# or point at it explicitly with `--config <path>` / MNEMOS_CONFIG=<path>.
+#
+# Every key is OPTIONAL — omit anything you don't need; omitted keys fall back
+# to their built-in defaults. An exported MNEMOS_* environment variable always
+# OVERRIDES the value here, so keep secrets in the environment when you prefer.
+# Each key maps to exactly one MNEMOS_* variable (noted inline).
+
+db:
+  url:                 # MNEMOS_DB_URL — sqlite:// | memory:// | postgres:// | mysql:// | libsql://
+  max_conns:           # MNEMOS_DB_MAX_CONNS (Postgres/MySQL, default 25)
+  max_idle_conns:      # MNEMOS_DB_MAX_IDLE_CONNS (default 5)
+  conn_max_lifetime:   # MNEMOS_DB_CONN_MAX_LIFETIME (Go duration, default 30m)
+
+llm:
+  provider:            # MNEMOS_LLM_PROVIDER — anthropic | openai | gemini | ollama | openai-compat
+  api_key:             # MNEMOS_LLM_API_KEY (required for cloud providers)
+  model:               # MNEMOS_LLM_MODEL
+  base_url:            # MNEMOS_LLM_BASE_URL (required for openai-compat / remote ollama)
+  timeout:             # MNEMOS_LLM_TIMEOUT (Go duration, default 120s)
+  cache_max_bytes:     # MNEMOS_LLM_CACHE_MAX_BYTES (default 1 GiB; 0 disables eviction)
+  extract_model:       # MNEMOS_EXTRACT_MODEL (override model for the extract stage only)
+
+embed:
+  provider:            # MNEMOS_EMBED_PROVIDER (falls back to llm.provider)
+  api_key:             # MNEMOS_EMBED_API_KEY (falls back to llm.api_key)
+  model:               # MNEMOS_EMBED_MODEL
+  base_url:            # MNEMOS_EMBED_BASE_URL
+  timeout:             # MNEMOS_EMBED_TIMEOUT (Go duration, default 60s)
+
+serve:
+  port:                # MNEMOS_SERVE_PORT (HTTP REST port)
+  tls_cert_file:       # MNEMOS_TLS_CERT_FILE
+  tls_key_file:        # MNEMOS_TLS_KEY_FILE
+  mtls_client_ca_file: # MNEMOS_MTLS_CLIENT_CA_FILE (enables mTLS client-cert verification)
+
+auth:
+  jwt_secret:          # MNEMOS_JWT_SECRET (hex, >=32 bytes; prefer the environment for this)
+  jwt_prev_secret:     # MNEMOS_JWT_PREV_SECRET (previous secret, for rotation)
+  dir:                 # MNEMOS_AUTH_DIR (directory for the JWT signing secret file)
+  user_id:             # MNEMOS_USER_ID (default write actor)
+
+registry:
+  url:                 # MNEMOS_REGISTRY_URL
+  token:               # MNEMOS_REGISTRY_TOKEN
+
+federation:
+  enabled:             # MNEMOS_FEDERATION_ENABLED (true/false)
+
+telemetry:
+  optin:               # MNEMOS_TELEMETRY_OPTIN (true/false; default off)
+  endpoint:            # MNEMOS_TELEMETRY_ENDPOINT (POST destination; unset = no send)
+
+kernel:
+  max_duration:        # MNEMOS_AXI_MAX_DURATION (Go duration; single-session bound)
+  max_invocations:     # MNEMOS_AXI_MAX_INVOCATIONS (positive int)
+  max_tokens:          # MNEMOS_AXI_MAX_TOKENS (positive int)
+  evidence_log:        # MNEMOS_AXI_EVIDENCE_LOG (JSONL evidence sink path)
+
+feedback:
+  contest_threshold:   # MNEMOS_FEEDBACK_CONTEST_THRESHOLD (int, default 3)
+  decay:               # MNEMOS_FEEDBACK_DECAY (float, default 0.9)
+
+job:
+  timeout:             # MNEMOS_JOB_TIMEOUT (Go duration, default 10m)
