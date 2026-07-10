@@ -110,6 +110,9 @@ func mcpRunRememberEvent(ctx context.Context, actor string, input mcpRememberEve
 // sorting; the handler only marshals the result into the MCP wire
 // shape).
 func mcpRunTimelineQuery(ctx context.Context, input mcpTimelineQueryInput) (mcpTimelineQueryOutput, error) {
+	if err := enforceRunScope(ctx, input.RunID); err != nil {
+		return mcpTimelineQueryOutput{}, err
+	}
 	var from, to time.Time
 	var err error
 	if s := strings.TrimSpace(input.From); s != "" {
@@ -161,6 +164,9 @@ func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (mcpQue
 	q := strings.TrimSpace(input.Question)
 	if q == "" {
 		return mcpQueryOutput{}, errors.New("question is required")
+	}
+	if err := enforceRunScope(ctx, input.RunID); err != nil {
+		return mcpQueryOutput{}, err
 	}
 	asOf, err := time.Parse(time.RFC3339, strings.TrimSpace(input.AsOf))
 	if err != nil {

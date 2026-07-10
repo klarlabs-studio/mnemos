@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"sync"
 	"testing"
+
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // TestConnCache verifies the read-connection cache: same DSN reuses one conn,
@@ -46,6 +49,40 @@ func TestConnCache(t *testing.T) {
 	}
 	if c == a {
 		t.Error("closeConnCache should have dropped the old conn")
+	}
+}
+
+// TestConnCacheConcurrent hammers openConn from many goroutines on the same
+// DSN; with the race detector this asserts the double-checked open is
+// race-free and converges on a single cached conn.
+func TestConnCacheConcurrent(t *testing.T) {
+	t.Setenv("MNEMOS_DB_URL", "memory://concurrent")
+	connCacheEnabled = false
+	closeConnCache()
+	t.Cleanup(func() { closeConnCache(); connCacheEnabled = false })
+	enableConnCache()
+
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	conns := make([]*store.Conn, 20)
+	for i := range conns {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			c, err := openConn(ctx)
+			if err != nil {
+				t.Errorf("openConn: %v", err)
+				return
+			}
+			conns[i] = c
+		}(i)
+	}
+	wg.Wait()
+	// All goroutines must observe the same cached conn.
+	for i := 1; i < len(conns); i++ {
+		if conns[i] != conns[0] {
+			t.Fatalf("conn %d differs from conn 0 — cache did not converge", i)
+		}
 	}
 }
 

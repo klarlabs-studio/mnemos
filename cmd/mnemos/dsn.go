@@ -23,6 +23,11 @@ import (
 //
 // The CLI never enables this (short-lived commands), so its behavior is
 // unchanged.
+// connCacheMax bounds the number of cached pools (≈ number of hot tenants).
+// Beyond it, additional tenants are served with per-request connections rather
+// than evicting an in-use pool.
+const connCacheMax = 512
+
 var (
 	connCacheEnabled bool
 	connCacheMu      sync.Mutex
@@ -87,17 +92,40 @@ func openConn(ctx context.Context) (*store.Conn, error) {
 	if !connCacheEnabled {
 		return store.Open(ctx, dsn)
 	}
+
+	// Fast path: return a cached pool. The lock guards only the map, never the
+	// blocking store.Open below — so a slow dial for one tenant cannot stall
+	// connection setup for others (#150).
 	connCacheMu.Lock()
-	defer connCacheMu.Unlock()
 	if c, ok := connCache[dsn]; ok {
+		connCacheMu.Unlock()
 		return c, nil
 	}
-	c, err := store.Open(ctx, dsn)
+	full := len(connCache) >= connCacheMax
+	connCacheMu.Unlock()
+
+	// Bound: when the cache is full, serve this (likely cold) tenant with an
+	// uncached per-request connection rather than evict an in-use pool. It is
+	// not in cachedConns, so the caller's closeConn closes it normally.
+	if full {
+		return store.Open(ctx, dsn)
+	}
+
+	c, err := store.Open(ctx, dsn) // opened WITHOUT the lock held
 	if err != nil {
 		return nil, err
 	}
+	connCacheMu.Lock()
+	if existing, ok := connCache[dsn]; ok {
+		// Lost the race to open the same DSN concurrently — keep the winner,
+		// discard our redundant pool.
+		connCacheMu.Unlock()
+		_ = c.Close()
+		return existing, nil
+	}
 	connCache[dsn] = c
 	cachedConns[c] = true
+	connCacheMu.Unlock()
 	return c, nil
 }
 
