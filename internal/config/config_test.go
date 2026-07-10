@@ -59,6 +59,26 @@ federation:
 	}
 }
 
+func TestServerBlockEnvOverrides(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+server:
+  url: https://brain.example.com
+  token: tok-abc
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	env := cfg.EnvOverrides()
+	if env["MNEMOS_URL"] != "https://brain.example.com" {
+		t.Errorf("MNEMOS_URL = %q", env["MNEMOS_URL"])
+	}
+	if env["MNEMOS_TOKEN"] != "tok-abc" {
+		t.Errorf("MNEMOS_TOKEN = %q", env["MNEMOS_TOKEN"])
+	}
+}
+
 func TestLoadRejectsUnknownFields(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, "llm:\n  provdier: typo\n")

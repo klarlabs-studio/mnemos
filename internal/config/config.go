@@ -75,6 +75,16 @@ type Config struct {
 		MTLSClientCAFile scalar `yaml:"mtls_client_ca_file"`
 	} `yaml:"serve"`
 
+	// Server points a CLIENT (e.g. the recall/brief/capture hooks) at a remote
+	// hosted mnemos brain over HTTP/REST. Set by `init --url <endpoint> [--token]`.
+	// When Server.URL is set, the hooks call the REST API instead of opening a
+	// local store. Distinct from Registry (federation) and Serve (this process's
+	// own listener).
+	Server struct {
+		URL   scalar `yaml:"url"`
+		Token scalar `yaml:"token"`
+	} `yaml:"server"`
+
 	Auth struct {
 		JWTSecret     scalar `yaml:"jwt_secret"`
 		JWTPrevSecret scalar `yaml:"jwt_prev_secret"`
@@ -144,6 +154,9 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_TLS_CERT_FILE", c.Serve.TLSCertFile},
 		{"MNEMOS_TLS_KEY_FILE", c.Serve.TLSKeyFile},
 		{"MNEMOS_MTLS_CLIENT_CA_FILE", c.Serve.MTLSClientCAFile},
+
+		{"MNEMOS_URL", c.Server.URL},
+		{"MNEMOS_TOKEN", c.Server.Token},
 
 		{"MNEMOS_JWT_SECRET", c.Auth.JWTSecret},
 		{"MNEMOS_JWT_PREV_SECRET", c.Auth.JWTPrevSecret},

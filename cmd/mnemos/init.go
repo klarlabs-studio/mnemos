@@ -190,10 +190,12 @@ func buildInitPlan(opts initOptions) initPlan {
 		scope = "project"
 	}
 
-	// Hosted-service mode: point Claude Code at a remote MCP endpoint over
-	// HTTP. There is no local brain, config, or hooks — the server owns them.
+	// Hosted-service mode: point Claude Code at a remote MCP endpoint over HTTP.
+	// There is no local brain, but we DO write a 0600 config (the hosted URL +
+	// token) and install the recall/brief/capture hooks — the hooks discover the
+	// endpoint from that config and call the REST API instead of a local store.
 	if opts.url != "" {
-		return initPlan{
+		plan := initPlan{
 			opts:        opts,
 			env:         env,
 			scope:       scope,
@@ -202,7 +204,21 @@ func buildInitPlan(opts initOptions) initPlan {
 			token:       opts.token,
 			bin:         selfPath(),
 			registerMCP: !opts.noMCP,
+			inlineDSN:   false, // never inline a secret; hooks read it from config
+			specs:       hookSpecsFor(opts.hooks),
 		}
+		// The hosted URL (and token, if any) live in the 0600 config file, never
+		// inlined into Claude Code's settings. The token is a bearer credential.
+		configKV := map[string]string{"server.url": opts.url}
+		if opts.token != "" {
+			configKV["server.token"] = opts.token
+		}
+		plan.configPath = initConfigPath(opts.project)
+		plan.configKV = configKV
+		if len(plan.specs) > 0 {
+			plan.settingsPath = claudeSettingsPath(opts.project)
+		}
+		return plan
 	}
 
 	dsn := opts.dsn
@@ -289,8 +305,19 @@ func renderInitPlan(p initPlan) {
 		} else {
 			fmt.Println("  • auth:      none (endpoint is unauthenticated or you'll add a header later)")
 		}
+		if len(p.configKV) > 0 {
+			secret := ""
+			if p.token != "" {
+				secret = " — URL + token kept here (0600), not in Claude config"
+			}
+			fmt.Printf("  • config:    %s%s\n", p.configPath, secret)
+		}
 		fmt.Printf("  • mcp:       register remote `mnemos` server (scope: %s)%s\n", p.scope, mcpFallbackNote(p.env))
-		fmt.Println("  • hooks:     none (recall/brief/capture require local brain access; use the MCP tools)")
+		if len(p.specs) > 0 {
+			fmt.Printf("  • hooks:     %s → %s  (call the hosted brain over REST)\n", strings.Join(hookNames(p.specs), ", "), p.settingsPath)
+		} else {
+			fmt.Println("  • hooks:     none (MCP tools only)")
+		}
 		return
 	}
 
@@ -338,8 +365,9 @@ func (r *initResult) err(format string, a ...any) {
 func applyInitPlan(p initPlan) initResult {
 	var r initResult
 
-	// Hosted-service mode: probe the endpoint, then register the remote MCP
-	// server. No local brain/config/hooks.
+	// Mode-specific setup: hosted probes the endpoint + registers the remote MCP;
+	// local creates the brain dir, bootstraps the schema, and registers the local
+	// MCP. Both then share the config + hooks steps below.
 	if p.httpMode {
 		if err := probeURL(p.url); err != nil {
 			if !p.opts.force {
@@ -357,53 +385,59 @@ func applyInitPlan(p initPlan) initResult {
 				r.ok("remote MCP server registered (scope: %s)", p.scope)
 			}
 		}
-		return r
-	}
-
-	// 1. Brain directory (sqlite only; networked backends need no local dir).
-	if p.brainDir != "" {
-		if err := os.MkdirAll(p.brainDir, 0o750); err != nil {
-			r.err("create brain dir %s: %s", p.brainDir, err)
-			return r
-		}
-	}
-
-	// 2. Connectivity check — actually open the chosen DSN (this also runs the
-	// idempotent schema bootstrap). A dead DSN is fatal unless --force, so we
-	// never wire hooks/MCP at a brain that can't be reached.
-	if err := probeBrain(p.dsn); err != nil {
-		if !p.opts.force {
-			r.err("cannot reach brain %s: %s", p.dsn, err)
-			return r
-		}
-		r.skip("brain unreachable (%s) — continuing anyway (--force)", err)
 	} else {
-		r.ok("brain reachable, schema ready (%s)", p.backend)
-	}
-	// Point this process's doctor probe (and any child) at the chosen DSN.
-	_ = os.Setenv("MNEMOS_DB_URL", p.dsn)
+		// 1. Brain directory (sqlite only; networked backends need no local dir).
+		if p.brainDir != "" {
+			if err := os.MkdirAll(p.brainDir, 0o750); err != nil {
+				r.err("create brain dir %s: %s", p.brainDir, err)
+				return r
+			}
+		}
 
-	// 3. Config file (merged, never clobbered).
-	if len(p.configKV) > 0 {
-		if err := config.SetValues(p.configPath, p.configKV); err != nil {
-			r.err("write config %s: %s", p.configPath, err)
-		} else if p.inlineDSN {
-			r.ok("wrote config %s", p.configPath)
+		// 2. Connectivity check — actually open the chosen DSN (this also runs the
+		// idempotent schema bootstrap). A dead DSN is fatal unless --force, so we
+		// never wire hooks/MCP at a brain that can't be reached.
+		if err := probeBrain(p.dsn); err != nil {
+			if !p.opts.force {
+				r.err("cannot reach brain %s: %s", p.dsn, err)
+				return r
+			}
+			r.skip("brain unreachable (%s) — continuing anyway (--force)", err)
 		} else {
+			r.ok("brain reachable, schema ready (%s)", p.backend)
+		}
+		// Point this process's doctor probe (and any child) at the chosen DSN.
+		_ = os.Setenv("MNEMOS_DB_URL", p.dsn)
+
+		// 4. MCP registration (local stdio server).
+		if p.registerMCP {
+			if err := registerClaudeCode(p.bin, p.dsn, p.scope, p.inlineDSN, p.opts.force, false); err != nil {
+				r.err("register MCP: %s", err)
+			} else {
+				r.ok("MCP server registered (scope: %s)", p.scope)
+			}
+		}
+	}
+
+	// 3. Config file (merged, never clobbered). Holds the credentialed DSN
+	// (local networked backend) or the hosted URL + token (hosted mode).
+	if len(p.configKV) > 0 {
+		err := config.SetValues(p.configPath, p.configKV)
+		switch {
+		case err != nil:
+			r.err("write config %s: %s", p.configPath, err)
+		case p.httpMode:
+			r.ok("wrote config %s (hosted URL/token stored here, 0600 — not in Claude config)", p.configPath)
+		case p.inlineDSN:
+			r.ok("wrote config %s", p.configPath)
+		default:
 			r.ok("wrote config %s (DSN stored here, 0600 — not in Claude config)", p.configPath)
 		}
 	}
 
-	// 4. MCP registration.
-	if p.registerMCP {
-		if err := registerClaudeCode(p.bin, p.dsn, p.scope, p.inlineDSN, p.opts.force, false); err != nil {
-			r.err("register MCP: %s", err)
-		} else {
-			r.ok("MCP server registered (scope: %s)", p.scope)
-		}
-	}
-
-	// 5. Hooks.
+	// 5. Hooks. For hosted mode p.dsn is empty and inlineDSN false, so the hook
+	// command carries no --db and discovers the hosted URL/token from the config
+	// at runtime, routing recall/brief/capture through the REST API.
 	if len(p.specs) > 0 {
 		backup, err := installHooks(p.settingsPath, p.bin, p.dsn, p.specs, p.inlineDSN)
 		switch {
@@ -461,9 +495,16 @@ func printInitNextSteps(p initPlan) {
 		fmt.Println("\nNext steps:")
 		fmt.Println("  1. Restart Claude Code so it connects to the remote MCP server.")
 		fmt.Println("  2. Run  /mcp  (or  claude mcp list )  to confirm mnemos shows Connected.")
-		fmt.Println("  3. Ask Claude to \"remember\" things or \"what do we know about …\" — the hosted")
-		fmt.Println("     brain answers over HTTP. (Automatic recall/brief/capture hooks are local-brain")
-		fmt.Println("     only for now.)")
+		if len(p.specs) > 0 {
+			fmt.Println("  3. Run  /hooks  to see the recall/brief/capture hooks. They call the hosted")
+			fmt.Println("     brain over REST and fire automatically:")
+			for _, s := range p.specs {
+				fmt.Printf("       - %s\n", hookDescription(s.Sub))
+			}
+		} else {
+			fmt.Println("  3. Ask Claude to \"remember\" things or \"what do we know about …\" — the hosted")
+			fmt.Println("     brain answers over HTTP via the MCP tools.")
+		}
 		return
 	}
 	fmt.Println("\nNext steps:")

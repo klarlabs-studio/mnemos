@@ -39,6 +39,14 @@ serve:
   tls_key_file:        # MNEMOS_TLS_KEY_FILE
   mtls_client_ca_file: # MNEMOS_MTLS_CLIENT_CA_FILE (enables mTLS client-cert verification)
 
+# Point a CLIENT (e.g. the recall/brief/capture hooks) at a remote hosted brain.
+# Written by `mnemos init --url <endpoint> [--token]`. When server.url is set, the
+# hooks call the REST API instead of opening a local store. (Distinct from
+# `registry:` above, which is federation, and `serve:`, this process's listener.)
+server:
+  url:                 # MNEMOS_URL (hosted brain REST endpoint, e.g. https://brain.example.com)
+  token:               # MNEMOS_TOKEN (bearer token; kept at 0600 — a credential)
+
 auth:
   jwt_secret:          # MNEMOS_JWT_SECRET (hex, >=32 bytes; prefer the environment for this)
   jwt_prev_secret:     # MNEMOS_JWT_PREV_SECRET (previous secret, for rotation)

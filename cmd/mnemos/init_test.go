@@ -107,11 +107,34 @@ func TestBuildInitPlanURLMode(t *testing.T) {
 	if plan.url != "https://pet-medical/mcp" || plan.token != "jwt" {
 		t.Errorf("url/token not carried: %+v", plan)
 	}
-	if len(plan.specs) != 0 {
-		t.Errorf("url mode should install no hooks, got %d", len(plan.specs))
+	// Hosted mode now installs the recall/brief/capture hooks (they call the
+	// hosted brain over REST) and writes the URL/token to the 0600 config.
+	if len(plan.specs) == 0 {
+		t.Error("hosted mode should install hooks")
 	}
-	if plan.dsn != "" || len(plan.configKV) != 0 {
-		t.Errorf("url mode should have no local brain/config: dsn=%q configKV=%v", plan.dsn, plan.configKV)
+	if plan.dsn != "" {
+		t.Errorf("hosted mode has no local brain DSN, got %q", plan.dsn)
+	}
+	if plan.inlineDSN {
+		t.Error("hosted mode must never inline a secret into Claude config")
+	}
+	if plan.configKV["server.url"] != "https://pet-medical/mcp" || plan.configKV["server.token"] != "jwt" {
+		t.Errorf("url/token not written to config: %v", plan.configKV)
+	}
+	if plan.configPath == "" || plan.settingsPath == "" {
+		t.Errorf("hosted mode should set configPath (%q) and settingsPath (%q)", plan.configPath, plan.settingsPath)
+	}
+}
+
+// TestBuildInitPlanURLMode_NoToken confirms a token-free hosted endpoint writes
+// only server.url (no empty token key).
+func TestBuildInitPlanURLMode_NoToken(t *testing.T) {
+	plan := buildInitPlan(initOptions{url: "https://open/mcp", hooks: defaultHookSet()})
+	if plan.configKV["server.url"] != "https://open/mcp" {
+		t.Errorf("server.url = %q", plan.configKV["server.url"])
+	}
+	if _, ok := plan.configKV["server.token"]; ok {
+		t.Error("no token → server.token must be omitted")
 	}
 }
 
