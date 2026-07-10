@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"go.klarlabs.de/mnemos/client"
 )
 
 // Claude Code hook handlers: `mnemos hook <recall|brief|capture>`.
@@ -109,6 +111,32 @@ func emitContext(eventName, context string) {
 	_ = json.NewEncoder(os.Stdout).Encode(out)
 }
 
+// hostedConfigured reports whether this integration targets a remote hosted
+// brain (init --url) rather than a local store. When true, the hooks call the
+// REST API via the client package instead of opening a local store.
+func hostedConfigured() bool {
+	return strings.TrimSpace(os.Getenv(client.EnvBaseURL)) != ""
+}
+
+// hostedClient builds a REST client for the configured hosted brain with the
+// given per-hook timeout. Only call when hostedConfigured() is true.
+func hostedClient(timeout time.Duration) *client.Client {
+	opts := []client.Option{client.WithTimeout(timeout)}
+	if tok := strings.TrimSpace(os.Getenv("MNEMOS_TOKEN")); tok != "" {
+		opts = append(opts, client.WithToken(tok))
+	}
+	return client.New(os.Getenv(client.EnvBaseURL), opts...)
+}
+
+// recallClaim is the transport-agnostic slice of a retrieved claim that the
+// recall injection needs, so the local (mcpQueryOutput) and hosted
+// (client.SearchResponse) paths share one renderer.
+type recallClaim struct {
+	Type       string
+	Text       string
+	TrustScore float64
+}
+
 // hookRecall (UserPromptSubmit) surfaces claims relevant to the user's prompt.
 func hookRecall(ev hookEvent) {
 	q := strings.TrimSpace(ev.Prompt)
@@ -118,32 +146,53 @@ func hookRecall(ev hookEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 
-	out, err := mcpRunQuery(ctx, mcpQueryInput{Question: q})
-	if err != nil {
-		return // fail-open
+	var (
+		claims         []recallClaim
+		contradictions int
+	)
+	if hostedConfigured() {
+		resp, err := hostedClient(12*time.Second).Search(ctx, q, client.SearchOptions{TopK: 6})
+		if err != nil || resp == nil {
+			return // fail-open
+		}
+		for _, c := range resp.Claims {
+			claims = append(claims, recallClaim{Type: c.Type, Text: c.Text, TrustScore: c.TrustScore})
+		}
+		contradictions = len(resp.Contradictions)
+	} else {
+		out, err := mcpRunQuery(ctx, mcpQueryInput{Question: q})
+		if err != nil {
+			return // fail-open
+		}
+		if len(out.Claims) == 0 && strings.TrimSpace(out.Answer) == "" {
+			return
+		}
+		for _, c := range out.Claims {
+			claims = append(claims, recallClaim{Type: string(c.Type), Text: c.Text, TrustScore: c.TrustScore})
+		}
+		contradictions = len(out.Contradictions)
 	}
-	ctxText := formatRecall(out)
-	emitContext("UserPromptSubmit", ctxText)
+	emitContext("UserPromptSubmit", renderRecall(claims, contradictions))
 }
 
-// formatRecall renders a compact, citation-friendly context block. It caps the
+// renderRecall renders a compact, citation-friendly context block. It caps the
 // claim list so the injection stays small.
-func formatRecall(out mcpQueryOutput) string {
-	if len(out.Claims) == 0 && strings.TrimSpace(out.Answer) == "" {
+func renderRecall(claims []recallClaim, contradictions int) string {
+	if len(claims) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("Relevant knowledge from Mnemos (your long-term memory):\n")
 	const maxClaims = 6
-	for i, c := range out.Claims {
+	for i, c := range claims {
 		if i >= maxClaims {
-			fmt.Fprintf(&b, "  …and %d more (use the query_knowledge tool for the full set)\n", len(out.Claims)-maxClaims)
+			fmt.Fprintf(&b, "  …and %d more (use the query_knowledge tool for the full set)\n", len(claims)-maxClaims)
 			break
 		}
 		fmt.Fprintf(&b, "  - [%s] %s (trust %.2f)\n", c.Type, strings.TrimSpace(c.Text), c.TrustScore)
 	}
-	if len(out.Contradictions) > 0 {
-		fmt.Fprintf(&b, "  ⚠ %d contradiction(s) recorded on this topic — verify before relying.\n", len(out.Contradictions))
+	if contradictions > 0 {
+		fmt.Fprintf(&b, "  ⚠ %d contradiction(s) recorded on this topic — verify before relying.\n", contradictions)
 	}
 	b.WriteString("If this contradicts newer information, prefer the newer and note the conflict.")
 	return b.String()
@@ -155,21 +204,38 @@ func hookBrief(ev hookEvent) {
 	if ev.Source == "clear" || ev.Source == "compact" {
 		return
 	}
-	m, err := mcpRunMetrics(context.Background())
-	if err != nil {
-		return
+	var claims, runs, contradictions int64
+	if hostedConfigured() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		m, err := hostedClient(10 * time.Second).Metrics(ctx)
+		if err != nil || m == nil {
+			return
+		}
+		claims, runs, contradictions = m.Claims, m.Runs, m.Contradictions
+	} else {
+		m, err := mcpRunMetrics(context.Background())
+		if err != nil {
+			return
+		}
+		claims, runs, contradictions = m.Claims, m.Runs, m.Contradictions
 	}
-	if m.Claims == 0 {
+	if claims == 0 {
 		return // empty brain: nothing worth announcing
 	}
+	emitContext("SessionStart", renderBrief(claims, runs, contradictions))
+}
+
+// renderBrief formats the session-start brain summary.
+func renderBrief(claims, runs, contradictions int64) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Mnemos brain connected: %d claims across %d runs", m.Claims, m.Runs)
-	if m.Contradictions > 0 {
-		fmt.Fprintf(&b, ", %d open contradiction(s)", m.Contradictions)
+	fmt.Fprintf(&b, "Mnemos brain connected: %d claims across %d runs", claims, runs)
+	if contradictions > 0 {
+		fmt.Fprintf(&b, ", %d open contradiction(s)", contradictions)
 	}
 	b.WriteString(".\n")
 	b.WriteString("Use query_knowledge before answering questions about past decisions, and record new decisions/facts with process_text or record_decision.")
-	emitContext("SessionStart", b.String())
+	return b.String()
 }
 
 // hookCapture (SessionEnd) distills the session transcript into the brain.
@@ -188,11 +254,17 @@ func hookCapture(ev hookEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	// Auto-enable LLM/embeddings when a provider is configured; the pipeline
-	// degrades to rule-based extraction otherwise.
+	if hostedConfigured() {
+		// Let the server decide LLM/embeddings from ITS config (the hook machine
+		// can't know the hosted brain's providers): omit the flags (nil).
+		_, _ = hostedClient(90*time.Second).Process(ctx, client.ProcessRequest{Text: text})
+		return
+	}
+
+	// Local brain: auto-enable LLM/embeddings when a provider is configured on
+	// this machine; the pipeline degrades to rule-based extraction otherwise.
 	useLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
-	actor := "claude-code"
-	_, _ = mcpRunProcessText(ctx, actor, mcpProcessTextInput{
+	_, _ = mcpRunProcessText(ctx, "claude-code", mcpProcessTextInput{
 		Text:          text,
 		UseLLM:        useLLM,
 		UseEmbeddings: useLLM,

@@ -346,6 +346,7 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant b
 	mux.HandleFunc("/health", makeHealthHandler(conn))
 	leadsLogger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 	mux.Handle("/v1/leads", leadsRateLimitMiddleware(makeLeadsHandler(leadsLogger)))
+	mux.HandleFunc("/v1/process", makeProcessHandler())
 	mux.HandleFunc("/v1/events", makeEventsHandler(conn, gw))
 	mux.HandleFunc("/v1/claims", makeClaimsHandler(conn, gw))
 	mux.HandleFunc("/v1/relationships", makeRelationshipsHandler(conn, gw))
@@ -622,6 +623,86 @@ type eventDTO struct {
 	Timestamp     string            `json:"timestamp"`
 	Metadata      map[string]string `json:"metadata"`
 	IngestedAt    string            `json:"ingested_at"`
+}
+
+// processRequestDTO is the POST /v1/process body: raw text to run through the
+// ingest→extract→relate pipeline. UseLLM/UseEmbeddings are tri-state (*bool): a
+// caller that omits them (e.g. a hosted-brain hook, which can't know the
+// server's LLM config) lets the SERVER decide — defaulting to LLM extraction iff
+// the server has a provider configured. An explicit true/false overrides.
+type processRequestDTO struct {
+	Text          string `json:"text"`
+	UseLLM        *bool  `json:"use_llm,omitempty"`
+	UseEmbeddings *bool  `json:"use_embeddings,omitempty"`
+}
+
+// processResponseDTO reports what the pipeline persisted.
+type processResponseDTO struct {
+	RunID          string `json:"run_id"`
+	Events         int    `json:"events"`
+	Claims         int    `json:"claims"`
+	Relationships  int    `json:"relationships"`
+	Embeddings     int    `json:"embeddings"`
+	UsedLLM        bool   `json:"used_llm"`
+	UsedEmbeddings bool   `json:"used_embeddings"`
+}
+
+// makeProcessHandler runs the full ingest→extract→relate pipeline from raw text —
+// the REST analogue of the MCP `process_text` tool, and the server-side path a
+// hosted-brain `capture` hook POSTs a transcript to. POST only; requires
+// claims:write (the pipeline's meaningful output). Tenant-scoped: the shared
+// mcpRunProcessText opens its writer via openWriter(ctx), which the request's
+// tenant (set by jwtAuthMiddleware) scopes — so it works under serve
+// --require-tenant unchanged.
+func makeProcessHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if !requireScope(w, r, domain.ScopeClaimsWrite) {
+			return
+		}
+		var req processRequestDTO
+		if err := decodeJSON(r, &req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		if strings.TrimSpace(req.Text) == "" {
+			writeError(w, http.StatusBadRequest, "text is required")
+			return
+		}
+		// Default to LLM extraction iff this server has a provider configured, so
+		// a hook that omits the flags gets the best the server can do without
+		// hard-failing when no LLM is set. Explicit request flags override.
+		serverHasLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
+		useLLM := serverHasLLM
+		if req.UseLLM != nil {
+			useLLM = *req.UseLLM
+		}
+		useEmbeddings := useLLM
+		if req.UseEmbeddings != nil {
+			useEmbeddings = *req.UseEmbeddings
+		}
+		out, err := mcpRunProcessText(r.Context(), actorFromContext(r.Context()), mcpProcessTextInput{
+			Text:          req.Text,
+			UseLLM:        useLLM,
+			UseEmbeddings: useEmbeddings,
+		})
+		if err != nil {
+			writeInternalError(w, "process text", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, processResponseDTO{
+			RunID:          out.RunID,
+			Events:         out.Events,
+			Claims:         out.Claims,
+			Relationships:  out.Relationships,
+			Embeddings:     out.Embeddings,
+			UsedLLM:        out.UsedLLM,
+			UsedEmbeddings: out.UsedEmbeddings,
+		})
+	}
 }
 
 func makeEventsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {

@@ -40,6 +40,44 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Metrics" }
+  /v1/process:
+    post:
+      summary: Run the ingest→extract→relate pipeline on raw text
+      description: |
+        Server-side analogue of the MCP `process_text` tool: ingests raw text,
+        extracts claims, detects relationships, and persists the artifacts.
+        Requires the `claims:write` scope. `use_llm`/`use_embeddings` are
+        tri-state — omit them to let the server decide (LLM extraction iff a
+        provider is configured), or set them explicitly to force. This is the
+        endpoint a hosted-brain `capture` hook POSTs a session transcript to.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, description: "Raw text to ingest and process." }
+                use_llm: { type: boolean, description: "Force LLM extraction on/off. Omit to use the server default." }
+                use_embeddings: { type: boolean, description: "Force embedding generation on/off. Omit to follow use_llm." }
+      responses:
+        "200":
+          description: Pipeline summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id: { type: string }
+                  events: { type: integer }
+                  claims: { type: integer }
+                  relationships: { type: integer }
+                  embeddings: { type: integer }
+                  used_llm: { type: boolean }
+                  used_embeddings: { type: boolean }
+        "400": { description: "Missing or empty text" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /v1/events:
     get:
       summary: List events

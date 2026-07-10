@@ -23,20 +23,38 @@ func TestReadHookEvent(t *testing.T) {
 	}
 }
 
-func TestFormatRecall(t *testing.T) {
-	out := mcpQueryOutput{
-		Claims: []domain.Claim{
-			{Text: "chose Postgres", Type: domain.ClaimTypeFact, TrustScore: 0.8},
-			{Text: "rate limiting on gateway", Type: domain.ClaimTypeDecision, TrustScore: 0.5},
-		},
-	}
-	got := formatRecall(out)
+func TestRenderRecall(t *testing.T) {
+	got := renderRecall([]recallClaim{
+		{Text: "chose Postgres", Type: string(domain.ClaimTypeFact), TrustScore: 0.8},
+		{Text: "rate limiting on gateway", Type: string(domain.ClaimTypeDecision), TrustScore: 0.5},
+	}, 1)
 	if !strings.Contains(got, "chose Postgres") || !strings.Contains(got, "trust 0.80") {
 		t.Errorf("recall missing claim/trust: %q", got)
 	}
+	if !strings.Contains(got, "1 contradiction") {
+		t.Errorf("recall missing contradiction note: %q", got)
+	}
 	// Empty result → empty string (no injection).
-	if formatRecall(mcpQueryOutput{}) != "" {
-		t.Error("empty query output should format to empty string")
+	if renderRecall(nil, 0) != "" {
+		t.Error("empty claim list should render to empty string")
+	}
+}
+
+func TestRenderBrief(t *testing.T) {
+	got := renderBrief(12, 3, 2)
+	if !strings.Contains(got, "12 claims across 3 runs") || !strings.Contains(got, "2 open contradiction") {
+		t.Errorf("brief wrong: %q", got)
+	}
+}
+
+func TestHostedConfigured(t *testing.T) {
+	t.Setenv("MNEMOS_URL", "")
+	if hostedConfigured() {
+		t.Error("no MNEMOS_URL → local mode")
+	}
+	t.Setenv("MNEMOS_URL", "https://brain.example.com")
+	if !hostedConfigured() {
+		t.Error("MNEMOS_URL set → hosted mode")
 	}
 }
 

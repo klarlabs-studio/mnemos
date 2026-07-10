@@ -159,7 +159,7 @@ var parityMatrix = []parityEntry{
 	{Capability: "list contradictions (browse helper)", MCPTool: "list_contradictions", HTTPRoute: parityNA, GRPCMethod: parityNA},
 
 	// Pipeline (MCP-only — agent action surface).
-	{Capability: "process text (ingest+extract+relate)", MCPTool: "process_text", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "process text (ingest+extract+relate)", MCPTool: "process_text", HTTPRoute: "/v1/process", GRPCMethod: parityNA},
 	{Capability: "query knowledge", MCPTool: "query_knowledge", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "ingest git PRs", MCPTool: "ingest_git_prs", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "ingest git log", MCPTool: "ingest_git_log", HTTPRoute: parityNA, GRPCMethod: parityNA},
