@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +102,47 @@ func TestTenant_PostgresIsolation(t *testing.T) {
 	}
 	if got, err := b.Get(ctx, idB); err != nil || !strings.Contains(got.Statement, "beta private incident") {
 		t.Fatalf("tenant B cannot read its own claim: got %+v err %v", got, err)
+	}
+}
+
+// TestTenant_SQLiteNamespaceIsolation is the non-Postgres analogue of
+// TestTenant_PostgresIsolation: on SQLite, Memory.Tenant() opens a physically
+// separate namespace (file) per tenant, so one tenant can neither Get another's
+// claim nor can the unscoped view. Runs in CI with no external dependency.
+func TestTenant_SQLiteNamespaceIsolation(t *testing.T) {
+	clearMnemosEnv(t)
+	dsn := "sqlite://" + filepath.Join(t.TempDir(), "mnemos.db")
+	base, err := mnemos.New(mnemos.WithStorage(dsn), mnemos.WithPassiveMode())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = base.Close() }()
+
+	a, err := base.Tenant("tenant_a")
+	if err != nil {
+		t.Fatalf("Tenant(a): %v", err)
+	}
+	defer func() { _ = a.Close() }()
+	b, err := base.Tenant("tenant_b")
+	if err != nil {
+		t.Fatalf("Tenant(b): %v", err)
+	}
+	defer func() { _ = b.Close() }()
+
+	ctx := context.Background()
+	idA, err := a.RememberClaimWithEvidence(ctx, "alpha private incident zzqq", []string{"evt:a1"}, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("a.RememberClaimWithEvidence: %v", err)
+	}
+
+	if got, err := a.Get(ctx, idA); err != nil || !strings.Contains(got.Statement, "alpha private incident") {
+		t.Fatalf("tenant A cannot read its own claim: got %+v err %v", got, err)
+	}
+	if _, err := b.Get(ctx, idA); err == nil {
+		t.Fatal("ISOLATION BREACH: tenant B read tenant A's claim by id")
+	}
+	if _, err := base.Get(ctx, idA); err == nil {
+		t.Fatal("ISOLATION BREACH: default view read tenant A's claim by id")
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // defaultTenant is the reserved tenant an unscoped [Memory] reads and writes. It
@@ -17,8 +19,13 @@ const defaultTenant = "__default__"
 var tenantRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
 // Tenant implements [Memory.Tenant]. It opens a fresh, tenant-scoped view over the
-// same DSN with a `tenant=` parameter; the postgres provider pins that tenant as a
-// per-connection GUC and row-level security enforces isolation default-deny.
+// same DSN. The isolation mechanism depends on the backend
+// ([store.TenancyModeForDSN]):
+//   - Postgres pins the tenant as a per-connection GUC (`tenant=` param) and
+//     row-level security enforces isolation default-deny.
+//   - sqlite / mysql / local libSQL open a physically separate namespace per
+//     tenant (`namespace=<derived>`), created on first open.
+//   - backends that cannot isolate (memory, remote libSQL) are refused.
 func (m *memory) Tenant(id string) (Memory, error) {
 	id = strings.TrimSpace(id)
 	if !tenantRE.MatchString(id) {
@@ -27,21 +34,43 @@ func (m *memory) Tenant(id string) (Memory, error) {
 	if id == defaultTenant {
 		return nil, fmt.Errorf("mnemos: tenant id %q is reserved", defaultTenant)
 	}
-	backend, _ := parseBackendNamespace(m.dsn)
-	if backend != "postgres" && backend != "postgresql" {
-		return nil, fmt.Errorf("mnemos: tenant scoping is only supported on postgres (this store is %q)", backend)
-	}
 	cfg := m.cfg
-	cfg.storageDSN = withTenantParam(m.dsn, id)
+	switch store.TenancyModeForDSN(m.dsn) {
+	case store.TenancyRowLevel:
+		cfg.storageDSN = withDSNParam(m.dsn, "tenant", id)
+	case store.TenancyNamespace:
+		cfg.storageDSN = setDSNParam(m.dsn, "namespace", store.TenantNamespace(id))
+	default:
+		backend, _ := parseBackendNamespace(m.dsn)
+		return nil, fmt.Errorf("mnemos: tenant scoping is not supported on this backend (%q); use postgres, sqlite, mysql, or local libsql", backend)
+	}
 	return newFromCfg(cfg)
 }
 
-// withTenantParam appends the tenant query parameter to a storage DSN, respecting
-// any existing query string.
-func withTenantParam(dsn, id string) string {
+// withDSNParam appends a query parameter to a storage DSN, respecting any
+// existing query string.
+func withDSNParam(dsn, key, value string) string {
 	sep := "?"
 	if strings.Contains(dsn, "?") {
 		sep = "&"
 	}
-	return dsn + sep + "tenant=" + id
+	return dsn + sep + key + "=" + value
+}
+
+// setDSNParam sets a query parameter, removing any existing occurrence first so
+// the derived namespace replaces (never duplicates) a base one.
+func setDSNParam(dsn, key, value string) string {
+	base, query, ok := strings.Cut(dsn, "?")
+	if !ok {
+		return dsn + "?" + key + "=" + value
+	}
+	kept := make([]string, 0)
+	for p := range strings.SplitSeq(query, "&") {
+		if p == key || strings.HasPrefix(p, key+"=") {
+			continue
+		}
+		kept = append(kept, p)
+	}
+	kept = append(kept, key+"="+value)
+	return base + "?" + strings.Join(kept, "&")
 }

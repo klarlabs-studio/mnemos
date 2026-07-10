@@ -860,12 +860,14 @@ func handleMCP(args []string) {
 
 	mw := mcp.WithMiddleware(mcp.DefaultMiddlewareWithTimeout(mcpBoltLogger{logger: logger}, 30*time.Second)...)
 	if serveCfg.httpAddr != "" {
-		// Multi-tenant scoping is enforced by Postgres RLS; refuse to start in
-		// that mode on any other backend rather than silently share data.
+		// Multi-tenant scoping isolates per token tenant: Postgres by RLS,
+		// sqlite/mysql/local libSQL by a separate namespace per tenant. Refuse to
+		// start on a backend that can't isolate (memory, remote libSQL) rather
+		// than silently share data.
 		if serveCfg.requireTenant {
 			base := resolveDSN()
-			if !isPostgresDSN(base) {
-				exitWithMnemosError(false, NewUserError("--require-tenant needs a postgres backend (set MNEMOS_DB_URL=postgres://…); RLS enforces tenant isolation (ADR 0007)"))
+			if store.TenancyModeForDSN(base) == store.TenancyNone {
+				exitWithMnemosError(false, NewUserError("--require-tenant needs a backend that isolates tenants: postgres (RLS), sqlite, mysql, or local libsql (namespace-per-tenant). This MNEMOS_DB_URL supports neither."))
 				return
 			}
 			// A base DSN with its own ?tenant= would override every request's
