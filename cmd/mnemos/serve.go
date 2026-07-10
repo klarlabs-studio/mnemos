@@ -251,7 +251,7 @@ func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory, requireTenan
 		// Per-request tenant-scoped connections, RLS-isolated (ADR 0007).
 		mnemosSrv = mnemosSrv.WithTenantScoping(func(ctx context.Context, tenant string) (*store.Conn, error) {
 			return openConn(withTenant(ctx, tenant))
-		})
+		}, closeConn)
 	}
 	grpcOpts := []grpc.ServerOption{grpc.UnaryInterceptor(mnemosSrv.UnaryInterceptor())}
 	if cert, key := os.Getenv("MNEMOS_TLS_CERT_FILE"), os.Getenv("MNEMOS_TLS_KEY_FILE"); cert != "" && key != "" {
@@ -2661,6 +2661,10 @@ func openIncidentHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Req
 }
 
 func listIncidentsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
+	if conn.Incidents == nil {
+		writeError(w, http.StatusNotImplemented, "incident storage not available on this backend")
+		return
+	}
 	ctx := r.Context()
 	severityFilter := r.URL.Query().Get("severity")
 	statusFilter := r.URL.Query().Get("status")
@@ -2692,6 +2696,10 @@ func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
 		gw := scopedWriter(r.Context(), gw)
+		if conn.Incidents == nil {
+			writeError(w, http.StatusNotImplemented, "incident storage not available on this backend")
+			return
+		}
 		// Strip "/v1/incidents/" prefix and split remainder.
 		prefix := "/v1/incidents/"
 		tail := strings.TrimPrefix(r.URL.Path, prefix)

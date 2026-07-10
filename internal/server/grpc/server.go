@@ -47,8 +47,14 @@ type Server struct {
 	// resolve through connFor/writerFor/memFor.
 	requireTenant  bool
 	openTenantConn func(ctx context.Context, tenant string) (*store.Conn, error)
-	tenantMemMu    sync.Mutex
-	tenantMems     map[string]mnemos.Memory
+	// closeTenantConn releases a conn from openTenantConn. It MUST mirror the
+	// opener's ownership: when the opener returns a process-cached pool (the
+	// default serve path enables a shared conn cache), a raw conn.Close() would
+	// shut a pool other requests still hold. The caller supplies the cache-aware
+	// closer so this matches the HTTP surface's closeConn discipline.
+	closeTenantConn func(*store.Conn)
+	tenantMemMu     sync.Mutex
+	tenantMems      map[string]mnemos.Memory
 }
 
 // NewServer returns a gRPC server backed by the given store Conn.
@@ -81,9 +87,14 @@ func NewServerWithMemory(conn *store.Conn, mem mnemos.Memory, verifier *auth.Ver
 // WithTenantScoping enables multi-tenant mode: every RPC requires a token with
 // a valid tenant, and RPC methods run against a per-request tenant-scoped
 // connection opened by openConn. Returns the server for chaining.
-func (s *Server) WithTenantScoping(openConn func(ctx context.Context, tenant string) (*store.Conn, error)) *Server {
+// closeConn is the cache-aware release for conns returned by openConn (a no-op
+// for process-cached pools, a real Close for per-request conns). It MUST pair
+// with openConn's ownership semantics; pass a raw func(c){ _ = c.Close() } only
+// when openConn always returns a caller-owned conn.
+func (s *Server) WithTenantScoping(openConn func(ctx context.Context, tenant string) (*store.Conn, error), closeConn func(*store.Conn)) *Server {
 	s.requireTenant = true
 	s.openTenantConn = openConn
+	s.closeTenantConn = closeConn
 	return s
 }
 
@@ -127,7 +138,10 @@ func (s *Server) writerFor(ctx context.Context) *govwrite.Writer {
 	return s.writer
 }
 
-// memFor returns a per-tenant Memory view (cached) or the shared facade.
+// memFor returns a per-tenant Memory view (cached) or the shared facade. When a
+// tenant IS present but its view can't be opened, it returns nil (fail closed)
+// so the cognitive RPCs' nil-guard yields codes.Unavailable — never the shared
+// __default__ facade, which would serve the wrong partition's data.
 func (s *Server) memFor(ctx context.Context) mnemos.Memory {
 	tenant, ok := tenantFromContext(ctx)
 	if !ok || s.mem == nil {
@@ -140,7 +154,7 @@ func (s *Server) memFor(ctx context.Context) mnemos.Memory {
 	}
 	tm, err := s.mem.Tenant(tenant)
 	if err != nil {
-		return s.mem
+		return nil
 	}
 	s.tenantMems[tenant] = tm
 	return tm
@@ -187,11 +201,28 @@ func (s *Server) UnaryInterceptor() grpc.UnaryServerInterceptor {
 			if terr != nil {
 				return nil, status.Errorf(codes.Internal, "tenant store unavailable")
 			}
-			defer func() { _ = tconn.Close() }()
+			// Release through the supplied cache-aware closer, never a raw
+			// tconn.Close(): the default serve path returns a process-cached pool
+			// that other in-flight requests still hold.
+			defer func() {
+				if s.closeTenantConn != nil {
+					s.closeTenantConn(tconn)
+				} else {
+					_ = tconn.Close()
+				}
+			}()
 			ctx = context.WithValue(ctx, tenantConnKey{}, tconn)
-			if tw, werr := govwrite.Wrap(tconn, s.logger); werr == nil {
-				ctx = context.WithValue(ctx, tenantWriterKey{}, tw)
+			// Wrap borrows tconn (ownConn=false); closing the writer releases
+			// only the kernel evidence sink (a real fd when
+			// MNEMOS_AXI_EVIDENCE_LOG is set, a no-op otherwise). tconn is
+			// closed separately above. In tenant mode a Wrap failure must fail
+			// the RPC closed rather than fall back to the __default__ writer.
+			tw, werr := govwrite.Wrap(tconn, s.logger)
+			if werr != nil {
+				return nil, status.Errorf(codes.Internal, "tenant writer unavailable")
 			}
+			defer func() { _ = tw.Close() }()
+			ctx = context.WithValue(ctx, tenantWriterKey{}, tw)
 		}
 
 		resp, err = handler(ctx, req)
