@@ -59,6 +59,40 @@ func TestDetectTemporalDivergence_RequiresSharedSubject(t *testing.T) {
 	}
 }
 
+// Regression: a single tenant's own, mutually-consistent product facts must
+// not be flagged as contradictions. Before the fix, "forecast" (planned) vs
+// "abandon" (never) anchored on the shared brand token produced spurious
+// contradicts edges (mnemos passive-mode over-triggering issue).
+func TestDetect_NoSpuriousContradictionAcrossProductFacts(t *testing.T) {
+	engine := NewEngine()
+	engine.nextID = seqRelationshipIDs()
+	rels, err := engine.Detect([]domain.Claim{
+		{ID: "cl_a", Text: "CartLens forecasts next month's revenue from your trailing sales trend."},
+		{ID: "cl_b", Text: "CartLens identifies the exact step where shoppers abandon their carts."},
+		{ID: "cl_c", Text: "CartLens exports any report to CSV or a scheduled Google Sheet."},
+	})
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	for _, r := range rels {
+		if r.Type == domain.RelationshipTypeContradicts {
+			t.Errorf("spurious contradiction between non-conflicting facts: %s -> %s", r.FromClaimID, r.ToClaimID)
+		}
+	}
+}
+
+// A long claim sharing only a brand token with another long claim is not a
+// shared subject, so an aspect mismatch anchored solely on it must not flag.
+func TestDetectTemporalDivergence_LongClaimsNeedTwoSharedTokens(t *testing.T) {
+	a := "Acme schedules a recurring weekly export to your connected data warehouse."
+	b := "Acme never retains raw customer payment card numbers on its servers."
+	aTok, _ := contentTokensAndPolarity(a)
+	bTok, _ := contentTokensAndPolarity(b)
+	if detectTemporalDivergence(a, b, aTok, bTok) {
+		t.Errorf("long claims sharing only the brand token must not flag as temporal divergence")
+	}
+}
+
 func TestDetect_TemporalDivergenceEmitsContradicts(t *testing.T) {
 	engine := NewEngine()
 	engine.nextID = seqRelationshipIDs()

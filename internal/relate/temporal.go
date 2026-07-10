@@ -55,21 +55,31 @@ var ongoingMarkers = map[string]struct{}{
 }
 
 // plannedMarkers indicate a future / scheduled event.
+//
+// "forecast" is deliberately absent: in operational text it's rare as a
+// planning verb ("planned"/"scheduled" dominate), while in product/marketing
+// copy it's an ordinary capability verb ("forecasts next month's revenue")
+// that carries no aspect claim about a shared event — reading it as an aspect
+// produced spurious contradictions (see the mnemos issue on passive-mode
+// contradiction over-triggering).
 var plannedMarkers = map[string]struct{}{
-	"plan":     {},
-	"schedul":  {},
-	"upcom":    {},
-	"forecast": {},
-	"will":     {},
+	"plan":    {},
+	"schedul": {},
+	"upcom":   {},
+	"will":    {},
 }
 
 // neverMarkers indicate the event explicitly did not (and will not)
 // happen. Distinct from polarity negation, which the existing path
 // already covers — these are dedicated lexical signals like "never".
+// "abandon" is deliberately absent: its dominant real-world sense in product
+// text is the e-commerce noun phrase "cart abandonment" — a tracked feature,
+// not a claim that an event was cancelled — so it mis-classified ordinary
+// claims as aspectNever (see the mnemos issue on passive-mode contradiction
+// over-triggering). Keep the unambiguous never-signals.
 var neverMarkers = map[string]struct{}{
 	"never":    {},
 	"cancel":   {},
-	"abandon":  {},
 	"declined": {},
 }
 
@@ -161,12 +171,30 @@ func detectTemporalDivergence(aText, bText string, aTokens, bTokens map[string]s
 		return false
 	}
 
-	// Require a shared subject anchor — at least one shared content
-	// token after stop-word removal. Without this guard, "deploy
-	// completed" and "rollback still running" would flag despite
-	// being about different operations.
-	if contentOverlap(aTokens, bTokens) < 1 {
+	// Require a shared subject anchor after stop-word removal. Without
+	// this guard, "deploy completed" and "rollback still running" would
+	// flag despite being about different operations.
+	overlap := contentOverlap(aTokens, bTokens)
+	if overlap < 1 {
+		return false
+	}
+	// For long claims, a single shared token is usually coincidental —
+	// most often a brand/entity name that appears in every claim of a
+	// corpus (e.g. "CartLens forecasts revenue" vs "CartLens tracks cart
+	// abandonment" share only "cartlens"). One token out of seven or
+	// eight is not a shared subject, so require at least two before
+	// trusting an aspect mismatch. Short claims (the canonical "migration
+	// completed" vs "migration is still running") legitimately pivot on a
+	// single subject token, so the stricter rule applies only when both
+	// claims are long.
+	shorter := min(len(aTokens), len(bTokens))
+	if shorter >= longClaimTokenCount && overlap < 2 {
 		return false
 	}
 	return true
 }
+
+// longClaimTokenCount is the content-token count at or above which a claim
+// is "long" for the temporal-anchor guard: long claims must share more than
+// one token to count as being about the same subject.
+const longClaimTokenCount = 5
