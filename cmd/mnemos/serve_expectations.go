@@ -50,6 +50,7 @@ func expectationToDTO(e domain.Expectation) expectationDTO {
 //	POST → attach/replace the expectation {predicted, tolerance, horizon}
 func makeExpectationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		if conn.Expectations == nil {
 			writeError(w, http.StatusNotImplemented, "expectations not supported by this store")
 			return
@@ -113,6 +114,7 @@ func makeExpectationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 // observed value against an existing expectation (mirrors RecordObservation).
 func makeObservationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return

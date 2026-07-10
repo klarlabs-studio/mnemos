@@ -29,7 +29,7 @@ func grpcSufficiency(s mnemos.Sufficiency) *mnemosv1.RecallSufficiency {
 
 // Recall runs advanced retrieval; mode selects the epistemic-honesty variant.
 func (s *Server) Recall(ctx context.Context, req *mnemosv1.RecallRequest) (*mnemosv1.RecallResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	if strings.TrimSpace(req.GetQuery()) == "" {
@@ -46,26 +46,26 @@ func (s *Server) Recall(ctx context.Context, req *mnemosv1.RecallRequest) (*mnem
 
 	switch mode {
 	case "sufficiency":
-		res, suf, err := s.mem.RecallWithSufficiency(ctx, query)
+		res, suf, err := s.memFor(ctx).RecallWithSufficiency(ctx, query)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		resp.Results, resp.Sufficiency = grpcRecallResults(res), grpcSufficiency(suf)
 	case "effort":
-		res, suf, eff, err := s.mem.RecallWithEffort(ctx, query, req.GetStakes())
+		res, suf, eff, err := s.memFor(ctx).RecallWithEffort(ctx, query, req.GetStakes())
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		resp.Results, resp.Sufficiency = grpcRecallResults(res), grpcSufficiency(suf)
 		resp.Effort = &mnemosv1.RecallEffort{Budget: eff.Budget, Passes: int32(eff.Passes), Hops: int32(eff.Hops), Breadth: int32(eff.Breadth)}
 	case "context":
-		res, err := s.mem.RecallWithContext(ctx, query, req.GetContext())
+		res, err := s.memFor(ctx).RecallWithContext(ctx, query, req.GetContext())
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		resp.Results = grpcRecallResults(res)
 	case "conflicts":
-		res, conflicts, err := s.mem.RecallWithConflicts(ctx, query)
+		res, conflicts, err := s.memFor(ctx).RecallWithConflicts(ctx, query)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -81,7 +81,7 @@ func (s *Server) Recall(ctx context.Context, req *mnemosv1.RecallRequest) (*mnem
 		if maxRounds <= 0 {
 			maxRounds = 3
 		}
-		res, rounds, err := s.mem.RecallIterative(ctx, query, maxRounds)
+		res, rounds, err := s.memFor(ctx).RecallIterative(ctx, query, maxRounds)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}

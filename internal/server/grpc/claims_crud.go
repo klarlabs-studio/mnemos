@@ -21,10 +21,10 @@ func isNotFound(err error) bool {
 
 // GetClaim returns a single claim's full detail.
 func (s *Server) GetClaim(ctx context.Context, req *mnemosv1.GetClaimRequest) (*mnemosv1.ClaimDetail, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
-	c, err := s.mem.Get(ctx, req.GetClaimId())
+	c, err := s.memFor(ctx).Get(ctx, req.GetClaimId())
 	if err != nil {
 		if isNotFound(err) {
 			return nil, status.Error(codes.NotFound, "claim not found")
@@ -49,7 +49,7 @@ func (s *Server) GetClaim(ctx context.Context, req *mnemosv1.GetClaimRequest) (*
 
 // SetClaimLifecycle transitions a claim's lifecycle.
 func (s *Server) SetClaimLifecycle(ctx context.Context, req *mnemosv1.SetClaimLifecycleRequest) (*mnemosv1.SetClaimLifecycleResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	lc := mnemos.ClaimLifecycle(req.GetLifecycle())
@@ -58,7 +58,7 @@ func (s *Server) SetClaimLifecycle(ctx context.Context, req *mnemosv1.SetClaimLi
 	default:
 		return nil, status.Error(codes.InvalidArgument, "lifecycle must be candidate, promoted, or superseded")
 	}
-	if err := s.mem.SetClaimLifecycle(ctx, req.GetClaimId(), lc); err != nil {
+	if err := s.memFor(ctx).SetClaimLifecycle(ctx, req.GetClaimId(), lc); err != nil {
 		if isNotFound(err) {
 			return nil, status.Error(codes.NotFound, "claim not found")
 		}
@@ -69,13 +69,13 @@ func (s *Server) SetClaimLifecycle(ctx context.Context, req *mnemosv1.SetClaimLi
 
 // Classify reports whether a candidate statement fits established knowledge or is novel.
 func (s *Server) Classify(ctx context.Context, req *mnemosv1.ClassifyRequest) (*mnemosv1.ClassifyResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	if strings.TrimSpace(req.GetText()) == "" {
 		return nil, status.Error(codes.InvalidArgument, "text is required")
 	}
-	a, err := s.mem.ClassifyClaim(ctx, req.GetText())
+	a, err := s.memFor(ctx).ClassifyClaim(ctx, req.GetText())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -84,10 +84,10 @@ func (s *Server) Classify(ctx context.Context, req *mnemosv1.ClassifyRequest) (*
 
 // GetDecision returns a single recorded decision by id.
 func (s *Server) GetDecision(ctx context.Context, req *mnemosv1.GetDecisionRequest) (*mnemosv1.Decision, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
-	d, err := s.mem.GetDecision(ctx, req.GetId())
+	d, err := s.memFor(ctx).GetDecision(ctx, req.GetId())
 	if err != nil {
 		if isNotFound(err) {
 			return nil, status.Error(codes.NotFound, "decision not found")

@@ -37,6 +37,7 @@ type fullClaimDTO struct {
 
 func makeGetClaimHandler(mem mnemos.Memory, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -70,6 +71,7 @@ func makeGetClaimHandler(mem mnemos.Memory, claimID string) http.HandlerFunc {
 
 func makeLifecycleHandler(mem mnemos.Memory, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -114,6 +116,7 @@ type assimilationDTO struct {
 
 func makeClassifyHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		// A read (novelty check, no side effects) → GET, so it needs no token.
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
@@ -160,6 +163,7 @@ func decisionToDTO(d mnemos.Decision) decisionDTO {
 // makeDecisionsHandler serves GET /v1/decisions?limit= (the decision browse list).
 func makeDecisionsHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -179,6 +183,7 @@ func makeDecisionsHandler(mem mnemos.Memory) http.HandlerFunc {
 // makeDecisionSubresourceHandler serves GET /v1/decisions/{id}.
 func makeDecisionSubresourceHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}

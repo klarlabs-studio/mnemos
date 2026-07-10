@@ -80,8 +80,11 @@ const (
 func handleServe(args []string, _ Flags) {
 	port := defaultServePort
 	grpcPort := 0 // 0 = disabled
+	requireTenant := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--require-tenant":
+			requireTenant = true
 		case "--port":
 			if i+1 >= len(args) {
 				exitWithMnemosError(false, NewUserError("--port requires a value"))
@@ -118,7 +121,31 @@ func handleServe(args []string, _ Flags) {
 	}
 
 	dsn := resolveDSN()
-	conn, err := openConn(context.Background())
+
+	// Multi-tenant mode (ADR 0007): every request scopes to its token's tenant
+	// via Postgres RLS. Requires a Postgres backend without a fixed ?tenant=,
+	// and fails closed if a request lacks a tenant. Enable the per-tenant
+	// connection cache so per-request opens reuse a pool (a no-op under the
+	// shared-pool mode, which is the efficient path here).
+	if requireTenant {
+		if !isPostgresDSN(dsn) {
+			exitWithMnemosError(false, NewUserError("serve --require-tenant needs a postgres backend (set MNEMOS_DB_URL=postgres://…); RLS enforces tenant isolation (ADR 0007)"))
+			return
+		}
+		if dsnHasTenantParam(dsn) {
+			exitWithMnemosError(false, NewUserError("serve --require-tenant: MNEMOS_DB_URL must not set ?tenant= — the per-request token supplies the tenant"))
+			return
+		}
+		setTenantRequired()
+		enableConnCache()
+		defer closeConnCache()
+		defer closeTenantMems()
+	}
+
+	// Base (unscoped) connection: the JWT verifier (revocation store), health,
+	// and the fallback for single-tenant mode. Per-request tenant connections
+	// are opened by tenantScopeMiddleware. openBaseConn never fail-closes.
+	conn, err := openBaseConn(context.Background())
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "failed to open database at %q", dsn))
 		return
@@ -137,7 +164,7 @@ func handleServe(args []string, _ Flags) {
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           newServerMuxWithMemory(conn, mem),
+		Handler:           newServerMuxWithMemory(conn, mem, requireTenant),
 		ReadTimeout:       serveReadTimeout,
 		ReadHeaderTimeout: serveReadHeaderTimeout,
 		WriteTimeout:      serveWriteTimeout,
@@ -147,7 +174,7 @@ func handleServe(args []string, _ Flags) {
 
 	var grpcSrv *grpc.Server
 	if grpcPort > 0 {
-		grpcSrv = startGRPCServer(grpcPort, conn, mem)
+		grpcSrv = startGRPCServer(grpcPort, conn, mem, requireTenant)
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -203,7 +230,7 @@ func handleServe(args []string, _ Flags) {
 
 // startGRPCServer creates and starts a gRPC server on the given port.
 // It shares the store.Conn and auth verifier with the HTTP surface.
-func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory) *grpc.Server {
+func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory, requireTenant bool) *grpc.Server {
 	_, projectRoot, _ := findProjectDB()
 	secretPath := auth.DefaultSecretPath(projectRoot)
 	secret, _, err := auth.LoadOrCreateSecret(secretPath)
@@ -220,6 +247,12 @@ func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory) *grpc.Server
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 
 	mnemosSrv := mnemosgrpc.NewServerWithMemory(conn, mem, verifier, logger, version)
+	if requireTenant {
+		// Per-request tenant-scoped connections, RLS-isolated (ADR 0007).
+		mnemosSrv = mnemosSrv.WithTenantScoping(func(ctx context.Context, tenant string) (*store.Conn, error) {
+			return openConn(withTenant(ctx, tenant))
+		})
+	}
 	grpcOpts := []grpc.ServerOption{grpc.UnaryInterceptor(mnemosSrv.UnaryInterceptor())}
 	if cert, key := os.Getenv("MNEMOS_TLS_CERT_FILE"), os.Getenv("MNEMOS_TLS_KEY_FILE"); cert != "" && key != "" {
 		creds, err := buildServerCreds(cert, key, os.Getenv("MNEMOS_MTLS_CLIENT_CA_FILE"))
@@ -255,14 +288,14 @@ func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory) *grpc.Server
 // newServerMux builds the HTTP surface with only the store-backed endpoints
 // (no cognitive facade). Kept for tests + callers that don't need the brain.
 func newServerMux(conn *store.Conn) http.Handler {
-	return newServerMuxWithMemory(conn, nil)
+	return newServerMuxWithMemory(conn, nil, false)
 }
 
 // newServerMuxWithMemory builds the full HTTP surface. When mem is non-nil the
 // connected-brain endpoints (who-knows, knowledge-gaps, calibration,
 // hypercorrections, recombinations, analogous) delegate to it; when nil they
 // return 503.
-func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory) http.Handler {
+func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant bool) http.Handler {
 	_, projectRoot, _ := findProjectDB()
 	secretPath := auth.DefaultSecretPath(projectRoot)
 	secret, created, err := auth.LoadOrCreateSecret(secretPath)
@@ -354,7 +387,10 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory) http.Handler {
 	// context so the access log and downstream handlers can include
 	// the correlation id. metricsMiddleware sits inside the access
 	// log so duration recorded in prometheus matches what's logged.
-	return panicRecover(logger, securityHeaders(requestIDMiddleware(boltAccessLog(logger, metricsMiddleware(mux, jwtAuthMiddleware(verifier, mux))))))
+	// Auth stashes the tenant (multi-tenant mode); tenantScopeMiddleware then
+	// opens a per-request tenant connection the handlers resolve via scopedConn.
+	authed := jwtAuthMiddleware(verifier, tenantScopeMiddleware(mux), requireTenant)
+	return panicRecover(logger, securityHeaders(requestIDMiddleware(boltAccessLog(logger, metricsMiddleware(mux, authed)))))
 }
 
 type statusRecorder struct {
@@ -486,6 +522,7 @@ type healthResponse struct {
 // parsing the JSON.
 func makeHealthHandler(conn *store.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		if r.URL.Query().Get("deep") != "true" {
 			writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Version: version})
 			return
@@ -588,6 +625,8 @@ type eventDTO struct {
 
 func makeEventsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		switch r.Method {
 		case http.MethodGet:
 			listEventsHandler(conn, w, r)
@@ -726,6 +765,8 @@ type claimDTO struct {
 
 func makeClaimsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		switch r.Method {
 		case http.MethodGet:
 			listClaimsHandler(conn, w, r)
@@ -1086,6 +1127,8 @@ type verdictDTO struct {
 
 func makeRelationshipsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		switch r.Method {
 		case http.MethodGet:
 			listRelationshipsHandler(conn, w, r)
@@ -1653,6 +1696,8 @@ type appendEmbeddingsRequest struct {
 
 func makeEmbeddingsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		switch r.Method {
 		case http.MethodGet:
 			listEmbeddingsHandler(conn, w, r)
@@ -1793,6 +1838,7 @@ type metricsResponse struct {
 
 func makeMetricsHandler(conn *store.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -1919,6 +1965,7 @@ type contextResponse struct {
 // alias so curl users don't have to send a body.
 func makeContextHandler(conn *store.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		var req contextRequest
 		switch r.Method {
 		case http.MethodGet:
@@ -2032,6 +2079,7 @@ type searchResponse struct {
 // filter DSL on top.
 func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		var req searchRequest
 		switch r.Method {
 		case http.MethodGet:
@@ -2227,6 +2275,9 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 //	GET /v1/claims/<id>/export.md   → human-readable markdown export with provenance annotations
 func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
+		mem := scopedMem(r.Context(), mem)
 		// path: /v1/claims/<id>/<subresource>
 		// Strip the prefix so we can parse id + subresource.
 		tail := strings.TrimPrefix(r.URL.Path, "/v1/claims/")
@@ -2286,6 +2337,7 @@ type claimHistoryResponse struct {
 // versions[0].text vs versions[1].text without re-sorting client-side.
 func makeClaimHistoryHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -2365,6 +2417,8 @@ func feedbackAutoContestThreshold() int {
 // negative streak crosses the threshold, persists both rows.
 func makeFeedbackHandler(conn *store.Conn, gw *govwrite.Writer, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -2480,6 +2534,7 @@ func envInt(key string, fallback int) int {
 // score was computed from its provenance signals.
 func makeProvenanceHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -2501,6 +2556,7 @@ func makeProvenanceHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 // frontmatter carrying trust score, confidence rationale, and source links.
 func makeClaimMarkdownExportHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -2550,6 +2606,8 @@ type incidentRequest struct {
 //	GET  /v1/incidents  → list all incidents (supports ?severity=<s> and ?status=<s>)
 func makeIncidentsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		switch r.Method {
 		case http.MethodPost:
 			openIncidentHandler(gw, w, r)
@@ -2632,6 +2690,8 @@ func listIncidentsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Reque
 //	GET  /v1/incidents/<id>/why-wrong   → WhyWereWeWrong analysis
 func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		// Strip "/v1/incidents/" prefix and split remainder.
 		prefix := "/v1/incidents/"
 		tail := strings.TrimPrefix(r.URL.Path, prefix)

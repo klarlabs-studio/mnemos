@@ -71,6 +71,7 @@ func sufficiencyToDTO(s mnemos.Sufficiency) *sufficiencyDTO {
 
 func makeRecallHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}

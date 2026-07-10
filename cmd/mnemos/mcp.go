@@ -381,7 +381,7 @@ func handleMCP(args []string) {
 		if !ok {
 			// Fail closed: never hand a cognitive tool the unscoped __default__
 			// facade in multi-tenant mode.
-			if mcpTenantRequired {
+			if tenantRequired {
 				return nil, errors.New("multi-tenant mode: request has no tenant")
 			}
 			return memFacade, nil
@@ -566,7 +566,7 @@ func handleMCP(args []string) {
 			// watch_file re-ingests a server-local file through a process
 			// singleton bound to the default partition — meaningless and
 			// cross-tenant-leaky on a multi-tenant server. Refuse it there.
-			if mcpTenantRequired {
+			if tenantRequired {
 				return mcpWatchFileOutput{}, errors.New("watch_file is not available on a multi-tenant server")
 			}
 			if kernel != nil {
@@ -874,7 +874,7 @@ func handleMCP(args []string) {
 				exitWithMnemosError(false, NewUserError("--require-tenant: MNEMOS_DB_URL must not set ?tenant= — the per-request token supplies the tenant"))
 				return
 			}
-			setMCPTenantRequired()
+			setTenantRequired()
 		}
 		if err := serveMCPHTTP(rootCtx, srv, serveCfg.httpAddr, serveCfg.requireAuth, serveCfg.requireTenant, mw); err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatal(err)

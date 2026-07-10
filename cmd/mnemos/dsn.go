@@ -159,7 +159,7 @@ func resolveDSNForContext(ctx context.Context) (string, error) {
 	if !ok {
 		// Fail closed: in multi-tenant mode a request that reached here without
 		// a tenant must NOT fall back to the reserved __default__ partition.
-		if mcpTenantRequired {
+		if tenantRequired {
 			return "", fmt.Errorf("multi-tenant mode: request has no tenant; refusing to serve the default partition")
 		}
 		return dsn, nil
@@ -184,14 +184,15 @@ func isPostgresDSN(dsn string) bool {
 	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
 }
 
-// mcpTenantRequired records that the process is serving in multi-tenant mode
+// tenantRequired records that the process is serving in multi-tenant mode (MCP
+// --require-tenant or serve --require-tenant).
 // (`mcp --http --require-tenant`). It makes resolveDSNForContext fail closed
 // instead of defaulting to the __default__ partition when a request somehow
 // lacks a tenant.
-var mcpTenantRequired bool
+var tenantRequired bool
 
-// setMCPTenantRequired latches multi-tenant mode on. Call once at startup.
-func setMCPTenantRequired() { mcpTenantRequired = true }
+// setTenantRequired latches multi-tenant mode on. Call once at startup.
+func setTenantRequired() { tenantRequired = true }
 
 // dsnHasTenantParam reports whether a DSN already carries a ?tenant= query
 // parameter. In multi-tenant mode this must be rejected: Postgres ParseDSN

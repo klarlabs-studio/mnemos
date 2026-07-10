@@ -25,6 +25,7 @@ type blockDTO struct {
 
 func makeBlocksHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if memUnavailable(w, mem) {
 			return
 		}
@@ -88,6 +89,7 @@ func makeBlocksHandler(mem mnemos.Memory) http.HandlerFunc {
 
 func makeActionsHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -123,6 +125,7 @@ func makeActionsHandler(mem mnemos.Memory) http.HandlerFunc {
 
 func makeActionOutcomeHandler(mem mnemos.Memory, actionID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -151,6 +154,7 @@ func makeActionOutcomeHandler(mem mnemos.Memory, actionID string) http.HandlerFu
 
 func makeActionSubresourceHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		tail := strings.TrimPrefix(r.URL.Path, "/v1/actions/")
 		parts := strings.SplitN(tail, "/", 2)
 		if len(parts) != 2 || parts[0] == "" || parts[1] != "outcome" {
@@ -165,6 +169,7 @@ func makeActionSubresourceHandler(mem mnemos.Memory) http.HandlerFunc {
 
 func makeSynthesizeHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
@@ -197,6 +202,7 @@ type timelineEventDTO struct {
 
 func makeTimelineHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -245,6 +251,7 @@ type signalDTO struct {
 
 func makeSignalsHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}

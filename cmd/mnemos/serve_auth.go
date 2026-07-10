@@ -99,14 +99,30 @@ func requireScope(w http.ResponseWriter, r *http.Request, want string) bool {
 //   - Invalid signature / expired / revoked token → 401
 //   - Valid token → user id from the `sub` claim lands on the request
 //     context for created_by stamping.
-func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler) http.Handler {
+func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/v1/leads" {
 			h.ServeHTTP(w, r)
 			return
 		}
+		// Infra/public endpoints never require a token (health probes, landing
+		// pages, Prometheus) — even in multi-tenant mode.
+		switch r.URL.Path {
+		case "/health", "/healthz", "/", "/app", "/internal/metrics":
+			h.ServeHTTP(w, r)
+			return
+		}
 
-		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		// In single-tenant mode reads are unauthenticated (public read API).
+		// In multi-tenant mode EVERY request must present a token so its tenant
+		// can be resolved — there is no anonymous tenant.
+		if !requireTenant && (r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions) {
+			h.ServeHTTP(w, r)
+			return
+		}
+		if r.Method == http.MethodOptions {
+			// CORS preflight carries no body/tenant; let it through even in
+			// multi-tenant mode.
 			h.ServeHTTP(w, r)
 			return
 		}
@@ -132,6 +148,14 @@ func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler) http.Handler {
 		ctx := withActor(r.Context(), claims.UserID)
 		ctx = withScopes(ctx, claims.Scopes)
 		ctx = withAllowedRuns(ctx, claims.Runs)
+		if requireTenant {
+			t := strings.TrimSpace(claims.Tenant)
+			if !validTenantID(t) {
+				writeError(w, http.StatusUnauthorized, "token has no valid tenant (tnt) claim; this server requires one")
+				return
+			}
+			ctx = withTenant(ctx, t)
+		}
 		h.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

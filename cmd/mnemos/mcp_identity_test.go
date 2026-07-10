@@ -107,8 +107,8 @@ func TestEnforceRunScope(t *testing.T) {
 
 func TestResolveDSNForContextFailClosed(t *testing.T) {
 	t.Setenv("MNEMOS_DB_URL", "postgres://h/db")
-	mcpTenantRequired = true
-	t.Cleanup(func() { mcpTenantRequired = false })
+	tenantRequired = true
+	t.Cleanup(func() { tenantRequired = false })
 
 	// require-tenant + no tenant in context → fail closed (no __default__).
 	if _, err := resolveDSNForContext(context.Background()); err == nil {

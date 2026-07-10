@@ -6,7 +6,10 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"runtime/debug"
+	"strings"
+	"sync"
 	"time"
 
 	"go.klarlabs.de/bolt"
@@ -37,6 +40,15 @@ type Server struct {
 	// with the HTTP surface). Nil when the facade couldn't be built — those
 	// RPCs then return codes.Unavailable while storage RPCs stay up.
 	mem mnemos.Memory
+
+	// Multi-tenant mode (ADR 0007, set by serve --require-tenant). When
+	// requireTenant is true, every RPC must present a token with a valid tenant;
+	// openTenantConn opens a per-request tenant-scoped connection the RPC methods
+	// resolve through connFor/writerFor/memFor.
+	requireTenant  bool
+	openTenantConn func(ctx context.Context, tenant string) (*store.Conn, error)
+	tenantMemMu    sync.Mutex
+	tenantMems     map[string]mnemos.Memory
 }
 
 // NewServer returns a gRPC server backed by the given store Conn.
@@ -63,7 +75,75 @@ func NewServerWithMemory(conn *store.Conn, mem mnemos.Memory, verifier *auth.Ver
 		// than silently degrade to an ungoverned write path.
 		panic(fmt.Sprintf("grpc: build governed writer: %v", err))
 	}
-	return &Server{conn: conn, writer: w, verifier: verifier, logger: logger, version: version, mem: mem}
+	return &Server{conn: conn, writer: w, verifier: verifier, logger: logger, version: version, mem: mem, tenantMems: map[string]mnemos.Memory{}}
+}
+
+// WithTenantScoping enables multi-tenant mode: every RPC requires a token with
+// a valid tenant, and RPC methods run against a per-request tenant-scoped
+// connection opened by openConn. Returns the server for chaining.
+func (s *Server) WithTenantScoping(openConn func(ctx context.Context, tenant string) (*store.Conn, error)) *Server {
+	s.requireTenant = true
+	s.openTenantConn = openConn
+	return s
+}
+
+// tenant context plumbing (per-request scoped conn/writer + the effective
+// tenant), stashed by the interceptor and read by the *For accessors.
+type tenantConnKey struct{}
+type tenantWriterKey struct{}
+type tenantKey struct{}
+
+// tenantIDRE mirrors the postgres provider's tenantRE (ADR 0007): a
+// quote/backslash-free charset. The reserved __default__ is rejected so no
+// bearer can scope to the global partition.
+var tenantIDRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
+
+func validTenantID(id string) bool {
+	return id != "__default__" && tenantIDRE.MatchString(id)
+}
+
+func withTenant(ctx context.Context, t string) context.Context {
+	return context.WithValue(ctx, tenantKey{}, t)
+}
+func tenantFromContext(ctx context.Context) (string, bool) {
+	t, ok := ctx.Value(tenantKey{}).(string)
+	return t, ok && t != ""
+}
+
+// connFor returns the request's tenant-scoped conn (multi-tenant mode) or the
+// shared conn.
+func (s *Server) connFor(ctx context.Context) *store.Conn {
+	if c, ok := ctx.Value(tenantConnKey{}).(*store.Conn); ok && c != nil {
+		return c
+	}
+	return s.conn
+}
+
+// writerFor mirrors connFor for the governed writer.
+func (s *Server) writerFor(ctx context.Context) *govwrite.Writer {
+	if w, ok := ctx.Value(tenantWriterKey{}).(*govwrite.Writer); ok && w != nil {
+		return w
+	}
+	return s.writer
+}
+
+// memFor returns a per-tenant Memory view (cached) or the shared facade.
+func (s *Server) memFor(ctx context.Context) mnemos.Memory {
+	tenant, ok := tenantFromContext(ctx)
+	if !ok || s.mem == nil {
+		return s.mem
+	}
+	s.tenantMemMu.Lock()
+	defer s.tenantMemMu.Unlock()
+	if m, cached := s.tenantMems[tenant]; cached {
+		return m
+	}
+	tm, err := s.mem.Tenant(tenant)
+	if err != nil {
+		return s.mem
+	}
+	s.tenantMems[tenant] = tm
+	return tm
 }
 
 // Register registers the Mnemos service on the provided gRPC server.
@@ -100,6 +180,20 @@ func (s *Server) UnaryInterceptor() grpc.UnaryServerInterceptor {
 			return nil, authErr
 		}
 
+		// Multi-tenant: open a per-request tenant-scoped connection (RLS) and a
+		// governed writer over it, closed when the RPC returns.
+		if tenant, ok := tenantFromContext(ctx); ok && s.openTenantConn != nil {
+			tconn, terr := s.openTenantConn(ctx, tenant)
+			if terr != nil {
+				return nil, status.Errorf(codes.Internal, "tenant store unavailable")
+			}
+			defer func() { _ = tconn.Close() }()
+			ctx = context.WithValue(ctx, tenantConnKey{}, tconn)
+			if tw, werr := govwrite.Wrap(tconn, s.logger); werr == nil {
+				ctx = context.WithValue(ctx, tenantWriterKey{}, tw)
+			}
+		}
+
 		resp, err = handler(ctx, req)
 
 		actor := actorFromContext(ctx)
@@ -121,6 +215,20 @@ func (s *Server) UnaryInterceptor() grpc.UnaryServerInterceptor {
 func (s *Server) authenticate(ctx context.Context, method string) (context.Context, error) {
 	if s.verifier == nil {
 		return ctx, nil
+	}
+
+	// Multi-tenant mode: every method (reads included) must present a token so
+	// its tenant can be resolved — no anonymous tenant.
+	if s.requireTenant {
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Errorf(codes.Unauthenticated, "missing authorization metadata")
+		}
+		vals := md.Get("authorization")
+		if len(vals) == 0 {
+			return nil, status.Errorf(codes.Unauthenticated, "missing bearer token")
+		}
+		return s.validateToken(ctx, vals[0])
 	}
 
 	// Read methods allow anonymous access.
@@ -166,6 +274,13 @@ func (s *Server) validateToken(ctx context.Context, raw string) (context.Context
 	ctx = withActor(ctx, claims.UserID)
 	ctx = withScopes(ctx, claims.Scopes)
 	ctx = withAllowedRuns(ctx, claims.Runs)
+	if s.requireTenant {
+		t := strings.TrimSpace(claims.Tenant)
+		if !validTenantID(t) {
+			return nil, status.Errorf(codes.Unauthenticated, "token has no valid tenant (tnt) claim; this server requires one")
+		}
+		ctx = withTenant(ctx, t)
+	}
 	return ctx, nil
 }
 
@@ -260,7 +375,7 @@ func (s *Server) Health(ctx context.Context, req *mnemosv1.HealthRequest) (*mnem
 func (s *Server) ListEvents(ctx context.Context, req *mnemosv1.ListEventsRequest) (*mnemosv1.ListEventsResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
 
-	all, err := s.conn.Events.ListAll(ctx)
+	all, err := s.connFor(ctx).Events.ListAll(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list events: %v", err)
 	}
@@ -319,7 +434,7 @@ func (s *Server) AppendEvents(ctx context.Context, req *mnemosv1.AppendEventsReq
 		})
 	}
 
-	accepted, err := s.writer.Events(ctx, events)
+	accepted, err := s.writerFor(ctx).Events(ctx, events)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "append events: %v", err)
 	}
@@ -352,7 +467,7 @@ func (s *Server) ListClaims(ctx context.Context, req *mnemosv1.ListClaimsRequest
 	// unfiltered claims (ADR-002 / Thor's safety audit).
 	var allowedEventIDs map[string]struct{}
 	if runIDFilter != "" {
-		events, err := s.conn.Events.ListByRunID(ctx, runIDFilter)
+		events, err := s.connFor(ctx).Events.ListByRunID(ctx, runIDFilter)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "list events by run id: %v", err)
 		}
@@ -365,7 +480,7 @@ func (s *Server) ListClaims(ctx context.Context, req *mnemosv1.ListClaimsRequest
 		}
 	}
 
-	all, err := s.conn.Claims.ListAll(ctx)
+	all, err := s.connFor(ctx).Claims.ListAll(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list claims: %v", err)
 	}
@@ -406,7 +521,7 @@ func (s *Server) ListClaims(ctx context.Context, req *mnemosv1.ListClaimsRequest
 		for _, c := range filtered {
 			candidateIDs = append(candidateIDs, c.ID)
 		}
-		evLinks, err := s.conn.Claims.ListEvidenceByClaimIDs(ctx, candidateIDs)
+		evLinks, err := s.connFor(ctx).Claims.ListEvidenceByClaimIDs(ctx, candidateIDs)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "load evidence for run_id filter: %v", err)
 		}
@@ -445,7 +560,7 @@ func (s *Server) ListClaims(ctx context.Context, req *mnemosv1.ListClaimsRequest
 
 	var evidence []*mnemosv1.ClaimEvidence
 	if req.IncludeEvidence && len(ids) > 0 {
-		links, err := s.conn.Claims.ListEvidenceByClaimIDs(ctx, ids)
+		links, err := s.connFor(ctx).Claims.ListEvidenceByClaimIDs(ctx, ids)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "load evidence: %v", err)
 		}
@@ -505,7 +620,7 @@ func (s *Server) AppendClaims(ctx context.Context, req *mnemosv1.AppendClaimsReq
 		return nil, status.Errorf(codes.Unimplemented, "run-scoped evidence validation not yet implemented for gRPC")
 	}
 
-	if _, err := s.writer.Claims(ctx, claims, govwrite.ClaimReason{}); err != nil {
+	if _, err := s.writerFor(ctx).Claims(ctx, claims, govwrite.ClaimReason{}); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert claims: %v", err)
 	}
 
@@ -514,7 +629,7 @@ func (s *Server) AppendClaims(ctx context.Context, req *mnemosv1.AppendClaimsReq
 		for _, e := range req.Evidence {
 			links = append(links, domain.ClaimEvidence{ClaimID: e.ClaimId, EventID: e.EventId})
 		}
-		if _, err := s.writer.EvidenceLinks(ctx, links); err != nil {
+		if _, err := s.writerFor(ctx).EvidenceLinks(ctx, links); err != nil {
 			return nil, status.Errorf(codes.Internal, "upsert evidence: %v", err)
 		}
 	}
@@ -533,7 +648,7 @@ func (s *Server) ListRelationships(ctx context.Context, req *mnemosv1.ListRelati
 		return nil, status.Errorf(codes.InvalidArgument, "invalid type %q (want supports or contradicts)", typeFilter)
 	}
 
-	allClaims, err := s.conn.Claims.ListAll(ctx)
+	allClaims, err := s.connFor(ctx).Claims.ListAll(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list claims for relationships: %v", err)
 	}
@@ -541,7 +656,7 @@ func (s *Server) ListRelationships(ctx context.Context, req *mnemosv1.ListRelati
 	for _, c := range allClaims {
 		claimIDs = append(claimIDs, c.ID)
 	}
-	rels, err := s.conn.Relationships.ListByClaimIDs(ctx, claimIDs)
+	rels, err := s.connFor(ctx).Relationships.ListByClaimIDs(ctx, claimIDs)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list relationships: %v", err)
 	}
@@ -599,7 +714,7 @@ func (s *Server) AppendRelationships(ctx context.Context, req *mnemosv1.AppendRe
 		})
 	}
 
-	if _, err := s.writer.Relationships(ctx, rels); err != nil {
+	if _, err := s.writerFor(ctx).Relationships(ctx, rels); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert relationships: %v", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(len(rels))}, nil
@@ -623,7 +738,7 @@ func (s *Server) ListEmbeddings(ctx context.Context, req *mnemosv1.ListEmbedding
 		wantedTypes = []string{"event", "claim"}
 	}
 	for _, t := range wantedTypes {
-		recs, err := s.conn.Embeddings.ListByEntityType(ctx, t)
+		recs, err := s.connFor(ctx).Embeddings.ListByEntityType(ctx, t)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "list embeddings: %v", err)
 		}
@@ -666,7 +781,7 @@ func (s *Server) AppendEmbeddings(ctx context.Context, req *mnemosv1.AppendEmbed
 		if e.Dimensions != 0 && int(e.Dimensions) != len(e.Vector) {
 			return nil, status.Errorf(codes.InvalidArgument, "embeddings[%d]: dimensions=%d but vector length=%d", i, e.Dimensions, len(e.Vector))
 		}
-		if err := s.writer.Embedding(ctx, e.EntityId, e.EntityType, e.Vector, e.Model, actor); err != nil {
+		if err := s.writerFor(ctx).Embedding(ctx, e.EntityId, e.EntityType, e.Vector, e.Model, actor); err != nil {
 			return nil, status.Errorf(codes.Internal, "upsert embedding: %v", err)
 		}
 		accepted++
@@ -680,10 +795,10 @@ func (s *Server) AppendEmbeddings(ctx context.Context, req *mnemosv1.AppendEmbed
 
 // Metrics returns aggregate counts (events, claims, contradictions, embeddings) and the running version.
 func (s *Server) Metrics(ctx context.Context, _ *mnemosv1.MetricsRequest) (*mnemosv1.MetricsResponse, error) {
-	events, _ := s.conn.Events.ListAll(ctx)
-	claims, _ := s.conn.Claims.ListAll(ctx)
-	eventEmbs, _ := s.conn.Embeddings.ListByEntityType(ctx, "event")
-	claimEmbs, _ := s.conn.Embeddings.ListByEntityType(ctx, "claim")
+	events, _ := s.connFor(ctx).Events.ListAll(ctx)
+	claims, _ := s.connFor(ctx).Claims.ListAll(ctx)
+	eventEmbs, _ := s.connFor(ctx).Embeddings.ListByEntityType(ctx, "event")
+	claimEmbs, _ := s.connFor(ctx).Embeddings.ListByEntityType(ctx, "claim")
 
 	runs := map[string]struct{}{}
 	for _, e := range events {
@@ -701,7 +816,7 @@ func (s *Server) Metrics(ctx context.Context, _ *mnemosv1.MetricsRequest) (*mnem
 	for _, c := range claims {
 		ids = append(ids, c.ID)
 	}
-	rels, _ := s.conn.Relationships.ListByClaimIDs(ctx, ids)
+	rels, _ := s.connFor(ctx).Relationships.ListByClaimIDs(ctx, ids)
 	var contradictions int64
 	for _, rel := range rels {
 		if rel.Type == domain.RelationshipTypeContradicts {
