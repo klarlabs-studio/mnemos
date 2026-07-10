@@ -122,14 +122,15 @@ func handleServe(args []string, _ Flags) {
 
 	dsn := resolveDSN()
 
-	// Multi-tenant mode (ADR 0007): every request scopes to its token's tenant
-	// via Postgres RLS. Requires a Postgres backend without a fixed ?tenant=,
-	// and fails closed if a request lacks a tenant. Enable the per-tenant
-	// connection cache so per-request opens reuse a pool (a no-op under the
-	// shared-pool mode, which is the efficient path here).
+	// Multi-tenant mode (ADR 0007): every request scopes to its token's tenant.
+	// Postgres isolates by row-level security (?tenant=); sqlite/mysql/local
+	// libSQL by a physically separate namespace per tenant (?namespace=<derived>).
+	// Backends that can't isolate (memory, remote libSQL) are refused. Fails
+	// closed if a request lacks a tenant. Enable the per-tenant connection cache
+	// so per-request opens reuse a pool/handle.
 	if requireTenant {
-		if !isPostgresDSN(dsn) {
-			exitWithMnemosError(false, NewUserError("serve --require-tenant needs a postgres backend (set MNEMOS_DB_URL=postgres://…); RLS enforces tenant isolation (ADR 0007)"))
+		if store.TenancyModeForDSN(dsn) == store.TenancyNone {
+			exitWithMnemosError(false, NewUserError("serve --require-tenant needs a backend that isolates tenants: postgres (RLS), sqlite, mysql, or local libsql (namespace-per-tenant). This MNEMOS_DB_URL supports neither."))
 			return
 		}
 		if dsnHasTenantParam(dsn) {

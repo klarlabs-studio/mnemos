@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 func TestMCPActorFor(t *testing.T) {
@@ -171,9 +172,18 @@ func TestResolveDSNForContext(t *testing.T) {
 		t.Errorf("existing query: got %q", got)
 	}
 
-	// Tenant on a non-postgres backend → fail closed.
+	// Tenant on a namespace backend (sqlite) → derived namespace, isolated by
+	// a separate file. See TestResolveDSNForContext_TenancyDispatch for the full
+	// per-backend matrix.
 	t.Setenv("MNEMOS_DB_URL", "sqlite:///tmp/a.db")
+	got, err = resolveDSNForContext(ctx)
+	if err != nil || got != "sqlite:///tmp/a.db?namespace="+store.TenantNamespace("acme") {
+		t.Errorf("sqlite tenant: got %q, %v", got, err)
+	}
+
+	// Tenant on a backend that cannot isolate (memory) → fail closed.
+	t.Setenv("MNEMOS_DB_URL", "memory://")
 	if _, err := resolveDSNForContext(ctx); err == nil {
-		t.Error("tenant on non-postgres must error (fail closed)")
+		t.Error("tenant on a non-isolating backend must error (fail closed)")
 	}
 }

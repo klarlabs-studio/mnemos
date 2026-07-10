@@ -4,7 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // TestResolveDSN_URLEnvWinsEverything covers the headline contract:
@@ -103,5 +106,66 @@ func TestOpenConn_OpensSQLiteBackendFromURL(t *testing.T) {
 
 	if conn.Raw == nil {
 		t.Error("expected SQLite Conn to expose *sql.DB through Raw")
+	}
+}
+
+// TestResolveDSNForContext_TenancyDispatch verifies resolveDSNForContext routes
+// per backend: Postgres → row-level (?tenant=), sqlite/mysql/local libsql →
+// namespace (?namespace=<derived>), and unsupported backends fail closed.
+func TestResolveDSNForContext_TenancyDispatch(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	tenant := "acme.prod"
+	wantNS := store.TenantNamespace(tenant)
+
+	cases := []struct {
+		name       string
+		dsn        string
+		wantSuffix string // "" means expect an error
+	}{
+		{"postgres row-level", "postgres://u:p@h:5432/db", "?tenant=" + tenant},
+		{"sqlite namespace", "sqlite:///srv/mnemos.db", "?namespace=" + wantNS},
+		{"mysql namespace", "mysql://u:p@h/mnemos", "?namespace=" + wantNS},
+		{"local libsql namespace", "libsql:///srv/mnemos.db", "?namespace=" + wantNS},
+		{"remote libsql unsupported", "libsql://x.turso.io?authToken=t", ""},
+		{"memory unsupported", "memory://", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("MNEMOS_DB_URL", c.dsn)
+			ctx := withTenant(context.Background(), tenant)
+			got, err := resolveDSNForContext(ctx)
+			if c.wantSuffix == "" {
+				if err == nil {
+					t.Fatalf("expected an error for %q, got dsn %q", c.dsn, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveDSNForContext(%q): %v", c.dsn, err)
+			}
+			if !strings.HasSuffix(got, c.wantSuffix) {
+				t.Errorf("resolveDSNForContext(%q) = %q, want suffix %q", c.dsn, got, c.wantSuffix)
+			}
+		})
+	}
+}
+
+// TestResolveDSNForContext_NamespaceReplacesBase ensures a derived tenant
+// namespace REPLACES a base ?namespace= rather than appending a duplicate
+// (providers read the first value, so a duplicate would silently keep the base).
+func TestResolveDSNForContext_NamespaceReplacesBase(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("MNEMOS_DB_URL", "sqlite:///srv/mnemos.db?namespace=mnemos")
+	ctx := withTenant(context.Background(), "acme")
+	got, err := resolveDSNForContext(ctx)
+	if err != nil {
+		t.Fatalf("resolveDSNForContext: %v", err)
+	}
+	if strings.Count(got, "namespace=") != 1 {
+		t.Errorf("expected exactly one namespace= param, got %q", got)
+	}
+	if !strings.Contains(got, "namespace="+store.TenantNamespace("acme")) {
+		t.Errorf("derived namespace not present in %q", got)
 	}
 }

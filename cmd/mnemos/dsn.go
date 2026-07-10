@@ -149,39 +149,78 @@ func openBaseConn(ctx context.Context) (*store.Conn, error) {
 }
 
 // resolveDSNForContext returns the DSN for this request, scoped to the
-// effective tenant when the request carries one (multi-tenant HTTP MCP mode).
-// It appends `?tenant=<id>` so the Postgres provider pins the mnemos.tenant GUC
-// and RLS isolates the request (ADR 0007). Tenant scoping requires a Postgres
-// backend; anything else fails closed rather than silently sharing data.
+// effective tenant when the request carries one (multi-tenant serve/MCP mode).
+//
+// The scoping mechanism depends on the backend (store.TenancyModeForDSN):
+//   - Postgres (row-level): append `?tenant=<id>` so the provider pins the
+//     mnemos.tenant GUC and RLS isolates the request (ADR 0007).
+//   - sqlite / mysql / local libSQL (namespace): set `?namespace=<derived>` so
+//     the request lands in a physically separate schema/database/file, created
+//     on first open.
+//   - anything else (memory, remote libSQL): fail closed rather than silently
+//     sharing data across tenants.
 func resolveDSNForContext(ctx context.Context) (string, error) {
 	dsn := resolveDSN()
 	tenant, ok := tenantFromContext(ctx)
 	if !ok {
 		// Fail closed: in multi-tenant mode a request that reached here without
-		// a tenant must NOT fall back to the reserved __default__ partition.
+		// a tenant must NOT fall back to the reserved default partition.
 		if tenantRequired {
 			return "", fmt.Errorf("multi-tenant mode: request has no tenant; refusing to serve the default partition")
 		}
 		return dsn, nil
 	}
-	if !isPostgresDSN(dsn) {
-		return "", fmt.Errorf("tenant scoping requires a postgres backend (this store is not postgres)")
-	}
 	// Defense in depth: never interpolate an unvalidated tenant into the DSN /
-	// the `SET mnemos.tenant` the provider runs.
+	// the `SET mnemos.tenant` the provider runs / a derived namespace.
 	if !validTenantID(tenant) {
 		return "", fmt.Errorf("invalid tenant id in request context")
 	}
-	sep := "?"
-	if strings.Contains(dsn, "?") {
-		sep = "&"
+	switch store.TenancyModeForDSN(dsn) {
+	case store.TenancyRowLevel:
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			sep = "&"
+		}
+		return dsn + sep + "tenant=" + tenant, nil
+	case store.TenancyNamespace:
+		// The derived namespace REPLACES any base namespace: providers read the
+		// first `namespace=` value, so a duplicate would silently keep the base.
+		return setDSNParam(dsn, "namespace", store.TenantNamespace(tenant)), nil
+	default:
+		return "", fmt.Errorf("tenant scoping is not supported by this backend (need postgres, sqlite, mysql, or local libsql)")
 	}
-	return dsn + sep + "tenant=" + tenant, nil
 }
 
-// isPostgresDSN reports whether a DSN targets the Postgres backend.
-func isPostgresDSN(dsn string) bool {
-	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
+// setDSNParam returns dsn with the query parameter key set to value, removing any
+// existing occurrence first. String surgery (not net/url) to avoid re-encoding
+// credentials in the DSN; key/value here are charset-safe (validated ids).
+func setDSNParam(dsn, key, value string) string {
+	stripped := stripDSNParam(dsn, key)
+	sep := "?"
+	if strings.Contains(stripped, "?") {
+		sep = "&"
+	}
+	return stripped + sep + key + "=" + value
+}
+
+// stripDSNParam removes a single named query parameter from a DSN, leaving the
+// rest untouched.
+func stripDSNParam(dsn, key string) string {
+	base, query, ok := strings.Cut(dsn, "?")
+	if !ok {
+		return dsn
+	}
+	kept := make([]string, 0)
+	for p := range strings.SplitSeq(query, "&") {
+		if p == key || strings.HasPrefix(p, key+"=") {
+			continue
+		}
+		kept = append(kept, p)
+	}
+	if len(kept) == 0 {
+		return base
+	}
+	return base + "?" + strings.Join(kept, "&")
 }
 
 // tenantRequired records that the process is serving in multi-tenant mode (MCP
