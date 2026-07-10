@@ -107,7 +107,7 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 // behaves exactly as before (bytea only) and SearchEventsByVector reports
 // ErrVectorSearchUnavailable so the query engine falls back to Go cosine.
 type EmbeddingRepository struct {
-	db            *sql.DB
+	db            pgQuerier
 	ns            string
 	vectorEnabled bool
 }

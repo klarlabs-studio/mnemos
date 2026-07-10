@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 
@@ -35,7 +34,7 @@ func (r ClaimRepository) SearchByText(ctx context.Context, query string, limit i
 
 // searchByText runs the shared tsvector match+rank against one table. idCol is
 // the row's primary-key column returned as the hit id.
-func searchByText(ctx context.Context, db *sql.DB, table, idCol, query string, limit int) ([]ports.TextHit, error) {
+func searchByText(ctx context.Context, db pgQuerier, table, idCol, query string, limit int) ([]ports.TextHit, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
 		return nil, nil

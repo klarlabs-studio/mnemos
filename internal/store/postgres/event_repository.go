@@ -15,7 +15,7 @@ import (
 // schema. Mirrors the SQLite EventRepository contract: idempotent
 // Append (ON CONFLICT DO NOTHING), GetByID/ListByIDs/ListAll/ListByRunID.
 type EventRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

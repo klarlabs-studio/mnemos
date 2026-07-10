@@ -15,7 +15,7 @@ import (
 // LessonRepository persists synthesised lessons in the configured
 // Postgres namespace.
 type LessonRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

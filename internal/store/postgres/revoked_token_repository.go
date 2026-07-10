@@ -13,7 +13,7 @@ import (
 // expiry. Idempotent Add (ON CONFLICT DO NOTHING preserves the
 // original revoked_at).
 type RevokedTokenRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

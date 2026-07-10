@@ -15,7 +15,7 @@ import (
 // DecisionRepository persists recorded decisions in the configured
 // Postgres namespace.
 type DecisionRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

@@ -15,7 +15,7 @@ import (
 // OutcomeRepository persists action outcomes in the configured
 // Postgres namespace.
 type OutcomeRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

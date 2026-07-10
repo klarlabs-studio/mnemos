@@ -16,7 +16,7 @@ import (
 // entities and UNIQUE(claim_id, entity_id, role) on claim_entities
 // give us idempotent upserts via ON CONFLICT.
 type EntityRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

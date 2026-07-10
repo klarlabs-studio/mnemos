@@ -14,7 +14,7 @@ import (
 // upserts at every status transition, so this is just an id-keyed
 // table.
 type CompilationJobRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

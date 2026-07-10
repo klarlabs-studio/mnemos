@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -515,5 +516,105 @@ func TestPostgres_WorkingMemoryBlocks(t *testing.T) {
 	}
 	if _, ok, _ := conn.Blocks.Get(ctx, owner, "persona"); ok {
 		t.Error("block still present after Delete")
+	}
+}
+
+// TestPostgres_CrossTenantIsolation is the ADR 0007 guardrail: with two tenant
+// views over the same namespace, tenant B must read NONE of tenant A's rows.
+// Runs in both the per-tenant-pool (default) and the shared-pool (Phase 2)
+// modes. Skips loudly if the connecting role bypasses RLS — isolation is
+// unenforceable there and a deployment MUST use a non-superuser role.
+func TestPostgres_CrossTenantIsolation(t *testing.T) {
+	dsn := requireLiveDSN(t)
+	ctx := context.Background()
+	ns := fmt.Sprintf("mnemos_iso_%d", time.Now().UnixNano())
+
+	open := func(t *testing.T, tenant string) *store.Conn {
+		t.Helper()
+		full := dsn
+		sep := "?"
+		if contains(full, "?") {
+			sep = "&"
+		}
+		full += sep + "namespace=" + ns
+		if tenant != "" {
+			full += "&tenant=" + tenant
+		}
+		conn, err := store.Open(ctx, full)
+		if err != nil {
+			t.Fatalf("store.Open(tenant=%q): %v", tenant, err)
+		}
+		return conn
+	}
+
+	// Bootstrap the namespace and guard against an RLS-bypassing role.
+	base := open(t, "")
+	t.Cleanup(func() {
+		if raw, ok := base.Raw.(interface {
+			ExecContext(context.Context, string, ...any) (any, error)
+		}); ok {
+			_, _ = raw.ExecContext(context.Background(), fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE", ns))
+		}
+		_ = base.Close()
+	})
+	if r, ok := base.Raw.(interface {
+		QueryRowContext(context.Context, string, ...any) *sql.Row
+	}); ok {
+		var bypass bool
+		if err := r.QueryRowContext(ctx, "SELECT rolbypassrls OR rolsuper FROM pg_roles WHERE rolname = current_user").Scan(&bypass); err == nil && bypass {
+			t.Skip("connecting role bypasses RLS (superuser/BYPASSRLS); isolation is unenforceable — use a non-superuser role")
+		}
+	}
+
+	for _, shared := range []bool{false, true} {
+		mode := "per_tenant_pool"
+		if shared {
+			mode = "shared_pool"
+		}
+		t.Run(mode, func(t *testing.T) {
+			if shared {
+				t.Setenv("MNEMOS_PG_SHARED_POOL", "1")
+			} else {
+				t.Setenv("MNEMOS_PG_SHARED_POOL", "")
+			}
+			a := open(t, "acme-"+mode)
+			defer func() { _ = a.Close() }()
+			b := open(t, "globex-"+mode)
+			defer func() { _ = b.Close() }()
+
+			now := time.Now().UTC()
+			ev := domain.Event{
+				ID: "iso-" + mode, RunID: "r", SchemaVersion: "1",
+				Content: "tenant-A secret", SourceInputID: "in",
+				Timestamp: now, IngestedAt: now, CreatedBy: domain.SystemUser,
+			}
+			if err := a.Events.Append(ctx, ev); err != nil {
+				t.Fatalf("tenant A append: %v", err)
+			}
+
+			bEvents, err := b.Events.ListAll(ctx)
+			if err != nil {
+				t.Fatalf("tenant B list: %v", err)
+			}
+			for _, e := range bEvents {
+				if e.ID == ev.ID {
+					t.Fatalf("CROSS-TENANT LEAK: tenant B read tenant A's event %q", e.ID)
+				}
+			}
+
+			aEvents, err := a.Events.ListAll(ctx)
+			if err != nil {
+				t.Fatalf("tenant A list: %v", err)
+			}
+			found := false
+			for _, e := range aEvents {
+				if e.ID == ev.ID {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("tenant A cannot see its own event (mode=%s)", mode)
+			}
+		})
 	}
 }

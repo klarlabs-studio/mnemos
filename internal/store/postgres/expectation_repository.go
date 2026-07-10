@@ -14,7 +14,7 @@ import (
 // Postgres namespace. Per-tenant isolation is handled by the ADR 0007 tenant column
 // + RLS, so this issues plain SQL.
 type ExpectationRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

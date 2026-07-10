@@ -12,7 +12,7 @@ import (
 // the dedup key; ON CONFLICT (id) DO UPDATE matches the SQLite
 // upsert semantics.
 type RelationshipRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

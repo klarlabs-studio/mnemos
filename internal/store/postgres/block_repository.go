@@ -15,7 +15,7 @@ import (
 // 0007 tenant column + row-level security (the connection pins the mnemos.tenant
 // GUC), so this repository issues plain SQL like every other.
 type BlockRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

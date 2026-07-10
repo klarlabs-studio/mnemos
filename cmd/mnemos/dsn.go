@@ -37,7 +37,18 @@ var (
 
 // enableConnCache turns on read-connection caching for the life of the process.
 // Call once, before serving requests.
-func enableConnCache() { connCacheEnabled = true }
+//
+// No-op under the Postgres shared-pool mode (MNEMOS_PG_SHARED_POOL): there,
+// openConn checks out a connection from one shared pool and the store.Conn's
+// Close resets+releases it — caching the store.Conn would pin one connection
+// per tenant and never release it, defeating the shared pool.
+func enableConnCache() {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_PG_SHARED_POOL"))) {
+	case "1", "true", "yes":
+		return
+	}
+	connCacheEnabled = true
+}
 
 // closeConnCache closes every cached connection and resets the cache. Call at
 // server shutdown.

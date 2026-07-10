@@ -14,7 +14,7 @@ import (
 // ActionRepository persists operational actions in the configured
 // Postgres namespace. Mirrors the SQLite contract.
 type ActionRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

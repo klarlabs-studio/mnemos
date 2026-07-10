@@ -16,7 +16,7 @@ import (
 // PlaybookRepository persists synthesised playbooks in the configured
 // Postgres namespace.
 type PlaybookRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

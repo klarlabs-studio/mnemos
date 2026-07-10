@@ -15,7 +15,7 @@ import (
 // callers (see domain.User.Validate / token issuance) as the
 // pre-F.3 default of full access.
 type UserRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

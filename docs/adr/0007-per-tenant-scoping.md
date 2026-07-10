@@ -34,11 +34,17 @@ is impossible).
   connect as a non-superuser role. The isolation test skips (loudly) if the role
   bypasses RLS.
 
-Known follow-up: `Memory.Tenant` opens its own connection pool per tenant (like the
-namespace-per-store status quo). A shared-pool mode (per-transaction `SET LOCAL`)
-is a future optimization; the RLS + GUC contract already supports it without an API
-change. Other backends (sqlite/libsql/mysql) can adopt tenant scoping later behind
-the same `Tenant()` API + isolation test; until then they fail closed.
+Follow-up (shipped, opt-in): the shared-pool mode is now implemented behind
+`MNEMOS_PG_SHARED_POOL`. Instead of a pool per tenant, one shared pool is opened
+per (DSN, namespace); a tenant request checks out a `*sql.Conn`, pins
+`SET mnemos.tenant` on it, and the Conn's Closer runs `RESET mnemos.tenant`
+before releasing it — fail-closed if ever reused unset. Repositories accept a
+`pgQuerier` interface so the same code serves either a pooled `*sql.DB` (default
+per-tenant-pool path) or a checked-out `*sql.Conn` (shared path). The default is
+unchanged. Guarded by `TestPostgres_CrossTenantIsolation` (both modes; skips on
+an RLS-bypassing role). Other backends (sqlite/libsql/mysql) can adopt tenant
+scoping later behind the same `Tenant()` API + isolation test; until then they
+fail closed.
 
 ---
 
