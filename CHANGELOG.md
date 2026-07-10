@@ -27,6 +27,24 @@ notable changes.
   `.ValidateInput()` calls were dropped from the tool registrations (no behaviour
   change — validation still runs). Full suite + vet + lint green.
 
+### Fixed
+
+- **Passive-mode recall now stems inflected forms (#159).** The `events_fts` /
+  `claims_fts` tables used the default `unicode61` tokenizer (no stemming), so
+  recall matched token-for-token: a claim stored as "issues automatic refunds"
+  was not recalled by the query "issue a refund". Both FTS tables now use
+  `tokenize = 'porter unicode61'`; a v18 schema migration rebuilds and
+  repopulates them (the tokenizer is fixed at table-creation time). Measured
+  downstream, overall recall rose 0.69 → 0.75 with precision unchanged at 1.0.
+- **Passive-mode no longer emits spurious contradictions between a tenant's own
+  facts (#160).** The temporal-aspect divergence detector read ordinary product
+  verbs as tense assertions (`forecast` → planned, `abandon` → never) and
+  accepted a single shared token — typically the brand name present in every
+  claim — as a shared subject, producing false `contradicts` edges that surfaced
+  as hard blocks. Those two markers are dropped, and long claims (≥ 5 content
+  tokens) must now share ≥ 2 tokens before an aspect mismatch counts; short
+  claims still pivot on a single subject token.
+
 ## [0.75.0] — 2026-07-06
 
 ### Added
