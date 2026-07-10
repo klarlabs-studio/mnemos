@@ -53,9 +53,10 @@ var (
 )
 
 // scopedMem returns a per-tenant Memory view (cached) when the request carries a
-// tenant, else the shared fallback. On a Tenant() error it falls back rather
-// than failing the request — cognitive endpoints already degrade to 503 on a
-// nil/unusable Memory.
+// tenant, else the shared fallback. When a tenant IS present but its view can't
+// be opened, it returns nil (fail closed) so the cognitive endpoints' nil-guard
+// yields a 503 — never the shared __default__ facade, which would serve the
+// wrong partition's data.
 func scopedMem(ctx context.Context, fallback mnemos.Memory) mnemos.Memory {
 	tenant, ok := tenantFromContext(ctx)
 	if !ok || fallback == nil {
@@ -68,7 +69,7 @@ func scopedMem(ctx context.Context, fallback mnemos.Memory) mnemos.Memory {
 	}
 	tm, err := fallback.Tenant(tenant)
 	if err != nil {
-		return fallback
+		return nil
 	}
 	tenantMemsSrv[tenant] = tm
 	return tm
@@ -100,9 +101,19 @@ func tenantScopeMiddleware(next http.Handler) http.Handler {
 		}
 		defer closeConn(conn)
 		ctx := withReqConn(r.Context(), conn)
-		if gw, err := govwrite.Wrap(conn, nil); err == nil {
-			ctx = withReqWriter(ctx, gw)
+		// Wrap borrows the conn (ownConn=false), so the writer's Close only
+		// releases the kernel's evidence sink — a no-op when
+		// MNEMOS_AXI_EVIDENCE_LOG is unset, but a real file-descriptor release
+		// when it is set. Close it per request either way; the conn itself is
+		// closed separately above. A Wrap failure must fail the request closed
+		// rather than let handlers fall back to the __default__ writer.
+		gw, err := govwrite.Wrap(conn, nil)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "tenant store unavailable")
+			return
 		}
+		defer func() { _ = gw.Close() }()
+		ctx = withReqWriter(ctx, gw)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
