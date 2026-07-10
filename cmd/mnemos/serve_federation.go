@@ -63,6 +63,7 @@ func mnemosFederationEnabled() bool {
 
 func makeFederationExportHandler(conn *store.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		conn := scopedConn(r.Context(), conn)
 		if r.Method != http.MethodGet {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return

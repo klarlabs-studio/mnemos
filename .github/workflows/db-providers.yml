@@ -11,6 +11,7 @@ on:
     branches: [main]
     paths:
       - "internal/store/**"
+      - "internal/server/grpc/**"
       - "sql/**"
       - "sqlc.yaml"
       - "go.mod"
@@ -20,6 +21,7 @@ on:
     branches: [main]
     paths:
       - "internal/store/**"
+      - "internal/server/grpc/**"
       - "sql/**"
       - "sqlc.yaml"
       - "go.mod"
@@ -75,4 +77,21 @@ jobs:
         env:
           TEST_POSTGRES_DSN: postgres://mnemos:mnemos@127.0.0.1:5432/mnemos?sslmode=disable
           TEST_MYSQL_DSN: mysql://root:mnemos@127.0.0.1:3306/
-        run: go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/
+        run: go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/ ./internal/server/grpc/
+
+      # ADR 0007 tenant isolation is enforced by Postgres RLS, which superusers
+      # bypass — the default `mnemos` role above is a superuser, so the
+      # isolation tests skip there. Create a NON-superuser role and re-run just
+      # the cross-tenant isolation tests as it, so RLS is genuinely exercised.
+      - name: Create non-superuser role for RLS isolation
+        env:
+          PGPASSWORD: mnemos
+        run: |
+          set -euo pipefail
+          psql -h 127.0.0.1 -U mnemos -d mnemos -c \
+            "CREATE ROLE app LOGIN PASSWORD 'app'; GRANT ALL ON SCHEMA public TO app; GRANT CREATE ON DATABASE mnemos TO app;"
+          echo "role app (non-superuser): $(psql -h 127.0.0.1 -U mnemos -d mnemos -tAc "SELECT rolsuper||'/'||rolbypassrls FROM pg_roles WHERE rolname='app'")"
+      - name: Run cross-tenant isolation tests (RLS enforced, non-superuser)
+        env:
+          TEST_POSTGRES_DSN: postgres://app:app@127.0.0.1:5432/mnemos?sslmode=disable
+        run: go test -race -count=1 -run CrossTenantIsolation ./internal/store/postgres/ ./internal/server/grpc/

@@ -19,14 +19,14 @@ func (s *Server) brainUnavailable() error {
 
 // WhoKnows ranks the workers whose memory best matches a query.
 func (s *Server) WhoKnows(ctx context.Context, req *mnemosv1.WhoKnowsRequest) (*mnemosv1.WhoKnowsResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	limit := int(req.GetLimit())
 	if limit <= 0 {
 		limit = 10
 	}
-	experts, err := s.mem.WhoKnows(ctx, req.GetQuery(), limit)
+	experts, err := s.memFor(ctx).WhoKnows(ctx, req.GetQuery(), limit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -41,14 +41,14 @@ func (s *Server) WhoKnows(ctx context.Context, req *mnemosv1.WhoKnowsRequest) (*
 
 // KnowledgeGaps lists the store's highest-value open questions.
 func (s *Server) KnowledgeGaps(ctx context.Context, req *mnemosv1.KnowledgeGapsRequest) (*mnemosv1.KnowledgeGapsResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	limit := int(req.GetLimit())
 	if limit <= 0 {
 		limit = 20
 	}
-	gaps, err := s.mem.KnowledgeGaps(ctx, limit)
+	gaps, err := s.memFor(ctx).KnowledgeGaps(ctx, limit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -61,10 +61,10 @@ func (s *Server) KnowledgeGaps(ctx context.Context, req *mnemosv1.KnowledgeGapsR
 
 // Calibration reports how well stated confidence tracks reality across the store.
 func (s *Server) Calibration(ctx context.Context, _ *mnemosv1.CalibrationRequest) (*mnemosv1.CalibrationResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
-	cal, err := s.mem.Calibration(ctx)
+	cal, err := s.memFor(ctx).Calibration(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -84,10 +84,10 @@ func (s *Server) Calibration(ctx context.Context, _ *mnemosv1.CalibrationRequest
 
 // Hypercorrections lists established beliefs a newer claim now contradicts.
 func (s *Server) Hypercorrections(ctx context.Context, _ *mnemosv1.HypercorrectionsRequest) (*mnemosv1.HypercorrectionsResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
-	hcs, err := s.mem.Hypercorrections(ctx)
+	hcs, err := s.memFor(ctx).Hypercorrections(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -111,14 +111,14 @@ func (s *Server) Hypercorrections(ctx context.Context, _ *mnemosv1.Hypercorrecti
 
 // Recombinations lists topically-similar-but-unlinked claim pairs.
 func (s *Server) Recombinations(ctx context.Context, req *mnemosv1.RecombinationsRequest) (*mnemosv1.RecombinationsResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	limit := int(req.GetLimit())
 	if limit <= 0 {
 		limit = 20
 	}
-	recs, err := s.mem.Recombinations(ctx, limit)
+	recs, err := s.memFor(ctx).Recombinations(ctx, limit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -133,14 +133,14 @@ func (s *Server) Recombinations(ctx context.Context, req *mnemosv1.Recombination
 
 // AnalogousClaims returns the claims most structurally analogous to a given one.
 func (s *Server) AnalogousClaims(ctx context.Context, req *mnemosv1.AnalogousClaimsRequest) (*mnemosv1.AnalogousClaimsResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	limit := int(req.GetLimit())
 	if limit <= 0 {
 		limit = 10
 	}
-	analogies, err := s.mem.AnalogousClaims(ctx, req.GetClaimId(), limit)
+	analogies, err := s.memFor(ctx).AnalogousClaims(ctx, req.GetClaimId(), limit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

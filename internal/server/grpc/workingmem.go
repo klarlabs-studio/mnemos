@@ -31,13 +31,13 @@ func tsOrNil(t time.Time) *timestamppb.Timestamp {
 
 // GetBlocks returns an owner's working-memory blocks.
 func (s *Server) GetBlocks(ctx context.Context, req *mnemosv1.GetBlocksRequest) (*mnemosv1.GetBlocksResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	if req.GetOwner() == "" {
 		return nil, status.Error(codes.InvalidArgument, "owner is required")
 	}
-	blocks, err := s.mem.Blocks(ctx, req.GetOwner())
+	blocks, err := s.memFor(ctx).Blocks(ctx, req.GetOwner())
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -52,7 +52,7 @@ func (s *Server) GetBlocks(ctx context.Context, req *mnemosv1.GetBlocksRequest) 
 
 // SetBlock sets or appends a working-memory block.
 func (s *Server) SetBlock(ctx context.Context, req *mnemosv1.SetBlockRequest) (*mnemosv1.SetBlockResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	if req.GetOwner() == "" || req.GetLabel() == "" {
@@ -60,9 +60,9 @@ func (s *Server) SetBlock(ctx context.Context, req *mnemosv1.SetBlockRequest) (*
 	}
 	var err error
 	if req.GetAppend() {
-		err = s.mem.AppendBlock(ctx, req.GetOwner(), req.GetLabel(), req.GetValue())
+		err = s.memFor(ctx).AppendBlock(ctx, req.GetOwner(), req.GetLabel(), req.GetValue())
 	} else {
-		err = s.mem.SetBlock(ctx, req.GetOwner(), req.GetLabel(), req.GetValue())
+		err = s.memFor(ctx).SetBlock(ctx, req.GetOwner(), req.GetLabel(), req.GetValue())
 	}
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -72,10 +72,10 @@ func (s *Server) SetBlock(ctx context.Context, req *mnemosv1.SetBlockRequest) (*
 
 // Synthesize runs a synthesis pass (actions -> lessons + playbooks).
 func (s *Server) Synthesize(ctx context.Context, _ *mnemosv1.SynthesizeRequest) (*mnemosv1.SynthesizeResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
-	res, err := s.mem.Synthesize(ctx)
+	res, err := s.memFor(ctx).Synthesize(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -86,14 +86,14 @@ func (s *Server) Synthesize(ctx context.Context, _ *mnemosv1.SynthesizeRequest) 
 
 // Timeline returns events on the temporal timeline.
 func (s *Server) Timeline(ctx context.Context, req *mnemosv1.TimelineRequest) (*mnemosv1.TimelineResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	limit := int(req.GetLimit())
 	if limit <= 0 {
 		limit = 50
 	}
-	events, err := s.mem.Timeline(ctx, mnemos.TimelineQuery{
+	events, err := s.memFor(ctx).Timeline(ctx, mnemos.TimelineQuery{
 		RunID: req.GetRunId(), From: tsOrZero(req.GetFrom()), To: tsOrZero(req.GetTo()),
 		Types: req.GetTypes(), Limit: limit,
 	})
@@ -111,14 +111,14 @@ func (s *Server) Timeline(ctx context.Context, req *mnemosv1.TimelineRequest) (*
 
 // Signals returns detected temporal patterns.
 func (s *Server) Signals(ctx context.Context, req *mnemosv1.SignalsRequest) (*mnemosv1.SignalsResponse, error) {
-	if s.mem == nil {
+	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
 	limit := int(req.GetLimit())
 	if limit <= 0 {
 		limit = 50
 	}
-	signals, err := s.mem.Signals(ctx, mnemos.SignalQuery{
+	signals, err := s.memFor(ctx).Signals(ctx, mnemos.SignalQuery{
 		RunID: req.GetRunId(), MinConfidence: req.GetMinConfidence(), Limit: limit,
 	})
 	if err != nil {

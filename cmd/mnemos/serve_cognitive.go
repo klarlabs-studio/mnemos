@@ -52,6 +52,7 @@ type expertDTO struct {
 
 func makeWhoKnowsHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -84,6 +85,7 @@ type gapDTO struct {
 
 func makeKnowledgeGapsHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -129,6 +131,7 @@ type calibrationDTO struct {
 
 func makeCalibrationHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -162,6 +165,7 @@ type hypercorrectionDTO struct {
 
 func makeHypercorrectionsHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -201,6 +205,7 @@ type recombinationDTO struct {
 
 func makeRecombinationsHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -229,6 +234,7 @@ type analogyDTO struct {
 // structurally analogous to the given one (Weisfeiler-Lehman similarity).
 func makeAnalogousHandler(mem mnemos.Memory, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}

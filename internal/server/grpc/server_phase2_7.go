@@ -30,11 +30,11 @@ func (s *Server) ListActions(ctx context.Context, req *mnemosv1.ListActionsReque
 	var err error
 	switch {
 	case req.Subject != "":
-		actions, err = s.conn.Actions.ListBySubject(ctx, req.Subject)
+		actions, err = s.connFor(ctx).Actions.ListBySubject(ctx, req.Subject)
 	case req.RunId != "":
-		actions, err = s.conn.Actions.ListByRunID(ctx, req.RunId)
+		actions, err = s.connFor(ctx).Actions.ListByRunID(ctx, req.RunId)
 	default:
-		actions, err = s.conn.Actions.ListAll(ctx)
+		actions, err = s.connFor(ctx).Actions.ListAll(ctx)
 	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list actions: %v", err)
@@ -76,7 +76,7 @@ func (s *Server) AppendActions(ctx context.Context, req *mnemosv1.AppendActionsR
 			Metadata:  a.Metadata,
 			CreatedBy: firstNonEmptyStr(a.CreatedBy, actor),
 		}
-		if _, err := s.writer.Action(ctx, action); err != nil {
+		if _, err := s.writerFor(ctx).Action(ctx, action); err != nil {
 			return nil, status.Errorf(codes.Internal, "append action %s: %v", action.ID, err)
 		}
 		accepted++
@@ -94,9 +94,9 @@ func (s *Server) ListOutcomes(ctx context.Context, req *mnemosv1.ListOutcomesReq
 	var outcomes []domain.Outcome
 	var err error
 	if req.ActionId != "" {
-		outcomes, err = s.conn.Outcomes.ListByActionID(ctx, req.ActionId)
+		outcomes, err = s.connFor(ctx).Outcomes.ListByActionID(ctx, req.ActionId)
 	} else {
-		outcomes, err = s.conn.Outcomes.ListAll(ctx)
+		outcomes, err = s.connFor(ctx).Outcomes.ListAll(ctx)
 	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list outcomes: %v", err)
@@ -143,7 +143,7 @@ func (s *Server) AppendOutcomes(ctx context.Context, req *mnemosv1.AppendOutcome
 		// autoEdge=false: the grpc surface intentionally does NOT fire
 		// action_of/outcome_of edges (see the godoc above); that wiring
 		// lives in the CLI/MCP layer.
-		if _, err := s.writer.Outcome(ctx, outcome, false); err != nil {
+		if _, err := s.writerFor(ctx).Outcome(ctx, outcome, false); err != nil {
 			return nil, status.Errorf(codes.Internal, "append outcome %s: %v", outcome.ID, err)
 		}
 		accepted++
@@ -163,11 +163,11 @@ func (s *Server) ListLessons(ctx context.Context, req *mnemosv1.ListLessonsReque
 	var err error
 	switch {
 	case req.Service != "":
-		lessons, err = s.conn.Lessons.ListByService(ctx, req.Service)
+		lessons, err = s.connFor(ctx).Lessons.ListByService(ctx, req.Service)
 	case req.Trigger != "":
-		lessons, err = s.conn.Lessons.ListByTrigger(ctx, req.Trigger)
+		lessons, err = s.connFor(ctx).Lessons.ListByTrigger(ctx, req.Trigger)
 	default:
-		lessons, err = s.conn.Lessons.ListAll(ctx)
+		lessons, err = s.connFor(ctx).Lessons.ListAll(ctx)
 	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list lessons: %v", err)
@@ -212,7 +212,7 @@ func (s *Server) AppendLessons(ctx context.Context, req *mnemosv1.AppendLessonsR
 			Source:       l.Source,
 			CreatedBy:    firstNonEmptyStr(l.CreatedBy, actor),
 		}
-		if _, err := s.writer.Lesson(ctx, lesson); err != nil {
+		if _, err := s.writerFor(ctx).Lesson(ctx, lesson); err != nil {
 			return nil, status.Errorf(codes.Internal, "append lesson %s: %v", lesson.ID, err)
 		}
 		accepted++
@@ -230,9 +230,9 @@ func (s *Server) ListDecisions(ctx context.Context, req *mnemosv1.ListDecisionsR
 	var decisions []domain.Decision
 	var err error
 	if req.RiskLevel != "" {
-		decisions, err = s.conn.Decisions.ListByRiskLevel(ctx, req.RiskLevel)
+		decisions, err = s.connFor(ctx).Decisions.ListByRiskLevel(ctx, req.RiskLevel)
 	} else {
-		decisions, err = s.conn.Decisions.ListAll(ctx)
+		decisions, err = s.connFor(ctx).Decisions.ListAll(ctx)
 	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list decisions: %v", err)
@@ -277,7 +277,7 @@ func (s *Server) AppendDecisions(ctx context.Context, req *mnemosv1.AppendDecisi
 			ChosenAt:     chosen,
 			CreatedBy:    firstNonEmptyStr(d.CreatedBy, actor),
 		}
-		if _, err := s.writer.Decision(ctx, decision); err != nil {
+		if _, err := s.writerFor(ctx).Decision(ctx, decision); err != nil {
 			return nil, status.Errorf(codes.Internal, "append decision %s: %v", decision.ID, err)
 		}
 		accepted++
@@ -296,11 +296,11 @@ func (s *Server) ListPlaybooks(ctx context.Context, req *mnemosv1.ListPlaybooksR
 	var err error
 	switch {
 	case req.Trigger != "":
-		playbooks, err = s.conn.Playbooks.ListByTrigger(ctx, req.Trigger)
+		playbooks, err = s.connFor(ctx).Playbooks.ListByTrigger(ctx, req.Trigger)
 	case req.Service != "":
-		playbooks, err = s.conn.Playbooks.ListByService(ctx, req.Service)
+		playbooks, err = s.connFor(ctx).Playbooks.ListByService(ctx, req.Service)
 	default:
-		playbooks, err = s.conn.Playbooks.ListAll(ctx)
+		playbooks, err = s.connFor(ctx).Playbooks.ListAll(ctx)
 	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list playbooks: %v", err)
@@ -354,7 +354,7 @@ func (s *Server) AppendPlaybooks(ctx context.Context, req *mnemosv1.AppendPlaybo
 			Source:             p.Source,
 			CreatedBy:          firstNonEmptyStr(p.CreatedBy, actor),
 		}
-		if _, err := s.writer.Playbook(ctx, playbook); err != nil {
+		if _, err := s.writerFor(ctx).Playbook(ctx, playbook); err != nil {
 			return nil, status.Errorf(codes.Internal, "append playbook %s: %v", playbook.ID, err)
 		}
 		accepted++
@@ -373,11 +373,11 @@ func (s *Server) ListEntityRelationships(ctx context.Context, req *mnemosv1.List
 	var err error
 	switch {
 	case req.EntityId != "" && req.EntityType != "":
-		edges, err = s.conn.EntityRels.ListByEntity(ctx, req.EntityId, req.EntityType)
+		edges, err = s.connFor(ctx).EntityRels.ListByEntity(ctx, req.EntityId, req.EntityType)
 	case req.Kind != "":
-		edges, err = s.conn.EntityRels.ListByKind(ctx, req.Kind)
+		edges, err = s.connFor(ctx).EntityRels.ListByKind(ctx, req.Kind)
 	default:
-		edges, err = s.conn.EntityRels.ListAll(ctx)
+		edges, err = s.connFor(ctx).EntityRels.ListAll(ctx)
 	}
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list entity_relationships: %v", err)
@@ -420,7 +420,7 @@ func (s *Server) AppendEntityRelationships(ctx context.Context, req *mnemosv1.Ap
 			CreatedBy: firstNonEmptyStr(e.CreatedBy, actor),
 		})
 	}
-	if _, err := s.writer.EntityRels(ctx, edges); err != nil {
+	if _, err := s.writerFor(ctx).EntityRels(ctx, edges); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert entity_relationships: %v", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(len(edges))}, nil

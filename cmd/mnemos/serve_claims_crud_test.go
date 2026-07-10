@@ -18,7 +18,7 @@ func crudFacadeServer(t *testing.T) *httptest.Server {
 		t.Fatalf("build facade: %v", err)
 	}
 	t.Cleanup(func() { _ = mem.Close() })
-	srv := httptest.NewServer(newServerMuxWithMemory(conn, mem))
+	srv := httptest.NewServer(newServerMuxWithMemory(conn, mem, false))
 	t.Cleanup(srv.Close)
 	return srv
 }

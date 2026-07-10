@@ -1299,6 +1299,7 @@ func printUsage() {
 	fmt.Println("  mcp --http <addr> [--auth]           MCP server over HTTP for remote clients (JWT auth by default)")
 	fmt.Println("  mcp --http <addr> --require-tenant   Multi-tenant: every request needs a token with a tenant (postgres, RLS-isolated)")
 	fmt.Println("  serve [--grpc-port N]                REST + gRPC API service")
+	fmt.Println("  serve --require-tenant               Multi-tenant REST + gRPC: every request needs a token with a tenant (postgres, RLS)")
 	fmt.Println("  token issue --user <id> [--tenant T] Mint a user JWT (optionally scoped to tenant T)")
 	fmt.Println("")
 	fmt.Println("Pipeline Commands:")
