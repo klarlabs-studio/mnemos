@@ -37,6 +37,12 @@ func mcpTools() []kernel.Action {
 			Description: "Ingest merged GitHub pull requests as events. Requires gh CLI authentication."},
 		{Name: "watch_file", Effect: domain.EffectWriteLocal, Idempotent: true,
 			Description: "Register a file to be re-ingested when its content changes."},
+		{Name: "remember_event", Effect: domain.EffectWriteLocal, Idempotent: false,
+			Description: "Store a temporal event (deployment, incident, decision, ...) with a wall-clock timestamp."},
+		{Name: "timeline_query", Effect: domain.EffectReadLocal, Idempotent: true,
+			Description: "Return events filtered by time range, type, and run, sorted chronologically."},
+		{Name: "recall_at_time", Effect: domain.EffectReadLocal, Idempotent: true,
+			Description: "Answer a question as of a historical instant (time-travel retrieval)."},
 	}
 }
 
@@ -127,6 +133,15 @@ func mcpExecutorMap(actor string, getWatcher func() (*Watcher, error)) map[strin
 		"exec.watch_file": toolExecutor[mcpWatchFileInput, mcpWatchFileOutput]{run: func(_ context.Context, in mcpWatchFileInput) (mcpWatchFileOutput, error) {
 			return runWatchFileTool(in, getWatcher)
 		}, summary: watchFileSummary},
+		"exec.remember_event": toolExecutor[mcpRememberEventInput, mcpRememberEventOutput]{run: func(ctx context.Context, in mcpRememberEventInput) (mcpRememberEventOutput, error) {
+			return mcpRunRememberEvent(ctx, mcpActorFor(ctx, actor), in)
+		}, summary: rememberEventSummary},
+		"exec.timeline_query": toolExecutor[mcpTimelineQueryInput, mcpTimelineQueryOutput]{run: func(ctx context.Context, in mcpTimelineQueryInput) (mcpTimelineQueryOutput, error) {
+			return mcpRunTimelineQuery(ctx, in)
+		}, summary: timelineQuerySummary},
+		"exec.recall_at_time": toolExecutor[mcpRecallAtTimeInput, mcpQueryOutput]{run: func(ctx context.Context, in mcpRecallAtTimeInput) (mcpQueryOutput, error) {
+			return mcpRunRecallAtTime(ctx, in)
+		}, summary: querySummary},
 	}
 }
 
@@ -232,6 +247,14 @@ func processTextEvidence(out mcpProcessTextOutput) []domain.EvidenceRecord {
 
 func metricsSummary(out mcpMetricsOutput) string {
 	return fmt.Sprintf("runs=%d events=%d claims=%d contradictions=%d", out.Runs, out.Events, out.Claims, out.Contradictions)
+}
+
+func rememberEventSummary(out mcpRememberEventOutput) string {
+	return fmt.Sprintf("recorded event %s", out.ID)
+}
+
+func timelineQuerySummary(out mcpTimelineQueryOutput) string {
+	return fmt.Sprintf("%d event(s)", len(out.Events))
 }
 
 func listClaimsSummary(out mcpListClaimsOutput) string {
