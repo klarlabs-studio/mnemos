@@ -290,8 +290,15 @@ CREATE TABLE IF NOT EXISTS claim_entities (
 
 CREATE INDEX IF NOT EXISTS idx_claim_entities_entity_id ON claim_entities(entity_id);
 
-CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(event_id UNINDEXED, content);
-CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(claim_id UNINDEXED, text);
+-- The 'porter unicode61' tokenizer chains Porter stemming on top of the
+-- default unicode61 behaviour (case-fold + diacritic-fold), so inflected
+-- forms collapse to a common stem: a claim stored as "issues automatic
+-- refunds" is recalled by the query "issue a refund". Without stemming,
+-- FTS5 matches token-for-token and paraphrases that differ only by
+-- inflection miss entirely. The tokenizer is fixed at table-creation
+-- time, so upgrading an existing DB rebuilds these tables (see migrate()).
+CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(event_id UNINDEXED, content, tokenize = 'porter unicode61');
+CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(claim_id UNINDEXED, text, tokenize = 'porter unicode61');
 
 CREATE TRIGGER IF NOT EXISTS events_ai_fts AFTER INSERT ON events BEGIN
 	INSERT INTO events_fts(event_id, content) VALUES (new.id, new.content);
@@ -504,7 +511,7 @@ CREATE INDEX IF NOT EXISTS idx_incidents_root_cause_claim_id ON incidents(root_c
 // currentSchemaVersion is the schema generation this binary expects.
 // Bump whenever a column or table is added; pair the bump with a step
 // in addMissingColumns so existing DBs upgrade in place.
-const currentSchemaVersion = 17
+const currentSchemaVersion = 18
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -664,6 +671,28 @@ func migrate(db *sql.DB) error {
 			SELECT id, text FROM claims
 			WHERE id NOT IN (SELECT claim_id FROM claims_fts)`); err != nil {
 			return fmt.Errorf("backfill claims_fts: %w", err)
+		}
+	}
+
+	if userVersion < 18 {
+		// v18 — rebuild the FTS5 tables with the 'porter unicode61'
+		// tokenizer so recall stems inflected forms (refund/refunds,
+		// issue/issues). A tokenizer is fixed at table-creation time, so
+		// the only way to change it on an existing DB is to drop and
+		// recreate the virtual tables, then repopulate from the base
+		// tables. The AFTER-INSERT/DELETE/UPDATE triggers bind to the
+		// tables by name and keep working across the recreate. Idempotent:
+		// re-running drops and rebuilds from the same source rows.
+		const rebuildFTS = `
+DROP TABLE IF EXISTS events_fts;
+DROP TABLE IF EXISTS claims_fts;
+CREATE VIRTUAL TABLE events_fts USING fts5(event_id UNINDEXED, content, tokenize = 'porter unicode61');
+CREATE VIRTUAL TABLE claims_fts USING fts5(claim_id UNINDEXED, text, tokenize = 'porter unicode61');
+INSERT INTO events_fts(event_id, content) SELECT id, content FROM events;
+INSERT INTO claims_fts(claim_id, text) SELECT id, text FROM claims;
+`
+		if _, err := db.Exec(rebuildFTS); err != nil {
+			return fmt.Errorf("rebuild FTS with porter tokenizer: %w", err)
 		}
 	}
 

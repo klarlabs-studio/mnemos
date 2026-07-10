@@ -62,6 +62,40 @@ func TestSearchByText_ReturnsRelevantEvents(t *testing.T) {
 	}
 }
 
+// The 'porter unicode61' tokenizer stems inflected forms, so a query recalls
+// documents phrased with a different inflection of the same word. Before the
+// fix, the default unicode61 tokenizer matched token-for-token and these
+// missed entirely.
+func TestSearchByText_StemsInflectedForms(t *testing.T) {
+	db, err := open(filepath.Join(t.TempDir(), "stem.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	now := nowRFC()
+	if _, err := db.Exec(
+		`INSERT INTO events (id, run_id, schema_version, content, source_input_id, timestamp, metadata_json, ingested_at)
+		 VALUES ('ev1', 'r', 'v1', 'The system issues automatic refunds to customers', 'src', ?, '{}', ?)`,
+		now, now,
+	); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Each query word is a different inflection of a word in the stored
+	// text: "refund" vs "refunds", "issued" vs "issues", "customer" vs
+	// "customers". All recall ev1 only because the tokenizer stems.
+	for _, q := range []string{"refund", "issued", "customer"} {
+		hits, err := NewEventRepository(db).SearchByText(ctx, q, 5)
+		if err != nil {
+			t.Fatalf("search %q: %v", q, err)
+		}
+		if len(hits) != 1 || hits[0].ID != "ev1" {
+			t.Fatalf("query %q: expected ev1 via stemming, got %+v", q, hits)
+		}
+	}
+}
+
 func TestSearchByText_ToleratesMessyInput(t *testing.T) {
 	db, err := open(filepath.Join(t.TempDir(), "fts.db"))
 	if err != nil {
