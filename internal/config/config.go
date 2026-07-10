@@ -47,6 +47,7 @@ type Config struct {
 		MaxConns        scalar `yaml:"max_conns"`
 		MaxIdleConns    scalar `yaml:"max_idle_conns"`
 		ConnMaxLifetime scalar `yaml:"conn_max_lifetime"`
+		SharedPool      scalar `yaml:"shared_pool"`
 	} `yaml:"db"`
 
 	LLM struct {
@@ -123,6 +124,7 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_DB_MAX_CONNS", c.DB.MaxConns},
 		{"MNEMOS_DB_MAX_IDLE_CONNS", c.DB.MaxIdleConns},
 		{"MNEMOS_DB_CONN_MAX_LIFETIME", c.DB.ConnMaxLifetime},
+		{"MNEMOS_PG_SHARED_POOL", c.DB.SharedPool},
 
 		{"MNEMOS_LLM_PROVIDER", c.LLM.Provider},
 		{"MNEMOS_LLM_API_KEY", c.LLM.APIKey},

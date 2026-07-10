@@ -12,7 +12,7 @@ import (
 // EntityRelationshipRepository persists polymorphic cross-entity
 // edges in the configured Postgres namespace.
 type EntityRelationshipRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

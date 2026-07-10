@@ -14,7 +14,7 @@ import (
 // enforced by the schema, so passing an unknown owner_id surfaces
 // as a Postgres FK violation — same loud failure shape as SQLite.
 type AgentRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 

@@ -15,6 +15,7 @@ db:
   max_conns:           # MNEMOS_DB_MAX_CONNS (Postgres/MySQL, default 25)
   max_idle_conns:      # MNEMOS_DB_MAX_IDLE_CONNS (default 5)
   conn_max_lifetime:   # MNEMOS_DB_CONN_MAX_LIFETIME (Go duration, default 30m)
+  shared_pool:         # MNEMOS_PG_SHARED_POOL (true/false) — Postgres multi-tenant: one shared pool with per-request SET tenant (ADR 0007 Phase 2), instead of a pool per tenant
 
 llm:
   provider:            # MNEMOS_LLM_PROVIDER — anthropic | openai | gemini | ollama | openai-compat

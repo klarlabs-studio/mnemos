@@ -15,7 +15,7 @@ import (
 // AverageTrust / CountClaimsBelowTrust) is implemented so this
 // repository satisfies ports.TrustScorer.
 type ClaimRepository struct {
-	db *sql.DB
+	db pgQuerier
 	ns string
 }
 
