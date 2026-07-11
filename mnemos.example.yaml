@@ -76,3 +76,10 @@ feedback:
 
 job:
   timeout:             # MNEMOS_JOB_TIMEOUT (Go duration, default 10m)
+
+# Read-time precedence when a federated read (global brain + tenant/repo brain)
+# surfaces the same topic from both tiers (ADR 0011 Phase C). One of:
+#   tenant-wins         the tenant/repo tier wins on conflict (default; local dev)
+#   global-wins         the vetted global (neocortex) tier wins (curated products)
+#   surface-dissonance  keep both and flag the disagreement for the agent
+precedence:            # MNEMOS_PRECEDENCE (default tenant-wins)

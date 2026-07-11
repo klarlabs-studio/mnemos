@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/client"
+	"go.klarlabs.de/mnemos/internal/query"
 )
 
 // Claude Code hook handlers: `mnemos hook <recall|brief|capture>`.
@@ -127,6 +128,10 @@ type recallClaim struct {
 	Text       string
 	TrustScore float64
 	Source     string // "global" | "workspace" (blank = untagged)
+	// Conflicted marks a claim that a surface-dissonance read (ADR 0011 Phase C)
+	// found to disagree with the other tier on the same topic. Both sides of the
+	// disagreement are kept and flagged so the renderer can warn.
+	Conflicted bool
 }
 
 // repoBrain resolves the opt-in repo brain for a session working directory: the
@@ -222,7 +227,7 @@ func hookRecall(ev hookEvent) {
 		if tenant := hostedWorkspaceTenant(ev.Cwd); tenant != "" {
 			wsClaims, wsContra = hostedRecall(ctx, cli, q, tenant, "workspace")
 		}
-		claims, contra := mergeRecall(wsClaims, wsContra, personal, personalContra)
+		claims, contra := mergeRecall(wsClaims, wsContra, personal, personalContra, query.PrecedenceOrDefault())
 		emitContext("UserPromptSubmit", renderRecall(claims, contra))
 		return
 	}
@@ -239,7 +244,7 @@ func hookRecall(ev hookEvent) {
 		})
 	}
 
-	claims, contra := mergeRecall(repoClaims, repoContra, globalClaims, globalContra)
+	claims, contra := mergeRecall(repoClaims, repoContra, globalClaims, globalContra, query.PrecedenceOrDefault())
 	emitContext("UserPromptSubmit", renderRecall(claims, contra))
 }
 
@@ -272,12 +277,23 @@ func hostedRecall(ctx context.Context, cli *client.Client, q, tenant, source str
 	return claims, len(resp.Contradictions)
 }
 
-// mergeRecall combines repo (more specific — listed first, wins on duplicate
-// text) with global claims, de-duplicating by normalized text.
-func mergeRecall(repo []recallClaim, repoContra int, global []recallClaim, globalContra int) ([]recallClaim, int) {
+// mergeRecall combines the repo/tenant tier with the global tier per the
+// read-time precedence policy (ADR 0011 Phase C), de-duplicating by normalized
+// text:
+//   - tenant-wins (default): repo leads, so its copy survives an identical-text
+//     duplicate — byte-for-byte the historical behavior.
+//   - global-wins: the global tier leads, so its copy wins the same duplicate.
+//   - surface-dissonance: repo leads (as tenant-wins), but same-topic,
+//     opposing-polarity conflicts between the tiers keep BOTH claims and are
+//     flagged so renderRecall can warn instead of silently trusting one tier.
+func mergeRecall(repo []recallClaim, repoContra int, global []recallClaim, globalContra int, policy query.PrecedencePolicy) ([]recallClaim, int) {
+	first, second := repo, global
+	if policy == query.PrecedenceGlobalWins {
+		first, second = global, repo
+	}
 	seen := make(map[string]bool)
 	out := make([]recallClaim, 0, len(repo)+len(global))
-	for _, tier := range [][]recallClaim{repo, global} {
+	for _, tier := range [][]recallClaim{first, second} {
 		for _, c := range tier {
 			key := strings.ToLower(strings.TrimSpace(c.Text))
 			if key == "" || seen[key] {
@@ -287,7 +303,30 @@ func mergeRecall(repo []recallClaim, repoContra int, global []recallClaim, globa
 			out = append(out, c)
 		}
 	}
+	if policy == query.PrecedenceSurfaceDissonance {
+		flagRecallDissonance(out, repo, global)
+	}
 	return out, repoContra + globalContra
+}
+
+// flagRecallDissonance marks, in place, every merged claim that participates in
+// a same-topic, opposing-polarity disagreement between the repo and global
+// tiers (ADR 0011 Phase C surface-dissonance policy).
+func flagRecallDissonance(out, repo, global []recallClaim) {
+	conflicted := make(map[string]bool)
+	for _, r := range repo {
+		for _, g := range global {
+			if query.Conflict(r.Text, g.Text) {
+				conflicted[strings.ToLower(strings.TrimSpace(r.Text))] = true
+				conflicted[strings.ToLower(strings.TrimSpace(g.Text))] = true
+			}
+		}
+	}
+	for i := range out {
+		if conflicted[strings.ToLower(strings.TrimSpace(out[i].Text))] {
+			out[i].Conflicted = true
+		}
+	}
 }
 
 // renderRecall renders a compact, citation-friendly context block. It caps the
@@ -298,10 +337,13 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 		return ""
 	}
 	hasRepo := false
+	hasDissonance := false
 	for _, c := range claims {
 		if c.Source == "workspace" {
 			hasRepo = true
-			break
+		}
+		if c.Conflicted {
+			hasDissonance = true
 		}
 	}
 	var b strings.Builder
@@ -320,6 +362,9 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 	}
 	if contradictions > 0 {
 		fmt.Fprintf(&b, "  ⚠ %d contradiction(s) recorded on this topic — verify before relying.\n", contradictions)
+	}
+	if hasDissonance {
+		b.WriteString("  ⚠ global and this workspace disagree — verify before relying.\n")
 	}
 	if hasRepo {
 		b.WriteString("{workspace} claims are specific to this workspace/repo and override {global} ones on conflict.\n")
@@ -352,7 +397,7 @@ func hookBrief(ev hookEvent) {
 		if m.Claims == 0 && wsClaims == 0 {
 			return
 		}
-		emitContext("SessionStart", renderBrief(m.Claims, m.Runs, m.Contradictions, wsClaims))
+		emitContext("SessionStart", renderBrief(m.Claims, m.Runs, m.Contradictions, wsClaims, query.PrecedenceOrDefault()))
 		return
 	}
 
@@ -382,12 +427,14 @@ func hookBrief(ev hookEvent) {
 	if gm.Claims == 0 && repoClaims == 0 {
 		return // both tiers empty: nothing worth announcing
 	}
-	emitContext("SessionStart", renderBrief(gm.Claims, gm.Runs, gm.Contradictions, repoClaims))
+	emitContext("SessionStart", renderBrief(gm.Claims, gm.Runs, gm.Contradictions, repoClaims, query.PrecedenceOrDefault()))
 }
 
 // renderBrief formats the session-start brain summary. repoClaims > 0 adds a
-// note that this repo has its own scoped overlay.
-func renderBrief(claims, runs, contradictions, repoClaims int64) string {
+// note that this repo has its own scoped overlay. Under the surface-dissonance
+// precedence policy (ADR 0011 Phase C) it also warns that global/workspace
+// disagreements will be flagged at recall for the agent to reconcile.
+func renderBrief(claims, runs, contradictions, repoClaims int64, policy query.PrecedencePolicy) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Mnemos brain connected: %d claims across %d runs", claims, runs)
 	if contradictions > 0 {
@@ -397,6 +444,9 @@ func renderBrief(claims, runs, contradictions, repoClaims int64) string {
 		fmt.Fprintf(&b, "; +%d claim(s) scoped to this workspace", repoClaims)
 	}
 	b.WriteString(".\n")
+	if repoClaims > 0 && policy == query.PrecedenceSurfaceDissonance {
+		b.WriteString("⚠ Precedence is surface-dissonance: global and this workspace may disagree — such conflicts are flagged at recall; verify before acting.\n")
+	}
 	b.WriteString("Use query_knowledge before answering questions about past decisions, and record new decisions/facts with process_text or record_decision.")
 	return b.String()
 }

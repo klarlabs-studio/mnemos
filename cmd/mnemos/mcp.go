@@ -1058,7 +1058,9 @@ func mcpRunQueryScoped(ctx context.Context, input mcpQueryInput) (mcpQueryOutput
 	if scope == "repo" {
 		return mcpRunQuery(withDSNOverride(ctx, repoDSN), input)
 	}
-	// "both" (default): federate; repo wins on conflict.
+	// "both" (default): federate the repo and global tiers. Which tier wins a
+	// conflict — or whether the conflict is surfaced — follows the read-time
+	// precedence policy (ADR 0011 Phase C); the default preserves repo-wins.
 	repoOut, rerr := mcpRunQuery(withDSNOverride(ctx, repoDSN), input)
 	globalOut, gerr := mcpRunQuery(ctx, input)
 	switch {
@@ -1069,14 +1071,22 @@ func mcpRunQueryScoped(ctx context.Context, input mcpQueryInput) (mcpQueryOutput
 	case gerr != nil:
 		return repoOut, nil
 	}
-	return mergeScopedQuery(repoOut, globalOut), nil
+	return mergeScopedQuery(repoOut, globalOut, query.PrecedenceOrDefault()), nil
 }
 
-// mergeScopedQuery merges a repo-tier and global-tier result: repo claims lead
-// and win on duplicate text; claim_provenance tags each tier; contradictions,
-// timeline, and hop distances are unioned; the repo's grounded answer is
-// preferred when it found claims, else the global answer.
-func mergeScopedQuery(repo, global mcpQueryOutput) mcpQueryOutput {
+// mergeScopedQuery merges a repo-tier and global-tier result under the read-time
+// precedence policy (ADR 0011 Phase C). claim_provenance tags each tier;
+// contradictions, timeline, and hop distances are unioned. The policy decides
+// the winner on conflict:
+//   - tenant-wins (default): repo claims lead and win a duplicate; repo's
+//     grounded answer and hop distances are preferred — byte-for-byte the
+//     historical behavior.
+//   - global-wins: the global tier leads and wins instead.
+//   - surface-dissonance: repo leads (as tenant-wins), but same-topic,
+//     opposing-polarity conflicts between the tiers surface as synthetic
+//     `contradicts` relationships on Contradictions so neither silently wins.
+func mergeScopedQuery(repo, global mcpQueryOutput, policy query.PrecedencePolicy) mcpQueryOutput {
+	globalLeads := policy == query.PrecedenceGlobalWins
 	out := mcpQueryOutput{ClaimProvenance: map[string]string{}}
 	seen := map[string]bool{}
 	add := func(claims []domain.Claim, tier string) {
@@ -1090,28 +1100,65 @@ func mergeScopedQuery(repo, global mcpQueryOutput) mcpQueryOutput {
 			out.ClaimProvenance[c.ID] = tier
 		}
 	}
-	add(repo.Claims, "repo")
-	add(global.Claims, "global")
+	if globalLeads {
+		add(global.Claims, "global")
+		add(repo.Claims, "repo")
+	} else {
+		add(repo.Claims, "repo")
+		add(global.Claims, "global")
+	}
 
 	out.Contradictions = append(append([]domain.Relationship{}, repo.Contradictions...), global.Contradictions...)
 	out.Timeline = append(append([]string{}, repo.Timeline...), global.Timeline...)
 
 	if len(repo.ClaimHopDistance)+len(global.ClaimHopDistance) > 0 {
 		out.ClaimHopDistance = map[string]int{}
-		for k, v := range global.ClaimHopDistance {
+		lead, follow := repo.ClaimHopDistance, global.ClaimHopDistance
+		if globalLeads {
+			lead, follow = global.ClaimHopDistance, repo.ClaimHopDistance
+		}
+		for k, v := range follow {
 			out.ClaimHopDistance[k] = v
 		}
-		for k, v := range repo.ClaimHopDistance {
-			out.ClaimHopDistance[k] = v // repo wins
+		for k, v := range lead {
+			out.ClaimHopDistance[k] = v // leading tier wins
 		}
 	}
 
-	if len(repo.Claims) > 0 && strings.TrimSpace(repo.Answer) != "" {
-		out.Answer = repo.Answer
+	leadAnswer, leadClaims, followAnswer := repo.Answer, repo.Claims, global.Answer
+	if globalLeads {
+		leadAnswer, leadClaims, followAnswer = global.Answer, global.Claims, repo.Answer
+	}
+	if len(leadClaims) > 0 && strings.TrimSpace(leadAnswer) != "" {
+		out.Answer = leadAnswer
 	} else {
-		out.Answer = global.Answer
+		out.Answer = followAnswer
+	}
+
+	if policy == query.PrecedenceSurfaceDissonance {
+		out.Contradictions = append(out.Contradictions, scopedDissonance(repo.Claims, global.Claims)...)
 	}
 	return out
+}
+
+// scopedDissonance returns synthetic `contradicts` relationships for each
+// same-topic, opposing-polarity disagreement between a repo claim and a global
+// claim. Surfacing them on the existing Contradictions field lets the agent
+// reconcile the tenant-vs-global conflict without any new wire identifier.
+func scopedDissonance(repo, global []domain.Claim) []domain.Relationship {
+	var rels []domain.Relationship
+	for _, r := range repo {
+		for _, g := range global {
+			if query.Conflict(r.Text, g.Text) {
+				rels = append(rels, domain.Relationship{
+					Type:        domain.RelationshipTypeContradicts,
+					FromClaimID: r.ID,
+					ToClaimID:   g.ID,
+				})
+			}
+		}
+	}
+	return rels
 }
 
 func mcpRunQuery(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
