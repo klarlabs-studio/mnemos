@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.klarlabs.de/mnemos/internal/query"
 )
 
 func TestRepoBrainDSN(t *testing.T) {
@@ -130,7 +132,7 @@ func TestMergeRecall_RepoWinsAndDedups(t *testing.T) {
 		{Text: "shared fact", Source: "global"}, // duplicate → repo wins
 		{Text: "general pref", Source: "global"},
 	}
-	merged, contra := mergeRecall(repo, 1, global, 2)
+	merged, contra := mergeRecall(repo, 1, global, 2, query.PrecedenceTenantWins)
 	if len(merged) != 3 {
 		t.Fatalf("want 3 merged claims, got %d: %+v", len(merged), merged)
 	}
@@ -147,6 +149,79 @@ func TestMergeRecall_RepoWinsAndDedups(t *testing.T) {
 	if contra != 3 {
 		t.Errorf("contradictions should sum: want 3, got %d", contra)
 	}
+}
+
+// TestMergeRecall_PrecedencePolicies exercises the ADR 0011 Phase C policy at
+// the recall merge point: tenant-wins preserves today's output, global-wins
+// flips the duplicate winner, and surface-dissonance keeps both conflicting
+// claims and flags them.
+func TestMergeRecall_PrecedencePolicies(t *testing.T) {
+	repo := func() []recallClaim {
+		return []recallClaim{
+			{Text: "shared fact", Source: "workspace", TrustScore: 0.9},
+			{Text: "the API is stable", Source: "workspace"},
+		}
+	}
+	global := func() []recallClaim {
+		return []recallClaim{
+			{Text: "shared fact", Source: "global", TrustScore: 0.4}, // duplicate
+			{Text: "the API is not stable", Source: "global"},        // conflict
+		}
+	}
+
+	t.Run("tenant-wins keeps the repo copy of a duplicate", func(t *testing.T) {
+		merged, _ := mergeRecall(repo(), 0, global(), 0, query.PrecedenceTenantWins)
+		dup := findByText(merged, "shared fact")
+		if dup == nil || dup.Source != "workspace" {
+			t.Fatalf("duplicate should resolve to workspace: %+v", dup)
+		}
+		for _, c := range merged {
+			if c.Conflicted {
+				t.Errorf("tenant-wins must never flag dissonance: %+v", c)
+			}
+		}
+	})
+
+	t.Run("global-wins flips the duplicate winner", func(t *testing.T) {
+		merged, _ := mergeRecall(repo(), 0, global(), 0, query.PrecedenceGlobalWins)
+		dup := findByText(merged, "shared fact")
+		if dup == nil || dup.Source != "global" {
+			t.Fatalf("global-wins should keep the global copy: %+v", dup)
+		}
+		// Global tier now leads.
+		if merged[0].Source != "global" {
+			t.Errorf("global tier should lead under global-wins: %+v", merged)
+		}
+	})
+
+	t.Run("surface-dissonance keeps both and flags the conflict", func(t *testing.T) {
+		merged, _ := mergeRecall(repo(), 0, global(), 0, query.PrecedenceSurfaceDissonance)
+		stable := findByText(merged, "the API is stable")
+		notStable := findByText(merged, "the API is not stable")
+		if stable == nil || notStable == nil {
+			t.Fatalf("both sides of the conflict must survive: %+v", merged)
+		}
+		if !stable.Conflicted || !notStable.Conflicted {
+			t.Errorf("both conflicting claims should be flagged: %+v / %+v", stable, notStable)
+		}
+		// A mere duplicate is not a conflict and must stay unflagged.
+		if dup := findByText(merged, "shared fact"); dup == nil || dup.Conflicted {
+			t.Errorf("duplicate should not be flagged as dissonance: %+v", dup)
+		}
+		// The renderer surfaces the warning.
+		if out := renderRecall(merged, 0); !strings.Contains(out, "global and this workspace disagree") {
+			t.Errorf("renderRecall should warn on dissonance: %q", out)
+		}
+	})
+}
+
+func findByText(claims []recallClaim, text string) *recallClaim {
+	for i := range claims {
+		if claims[i].Text == text {
+			return &claims[i]
+		}
+	}
+	return nil
 }
 
 func TestRenderRecall_TagsOnlyWhenRepoPresent(t *testing.T) {

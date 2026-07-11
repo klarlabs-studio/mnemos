@@ -148,6 +148,14 @@ func main() {
 		printProgress("config: loaded %s (%d value(s) applied)", path, len(applied))
 	}
 
+	// Validate the read-time precedence policy (ADR 0011 Phase C) once the
+	// config is hydrated, so an unrecognized MNEMOS_PRECEDENCE fails fast with a
+	// clear message instead of silently degrading at query time.
+	if _, err := query.PrecedenceFromEnv(); err != nil {
+		fmt.Fprintf(os.Stderr, "config: %s\n", err)
+		os.Exit(int(ExitConfig))
+	}
+
 	// An explicit --db flag is the most specific DSN source, so it wins over
 	// both the config file (already hydrated above) and any inherited
 	// MNEMOS_DB_URL. Exporting it here means every command — not just the ones

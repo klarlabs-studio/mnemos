@@ -121,6 +121,12 @@ type Config struct {
 	Job struct {
 		Timeout scalar `yaml:"timeout"`
 	} `yaml:"job"`
+
+	// Precedence selects the read-time federation policy (ADR 0011 Phase C):
+	// tenant-wins (default), global-wins, or surface-dissonance. It decides which
+	// tier wins — or whether the conflict is surfaced — when a federated read
+	// turns up the same topic from both the global and the tenant/repo brain.
+	Precedence scalar `yaml:"precedence"`
 }
 
 // EnvOverrides flattens the config to canonical MNEMOS_* keys. Empty leaves
@@ -180,6 +186,8 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_FEEDBACK_DECAY", c.Feedback.Decay},
 
 		{"MNEMOS_JOB_TIMEOUT", c.Job.Timeout},
+
+		{"MNEMOS_PRECEDENCE", c.Precedence},
 	}
 	out := make(map[string]string, len(pairs))
 	for _, p := range pairs {

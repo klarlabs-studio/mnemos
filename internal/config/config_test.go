@@ -79,6 +79,27 @@ server:
 	}
 }
 
+func TestPrecedenceBlockEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, "precedence: global-wins\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if env := cfg.EnvOverrides(); env["MNEMOS_PRECEDENCE"] != "global-wins" {
+		t.Errorf("MNEMOS_PRECEDENCE = %q, want global-wins", env["MNEMOS_PRECEDENCE"])
+	}
+	// An empty precedence leaf must be omitted so it never shadows the default.
+	empty := writeConfig(t, dir, "db:\n  url: memory://\n")
+	ecfg, err := Load(empty)
+	if err != nil {
+		t.Fatalf("Load empty: %v", err)
+	}
+	if _, ok := ecfg.EnvOverrides()["MNEMOS_PRECEDENCE"]; ok {
+		t.Error("empty precedence leaf should be omitted")
+	}
+}
+
 func TestLoadRejectsUnknownFields(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, "llm:\n  provdier: typo\n")
