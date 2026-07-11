@@ -623,6 +623,17 @@ func plausibleCausalOrdering(causeAt, effectAt time.Time) bool {
 	return effectAt.Sub(causeAt) <= causalTimeTolerance
 }
 
+// ContentTokens returns the normalized content tokens of text: lowercased,
+// punctuation-stripped, stop-words and negation-words removed, and minimally
+// stemmed. It is the shared tokenization used both here (relationship /
+// contradiction detection) and by internal/consolidate (cross-tenant lesson
+// clustering), so the two never drift apart. Negation is dropped from the token
+// set (polarity is handled separately by the contradiction path).
+func ContentTokens(text string) map[string]struct{} {
+	tokens, _ := contentTokensAndPolarity(text)
+	return tokens
+}
+
 // contentTokensAndPolarity splits text into content tokens (stop words removed)
 // and detects whether the text contains negation.
 func contentTokensAndPolarity(text string) (map[string]struct{}, bool) {

@@ -19,3 +19,28 @@ type Expectation struct {
 
 	CreatedAt time.Time
 }
+
+// Surprise returns the prediction-error scalar and whether it is meaningful.
+// It is only defined once an observation has arrived; without one there is no
+// error to measure and ok is false.
+//
+// The magnitude is expressed in tolerance-units when a positive Tolerance is
+// set — |predicted − observed| / tolerance — so a value of 1 means "exactly at
+// the edge of the confirmed band" and > 1 means the prediction was refuted by
+// that many tolerances. This normalization makes surprise comparable across
+// predictions of wildly different absolute scale (a latency in ms vs an error
+// rate in fractions). With no tolerance, it falls back to the raw absolute
+// error.
+func (e Expectation) Surprise() (float64, bool) {
+	if !e.HasObservation {
+		return 0, false
+	}
+	diff := e.Predicted - e.Observed
+	if diff < 0 {
+		diff = -diff
+	}
+	if e.Tolerance > 0 {
+		return diff / e.Tolerance, true
+	}
+	return diff, true
+}
