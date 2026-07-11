@@ -126,7 +126,7 @@ type recallClaim struct {
 	Type       string
 	Text       string
 	TrustScore float64
-	Source     string // "global" | "repo" (blank = untagged)
+	Source     string // "global" | "workspace" (blank = untagged)
 }
 
 // repoBrain resolves the opt-in repo brain for a session working directory: the
@@ -139,6 +139,14 @@ type recallClaim struct {
 func repoBrain(cwd string) (dsn, repoRoot string) {
 	if hostedConfigured() || strings.TrimSpace(cwd) == "" {
 		return "", ""
+	}
+	// A named workspace (registry, ADR 0010) that owns cwd takes precedence over
+	// the implicit .mnemos walk-up. Its matched folder is the AGENTS.md root.
+	if wsDSN, _, folder := resolveWorkspaceBrain(cwd); wsDSN != "" {
+		if wsDSN == strings.TrimSpace(os.Getenv("MNEMOS_DB_URL")) {
+			return "", "" // workspace brain IS the pinned global brain; no overlay
+		}
+		return wsDSN, folder
 	}
 	dbPath, root, ok := findProjectDBFrom(cwd)
 	if !ok {
@@ -201,7 +209,7 @@ func hookRecall(ev hookEvent) {
 	var repoContra int
 	if dsn, _ := repoBrain(ev.Cwd); dsn != "" {
 		withBrainDSN(dsn, func() {
-			repoClaims, repoContra = recallLocal(ctx, q, "repo")
+			repoClaims, repoContra = recallLocal(ctx, q, "workspace")
 		})
 	}
 
@@ -250,7 +258,7 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 	}
 	hasRepo := false
 	for _, c := range claims {
-		if c.Source == "repo" {
+		if c.Source == "workspace" {
 			hasRepo = true
 			break
 		}
@@ -273,7 +281,7 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 		fmt.Fprintf(&b, "  ⚠ %d contradiction(s) recorded on this topic — verify before relying.\n", contradictions)
 	}
 	if hasRepo {
-		b.WriteString("{repo} claims are specific to this repository and override {global} ones on conflict.\n")
+		b.WriteString("{workspace} claims are specific to this workspace/repo and override {global} ones on conflict.\n")
 	}
 	b.WriteString("If this contradicts newer information, prefer the newer and note the conflict.")
 	return b.String()
@@ -334,7 +342,7 @@ func renderBrief(claims, runs, contradictions, repoClaims int64) string {
 		fmt.Fprintf(&b, ", %d open contradiction(s)", contradictions)
 	}
 	if repoClaims > 0 {
-		fmt.Fprintf(&b, "; +%d claim(s) scoped to this repo", repoClaims)
+		fmt.Fprintf(&b, "; +%d claim(s) scoped to this workspace", repoClaims)
 	}
 	b.WriteString(".\n")
 	b.WriteString("Use query_knowledge before answering questions about past decisions, and record new decisions/facts with process_text or record_decision.")
