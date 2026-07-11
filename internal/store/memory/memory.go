@@ -91,6 +91,7 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 		Feedback:      FeedbackRepository{state: st},
 		Blocks:        BlockRepository{state: st},
 		Expectations:  ExpectationRepository{state: st},
+		GlobalSchemas: GlobalSchemaRepository{state: st},
 		ClaimVersions: ClaimVersionRepository{state: st},
 		Raw:           st,
 		Closer:        func() error { st.clear(); return nil },
@@ -150,6 +151,7 @@ type state struct {
 	claimVersions    map[string][]domain.ClaimVersion     // claim_id -> version chain, append-ordered
 	blocks           map[string]domain.WorkingMemoryBlock // owner\x00label -> working-memory block
 	expectations     map[string]domain.Expectation        // claim_id -> forward expectation
+	globalSchemas    map[string]domain.GlobalSchema       // id -> promoted global (neocortex) schema
 }
 
 // storedEntityVersion is the in-memory analogue of a row in
@@ -194,6 +196,7 @@ func newState() *state {
 		claimVersions:    map[string][]domain.ClaimVersion{},
 		blocks:           map[string]domain.WorkingMemoryBlock{},
 		expectations:     map[string]domain.Expectation{},
+		globalSchemas:    map[string]domain.GlobalSchema{},
 	}
 }
 
@@ -243,6 +246,7 @@ func (s *state) clear() {
 	s.incidents = map[string]domain.Incident{}
 	s.feedback = map[string]domain.ClaimFeedback{}
 	s.claimVersions = map[string][]domain.ClaimVersion{}
+	s.globalSchemas = map[string]domain.GlobalSchema{}
 	s.incidentOrder = nil
 }
 

@@ -37,8 +37,22 @@ notable changes.
   (promoted/pending/dissonant/skipped). Default gate is operator (human-in-the-
   loop); `--gate auto` promotes above threshold. Guarded by
   `TestPromotion_NoSingleTenantLeak` and the token-level / near-paraphrase /
-  fail-closed / order-independence tests. The pass emits a promotion plan; the
-  global-write step is deferred.
+  fail-closed / order-independence tests.
+- **Global-write persistence + direct prediction-error edge (ADR 0011 Phase B
+  completion).** Promoted schemas are now persisted to the neocortex, closing the
+  loop. A new first-class `domain.GlobalSchema` (a de-identified generalization
+  whose provenance is *counts* — `DistinctTenants`/`EvidenceCount` — never tenant
+  ids or raw evidence ids) is written through a `GlobalSchemaRepository` port
+  (sqlite/libsql/postgres/memory). `consolidate --promote --apply` opts into
+  writing (`--dry-run` stays the default): under `--gate auto` survivors land
+  **active**, under the operator gate **pending**, and `consolidate --promote
+  approve <id>` activates a pending record. Its Postgres table is **deliberately
+  NOT** in the ADR-0007 RLS `scoped` array — the neocortex is the shared tier and
+  must read across tenants (the inverse of the isolation gotcha). A persisted-
+  no-leak test scans every stored cell to prove no tenant id / evidence id
+  crosses. The prediction-error ranker now uses the **direct** Lesson→Expectation
+  edge (schema → backing actions → outcomes → decisions → belief claims →
+  expectations), replacing the earlier scope-aggregation proxy.
 
 ## [0.83.0] — 2026-07-11
 

@@ -63,6 +63,12 @@ type Conn struct {
 	// claim). nil on providers without an implementation.
 	Expectations ports.ExpectationRepository
 
+	// GlobalSchemas is the promoted-schema store for the shared global
+	// ("neocortex") tier — the write side of the ADR 0011 consolidation
+	// pass. Deliberately NOT tenant-scoped (the shared tier). nil on
+	// providers without an implementation; callers type-check before use.
+	GlobalSchemas ports.GlobalSchemaRepository
+
 	// Raw is the provider's underlying handle (e.g. *sql.DB for
 	// SQLite/Postgres, an in-memory state struct for memory). It is
 	// nil-safe to ignore. Some call sites still issue raw SQL or

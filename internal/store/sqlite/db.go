@@ -495,6 +495,32 @@ CREATE INDEX IF NOT EXISTS idx_incidents_severity ON incidents(severity);
 CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
 CREATE INDEX IF NOT EXISTS idx_incidents_opened_at ON incidents(opened_at);
 CREATE INDEX IF NOT EXISTS idx_incidents_root_cause_claim_id ON incidents(root_cause_claim_id);
+
+-- ADR 0011 Phase B: global_schemas — the neocortex (shared/global) tier. A
+-- promoted schema is a de-identified generalization corroborated by N distinct
+-- tenants; its provenance is COUNTS (distinct_tenants, evidence_count), never
+-- tenant ids or raw evidence ids. This is the INVERSE of the ADR-0007 per-tenant
+-- gotcha: the table is intentionally shared and carries NO tenant column, so on
+-- Postgres it is deliberately excluded from the RLS scoped array (see
+-- internal/store/postgres/schema.sql).
+CREATE TABLE IF NOT EXISTS global_schemas (
+	id TEXT PRIMARY KEY,
+	statement TEXT NOT NULL,
+	scope_service TEXT NOT NULL DEFAULT '',
+	scope_env TEXT NOT NULL DEFAULT '',
+	scope_team TEXT NOT NULL DEFAULT '',
+	polarity TEXT NOT NULL DEFAULT '',
+	distinct_tenants INTEGER NOT NULL DEFAULT 0,
+	evidence_count INTEGER NOT NULL DEFAULT 0,
+	confidence REAL NOT NULL DEFAULT 0,
+	surprise REAL NOT NULL DEFAULT 0,
+	has_surprise INTEGER NOT NULL DEFAULT 0,
+	status TEXT NOT NULL DEFAULT 'pending',
+	promoted_at TEXT NOT NULL DEFAULT '',
+	created_by TEXT NOT NULL DEFAULT '<system>'
+);
+CREATE INDEX IF NOT EXISTS idx_global_schemas_status ON global_schemas(status);
+CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(promoted_at);
 `
 
 	if _, err := db.Exec(schema); err != nil {
@@ -511,7 +537,10 @@ CREATE INDEX IF NOT EXISTS idx_incidents_root_cause_claim_id ON incidents(root_c
 // currentSchemaVersion is the schema generation this binary expects.
 // Bump whenever a column or table is added; pair the bump with a step
 // in addMissingColumns so existing DBs upgrade in place.
-const currentSchemaVersion = 18
+// v19 (ADR 0011 Phase B) adds the global_schemas table (neocortex tier). It is
+// a new table, so it auto-creates via CREATE TABLE IF NOT EXISTS above and needs
+// no column-add entry; the version bump keeps user_version in step.
+const currentSchemaVersion = 19
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,

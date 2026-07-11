@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"strconv"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/domain"
@@ -14,16 +17,21 @@ import (
 //
 //	mnemos consolidate --promote [--min-tenants N] [--gate auto|operator]
 //	                   [--tenant-dsn <dsn> ...] [--global-dsn <dsn>]
-//	                   [--sensitive <token> ...] [--dry-run]
+//	                   [--sensitive <token> ...] [--dry-run | --apply]
 //
-// It reads the synthesized Lessons from each supplied tenant store, runs the
-// pure promotion engine (internal/consolidate) with its five gates, and emits a
-// structured, auditable plan as JSON. It is READ-ONLY: no promoted lesson is
-// written to any global store by this command — the safe posture is that an
-// operator inspects the plan (and, under GateOperator, the pending set) before
-// any global write. --dry-run is accepted and always effectively on; it is kept
-// for symmetry with the rest of `consolidate` and to make the read-only intent
-// explicit.
+//	mnemos consolidate --promote approve <id> --global-dsn <dsn>
+//
+// It reads the synthesized Schemas (Lessons) from each supplied tenant store,
+// runs the pure promotion engine (internal/consolidate) with its five gates, and
+// emits a structured, auditable plan as JSON.
+//
+// Writing is OPT-IN. --dry-run (the default) never writes: an operator inspects
+// the plan first. --apply persists the surviving candidates to the global
+// (neocortex) store identified by --global-dsn: under GateAuto they land Active
+// (in force); under GateOperator they land Pending, awaiting an explicit
+// `--promote approve <id>` to activate. Only de-identified fields (statement,
+// scope, polarity, corroboration/evidence counts, confidence, surprise) ever
+// cross into the global store — see consolidate.PromotedLesson.ToGlobalSchema.
 //
 // Scope note: reading live multi-tenant lessons through one server's per-request
 // tenant scoping (serve/mcp) is a larger wiring job; this command instead
@@ -38,6 +46,12 @@ func handlePromote(args []string, f Flags) {
 	}
 
 	ctx := context.Background()
+
+	// Operator approval sub-verb: activate a single pending global record.
+	if opts.approveID != "" {
+		handlePromoteApprove(ctx, opts)
+		return
+	}
 
 	// Load per-tenant lessons. With no --tenant-dsn provided, fall back to the
 	// default store as a single tenant — which, by the corroboration gate, can
@@ -70,9 +84,10 @@ func handlePromote(args []string, f Flags) {
 		global = &storeGlobalKnowledge{dsn: opts.globalDSN}
 	}
 
-	// Prediction-error ranking signal: aggregate domain.Expectation surprise
-	// across the tenant stores, keyed by operational scope (see
-	// newStoreSurpriseSource for the linkage rationale).
+	// Prediction-error ranking signal: the DIRECT Lesson→Expectation edge —
+	// a lesson's backing actions → the decisions/claims those actions produced
+	// → the Expectation on those claims → the peak surprise (see
+	// newStoreSurpriseSource).
 	surprise, err := newStoreSurpriseSource(ctx, dsns)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "load prediction-error signal"))
@@ -92,15 +107,106 @@ func handlePromote(args []string, f Flags) {
 		return
 	}
 
-	emitJSON(map[string]any{
+	out := map[string]any{
 		"tenants_scanned": len(tenants),
 		"min_tenants":     opts.engine.MinTenants,
 		"gate":            string(opts.engine.Gate),
-		"dry_run":         true,
+		"dry_run":         !opts.apply,
 		"promoted":        res.Promoted,
 		"pending":         res.Pending,
 		"dissonant":       res.Dissonant,
 		"skipped":         res.Skipped,
+	}
+
+	// --apply persists the surviving candidates to the neocortex store.
+	if opts.apply {
+		written, err := applyPromotion(ctx, opts.globalDSN, res)
+		if err != nil {
+			exitWithMnemosError(false, err)
+			return
+		}
+		out["applied"] = true
+		out["written_active"] = written.active
+		out["written_pending"] = written.pending
+		out["global_dsn"] = opts.globalDSN
+	}
+
+	emitJSON(out)
+}
+
+// writeCounts records how many global records a promotion apply wrote.
+type writeCounts struct {
+	active  int
+	pending int
+}
+
+// applyPromotion persists a promotion Result to the global (neocortex) store.
+// GateAuto survivors (res.Promoted) are written Active; GateOperator survivors
+// (res.Pending) are written Pending. Dissonant and skipped candidates are never
+// written. Only de-identified fields cross (via ToGlobalSchema).
+func applyPromotion(ctx context.Context, globalDSN string, res consolidate.Result) (writeCounts, error) {
+	var wc writeCounts
+	if globalDSN == "" {
+		return wc, NewUserError("--apply requires --global-dsn (the neocortex store to write to)")
+	}
+	conn, err := store.Open(ctx, globalDSN)
+	if err != nil {
+		return wc, NewSystemError(err, "open global store %q", globalDSN)
+	}
+	defer func() { _ = conn.Close() }()
+	if conn.GlobalSchemas == nil {
+		return wc, NewUserError("global store %q does not support promoted-schema persistence", globalDSN)
+	}
+
+	now := time.Now().UTC()
+	write := func(cands []consolidate.PromotedLesson, status domain.GlobalSchemaStatus) error {
+		for _, c := range cands {
+			gs := c.ToGlobalSchema(status, now, domain.SystemUser)
+			if err := conn.GlobalSchemas.Upsert(ctx, gs); err != nil {
+				return NewSystemError(err, "persist global schema %q", gs.ID)
+			}
+		}
+		return nil
+	}
+	if err := write(res.Promoted, domain.GlobalSchemaStatusActive); err != nil {
+		return wc, err
+	}
+	if err := write(res.Pending, domain.GlobalSchemaStatusPending); err != nil {
+		return wc, err
+	}
+	wc.active = len(res.Promoted)
+	wc.pending = len(res.Pending)
+	return wc, nil
+}
+
+// handlePromoteApprove activates a single pending global schema by id.
+func handlePromoteApprove(ctx context.Context, opts promoteOpts) {
+	if opts.globalDSN == "" {
+		exitWithMnemosError(false, NewUserError("approve requires --global-dsn"))
+		return
+	}
+	conn, err := store.Open(ctx, opts.globalDSN)
+	if err != nil {
+		exitWithMnemosError(false, NewSystemError(err, "open global store %q", opts.globalDSN))
+		return
+	}
+	defer func() { _ = conn.Close() }()
+	if conn.GlobalSchemas == nil {
+		exitWithMnemosError(false, NewUserError("global store %q does not support promoted-schema persistence", opts.globalDSN))
+		return
+	}
+	if err := conn.GlobalSchemas.Approve(ctx, opts.approveID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			exitWithMnemosError(false, NewUserError("no global schema with id %q", opts.approveID))
+			return
+		}
+		exitWithMnemosError(false, NewSystemError(err, "approve global schema %q", opts.approveID))
+		return
+	}
+	emitJSON(map[string]any{
+		"approved":   opts.approveID,
+		"status":     string(domain.GlobalSchemaStatusActive),
+		"global_dsn": opts.globalDSN,
 	})
 }
 
@@ -108,6 +214,8 @@ type promoteOpts struct {
 	engine     consolidate.Options
 	tenantDSNs []string
 	globalDSN  string
+	apply      bool
+	approveID  string
 }
 
 func parsePromoteOpts(args []string, _ Flags) (promoteOpts, error) {
@@ -116,6 +224,14 @@ func parsePromoteOpts(args []string, _ Flags) (promoteOpts, error) {
 		switch args[i] {
 		case "--promote":
 			// consumed as the mode selector; no value.
+		case "approve":
+			// Sub-verb: `--promote approve <id>`. The next positional arg is
+			// the id of the global schema to activate.
+			if i+1 >= len(args) {
+				return out, NewUserError("approve requires a global schema id")
+			}
+			out.approveID = args[i+1]
+			i++
 		case "--min-tenants":
 			if i+1 >= len(args) {
 				return out, NewUserError("--min-tenants requires a value")
@@ -157,8 +273,11 @@ func parsePromoteOpts(args []string, _ Flags) (promoteOpts, error) {
 			}
 			out.engine.SensitiveTokens = append(out.engine.SensitiveTokens, args[i+1])
 			i++
+		case "--apply":
+			out.apply = true
 		case "--dry-run":
-			// Always effectively on; accepted for symmetry.
+			// Default; accepted for symmetry and explicitness.
+			out.apply = false
 		default:
 			return out, NewUserError("unknown flag %q", args[i])
 		}
@@ -193,69 +312,138 @@ func (g *storeGlobalKnowledge) VettedClaims(ctx context.Context) ([]domain.Claim
 	return vetted, nil
 }
 
-// scopeSurpriseSource is a store-backed consolidate.SurpriseSource. It ranks
-// promotion candidates by prediction-error (domain.Expectation surprise).
+// directSurpriseSource is a store-backed consolidate.SurpriseSource that ranks
+// promotion candidates by the DIRECT Lesson→Expectation prediction-error edge.
 //
-// Linkage rationale: in the current model a synthesized Lesson links to Actions
-// (Lesson.Evidence is []ActionID), while an Expectation keys on a ClaimID (a
-// decision/hypothesis). There is no direct Lesson→Claim edge, so the closest
-// real, honest signal is operational SCOPE: an Expectation belongs to a claim
-// with a Scope, and a Lesson carries the Scope of the action cluster it
-// generalizes. This source therefore aggregates, per exact Scope key, the PEAK
-// surprise of any resolved expectation on a claim in that scope, across every
-// tenant store, and answers SurpriseFor(lesson) by that lesson's Scope key.
-// Lessons whose scope has no observed expectation return hasData=false and fall
-// back to corroboration-count ranking. When a future model adds a direct
-// Lesson→belief edge this source can tighten to per-lesson without touching the
-// engine.
-type scopeSurpriseSource struct {
-	byScopeKey map[string]float64
+// Linkage (the real model path, replacing the earlier scope-aggregation proxy):
+//
+//	Schema.Evidence  → action ids
+//	Outcome.ActionID → the outcomes those actions produced
+//	Decision.OutcomeID + Decision.Beliefs → the decisions those outcomes drove
+//	                    and the belief claim ids that justified them
+//	Expectation(ClaimID) → the forward prediction on each belief claim, whose
+//	                       reconciled Surprise() is the prediction-error scalar
+//
+// The peak (max) surprise reachable from a lesson's backing actions is its
+// prediction-error weight. byActionID caches that peak per action id (the join
+// key on Schema.Evidence), so SurpriseFor is an O(evidence) lookup. A lesson
+// none of whose actions reach a resolved expectation returns hasData=false and
+// falls back to corroboration-count ranking in the engine.
+type directSurpriseSource struct {
+	byActionID map[string]float64
 }
 
-func (s *scopeSurpriseSource) SurpriseFor(_ context.Context, lesson domain.Lesson) (float64, bool) {
-	v, ok := s.byScopeKey[lesson.Scope.Key()]
-	return v, ok
+func (s *directSurpriseSource) SurpriseFor(_ context.Context, lesson domain.Lesson) (float64, bool) {
+	peak, has := 0.0, false
+	for _, actionID := range lesson.Evidence {
+		v, ok := s.byActionID[actionID]
+		if !ok {
+			continue
+		}
+		if !has || v > peak {
+			peak, has = v, true
+		}
+	}
+	return peak, has
 }
 
-// newStoreSurpriseSource builds a scopeSurpriseSource by scanning every tenant
-// store for resolved expectations and recording the peak surprise per claim
-// scope. It never fails the pass on a provider that lacks expectations (nil
-// repo) — that store simply contributes no signal.
+// newStoreSurpriseSource builds a directSurpriseSource by resolving, across every
+// tenant store, the direct action→outcome→decision→belief→expectation path and
+// recording the peak reconciled surprise reachable from each action id. Stores
+// lacking the necessary repositories simply contribute no signal (never an
+// error), and action ids are globally unique, so keying the merged map by action
+// id keeps each tenant's signal correctly attributed.
 func newStoreSurpriseSource(ctx context.Context, dsns []string) (consolidate.SurpriseSource, error) {
-	byScope := map[string]float64{}
+	byAction := map[string]float64{}
 	for _, dsn := range dsns {
 		conn, err := store.Open(ctx, dsn)
 		if err != nil {
 			return nil, err
 		}
-		if conn.Expectations == nil {
-			_ = conn.Close()
-			continue
-		}
-		claims, err := conn.Claims.ListAll(ctx)
-		if err != nil {
+		if err := accumulateActionSurprise(ctx, conn, byAction); err != nil {
 			_ = conn.Close()
 			return nil, err
 		}
-		for _, c := range claims {
-			exp, ok, err := conn.Expectations.Get(ctx, c.ID)
+		_ = conn.Close()
+	}
+	return &directSurpriseSource{byActionID: byAction}, nil
+}
+
+// accumulateActionSurprise walks one tenant store's decision/outcome/expectation
+// graph and records, into byAction, the peak reconciled surprise reachable from
+// each action id via the direct Lesson→Expectation edge. It is defensive: a
+// backend missing decisions, outcomes, or expectations contributes nothing.
+func accumulateActionSurprise(ctx context.Context, conn *store.Conn, byAction map[string]float64) error {
+	if conn.Decisions == nil || conn.Outcomes == nil || conn.Expectations == nil {
+		return nil
+	}
+
+	// outcomeID → belief claim ids of the decision that consumed that outcome.
+	decisions, err := conn.Decisions.ListAll(ctx)
+	if err != nil {
+		return err
+	}
+	outcomeToBeliefs := map[string][]string{}
+	for _, d := range decisions {
+		if d.OutcomeID == "" || len(d.Beliefs) == 0 {
+			continue
+		}
+		outcomeToBeliefs[d.OutcomeID] = append(outcomeToBeliefs[d.OutcomeID], d.Beliefs...)
+	}
+	if len(outcomeToBeliefs) == 0 {
+		return nil
+	}
+
+	// claimID → reconciled surprise (memoised; only claims that back a decision
+	// are ever queried).
+	claimSurprise := map[string]float64{}
+	surpriseFor := func(claimID string) (float64, bool, error) {
+		if v, ok := claimSurprise[claimID]; ok {
+			return v, true, nil
+		}
+		exp, ok, err := conn.Expectations.Get(ctx, claimID)
+		if err != nil {
+			return 0, false, err
+		}
+		if !ok {
+			return 0, false, nil
+		}
+		s, meaningful := exp.Surprise()
+		if !meaningful {
+			return 0, false, nil
+		}
+		claimSurprise[claimID] = s
+		return s, true, nil
+	}
+
+	outcomes, err := conn.Outcomes.ListAll(ctx)
+	if err != nil {
+		return err
+	}
+	for _, o := range outcomes {
+		beliefs, ok := outcomeToBeliefs[o.ID]
+		if !ok {
+			continue
+		}
+		peak, has := 0.0, false
+		for _, claimID := range beliefs {
+			s, ok, err := surpriseFor(claimID)
 			if err != nil {
-				_ = conn.Close()
-				return nil, err
+				return err
 			}
 			if !ok {
 				continue
 			}
-			surprise, meaningful := exp.Surprise()
-			if !meaningful {
-				continue
-			}
-			key := c.Scope.Key()
-			if surprise > byScope[key] {
-				byScope[key] = surprise
+			if !has || s > peak {
+				peak, has = s, true
 			}
 		}
-		_ = conn.Close()
+		if !has {
+			continue
+		}
+		if cur, ok := byAction[o.ActionID]; !ok || peak > cur {
+			byAction[o.ActionID] = peak
+		}
 	}
-	return &scopeSurpriseSource{byScopeKey: byScope}, nil
+	return nil
 }

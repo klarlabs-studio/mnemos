@@ -511,6 +511,37 @@ type EntityVersion struct {
 	ValidTo     time.Time
 }
 
+// GlobalSchemaRepository persists promoted, de-identified schemas in the
+// shared global ("neocortex") tier — the write side of the ADR 0011
+// consolidation pass. Records are upsert-by-id so re-running promotion with
+// fresh corroboration ratchets a schema's counts/confidence forward without
+// churning identity.
+//
+// Unlike every per-tenant repository, this store is deliberately NOT
+// tenant-scoped: promoted schemas are the shared tier and must be readable
+// across tenants (the inverse of the ADR-0007 isolation gotcha). nil on
+// providers that have not implemented it; callers type-check before use.
+type GlobalSchemaRepository interface {
+	// Upsert writes (or replaces) the schema on its id.
+	Upsert(ctx context.Context, schema domain.GlobalSchema) error
+	// GetByID returns the schema with the given id, or ok=false when none
+	// exists. "Not found" is not an error.
+	GetByID(ctx context.Context, id string) (domain.GlobalSchema, bool, error)
+	// ListAll returns every promoted schema, ordered by promoted_at descending.
+	ListAll(ctx context.Context) ([]domain.GlobalSchema, error)
+	// ListByStatus returns promoted schemas matching the given lifecycle
+	// status, ordered by promoted_at descending.
+	ListByStatus(ctx context.Context, status domain.GlobalSchemaStatus) ([]domain.GlobalSchema, error)
+	// Approve activates a pending schema (pending → active). It is the
+	// operator-gate release step. Returns sql.ErrNoRows-wrapped when the id
+	// does not exist; approving an already-active schema is a no-op.
+	Approve(ctx context.Context, id string) error
+	// CountAll returns the total number of promoted schema rows.
+	CountAll(ctx context.Context) (int64, error)
+	// DeleteAll wipes every promoted schema row. Used by mnemos reset.
+	DeleteAll(ctx context.Context) error
+}
+
 // EntityRepository persists canonicalised entities and the
 // claim_entities link table. The interface mirrors the SQLite
 // implementation's public surface so cmd/mnemos and internal/pipeline
