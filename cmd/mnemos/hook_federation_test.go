@@ -80,8 +80,8 @@ func TestWithBrainDSN_RestoresEnv(t *testing.T) {
 
 func TestMergeRecall_RepoWinsAndDedups(t *testing.T) {
 	repo := []recallClaim{
-		{Text: "uses Kafka", Source: "repo"},
-		{Text: "shared fact", Source: "repo"},
+		{Text: "uses Kafka", Source: "workspace"},
+		{Text: "shared fact", Source: "workspace"},
 	}
 	global := []recallClaim{
 		{Text: "shared fact", Source: "global"}, // duplicate → repo wins
@@ -92,12 +92,12 @@ func TestMergeRecall_RepoWinsAndDedups(t *testing.T) {
 		t.Fatalf("want 3 merged claims, got %d: %+v", len(merged), merged)
 	}
 	// Repo claims lead.
-	if merged[0].Source != "repo" || merged[1].Source != "repo" {
+	if merged[0].Source != "workspace" || merged[1].Source != "workspace" {
 		t.Errorf("repo claims should lead: %+v", merged)
 	}
 	// The shared fact is attributed to repo, not global.
 	for _, c := range merged {
-		if c.Text == "shared fact" && c.Source != "repo" {
+		if c.Text == "shared fact" && c.Source != "workspace" {
 			t.Errorf("duplicate should resolve to repo, got %q", c.Source)
 		}
 	}
@@ -109,15 +109,15 @@ func TestMergeRecall_RepoWinsAndDedups(t *testing.T) {
 func TestRenderRecall_TagsOnlyWhenRepoPresent(t *testing.T) {
 	// Global-only: no tier tags, no repo footer.
 	globalOnly := renderRecall([]recallClaim{{Type: "fact", Text: "x", Source: "global"}}, 0)
-	if strings.Contains(globalOnly, "{global}") || strings.Contains(globalOnly, "scoped to this repo") {
+	if strings.Contains(globalOnly, "{global}") || strings.Contains(globalOnly, "scoped to this workspace") {
 		t.Errorf("global-only recall should not tag tiers: %q", globalOnly)
 	}
 	// With a repo overlay: tags appear and the precedence note is shown.
 	mixed := renderRecall([]recallClaim{
-		{Type: "fact", Text: "r", Source: "repo"},
+		{Type: "fact", Text: "r", Source: "workspace"},
 		{Type: "fact", Text: "g", Source: "global"},
 	}, 0)
-	if !strings.Contains(mixed, "{repo}") || !strings.Contains(mixed, "{global}") {
+	if !strings.Contains(mixed, "{workspace}") || !strings.Contains(mixed, "{global}") {
 		t.Errorf("mixed recall should tag both tiers: %q", mixed)
 	}
 	if !strings.Contains(mixed, "override {global}") {

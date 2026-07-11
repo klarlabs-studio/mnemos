@@ -258,6 +258,8 @@ func main() {
 		handleRebuild(args, flags)
 	case "repo-tenant":
 		handleRepoTenant(args, flags)
+	case "workspace":
+		handleWorkspace(args, flags)
 	case "lessons":
 		handleLessons(args, flags)
 	case "verify":
@@ -1424,6 +1426,8 @@ func printUsage() {
 	fmt.Println("                                       agents follow them natively (mnemos-managed block)")
 	fmt.Println("  rebuild [--claude] [--file <name>]   Rebuild the gitignored repo brain from a committed AGENTS.md")
 	fmt.Println("                                       (run once after cloning a repo that has an AGENTS.md block)")
+	fmt.Println("  workspace create <name> --folder <d> Define a named workspace over 1+ folders (Cowork-style — ADR 0010);")
+	fmt.Println("  workspace list | remove <name>       sessions in those folders federate global ∪ this workspace")
 	fmt.Println("")
 	fmt.Println("Flags:")
 	fmt.Println("  -h, --help     show this help message")

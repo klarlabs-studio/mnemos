@@ -128,7 +128,7 @@ var commands = []string{
 	"user", "token", "agent", "repo-tenant",
 	"registry", "push", "pull",
 	"reset", "delete-claim", "delete-event", "reembed", "recompute-trust", "dedup", "consolidate",
-	"sync-docs", "rebuild", "hook",
+	"sync-docs", "rebuild", "workspace", "hook",
 }
 
 // suggestCommand returns the closest known command to input, or "" if none is close.
