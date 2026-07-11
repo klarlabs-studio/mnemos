@@ -8,6 +8,33 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **User-selected workspaces (the Cowork model, ADR 0010).** `mnemos workspace
+  create <name> --folder A --folder B` maps one or more folders to one brain,
+  federated with the global brain — mnemos's analogue of a Claude Cowork Project.
+  A session's cwd activates whichever workspace owns it (most-specific folder
+  wins), so a workspace is defined once, never re-selected per session. The name
+  derives a portable hosted tenant, so a workspace is shareable without git.
+  `workspace list` / `remove` round out the surface; existing `.mnemos` repo
+  brains keep working (registry-first, walk-up fallback).
+- **Hosted repo/workspace federation (ADR 0009 Phase 3).** With a hosted brain
+  (`init --url`), the recall/brief/capture hooks now federate the personal tenant
+  with the repo/workspace tenant over two tenant-scoped REST requests, mirroring
+  the local two-tier overlay: recall merges (workspace wins on conflict), brief
+  reports the scoped count, and capture routes to the workspace tenant. The
+  `client` package gained `WithTenant(ctx, tenant)` (sets `X-Mnemos-Tenant`).
+  `mnemos init --url --project` opts a repo into federation and prints its derived
+  tenant for the token's `tnts`.
+- **MCP `scope` parameter + `mnemos repo-tenant`.** `query_knowledge` accepts a
+  `scope` (global/repo/both) so a remote MCP client can target either tier;
+  `repo-tenant` prints a repo's portable identity and derived hosted tenant.
+- **Multi-tenant token allowlist (ADR 0009 Phase 2).** A token may carry `tnts`
+  (a set of allowed tenants) alongside its default `tnt`; `token issue --tenant A
+  --tenant B` / `--tenants A,B` mints it, and every auth path (REST, gRPC,
+  MCP-HTTP) resolves an `X-Mnemos-Tenant` selection against the grant, failing
+  closed. This is what lets a single client federate `personal ∪ repo` reads.
+
 ## [0.82.0] — 2026-07-11
 
 ### Added

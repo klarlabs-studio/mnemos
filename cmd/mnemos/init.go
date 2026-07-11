@@ -502,6 +502,19 @@ func printInitNextSteps(p initPlan) {
 			fmt.Println("  3. Ask Claude to \"remember\" things or \"what do we know about …\" — the hosted")
 			fmt.Println("     brain answers over HTTP via the MCP tools.")
 		}
+		// Project-scoped hosted setup (ADR 0009 Phase 3): the .mnemos marker just
+		// written opts this repo into federated reads — the hooks scope one request
+		// to the repo tenant below (personal ∪ repo). Print it so the operator can
+		// grant it in the token's tnts and share it with teammates (same git remote
+		// → same tenant).
+		if p.scope == "project" {
+			if cwd, err := os.Getwd(); err == nil {
+				if tenant := deriveHostedTenant(repoTenantKey(cwd)); tenant != "" {
+					fmt.Printf("\nThis repo federates a scoped tenant on the hosted brain:\n  tenant:  %s\n", tenant)
+					fmt.Printf("  Grant it (and any personal tenant) when minting the token:\n    mnemos token issue --user <id> --tenant <personal> --tenant %s\n", tenant)
+				}
+			}
+		}
 		return
 	}
 	fmt.Println("\nNext steps:")

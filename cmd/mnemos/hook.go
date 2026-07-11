@@ -159,6 +159,29 @@ func repoBrain(cwd string) (dsn, repoRoot string) {
 	return dsn, root
 }
 
+// hostedWorkspaceTenant returns the hosted tenant id (ADR 0009) for the
+// workspace or repo that owns cwd, or "" if the session is in neither. Unlike
+// repoBrain — which resolves a *local* overlay DB and bails in hosted mode — this
+// resolves the *tenant* used to federate a remote brain: a named workspace's name
+// (ADR 0010) or, failing that, the nearest .mnemos repo's portable key, each
+// mapped through deriveHostedTenant. The personal (token-default) tier plus this
+// tenant are the two scopes a hosted hook federates.
+func hostedWorkspaceTenant(cwd string) string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return ""
+	}
+	if _, name, _ := resolveWorkspaceBrain(cwd); name != "" {
+		return deriveHostedTenant(name)
+	}
+	if _, root, ok := findProjectDBFrom(cwd); ok {
+		if key := repoTenantKey(root); key != "" {
+			return deriveHostedTenant(key)
+		}
+	}
+	return ""
+}
+
 // withBrainDSN runs fn with MNEMOS_DB_URL temporarily set to dsn, restoring the
 // previous value afterward. Hooks are one-shot, single-goroutine processes, so
 // repointing the resolver at a second brain for one call is safe.
@@ -187,17 +210,20 @@ func hookRecall(ev hookEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 
-	// Hosted brains are global-only for now (no local repo overlay).
+	// Hosted brain: federate the personal (token-default) tenant with the
+	// workspace/repo tenant, mirroring the local two-tier overlay. When the
+	// session isn't in a workspace, the workspace call is skipped and this is
+	// personal-only.
 	if hostedConfigured() {
-		resp, err := hostedClient(12*time.Second).Search(ctx, q, client.SearchOptions{TopK: 6})
-		if err != nil || resp == nil {
-			return // fail-open
+		cli := hostedClient(12 * time.Second)
+		personal, personalContra := hostedRecall(ctx, cli, q, "", "global")
+		var wsClaims []recallClaim
+		var wsContra int
+		if tenant := hostedWorkspaceTenant(ev.Cwd); tenant != "" {
+			wsClaims, wsContra = hostedRecall(ctx, cli, q, tenant, "workspace")
 		}
-		claims := make([]recallClaim, 0, len(resp.Claims))
-		for _, c := range resp.Claims {
-			claims = append(claims, recallClaim{Type: c.Type, Text: c.Text, TrustScore: c.TrustScore, Source: "global"})
-		}
-		emitContext("UserPromptSubmit", renderRecall(claims, len(resp.Contradictions)))
+		claims, contra := mergeRecall(wsClaims, wsContra, personal, personalContra)
+		emitContext("UserPromptSubmit", renderRecall(claims, contra))
 		return
 	}
 
@@ -229,6 +255,21 @@ func recallLocal(ctx context.Context, q, source string) ([]recallClaim, int) {
 		claims = append(claims, recallClaim{Type: string(c.Type), Text: c.Text, TrustScore: c.TrustScore, Source: source})
 	}
 	return claims, len(out.Contradictions)
+}
+
+// hostedRecall runs one hosted Search scoped to the given tenant ("" = the
+// token's default/personal tenant), tagging each claim with its source tier so
+// the shared renderer can label it. Fail-open: any error yields no claims.
+func hostedRecall(ctx context.Context, cli *client.Client, q, tenant, source string) ([]recallClaim, int) {
+	resp, err := cli.Search(client.WithTenant(ctx, tenant), q, client.SearchOptions{TopK: 6})
+	if err != nil || resp == nil {
+		return nil, 0
+	}
+	claims := make([]recallClaim, 0, len(resp.Claims))
+	for _, c := range resp.Claims {
+		claims = append(claims, recallClaim{Type: c.Type, Text: c.Text, TrustScore: c.TrustScore, Source: source})
+	}
+	return claims, len(resp.Contradictions)
 }
 
 // mergeRecall combines repo (more specific — listed first, wins on duplicate
@@ -296,11 +337,22 @@ func hookBrief(ev hookEvent) {
 	if hostedConfigured() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		m, err := hostedClient(10 * time.Second).Metrics(ctx)
-		if err != nil || m == nil || m.Claims == 0 {
+		cli := hostedClient(10 * time.Second)
+		m, err := cli.Metrics(ctx)
+		if err != nil || m == nil {
 			return
 		}
-		emitContext("SessionStart", renderBrief(m.Claims, m.Runs, m.Contradictions, 0))
+		// Workspace/repo tenant overlay: count its claims for the scoped note.
+		var wsClaims int64
+		if tenant := hostedWorkspaceTenant(ev.Cwd); tenant != "" {
+			if wm, e := cli.Metrics(client.WithTenant(ctx, tenant)); e == nil && wm != nil {
+				wsClaims = wm.Claims
+			}
+		}
+		if m.Claims == 0 && wsClaims == 0 {
+			return
+		}
+		emitContext("SessionStart", renderBrief(m.Claims, m.Runs, m.Contradictions, wsClaims))
 		return
 	}
 
@@ -366,9 +418,13 @@ func hookCapture(ev hookEvent) {
 	defer cancel()
 
 	if hostedConfigured() {
-		// Let the server decide LLM/embeddings from ITS config (the hook machine
-		// can't know the hosted brain's providers): omit the flags (nil).
-		_, _ = hostedClient(90*time.Second).Process(ctx, client.ProcessRequest{Text: text})
+		// Repo-first routing, hosted edition: a session inside a workspace/repo
+		// captures to that tenant (keeping its knowledge scoped), otherwise the
+		// personal (token-default) tenant. Let the server decide LLM/embeddings
+		// from ITS config (the hook machine can't know the hosted providers): omit
+		// the flags (nil).
+		pctx := client.WithTenant(ctx, hostedWorkspaceTenant(ev.Cwd))
+		_, _ = hostedClient(90*time.Second).Process(pctx, client.ProcessRequest{Text: text})
 		return
 	}
 

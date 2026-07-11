@@ -176,6 +176,42 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+// TestClient_TenantHeader proves the per-request tenant selection (ADR 0009
+// Phase 3): WithTenant sets the X-Mnemos-Tenant header a multi-tenant hosted
+// brain reads, an empty/absent tenant sends no header, and one client can hit
+// two tenants back-to-back (the federation primitive).
+func TestClient_TenantHeader(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get(client.TenantHeader))
+		writeJSON(w, http.StatusOK, client.SearchResponse{})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	ctx := context.Background()
+	// Personal (no tenant) then a scoped tenant — same client, two scopes.
+	if _, err := c.Search(ctx, "q", client.SearchOptions{}); err != nil {
+		t.Fatalf("personal search: %v", err)
+	}
+	if _, err := c.Search(client.WithTenant(ctx, "repo_acme_abc123"), "q", client.SearchOptions{}); err != nil {
+		t.Fatalf("tenant search: %v", err)
+	}
+	// A blank tenant is a no-op: still no header.
+	if _, err := c.Search(client.WithTenant(ctx, "  "), "q", client.SearchOptions{}); err != nil {
+		t.Fatalf("blank-tenant search: %v", err)
+	}
+	want := []string{"", "repo_acme_abc123", ""}
+	if len(got) != len(want) {
+		t.Fatalf("got %d requests, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("request %d tenant header = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestClient_Health(t *testing.T) {
 	srv := httptest.NewServer((&fakeRegistry{}).handler())
 	defer srv.Close()

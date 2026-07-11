@@ -22,6 +22,38 @@ import (
 // base URL.
 const EnvBaseURL = "MNEMOS_URL"
 
+// TenantHeader is the HTTP header a multi-tenant hosted brain reads to select
+// which of the token's authorized tenants (tnt/tnts, ADR 0009) a request scopes
+// to. Set it per-request via WithTenant. Both the REST (`serve`) and MCP-HTTP
+// surfaces honor it; a value outside the token's allowlist is denied server-side.
+const TenantHeader = "X-Mnemos-Tenant"
+
+// tenantCtxKey carries a per-request tenant selection through the context.
+type tenantCtxKey struct{}
+
+// WithTenant returns a context that makes every client request made with it
+// select the given tenant via the X-Mnemos-Tenant header — the mechanism a
+// federating caller uses to hit two tenants (e.g. personal ∪ workspace) over one
+// client. An empty tenant is a no-op: the request carries no header and the
+// server falls back to the token's default tenant.
+func WithTenant(ctx context.Context, tenant string) context.Context {
+	if strings.TrimSpace(tenant) == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, tenantCtxKey{}, strings.TrimSpace(tenant))
+}
+
+// tenantFromContext returns the per-request tenant set by WithTenant, or "".
+func tenantFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v, ok := ctx.Value(tenantCtxKey{}).(string); ok {
+		return v
+	}
+	return ""
+}
+
 // Client is a typed Go client for the Mnemos registry HTTP API. It is
 // safe for concurrent use by multiple goroutines.
 //
@@ -365,6 +397,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, dst any) err
 		}
 		if c.token != "" {
 			req.Header.Set("Authorization", "Bearer "+c.token)
+		}
+		if t := tenantFromContext(ctx); t != "" {
+			req.Header.Set(TenantHeader, t)
 		}
 		resp, err := c.httpc.Do(req)
 		if err != nil {

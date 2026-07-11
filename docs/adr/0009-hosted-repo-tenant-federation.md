@@ -1,6 +1,6 @@
 # ADR 0009: Repo-as-tenant in a hosted central brain, with federated reads
 
-- **Status:** Accepted (design); Phases 1 & 2 implemented
+- **Status:** Accepted (design); Phases 1, 2 & 3 implemented
 - **Date:** 2026-07-11
 - **Deciders:** Felix Geelhaar
 - **Scope:** Mnemos hosted mode (`mnemos serve` / `mcp --http --require-tenant`)
@@ -139,6 +139,15 @@ committing the repo brain. The personal tenant stays private.
   request. Guarded by `TestEffectiveTenant_FailClosed`,
   `TestGRPC_TenantAllowlist_SelectionAndDenial`, and the existing cross-tenant
   isolation suite.
-- **Phase 3:** client per-request tenant (`internal/client` sends the header) +
-  hosted hook federation (recall/brief/capture over two tenant-scoped requests)
-  + `init --url --project`.
+- **Phase 3 (implemented):** the `client` package gained `WithTenant(ctx,
+  tenant)`, which sets the `X-Mnemos-Tenant` header per request (blank = the
+  token default); the server side already honored it (Phase 2). The hosted hook
+  path now federates: `hostedWorkspaceTenant(cwd)` derives the repo/workspace
+  tenant (named workspace → `deriveHostedTenant(name)`, else the nearest `.mnemos`
+  repo's git-remote key), and recall/brief issue a personal-tenant read plus a
+  workspace-tenant read, merged with the same repo-wins/tier-tag logic as the
+  local path; capture routes to the workspace tenant (personal when outside one).
+  `mnemos init --url --project` writes the `.mnemos` marker that opts a repo into
+  federation and prints the derived tenant so the operator can grant it in the
+  token's `tnts`. Guarded by `TestClient_TenantHeader` and
+  `TestHostedWorkspaceTenant`.
