@@ -115,10 +115,17 @@ Still open:
    converge. Safety: it does NOT regenerate/overwrite, so a human note that
    didn't extract into a claim is never silently wiped; the block is only
    rewritten by explicit `sync-docs` or the capture regen. Two-way loop closed.
-4. **Rebuild — LATER:** `mnemos rebuild` reconstructs the gitignored `.db` from
-   AGENTS.md + captured sessions after a clone.
-5. **Docs + `.gitignore` guidance — LATER:** commit AGENTS.md, ignore
-   `.mnemos/mnemos.db` and `.mnemos/.*.sha`.
+4. **Rebuild — DONE:** `mnemos rebuild` reconstructs the gitignored `.db` from a
+   committed AGENTS.md managed block after a clone (ingests the block, baselines
+   the sync-back hash).
+5. **Docs + `.gitignore` guidance — DONE:** `sync-docs`/capture auto-append the
+   derived-index patterns to `.gitignore`; `docs/repo-brain-workflow.md` covers
+   the commit-vs-ignore workflow.
+
+Still open (noted): the MCP `scope` param (needs the query path to take an
+explicit DSN — the MCP server is long-lived/concurrent, so the hooks' env-swap
+is unsafe there), a "remember globally" escape hatch, and the hosted repo-tenant
+placement (Postgres RLS / namespace).
 
 Two kinds of memory, one workflow:
 
