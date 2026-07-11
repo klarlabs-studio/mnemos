@@ -1,6 +1,6 @@
 # ADR 0011: Mnemos as a brain — Complementary Learning Systems, consolidation, and the ubiquitous language
 
-- **Status:** Accepted; execution in progress
+- **Status:** Accepted; implemented (Phases A–D)
 - **Date:** 2026-07-11
 - **Deciders:** Felix Geelhaar
 - **Scope:** The whole system. This is the organizing principle the rest of the
@@ -174,14 +174,22 @@ very different blast radius, sequenced accordingly:
 
 ## Rollout
 
-- **Phase A — vocabulary (non-breaking):** brain terms canonical for Go types +
-  docs, back-compat aliases retained; public wire unchanged. (In progress.)
-- **Phase B — consolidation/promotion:** the hippocampus→neocortex pass —
-  per-tenant schema synthesis → cross-tenant corroboration gate →
-  de-identification → contradiction check → prediction-error ranking → operator/
-  auto gate → write to neocortex. Guarded by a cross-tenant no-leak test. Targets
-  the next release ("a full brain"). (In progress.)
-- **Phase C — read-time precedence policy:** `tenant-wins` / `global-wins` /
-  `surface-dissonance`, per deployment.
-- **Phase D — API v2:** brain terms as canonical wire names with v1 aliases;
-  product-client migration on their own schedule.
+- **Phase A — vocabulary (non-breaking): DONE.** Brain terms are the canonical Go
+  types (`Episode`/`Belief`/`Association`/`Reflex`/`Schema`/`Context`), back-compat
+  aliases retained, `reconsolidate` added; public wire unchanged.
+- **Phase B — consolidation/promotion: DONE.** `consolidate --promote` runs the
+  hippocampus→neocortex pass (cross-tenant corroboration → token-level
+  de-identification → fail-closed contradiction → prediction-error ranking →
+  operator/auto gate). `--apply` persists a first-class `domain.GlobalSchema`
+  (counts-only provenance) to the shared neocortex tier (deliberately un-scoped by
+  RLS); the operator gate stages `pending` and `--promote approve <id>` activates.
+  Prediction error is the direct Lesson→Expectation edge. Guarded by the
+  cross-tenant no-leak tests on both the compute and the write path.
+- **Phase C — read-time precedence policy: DONE.** `MNEMOS_PRECEDENCE` selects
+  `tenant-wins` (default) / `global-wins` / `surface-dissonance`, applied at the
+  hook and MCP federation merges.
+- **Phase D — API v2: DONE (REST).** A brain-native `/v2` REST surface
+  (`beliefs`/`episodes`/`associations`/`schemas`/…) is served alongside the
+  byte-identical v1 via a capture-and-remap delegate that reuses the exact v1
+  handlers. MCP and gRPC brain-aliasing are deferred follow-ups (renaming their
+  live I/O risks existing consumers); DB columns and config keys are unchanged.

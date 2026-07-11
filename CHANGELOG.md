@@ -8,6 +8,8 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.84.0] — 2026-07-11
+
 ### Added
 
 - **`mnemos workspace use <name>`** pins a workspace regardless of cwd (an
@@ -62,6 +64,14 @@ notable changes.
   reconcile). Applied at both federation merge points (the recall/brief hooks and
   the MCP scoped query); recall renders a `⚠ global and this workspace disagree`
   note under surface-dissonance.
+- **Brain-native REST API v2 (ADR 0011 Phase D).** A `/v2` surface speaks the
+  brain vocabulary — `/v2/episodes`, `/v2/beliefs`, `/v2/associations`,
+  `/v2/metrics` (with `dissonances`), and the neocortex-only `/v2/schemas` — served
+  alongside a **byte-identical v1**. Each v2 route reuses the exact v1 handler via
+  a capture-and-remap delegate (structured field rename, not string replacement)
+  and inherits v1's auth + tenant scoping, so v1 cannot drift. MCP tools, gRPC, DB
+  columns, and config keys are unchanged; MCP/gRPC brain-aliasing is a documented
+  follow-up (renaming their live I/O would risk existing consumers).
 
 ## [0.83.0] — 2026-07-11
 
