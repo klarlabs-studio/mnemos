@@ -125,7 +125,7 @@ var commands = []string{
 	"decision", "action", "outcome", "incident",
 	"synthesize", "lessons", "playbook", "export", "import", "history",
 	"resolve", "trust", "verify",
-	"user", "token", "agent",
+	"user", "token", "agent", "repo-tenant",
 	"registry", "push", "pull",
 	"reset", "delete-claim", "delete-event", "reembed", "recompute-trust", "dedup", "consolidate",
 	"sync-docs", "rebuild", "hook",

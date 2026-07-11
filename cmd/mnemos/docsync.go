@@ -410,6 +410,60 @@ func repoTenantKey(dir string) string {
 	return ""
 }
 
+// deriveHostedTenant maps a repo identity (repoTenantKey — git remote or path)
+// to a stable, charset-safe tenant id for a hosted central brain (ADR 0009): a
+// `repo_<slug>_<sha6>` that matches the `tnt`-claim charset and is identical
+// across clones of the same remote, so teammates share the repo tenant. Empty
+// for an empty key.
+func deriveHostedTenant(repoKey string) string {
+	repoKey = strings.TrimSpace(repoKey)
+	if repoKey == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(repoKey))
+	h := hex.EncodeToString(sum[:6]) // 12 hex chars — ample against collisions
+	var b strings.Builder
+	for _, r := range strings.ToLower(repoKey) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	slug := strings.Trim(b.String(), "_")
+	const maxSlug = 40
+	if len(slug) > maxSlug {
+		slug = slug[:maxSlug]
+	}
+	if slug == "" {
+		slug = "x"
+	}
+	return "repo_" + slug + "_" + h
+}
+
+// handleRepoTenant implements `mnemos repo-tenant` — print the current repo's
+// identity and its derived hosted tenant id (ADR 0009), so an operator can mint
+// a token for the repo's brain on a hosted central server.
+func handleRepoTenant(args []string, f Flags) {
+	for _, a := range args {
+		exitWithMnemosError(f.Verbose, NewUserError("repo-tenant takes no flags (got %q)", a))
+		return
+	}
+	cwd, _ := os.Getwd()
+	key := repoTenantKey(cwd)
+	if key == "" {
+		exitWithMnemosError(f.Verbose, NewUserError("not inside a git repo (no remote or toplevel) — no repo tenant"))
+		return
+	}
+	tenant := deriveHostedTenant(key)
+	if f.JSON {
+		emitJSON(map[string]string{"repo_key": key, "tenant": tenant})
+		return
+	}
+	fmt.Printf("repo key: %s\ntenant:   %s\n\nMint a token for this repo's hosted brain:\n  mnemos token issue --user <id> --tenant %s\n", key, tenant, tenant)
+}
+
 func gitRemoteURL(dir string) string {
 	if url := gitOutput(dir, "remote", "get-url", "origin"); url != "" {
 		return url

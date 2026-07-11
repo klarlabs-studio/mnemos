@@ -60,6 +60,7 @@ type mcpQueryInput struct {
 	Question string `json:"question" jsonschema:"required,description=Natural language question to ask Mnemos"`
 	RunID    string `json:"runId,omitempty" jsonschema:"description=Optional run ID to scope the query"`
 	Hops     int    `json:"hops,omitempty" jsonschema:"description=BFS hop expansion depth through supports/contradicts edges (0-5, default 0)"`
+	Scope    string `json:"scope,omitempty" jsonschema:"description=Which brain(s) to search: 'both' (default; global + this repo's brain if one exists), 'global', or 'repo'. Repo claims win on conflict and are tagged claim_provenance=repo."`
 }
 
 type mcpQueryOutput struct {
@@ -415,7 +416,7 @@ func handleMCP(args []string) {
 			if kernel != nil {
 				return dispatchAxiTool[mcpQueryOutput](ctx, kernel, nil, "query_knowledge", input)
 			}
-			return mcpRunQuery(ctx, input)
+			return mcpRunQueryScoped(ctx, input)
 		})
 
 	srv.Tool("process_text").
@@ -1029,6 +1030,88 @@ func resolveMCPActor() string {
 		return domain.SystemUser
 	}
 	return actor
+}
+
+// mcpRepoBrainDSN resolves the repo overlay brain from the MCP server's working
+// directory (the project Claude Code spawned it in). Empty when the server isn't
+// inside an opted-in repo, or in hosted mode.
+func mcpRepoBrainDSN() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	dsn, _ := repoBrain(cwd)
+	return dsn
+}
+
+// mcpRunQueryScoped federates query_knowledge across the global brain and this
+// repo's brain per input.Scope (default "both"). Each side runs against an
+// explicit per-request DSN (context override) — never mutating MNEMOS_DB_URL —
+// so it is safe under the concurrent MCP transport.
+func mcpRunQueryScoped(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
+	scope := strings.ToLower(strings.TrimSpace(input.Scope))
+	repoDSN := mcpRepoBrainDSN()
+
+	if repoDSN == "" || scope == "global" {
+		return mcpRunQuery(ctx, input) // no overlay, or explicitly global
+	}
+	if scope == "repo" {
+		return mcpRunQuery(withDSNOverride(ctx, repoDSN), input)
+	}
+	// "both" (default): federate; repo wins on conflict.
+	repoOut, rerr := mcpRunQuery(withDSNOverride(ctx, repoDSN), input)
+	globalOut, gerr := mcpRunQuery(ctx, input)
+	switch {
+	case rerr != nil && gerr != nil:
+		return mcpQueryOutput{}, gerr
+	case rerr != nil:
+		return globalOut, nil
+	case gerr != nil:
+		return repoOut, nil
+	}
+	return mergeScopedQuery(repoOut, globalOut), nil
+}
+
+// mergeScopedQuery merges a repo-tier and global-tier result: repo claims lead
+// and win on duplicate text; claim_provenance tags each tier; contradictions,
+// timeline, and hop distances are unioned; the repo's grounded answer is
+// preferred when it found claims, else the global answer.
+func mergeScopedQuery(repo, global mcpQueryOutput) mcpQueryOutput {
+	out := mcpQueryOutput{ClaimProvenance: map[string]string{}}
+	seen := map[string]bool{}
+	add := func(claims []domain.Claim, tier string) {
+		for _, c := range claims {
+			key := strings.ToLower(strings.TrimSpace(c.Text))
+			if key == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			out.Claims = append(out.Claims, c)
+			out.ClaimProvenance[c.ID] = tier
+		}
+	}
+	add(repo.Claims, "repo")
+	add(global.Claims, "global")
+
+	out.Contradictions = append(append([]domain.Relationship{}, repo.Contradictions...), global.Contradictions...)
+	out.Timeline = append(append([]string{}, repo.Timeline...), global.Timeline...)
+
+	if len(repo.ClaimHopDistance)+len(global.ClaimHopDistance) > 0 {
+		out.ClaimHopDistance = map[string]int{}
+		for k, v := range global.ClaimHopDistance {
+			out.ClaimHopDistance[k] = v
+		}
+		for k, v := range repo.ClaimHopDistance {
+			out.ClaimHopDistance[k] = v // repo wins
+		}
+	}
+
+	if len(repo.Claims) > 0 && strings.TrimSpace(repo.Answer) != "" {
+		out.Answer = repo.Answer
+	} else {
+		out.Answer = global.Answer
+	}
+	return out
 }
 
 func mcpRunQuery(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {

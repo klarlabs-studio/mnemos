@@ -165,6 +165,26 @@ func openBaseConn(ctx context.Context) (*store.Conn, error) {
 	return store.Open(ctx, resolveDSN())
 }
 
+// dsnOverrideKey carries an explicit per-request store DSN. It lets a
+// concurrent, long-lived server (the MCP transport) point ONE request at a
+// second brain (e.g. the repo overlay for `scope=repo`) without mutating the
+// process-wide MNEMOS_DB_URL — the env-swap the one-shot hooks use is unsafe
+// under concurrency. Highest precedence: it bypasses tenant scoping (a full,
+// explicit local DSN).
+type dsnOverrideKey struct{}
+
+func withDSNOverride(ctx context.Context, dsn string) context.Context {
+	if dsn == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, dsnOverrideKey{}, dsn)
+}
+
+func dsnOverrideFromContext(ctx context.Context) (string, bool) {
+	d, ok := ctx.Value(dsnOverrideKey{}).(string)
+	return d, ok && d != ""
+}
+
 // resolveDSNForContext returns the DSN for this request, scoped to the
 // effective tenant when the request carries one (multi-tenant serve/MCP mode).
 //
@@ -176,7 +196,12 @@ func openBaseConn(ctx context.Context) (*store.Conn, error) {
 //     on first open.
 //   - anything else (memory, remote libSQL): fail closed rather than silently
 //     sharing data across tenants.
+//
+// A per-request dsnOverride (above) takes precedence over all of this.
 func resolveDSNForContext(ctx context.Context) (string, error) {
+	if o, ok := dsnOverrideFromContext(ctx); ok {
+		return o, nil // explicit per-request brain; concurrency-safe, no env swap
+	}
 	dsn := resolveDSN()
 	tenant, ok := tenantFromContext(ctx)
 	if !ok {
