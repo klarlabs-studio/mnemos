@@ -86,6 +86,37 @@ func TestSQLiteFilePath(t *testing.T) {
 	}
 }
 
+func TestResolveBinPath(t *testing.T) {
+	// A Homebrew install launches via the stable /opt/homebrew/bin/mnemos
+	// symlink. os.Executable() returns that absolute symlink path; resolveBinPath
+	// must keep it as-is rather than following it to a versioned Cellar path that
+	// `brew upgrade` deletes.
+	tests := []struct {
+		name string
+		exe  string
+		err  error
+		want string
+	}{
+		{"homebrew symlink kept intact", "/opt/homebrew/bin/mnemos", nil, "/opt/homebrew/bin/mnemos"},
+		{"plain absolute path", "/usr/local/bin/mnemos", nil, "/usr/local/bin/mnemos"},
+		{"error falls back to bare name", "", errStub, "mnemos"},
+		{"empty falls back to bare name", "", nil, "mnemos"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveBinPath(tt.exe, tt.err); got != tt.want {
+				t.Errorf("resolveBinPath(%q, %v) = %q, want %q", tt.exe, tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+var errStub = errStubType("boom")
+
+type errStubType string
+
+func (e errStubType) Error() string { return string(e) }
+
 func TestMCPJSONSnippetIsValidShape(t *testing.T) {
 	snippet := mcpJSONSnippet("/usr/local/bin/mnemos", "sqlite:///tmp/a.db", true)
 	for _, want := range []string{`"type": "stdio"`, `"command": "/usr/local/bin/mnemos"`, `"args": ["mcp"]`, `"MNEMOS_DB_URL": "sqlite:///tmp/a.db"`} {
