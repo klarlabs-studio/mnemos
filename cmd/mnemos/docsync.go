@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -136,6 +139,9 @@ func syncRepoDocs(ctx context.Context, repoRoot, fileName, brainDSN string) (pat
 	if data, rerr := os.ReadFile(path); rerr == nil { //nolint:gosec // repo-local doc path
 		existing = string(data)
 	}
+	// Baseline the stored hash to what mnemos generated, so the brief-time
+	// sync-back can tell a later human edit apart from mnemos's own output.
+	writeStoredDocHash(repoRoot, fileName, blockHash(block))
 	updated := upsertManagedBlock(existing, block)
 	if updated == existing {
 		return path, false, nil
@@ -144,6 +150,122 @@ func syncRepoDocs(ctx context.Context, repoRoot, fileName, brainDSN string) (pat
 		return path, false, werr
 	}
 	return path, true, nil
+}
+
+// ---- sync-back: fold human edits of the managed block into the brain ----
+
+var trustAnnotationRE = regexp.MustCompile(`\s*\(trust [0-9.]+\)`)
+
+// extractManagedBlock returns the inner text between the markers (trimmed) and
+// whether a block was present.
+func extractManagedBlock(content string) (string, bool) {
+	b := strings.Index(content, docBeginMarker)
+	e := strings.Index(content, docEndMarker)
+	if b < 0 || e <= b {
+		return "", false
+	}
+	return strings.TrimSpace(content[b+len(docBeginMarker) : e]), true
+}
+
+func blockHash(inner string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(inner)))
+	return hex.EncodeToString(sum[:])
+}
+
+// docHashPath is the sidecar that records the hash of the last mnemos-generated
+// block for a given doc. It lives under .mnemos/ (local, gitignored state).
+func docHashPath(repoRoot, fileName string) string {
+	return filepath.Join(repoRoot, ".mnemos", "."+fileName+".sha")
+}
+
+func readStoredDocHash(repoRoot, fileName string) string {
+	data, err := os.ReadFile(docHashPath(repoRoot, fileName)) //nolint:gosec // repo-local state file
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func writeStoredDocHash(repoRoot, fileName, hash string) {
+	_ = os.WriteFile(docHashPath(repoRoot, fileName), []byte(hash+"\n"), 0o644) //nolint:gosec // local state
+}
+
+// blockBulletsText pulls the bullet lines out of the managed block and strips
+// mnemos's own annotations (trust scores, contested flag), yielding clean text
+// to re-ingest. Section headers and boilerplate are skipped, so only the actual
+// facts/decisions — including whatever a human added — flow back into the brain.
+func blockBulletsText(inner string) string {
+	var lines []string
+	for raw := range strings.SplitSeq(inner, "\n") {
+		ln := strings.TrimSpace(raw)
+		if !strings.HasPrefix(ln, "- ") {
+			continue
+		}
+		s := strings.TrimSpace(strings.TrimPrefix(ln, "- "))
+		s = trustAnnotationRE.ReplaceAllString(s, "")
+		s = strings.ReplaceAll(s, "⚠ contested", "")
+		s = strings.TrimSpace(s)
+		if s != "" {
+			lines = append(lines, s)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// syncBackFromDocs detects a human edit to the managed block of <repoRoot>/
+// fileName (its hash differs from the last mnemos-generated one) and, if so,
+// ingests the block's bullet lines into the brain at brainDSN, then re-baselines
+// the hash so it converges (no re-ingest next time). The human's text is left in
+// place — see the note below. Best-effort / fail-open.
+func syncBackFromDocs(ctx context.Context, repoRoot, fileName, brainDSN string) {
+	data, err := os.ReadFile(filepath.Join(repoRoot, fileName)) //nolint:gosec // repo-local doc
+	if err != nil {
+		return
+	}
+	inner, ok := extractManagedBlock(string(data))
+	if !ok {
+		return
+	}
+	cur := blockHash(inner)
+	stored := readStoredDocHash(repoRoot, fileName)
+	if stored == "" {
+		// No baseline yet (e.g. a fresh clone): adopt current without ingesting,
+		// so mnemos's own generated content isn't mistaken for a human edit.
+		writeStoredDocHash(repoRoot, fileName, cur)
+		return
+	}
+	if cur == stored {
+		return // unchanged since mnemos last wrote it
+	}
+
+	text := blockBulletsText(inner)
+	if strings.TrimSpace(text) == "" {
+		writeStoredDocHash(repoRoot, fileName, cur)
+		return
+	}
+	useLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
+	ingest := func() {
+		// Dedup in the pipeline collapses lines already known, so only the
+		// human's additions become new claims.
+		_, _ = mcpRunProcessText(ctx, "human-edit:"+fileName, mcpProcessTextInput{
+			Text:          text,
+			UseLLM:        useLLM,
+			UseEmbeddings: useLLM,
+		})
+	}
+	if brainDSN != "" {
+		withBrainDSN(brainDSN, ingest)
+	} else {
+		ingest()
+	}
+	// Re-baseline the stored hash to the human-edited content and LEAVE THE
+	// HUMAN'S TEXT IN PLACE. We deliberately do NOT regenerate the block here:
+	// if extraction didn't turn an edit into a claim, regenerating would wipe
+	// the human's note (data loss). The block is only rewritten by an explicit
+	// `mnemos sync-docs` or the capture trigger — by which point the extractable
+	// facts are claims and reappear. Re-baselining prevents re-ingesting the
+	// same edit on the next brief.
+	writeStoredDocHash(repoRoot, fileName, cur)
 }
 
 // repoTenantKey returns a stable identity for the repo containing dir: the git

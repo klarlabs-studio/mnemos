@@ -299,9 +299,17 @@ func hookBrief(ev hookEvent) {
 	if err != nil {
 		return
 	}
-	// Repo overlay count, if the session is inside an opted-in repo.
+	// Repo overlay, if the session is inside an opted-in repo.
 	var repoClaims int64
 	if dsn := repoBrainDSN(ev.Cwd); dsn != "" {
+		// Sync-back: fold any human edits of the repo's AGENTS.md managed block
+		// back into the brain before reporting, so the loop closes. Bounded and
+		// best-effort — a slow ingest must not hang session start indefinitely.
+		if _, repoRoot, ok := findProjectDBFrom(ev.Cwd); ok {
+			sbCtx, sbCancel := context.WithTimeout(context.Background(), 60*time.Second)
+			syncBackFromDocs(sbCtx, repoRoot, "AGENTS.md", dsn)
+			sbCancel()
+		}
 		withBrainDSN(dsn, func() {
 			if rm, e := mcpRunMetrics(context.Background()); e == nil {
 				repoClaims = rm.Claims
@@ -367,10 +375,12 @@ func hookCapture(ev hookEvent) {
 	// brain (keeping repo-specific knowledge local); otherwise the global brain.
 	if dsn := repoBrainDSN(ev.Cwd); dsn != "" {
 		withBrainDSN(dsn, write)
-		// Fold the repo's learnings into its AGENTS.md so every future agent
-		// session in the repo follows them natively. Best-effort: never fail
-		// the hook over a doc write.
+		// Keep the repo's AGENTS.md current so every future agent session
+		// follows its learnings natively. First absorb any human edits of the
+		// managed block (so extractable notes survive the regen), then
+		// regenerate from the brain. Best-effort: never fail the hook over docs.
 		if _, repoRoot, ok := findProjectDBFrom(ev.Cwd); ok {
+			syncBackFromDocs(ctx, repoRoot, "AGENTS.md", dsn)
 			_, _, _ = syncRepoDocs(ctx, repoRoot, "AGENTS.md", dsn)
 		}
 		return
