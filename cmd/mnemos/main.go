@@ -254,6 +254,8 @@ func main() {
 		handleSynthesize(args, flags)
 	case "consolidate":
 		handleConsolidate(args, flags)
+	case "sync-docs":
+		handleSyncDocs(args, flags)
 	case "lessons":
 		handleLessons(args, flags)
 	case "verify":
@@ -1414,6 +1416,8 @@ func printUsage() {
 	fmt.Println("  dedup [--threshold T] [--force]      Merge near-duplicate claims by embedding similarity (dry-run by default)")
 	fmt.Println("  consolidate [--dry-run] [--forget-below-trust T]  The cognitive \"sleep\" pass: dedupe + refresh trust,")
 	fmt.Println("    [--forget-refuted] [--synthesize]  and optionally forget/reinforce/synthesize/replay. Deterministic.")
+	fmt.Println("  sync-docs [--claude] [--file <name>] Write this repo's learnings into AGENTS.md (or CLAUDE.md) so")
+	fmt.Println("                                       agents follow them natively (mnemos-managed block)")
 	fmt.Println("")
 	fmt.Println("Flags:")
 	fmt.Println("  -h, --help     show this help message")

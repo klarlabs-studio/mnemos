@@ -367,6 +367,12 @@ func hookCapture(ev hookEvent) {
 	// brain (keeping repo-specific knowledge local); otherwise the global brain.
 	if dsn := repoBrainDSN(ev.Cwd); dsn != "" {
 		withBrainDSN(dsn, write)
+		// Fold the repo's learnings into its AGENTS.md so every future agent
+		// session in the repo follows them natively. Best-effort: never fail
+		// the hook over a doc write.
+		if _, repoRoot, ok := findProjectDBFrom(ev.Cwd); ok {
+			_, _, _ = syncRepoDocs(ctx, repoRoot, "AGENTS.md", dsn)
+		}
 		return
 	}
 	write()
