@@ -18,6 +18,27 @@ notable changes.
   definition across machines. The name is the portable identity (same hosted
   tenant everywhere), so folders/db are machine-specific hints the importer
   overrides with `--folder` / `--db` (import defaults to a machine-local brain).
+- **Mnemos as a brain — Complementary Learning Systems (ADR 0011).** The domain
+  now speaks the brain vocabulary: `Episode` (←Event), `Belief` (←Claim),
+  `Association` (←Relationship), `Reflex` (←Playbook), `Schema` (←Lesson),
+  `Context` (←Scope); `reconsolidate` is a new alias for `verify`. **Non-breaking**
+  — the brain terms are the canonical Go types with back-compat aliases retained,
+  and no JSON/DB/MCP/REST/gRPC/CLI/config identifier changed (public wire moves
+  only at a future API v2). `Evidence` is kept deliberately (citation is the moat).
+- **Tenant→global consolidation / promotion (ADR 0011 Phase B).** `mnemos
+  consolidate --promote` bridges per-tenant memory (hippocampus) to the shared
+  global brain (neocortex): an offline, audit-only pass gated on **cross-tenant
+  corroboration** (≥N tenants — the combined quality + privacy filter),
+  **token-level de-identification** (a promoted statement may contain only tokens
+  corroborated across ≥2 tenants, so no single tenant's specific can ride out),
+  a **fail-closed contradiction** check against vetted global claims, and
+  **prediction-error ranking** (peak `domain.Expectation` surprise). Order-
+  independent; every input lands in exactly one auditable bucket
+  (promoted/pending/dissonant/skipped). Default gate is operator (human-in-the-
+  loop); `--gate auto` promotes above threshold. Guarded by
+  `TestPromotion_NoSingleTenantLeak` and the token-level / near-paraphrase /
+  fail-closed / order-independence tests. The pass emits a promotion plan; the
+  global-write step is deferred.
 
 ## [0.83.0] — 2026-07-11
 
