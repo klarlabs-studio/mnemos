@@ -13,6 +13,79 @@ Claude Code session, but let knowledge that *belongs to a repo* stay with that
 repo — surfaced when you work there, invisible everywhere else, and (optionally)
 committable so it travels with the code and the team.
 
+---
+
+## v2 direction: repo-as-tenant + an Agent-OS markdown source-of-truth
+
+Two refinements sharpen v1 and resolve its biggest open question.
+
+### 1. The repo tier IS a tenant
+
+mnemos already has the isolation machinery (ADR 0007): a tenant key, `Tenancy
+ModeForDSN`, `TenantNamespace(tenant)`, Postgres RLS + namespace-per-tenant for
+sqlite/mysql/libsql, the `tnt` JWT claim, `--require-tenant`. So model the
+**repo as a tenant** and separate two concerns that v1 conflated:
+
+- **Tenant key** (identity): what names "this repo" — a git remote URL
+  (stable across clones, shareable) or the repo-root path (works offline). This
+  is the federation key: recall = `tenant:default (global) ∪ tenant:<repo>`.
+- **Physical placement** (storage): where that tenant's rows live —
+  - *local file* `<repo>/.mnemos/mnemos.db` (v1; personal, per-repo), or
+  - *namespace/RLS inside a central store* (`mnemos serve` on Postgres; shared
+    across your machines and teammates, one DB, isolated per repo-tenant).
+
+Same federation logic, two backends. v1 is the local-file case of this more
+general model; a hosted central brain becomes "one store, one tenant per repo,
+plus the default (personal) tenant." A team/org is just another tenant level.
+
+### 2. Markdown is the source of truth; the `.db` is a derived index
+
+This is the Agent-OS technique, and it dissolves the "SQLite conflicts badly in
+git" problem. Agent OS keeps durable knowledge as **human-editable, append-only
+markdown** — `AGENTS.md` (identity), `decisions.md` (append-only; superseded
+entries get `→ superseded [date]`, never deleted), `open-threads.md`,
+`status.md` — with a brief/capture/compact session lifecycle. mnemos already has
+a markdown round-trip layer (lessons/playbooks ↔ YAML-frontmatter).
+
+Marry them for the repo tier:
+
+- **Commit the markdown, gitignore the `.db`.** `<repo>/.mnemos/*.md` is the
+  reviewable, diff-able, PR-able source of truth; `<repo>/.mnemos/mnemos.db` is
+  a local, rebuildable index (`mnemos import` / a `rebuild` step). No binary
+  merge conflicts; the repo brain travels with the code as text.
+- **Map the Agent-OS files onto mnemos concepts:**
+  - `AGENTS.md` → repo identity/context, injected at **brief**.
+  - `decisions.md` (append-only + supersession) → mnemos **decisions/claims**
+    with `resolve --supersedes` / temporal `valid_to` (the model already exists).
+  - `open-threads.md` / `status.md` → a repo-scoped **working-memory** surface
+    that brief reads ("3 open threads in this repo").
+  - session **capture** writes both the claim (into the index) and, optionally,
+    a human session log — same as Agent OS `/capture`.
+  - **compaction** (`/mem-compact`) → mnemos `consolidate` already digests +
+    dedupes; point it at the repo tier on a schedule.
+- **Staleness:** adopt the Agent-OS `updated:` frontmatter + "verify if
+  untouched N days" so stale repo knowledge is flagged, not trusted blindly.
+
+### What this changes about v1
+
+v1 (local binary `.db` overlay, repo-first routing) stays the fast path and the
+default. v2 adds: (a) a tenant abstraction so the same federation works against
+a hosted central store, and (b) a committed-markdown source-of-truth so a repo
+brain is shareable as text. They compose — the `.db` is always derivable from
+the markdown + captured sessions.
+
+### Decisions this raises
+
+1. **Tenant key:** git remote URL vs repo-root path (or: remote when present,
+   path hash offline). Determines shareability and clone-portability.
+2. **Markdown schema:** adopt the Agent-OS file set verbatim
+   (`AGENTS.md`/`decisions.md`/`open-threads.md`/`status.md`) vs a mnemos-native
+   export shape vs a bridge that reads both.
+3. **Rebuild ergonomics:** `mnemos import` on demand, a hook that rebuilds the
+   index when the markdown is newer, or a `mnemos rebuild` command.
+4. **Central-store placement:** for the hosted case, repo-tenant via Postgres
+   RLS (one DB) vs namespace-per-tenant — mnemos already supports both.
+
 Two kinds of memory, one workflow:
 
 - **Central (personal):** cross-cutting preferences, general facts, decisions
