@@ -53,6 +53,15 @@ notable changes.
   crosses. The prediction-error ranker now uses the **direct** Lesson→Expectation
   edge (schema → backing actions → outcomes → decisions → belief claims →
   expectations), replacing the earlier scope-aggregation proxy.
+- **Read-time precedence policy (ADR 0011 Phase C).** When a read federates the
+  global tier (neocortex) with a tenant/workspace tier (hippocampus), a new
+  `MNEMOS_PRECEDENCE` / `precedence:` setting chooses how conflicts resolve:
+  `tenant-wins` (default — preserves prior behavior byte-for-byte), `global-wins`
+  (vetted global truth wins — the pet-medical default), or `surface-dissonance`
+  (neither silently wins; the conflicting pair is surfaced to the agent to
+  reconcile). Applied at both federation merge points (the recall/brief hooks and
+  the MCP scoped query); recall renders a `⚠ global and this workspace disagree`
+  note under surface-dissonance.
 
 ## [0.83.0] — 2026-07-11
 
