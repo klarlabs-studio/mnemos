@@ -378,6 +378,13 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant b
 	mux.HandleFunc("/v1/synthesize", makeSynthesizeHandler(mem))
 	mux.HandleFunc("/v1/timeline", makeTimelineHandler(mem))
 	mux.HandleFunc("/v1/signals", makeSignalsHandler(mem))
+
+	// ADR 0011 Phase D — brain-native REST API v2, mounted alongside the
+	// untouched v1 surface. Registered in serve_v2.go (not here) so the v1
+	// TestAPISurfaceParity route scan stays unchanged; the v2 routes reuse the
+	// exact v1 handlers and inherit this mux's auth + tenant-scoping middleware.
+	registerV2Routes(mux, conn, gw)
+
 	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
