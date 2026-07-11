@@ -49,25 +49,16 @@ type hookSpecificOutput struct {
 // handleHook dispatches `mnemos hook <name>`. It always exits 0; failures
 // degrade to "no context injected" rather than surfacing to the user.
 func handleHook(args []string) {
+	// The brain is pinned via the global --db flag (parsed in ParseFlags and
+	// exported as MNEMOS_DB_URL before dispatch), so the hook always targets
+	// the store the integration was set up against, regardless of the project
+	// directory Claude Code launched it from. Here we only need the sub-name.
 	name := ""
-	dbOverride := ""
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--db":
-			if i+1 < len(args) {
-				dbOverride = args[i+1]
-				i++
-			}
-		default:
-			if name == "" && !strings.HasPrefix(args[i], "-") {
-				name = args[i]
-			}
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			name = a
+			break
 		}
-	}
-	// Pin the brain the integration was set up against, regardless of the
-	// project directory Claude Code launched the hook from.
-	if dbOverride != "" {
-		_ = os.Setenv("MNEMOS_DB_URL", dbOverride)
 	}
 
 	ev := readHookEvent(os.Stdin)

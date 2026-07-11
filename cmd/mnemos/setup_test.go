@@ -7,10 +7,11 @@ import (
 
 func TestParseSetupArgs(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    []string
-		want    setupOpts
-		wantErr bool
+		name      string
+		args      []string
+		globalDSN string // the global --db flag value (parsed in ParseFlags)
+		want      setupOpts
+		wantErr   bool
 	}{
 		{
 			name: "defaults to claude-code user scope",
@@ -23,19 +24,15 @@ func TestParseSetupArgs(t *testing.T) {
 			want: setupOpts{target: "claude-code", project: true},
 		},
 		{
-			name: "explicit target and db",
-			args: []string{"claude-code", "--db", "postgres://x/y"},
-			want: setupOpts{target: "claude-code", dsn: "postgres://x/y"},
+			name:      "explicit target and db (db via global flag)",
+			args:      []string{"claude-code"},
+			globalDSN: "postgres://x/y",
+			want:      setupOpts{target: "claude-code", dsn: "postgres://x/y"},
 		},
 		{
 			name: "print flag",
 			args: []string{"--print"},
 			want: setupOpts{target: "claude-code", print: true},
-		},
-		{
-			name:    "db without value",
-			args:    []string{"--db"},
-			wantErr: true,
 		},
 		{
 			name:    "unknown flag",
@@ -45,7 +42,7 @@ func TestParseSetupArgs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseSetupArgs(tt.args)
+			got, err := parseSetupArgs(tt.args, tt.globalDSN)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil (%+v)", got)

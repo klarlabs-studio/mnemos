@@ -22,7 +22,7 @@ import (
 // Everything is idempotent: re-running reports "already registered" rather
 // than erroring, and --force replaces an existing registration.
 func handleSetup(args []string, f Flags) {
-	opts, err := parseSetupArgs(args)
+	opts, err := parseSetupArgs(args, f.DB)
 	if err != nil {
 		exitWithMnemosError(false, err)
 		return
@@ -49,8 +49,10 @@ type setupOpts struct {
 	dsn     string // explicit DB DSN override
 }
 
-func parseSetupArgs(args []string) (setupOpts, error) {
-	opts := setupOpts{target: "claude-code"}
+// parseSetupArgs parses setup's own flags. The brain DSN arrives via globalDSN
+// (the global --db flag, parsed in ParseFlags) rather than a local --db case.
+func parseSetupArgs(args []string, globalDSN string) (setupOpts, error) {
+	opts := setupOpts{target: "claude-code", dsn: globalDSN}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
@@ -58,12 +60,6 @@ func parseSetupArgs(args []string) (setupOpts, error) {
 			opts.project = true
 		case "--print":
 			opts.print = true
-		case "--db":
-			if i+1 >= len(args) {
-				return opts, NewUserError("--db requires a DSN value")
-			}
-			opts.dsn = args[i+1]
-			i++
 		default:
 			if strings.HasPrefix(arg, "-") {
 				return opts, NewUserError("unknown setup flag %q", arg)

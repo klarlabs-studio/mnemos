@@ -41,8 +41,11 @@ func defaultHookSet() map[string]bool {
 	return map[string]bool{"recall": true, "brief": true, "capture": true}
 }
 
-func parseInitArgs(args []string) (initOptions, error) {
-	opts := initOptions{hooks: defaultHookSet()}
+// parseInitArgs parses init's own flags. The brain DSN arrives via globalDSN
+// (the global --db flag, parsed in ParseFlags) rather than a local --db case,
+// so `mnemos init --db <dsn>` resolves identically to every other command.
+func parseInitArgs(args []string, globalDSN string) (initOptions, error) {
+	opts := initOptions{hooks: defaultHookSet(), dsn: globalDSN}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--project":
@@ -51,12 +54,6 @@ func parseInitArgs(args []string) (initOptions, error) {
 			opts.noHooks = true
 		case "--no-mcp":
 			opts.noMCP = true
-		case "--db":
-			if i+1 >= len(args) {
-				return opts, NewUserError("--db requires a DSN value")
-			}
-			opts.dsn = args[i+1]
-			i++
 		case "--url":
 			if i+1 >= len(args) {
 				return opts, NewUserError("--url requires a hosted MCP endpoint (e.g. https://host/mcp)")
@@ -121,7 +118,7 @@ func parseHookSelection(csv string) map[string]bool {
 // handleInit is the CLI entry point for `mnemos init` (and its `setup` alias
 // when hooks are requested).
 func handleInit(args []string, f Flags) {
-	opts, err := parseInitArgs(args)
+	opts, err := parseInitArgs(args, f.DB)
 	if err != nil {
 		exitWithMnemosError(false, err)
 		return

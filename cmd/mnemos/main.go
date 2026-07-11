@@ -131,6 +131,16 @@ func main() {
 		printProgress("config: loaded %s (%d value(s) applied)", path, len(applied))
 	}
 
+	// An explicit --db flag is the most specific DSN source, so it wins over
+	// both the config file (already hydrated above) and any inherited
+	// MNEMOS_DB_URL. Exporting it here means every command — not just the ones
+	// that used to parse --db themselves (hook/init/setup) — resolves the same
+	// brain via resolveDSN(). init/setup read flags.DB directly for the brain
+	// they configure; setting the env too is harmless (they re-pin it anyway).
+	if flags.DB != "" {
+		_ = os.Setenv("MNEMOS_DB_URL", flags.DB)
+	}
+
 	// Default to human-readable output in interactive terminals.
 	if !flags.Human && !flags.JSON {
 		if fileInfo, _ := os.Stdout.Stat(); fileInfo != nil && fileInfo.Mode()&os.ModeCharDevice != 0 {
@@ -1374,6 +1384,7 @@ func printUsage() {
 	fmt.Println("  --min-trust X  query: only return claims with trust_score ≥ X (X in [0, 1])")
 	fmt.Println("  -y, --yes      with reset: skip the confirmation prompt")
 	fmt.Println("  --config PATH  YAML config file (else MNEMOS_CONFIG, then .mnemos/mnemos.yaml, then ~/.config/mnemos/config.yaml)")
+	fmt.Println("  --db DSN       storage DSN for this command (overrides MNEMOS_DB_URL / config; any registered backend)")
 	fmt.Println("")
 	fmt.Println("Configuration:")
 	fmt.Println("  Settings come from the environment and/or a YAML config file.")
