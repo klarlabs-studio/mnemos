@@ -25,8 +25,12 @@ import (
 const (
 	docBeginMarker = "<!-- mnemos:begin (generated — edits inside are re-synced into the brain) -->"
 	docEndMarker   = "<!-- mnemos:end -->"
-	// maxDocFacts caps the facts section so the agent file stays readable.
-	maxDocFacts = 20
+	// maxDocFacts caps the facts section so the agent file stays readable. The
+	// committed doc is a curated top-by-trust projection, not the full brain —
+	// `mnemos rebuild` reconstructs this projection, not deprecated claims or
+	// embeddings (see docs/repo-brain-workflow.md). All decisions and open
+	// questions are always included; only low-trust facts beyond this cap drop.
+	maxDocFacts = 40
 )
 
 // upsertManagedBlock returns content with the mnemos-managed block (between the
@@ -139,16 +143,19 @@ func syncRepoDocs(ctx context.Context, repoRoot, fileName, brainDSN string) (pat
 	if data, rerr := os.ReadFile(path); rerr == nil { //nolint:gosec // repo-local doc path
 		existing = string(data)
 	}
-	// Baseline the stored hash to what mnemos generated, so the brief-time
-	// sync-back can tell a later human edit apart from mnemos's own output.
-	writeStoredDocHash(repoRoot, fileName, blockHash(block))
 	updated := upsertManagedBlock(existing, block)
 	if updated == existing {
+		// Already current: baseline the hash to what's on disk (== block).
+		writeStoredDocHash(repoRoot, fileName, blockHash(block))
 		return path, false, nil
 	}
 	if werr := os.WriteFile(path, []byte(updated), 0o644); werr != nil { //nolint:gosec // agent-facing doc, world-readable by design
 		return path, false, werr
 	}
+	// Baseline the stored hash AFTER the write succeeds, so the brief-time
+	// sync-back can tell a later human edit apart from mnemos's own output —
+	// and never treats a failed write as a phantom edit.
+	writeStoredDocHash(repoRoot, fileName, blockHash(block))
 	// Keep the derived index + hash sidecars out of git so only the doc is
 	// committed. Best-effort.
 	ensureRepoGitignore(repoRoot)
@@ -332,9 +339,11 @@ func blockBulletsText(inner string) string {
 // syncBackFromDocs detects a human edit to the managed block of <repoRoot>/
 // fileName (its hash differs from the last mnemos-generated one) and, if so,
 // ingests the block's bullet lines into the brain at brainDSN, then re-baselines
-// the hash so it converges (no re-ingest next time). The human's text is left in
-// place — see the note below. Best-effort / fail-open.
-func syncBackFromDocs(ctx context.Context, repoRoot, fileName, brainDSN string) {
+// the hash so it converges (no re-ingest next time). useLLM selects extraction
+// quality — callers on the latency-sensitive session-start path pass false
+// (fast, rule-based). It NEVER rewrites the doc, so the human's text is left in
+// place (no data loss). Best-effort / fail-open.
+func syncBackFromDocs(ctx context.Context, repoRoot, fileName, brainDSN string, useLLM bool) {
 	data, err := os.ReadFile(filepath.Join(repoRoot, fileName)) //nolint:gosec // repo-local doc
 	if err != nil {
 		return
@@ -360,7 +369,6 @@ func syncBackFromDocs(ctx context.Context, repoRoot, fileName, brainDSN string) 
 		writeStoredDocHash(repoRoot, fileName, cur)
 		return
 	}
-	useLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
 	ingest := func() {
 		// Dedup in the pipeline collapses lines already known, so only the
 		// human's additions become new claims.
@@ -376,12 +384,11 @@ func syncBackFromDocs(ctx context.Context, repoRoot, fileName, brainDSN string) 
 		ingest()
 	}
 	// Re-baseline the stored hash to the human-edited content and LEAVE THE
-	// HUMAN'S TEXT IN PLACE. We deliberately do NOT regenerate the block here:
-	// if extraction didn't turn an edit into a claim, regenerating would wipe
-	// the human's note (data loss). The block is only rewritten by an explicit
-	// `mnemos sync-docs` or the capture trigger — by which point the extractable
-	// facts are claims and reappear. Re-baselining prevents re-ingesting the
-	// same edit on the next brief.
+	// HUMAN'S TEXT IN PLACE. We deliberately never regenerate the block from
+	// sync-back: if extraction didn't turn an edit into a claim, regenerating
+	// would wipe the human's note. The block is rewritten only by an explicit
+	// `mnemos sync-docs` (which absorbs edits first). Re-baselining prevents
+	// re-ingesting the same edit next time.
 	writeStoredDocHash(repoRoot, fileName, cur)
 }
 
@@ -466,7 +473,14 @@ func handleSyncDocs(args []string, f Flags) {
 	}
 	brainDSN := "sqlite://" + dbPath
 
-	path, changed, err := syncRepoDocs(context.Background(), repoRoot, fileName, brainDSN)
+	// Absorb any human edits of the managed block into the brain BEFORE
+	// regenerating, so an edit that extracts into a claim survives the rewrite.
+	// (Regeneration replaces the block — this is the explicit, user-initiated
+	// refresh; durable prose belongs OUTSIDE the markers.)
+	ctx := context.Background()
+	syncBackFromDocs(ctx, repoRoot, fileName, brainDSN, f.LLM)
+
+	path, changed, err := syncRepoDocs(ctx, repoRoot, fileName, brainDSN)
 	if err != nil {
 		exitWithMnemosError(f.Verbose, NewSystemError(err, "sync repo docs"))
 		return

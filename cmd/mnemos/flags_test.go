@@ -5,27 +5,30 @@ import (
 	"testing"
 )
 
-func TestSplitEqualsFlags(t *testing.T) {
-	tests := []struct {
-		name string
-		in   []string
-		want []string
-	}{
-		{"long flag with value", []string{"--kind=lesson"}, []string{"--kind", "lesson"}},
-		{"global flag with value", []string{"--as=felix"}, []string{"--as", "felix"}},
-		{"bare flag untouched", []string{"--dry-run"}, []string{"--dry-run"}},
-		{"positional with = untouched", []string{"query", "a=b and c=d"}, []string{"query", "a=b and c=d"}},
-		{"value may contain =", []string{"--metadata={\"k\":\"a=b\"}"}, []string{"--metadata", "{\"k\":\"a=b\"}"}},
-		{"double-dash sentinel untouched", []string{"--"}, []string{"--"}},
-		{"empty name not split", []string{"--=x"}, []string{"--=x"}},
-		{"mixed", []string{"export", "--kind=playbook", "--out", "p.md"}, []string{"export", "--kind", "playbook", "--out", "p.md"}},
+// TestParseFlagsNoValueSplitting guards against the corruption the review
+// caught: the removed splitEqualsFlags pass used to rewrite ANY "--x=y" token —
+// including flag VALUES — before parsing, tearing a spaced value like
+// `--text "--db=… is the default"` into `--db` + `… is the default` and letting
+// ParseFlags consume it as the global DSN. With that pass gone, a value is never
+// split, so an ordinary value (even one containing "=") passes through verbatim.
+//
+// (Residual, unchanged from every other global flag: a value that is itself a
+// single bare `--db=…`/`--config=…` token is still recognized as that global
+// flag — a long-standing property of global flags, not introduced here.)
+func TestParseFlagsNoValueSplitting(t *testing.T) {
+	// A value containing "=" (not a bare global-flag token) is untouched.
+	f, rest := ParseFlags([]string{"query", "what is x=y and a=b?"})
+	if f.DB != "" || f.Config != "" {
+		t.Errorf("a value must not be consumed: DB=%q Config=%q", f.DB, f.Config)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := splitEqualsFlags(tt.in); !slices.Equal(got, tt.want) {
-				t.Errorf("splitEqualsFlags(%v) = %v, want %v", tt.in, got, tt.want)
-			}
-		})
+	if !slices.Equal(rest, []string{"query", "what is x=y and a=b?"}) {
+		t.Errorf("value corrupted: rest=%v", rest)
+	}
+
+	// The global value-flags accept the equals form when the user means them.
+	fa, _ := ParseFlags([]string{"process", "--as=felix"})
+	if fa.Actor != "felix" {
+		t.Errorf("--as=felix should set Actor; got %q", fa.Actor)
 	}
 }
 

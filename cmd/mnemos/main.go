@@ -135,9 +135,7 @@ func main() {
 		os.Exit(int(ExitUsage))
 	}
 
-	// Normalize --flag=value into "--flag value" up front so both the global
-	// parser and every command's space-form loop accept the equals form.
-	flags, args := ParseFlags(splitEqualsFlags(os.Args[1:]))
+	flags, args := ParseFlags(os.Args[1:])
 
 	// Layer the YAML config file under the environment before anything
 	// reads MNEMOS_* variables. Exported env vars always win; the file only

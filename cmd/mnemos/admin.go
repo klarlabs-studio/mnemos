@@ -75,12 +75,7 @@ func handleDeleteClaim(args []string, f Flags) {
 		return
 	}
 
-	if !f.Yes {
-		if !confirm(fmt.Sprintf("This will permanently delete %d claim(s) and their evidence/embeddings/relationships (%s) from %s. Continue?", len(args), strings.Join(args, ", "), displayDSN())) {
-			fmt.Println("aborted")
-			os.Exit(int(ExitSuccess))
-		}
-	}
+	confirmDestructiveOrExit(f, fmt.Sprintf("This will permanently delete %d claim(s) and their evidence/embeddings/relationships (%s) from %s. Continue?", len(args), strings.Join(args, ", "), displayDSN()))
 
 	err := runJob("delete-claim", map[string]string{"ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
 		var deletedClaims int64
@@ -108,12 +103,7 @@ func handleDeleteEvent(args []string, f Flags) {
 		return
 	}
 
-	if !f.Yes {
-		if !confirm(fmt.Sprintf("This will permanently delete %d event(s) and cascade their dependent claims/evidence/embeddings/relationships (%s) from %s. Continue?", len(args), strings.Join(args, ", "), displayDSN())) {
-			fmt.Println("aborted")
-			os.Exit(int(ExitSuccess))
-		}
-	}
+	confirmDestructiveOrExit(f, fmt.Sprintf("This will permanently delete %d event(s) and cascade their dependent claims/evidence/embeddings/relationships (%s) from %s. Continue?", len(args), strings.Join(args, ", "), displayDSN()))
 
 	err := runJob("delete-event", map[string]string{"ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
 		var deletedEvents, cascadedClaims int64
@@ -366,4 +356,31 @@ func confirm(prompt string) bool {
 	}
 	line = strings.TrimSpace(strings.ToLower(line))
 	return line == "y" || line == "yes"
+}
+
+// stdinIsInteractive reports whether stdin is a terminal (so a y/N prompt can
+// actually be answered).
+func stdinIsInteractive() bool {
+	fi, err := os.Stdin.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+// confirmDestructiveOrExit gates a destructive command. With --yes it returns.
+// On an interactive terminal it prompts and exits 0 if the user declines. In a
+// NON-interactive context without --yes it exits NON-ZERO with a usage error —
+// so a script/CI run fails loudly instead of silently no-opping while reporting
+// success (the prompt would otherwise read EOF, "decline", and exit 0 without
+// deleting anything).
+func confirmDestructiveOrExit(f Flags, prompt string) {
+	if f.Yes {
+		return
+	}
+	if !stdinIsInteractive() {
+		exitWithMnemosError(f.Verbose, NewUserError("refusing to proceed without confirmation in a non-interactive context — pass --yes to confirm"))
+		return
+	}
+	if !confirm(prompt) {
+		fmt.Println("aborted")
+		os.Exit(int(ExitSuccess))
+	}
 }

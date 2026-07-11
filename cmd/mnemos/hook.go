@@ -129,25 +129,26 @@ type recallClaim struct {
 	Source     string // "global" | "repo" (blank = untagged)
 }
 
-// repoBrainDSN resolves the opt-in repo brain for a session working directory:
-// the <repo>/.mnemos/mnemos.db of the nearest ancestor of cwd that has a
-// .mnemos/ (created by `mnemos init --project`). Returns "" when the session
-// isn't inside a repo that opted in — the hooks then use the global brain only.
-// Hosted mode has no local repo overlay, and a repo db equal to the active
-// (global) brain is not an overlay, so both yield "".
-func repoBrainDSN(cwd string) string {
+// repoBrain resolves the opt-in repo brain for a session working directory: the
+// <repo>/.mnemos/mnemos.db of the nearest ancestor of cwd that has a .mnemos/
+// (created by `mnemos init --project`), plus the repo root. Returns ("","") when
+// the session isn't inside a repo that opted in — the hooks then use the global
+// brain only. Hosted mode has no local repo overlay, and a repo db equal to the
+// active (global) brain is not an overlay, so both yield ("",""). Returning the
+// root too lets callers avoid re-walking the filesystem.
+func repoBrain(cwd string) (dsn, repoRoot string) {
 	if hostedConfigured() || strings.TrimSpace(cwd) == "" {
-		return ""
+		return "", ""
 	}
-	dbPath, _, ok := findProjectDBFrom(cwd)
+	dbPath, root, ok := findProjectDBFrom(cwd)
 	if !ok {
-		return ""
+		return "", ""
 	}
-	dsn := "sqlite://" + dbPath
+	dsn = "sqlite://" + dbPath
 	if dsn == strings.TrimSpace(os.Getenv("MNEMOS_DB_URL")) {
-		return "" // the repo brain IS the pinned global brain; no overlay
+		return "", "" // the repo brain IS the pinned global brain; no overlay
 	}
-	return dsn
+	return dsn, root
 }
 
 // withBrainDSN runs fn with MNEMOS_DB_URL temporarily set to dsn, restoring the
@@ -198,7 +199,7 @@ func hookRecall(ev hookEvent) {
 	// Repo overlay, if the session is inside an opted-in repo.
 	var repoClaims []recallClaim
 	var repoContra int
-	if dsn := repoBrainDSN(ev.Cwd); dsn != "" {
+	if dsn, _ := repoBrain(ev.Cwd); dsn != "" {
 		withBrainDSN(dsn, func() {
 			repoClaims, repoContra = recallLocal(ctx, q, "repo")
 		})
@@ -301,13 +302,15 @@ func hookBrief(ev hookEvent) {
 	}
 	// Repo overlay, if the session is inside an opted-in repo.
 	var repoClaims int64
-	if dsn := repoBrainDSN(ev.Cwd); dsn != "" {
+	if dsn, repoRoot := repoBrain(ev.Cwd); dsn != "" {
 		// Sync-back: fold any human edits of the repo's AGENTS.md managed block
-		// back into the brain before reporting, so the loop closes. Bounded and
-		// best-effort — a slow ingest must not hang session start indefinitely.
-		if _, repoRoot, ok := findProjectDBFrom(ev.Cwd); ok {
-			sbCtx, sbCancel := context.WithTimeout(context.Background(), 60*time.Second)
-			syncBackFromDocs(sbCtx, repoRoot, "AGENTS.md", dsn)
+		// back into the brain so the loop closes. This is the latency-sensitive
+		// SessionStart path, so it runs RULE-BASED (no LLM call) under a short
+		// timeout — session start must not hang on a slow/unreachable model. The
+		// thorough LLM pass happens at session end (capture) and on `sync-docs`.
+		if repoRoot != "" {
+			sbCtx, sbCancel := context.WithTimeout(context.Background(), 8*time.Second)
+			syncBackFromDocs(sbCtx, repoRoot, "AGENTS.md", dsn, false /* useLLM */)
 			sbCancel()
 		}
 		withBrainDSN(dsn, func() {
@@ -373,15 +376,16 @@ func hookCapture(ev hookEvent) {
 	}
 	// Repo-first routing: a session inside an opted-in repo captures to the repo
 	// brain (keeping repo-specific knowledge local); otherwise the global brain.
-	if dsn := repoBrainDSN(ev.Cwd); dsn != "" {
+	if dsn, repoRoot := repoBrain(ev.Cwd); dsn != "" {
 		withBrainDSN(dsn, write)
-		// Keep the repo's AGENTS.md current so every future agent session
-		// follows its learnings natively. First absorb any human edits of the
-		// managed block (so extractable notes survive the regen), then
-		// regenerate from the brain. Best-effort: never fail the hook over docs.
-		if _, repoRoot, ok := findProjectDBFrom(ev.Cwd); ok {
-			syncBackFromDocs(ctx, repoRoot, "AGENTS.md", dsn)
-			_, _, _ = syncRepoDocs(ctx, repoRoot, "AGENTS.md", dsn)
+		// Absorb any human edits of the managed block into the brain (thorough,
+		// LLM when configured). We deliberately do NOT regenerate AGENTS.md here:
+		// regenerating from the brain would wipe a human note that didn't extract
+		// into a claim. Refreshing the committed doc is the explicit, non-
+		// destructive `mnemos sync-docs` (which absorbs then regenerates). Best-
+		// effort: never fail the hook over docs.
+		if repoRoot != "" {
+			syncBackFromDocs(ctx, repoRoot, "AGENTS.md", dsn, useLLM)
 		}
 		return
 	}

@@ -25,23 +25,23 @@ func TestRepoBrainDSN(t *testing.T) {
 	t.Setenv("MNEMOS_DB_URL", "sqlite://"+filepath.Join(home, ".local/share/mnemos/mnemos.db"))
 
 	want := "sqlite://" + filepath.Join(repo, ".mnemos", "mnemos.db")
-	if got := repoBrainDSN(sub); got != want {
-		t.Errorf("repoBrainDSN(%q) = %q, want %q", sub, got, want)
+	if got, root := repoBrain(sub); got != want || root != repo {
+		t.Errorf("repoBrain(%q) = (%q, %q), want (%q, %q)", sub, got, root, want, repo)
 	}
 
 	// Outside any repo (a bare dir under home) → no overlay.
-	if got := repoBrainDSN(home); got != "" {
+	if got, _ := repoBrain(home); got != "" {
 		t.Errorf("no repo → want empty, got %q", got)
 	}
 
 	// Empty cwd → no overlay.
-	if got := repoBrainDSN(""); got != "" {
+	if got, _ := repoBrain(""); got != "" {
 		t.Errorf("empty cwd → want empty, got %q", got)
 	}
 
 	// When the repo brain IS the pinned global brain, it is not an overlay.
 	t.Setenv("MNEMOS_DB_URL", want)
-	if got := repoBrainDSN(sub); got != "" {
+	if got, _ := repoBrain(sub); got != "" {
 		t.Errorf("repo brain == global → want empty, got %q", got)
 	}
 }
@@ -54,7 +54,7 @@ func TestRepoBrainDSN_HostedIsGlobalOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MNEMOS_URL", "https://brain.example.com") // hosted
-	if got := repoBrainDSN(repo); got != "" {
+	if got, _ := repoBrain(repo); got != "" {
 		t.Errorf("hosted mode has no repo overlay, got %q", got)
 	}
 }
