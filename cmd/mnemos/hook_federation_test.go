@@ -59,6 +59,49 @@ func TestRepoBrainDSN_HostedIsGlobalOnly(t *testing.T) {
 	}
 }
 
+// TestHostedWorkspaceTenant covers the hosted-federation tenant resolver (ADR
+// 0009 Phase 3): a named workspace's tenant wins, a .mnemos repo falls back to
+// its git-remote-derived tenant, and neither yields "".
+func TestHostedWorkspaceTenant(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	// A named workspace over one folder.
+	wsFolder := filepath.Join(home, "acme")
+	if err := os.MkdirAll(wsFolder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	reg := workspaceRegistry{Workspaces: map[string]*workspace{
+		"acme": {Folders: []string{wsFolder}, DB: "sqlite:///w/acme.db"},
+	}}
+	if err := saveWorkspaceRegistry(reg); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := hostedWorkspaceTenant(wsFolder), deriveHostedTenant("acme"); got != want {
+		t.Errorf("workspace tenant = %q, want %q", got, want)
+	}
+
+	// A .mnemos repo (no workspace) with a git remote → repo-key-derived tenant.
+	repo := filepath.Join(home, "proj")
+	if err := os.MkdirAll(filepath.Join(repo, ".mnemos"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "init")
+	runGit(t, repo, "remote", "add", "origin", "https://example.com/proj.git")
+	if got, want := hostedWorkspaceTenant(repo), deriveHostedTenant("https://example.com/proj.git"); got != want {
+		t.Errorf("repo tenant = %q, want %q", got, want)
+	}
+
+	// Neither a workspace nor a repo → no scoped tenant.
+	if got := hostedWorkspaceTenant(home); got != "" {
+		t.Errorf("bare home → want empty, got %q", got)
+	}
+	if got := hostedWorkspaceTenant(""); got != "" {
+		t.Errorf("empty cwd → want empty, got %q", got)
+	}
+}
+
 func TestWithBrainDSN_RestoresEnv(t *testing.T) {
 	t.Setenv("MNEMOS_DB_URL", "sqlite:///global.db")
 	withBrainDSN("sqlite:///repo.db", func() {
