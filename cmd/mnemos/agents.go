@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -20,15 +19,10 @@ import (
 // token` so the agent surface stays self-contained — issuing an agent
 // token requires looking the agent up to fetch its scopes, which is
 // agent-shaped, not token-shaped.
-func handleAgent(args []string, _ Flags) {
+func handleAgent(args []string, f Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "error: agent requires a subcommand")
-		fmt.Fprintln(os.Stderr, "  mnemos agent create --name <n> --owner <user-id> --scope <s> [--scope <s>...] [--run <id>...]")
-		fmt.Fprintln(os.Stderr, "  mnemos agent list")
-		fmt.Fprintln(os.Stderr, "  mnemos agent revoke <agent-id>")
-		fmt.Fprintln(os.Stderr, "  mnemos agent token issue --agent <id> [--ttl <duration>]")
-		fmt.Fprintln(os.Stderr, "  mnemos agent heal --claim <id> --statement \"<new truth>\" [--reason \"...\"] [--json]")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("agent requires a subcommand: create, list, revoke, token, heal"))
+		return
 	}
 	switch args[0] {
 	case "create":
@@ -40,9 +34,9 @@ func handleAgent(args []string, _ Flags) {
 	case "token":
 		handleAgentToken(args[1:])
 	case "heal":
-		handleAgentHeal(args[1:])
+		handleAgentHeal(args[1:], f)
 	default:
-		exitWithMnemosError(false, NewUserError("unknown agent subcommand %q", args[0]))
+		exitWithMnemosError(false, NewUserError("unknown agent subcommand %q (want create, list, revoke, token, heal)", args[0]))
 	}
 }
 
@@ -311,9 +305,9 @@ func newAgentID() (string, error) {
 //  4. Calls WhyTrustClaim to compute and return the updated trust report.
 //
 // Output is either human-readable or JSON (--json).
-func handleAgentHeal(args []string) {
+func handleAgentHeal(args []string, f Flags) {
 	claimID, statement, reason := "", "", ""
-	jsonOut := false
+	jsonOut := f.JSON
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--claim":
@@ -337,8 +331,6 @@ func handleAgentHeal(args []string) {
 			}
 			reason = args[i+1]
 			i++
-		case "--json":
-			jsonOut = true
 		default:
 			exitWithMnemosError(false, NewUserError("unknown heal flag %q", args[i]))
 			return

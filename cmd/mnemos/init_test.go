@@ -7,7 +7,7 @@ import (
 
 func TestParseInitArgs(t *testing.T) {
 	t.Run("defaults to all hooks, user scope", func(t *testing.T) {
-		opts, err := parseInitArgs(nil)
+		opts, err := parseInitArgs(nil, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -22,7 +22,7 @@ func TestParseInitArgs(t *testing.T) {
 	})
 
 	t.Run("no-hooks clears the set", func(t *testing.T) {
-		opts, err := parseInitArgs([]string{"--no-hooks"})
+		opts, err := parseInitArgs([]string{"--no-hooks"}, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -32,7 +32,7 @@ func TestParseInitArgs(t *testing.T) {
 	})
 
 	t.Run("hooks subset", func(t *testing.T) {
-		opts, err := parseInitArgs([]string{"--hooks", "recall,capture"})
+		opts, err := parseInitArgs([]string{"--hooks", "recall,capture"}, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -42,13 +42,13 @@ func TestParseInitArgs(t *testing.T) {
 	})
 
 	t.Run("invalid hooks errors", func(t *testing.T) {
-		if _, err := parseInitArgs([]string{"--hooks", "nope"}); err == nil {
+		if _, err := parseInitArgs([]string{"--hooks", "nope"}, ""); err == nil {
 			t.Error("expected error for invalid hooks selection")
 		}
 	})
 
-	t.Run("project and db", func(t *testing.T) {
-		opts, err := parseInitArgs([]string{"--project", "--db", "postgres://x/y"})
+	t.Run("project and db (db via global flag)", func(t *testing.T) {
+		opts, err := parseInitArgs([]string{"--project"}, "postgres://x/y")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,19 +58,19 @@ func TestParseInitArgs(t *testing.T) {
 	})
 
 	t.Run("positional arg rejected", func(t *testing.T) {
-		if _, err := parseInitArgs([]string{"claude-code"}); err == nil {
+		if _, err := parseInitArgs([]string{"claude-code"}, ""); err == nil {
 			t.Error("init should reject positional args")
 		}
 	})
 
 	t.Run("unknown flag rejected", func(t *testing.T) {
-		if _, err := parseInitArgs([]string{"--wat"}); err == nil {
+		if _, err := parseInitArgs([]string{"--wat"}, ""); err == nil {
 			t.Error("expected error for unknown flag")
 		}
 	})
 
 	t.Run("url and token", func(t *testing.T) {
-		opts, err := parseInitArgs([]string{"--url", "https://h/mcp", "--token", "jwt"})
+		opts, err := parseInitArgs([]string{"--url", "https://h/mcp", "--token", "jwt"}, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,16 +80,16 @@ func TestParseInitArgs(t *testing.T) {
 	})
 
 	t.Run("url and db mutually exclusive", func(t *testing.T) {
-		if _, err := parseInitArgs([]string{"--url", "https://h/mcp", "--db", "sqlite://x"}); err == nil {
+		if _, err := parseInitArgs([]string{"--url", "https://h/mcp"}, "sqlite://x"); err == nil {
 			t.Error("expected mutual-exclusion error")
 		}
 	})
 
 	t.Run("service takes no url/db", func(t *testing.T) {
-		if _, err := parseInitArgs([]string{"--service", "--db", "sqlite://x"}); err == nil {
+		if _, err := parseInitArgs([]string{"--service"}, "sqlite://x"); err == nil {
 			t.Error("expected error: --service with --db")
 		}
-		opts, err := parseInitArgs([]string{"--service", "--out", "deploy"})
+		opts, err := parseInitArgs([]string{"--service", "--out", "deploy"}, "")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -57,3 +57,59 @@ func TestHandleConsolidate_RunsAndEmitsJSON(t *testing.T) {
 		t.Errorf("expected trust_refreshed key in output; got %v", res)
 	}
 }
+
+// TestParseConsolidateOpts_DryRunFromGlobalFlag guards the data-safety bug:
+// --dry-run is a global flag (stripped by ParseFlags), so it must flow into
+// ConsolidateOptions via f, not a local case. Without this, `consolidate
+// --dry-run` silently mutated the store.
+func TestParseConsolidateOpts_DryRunFromGlobalFlag(t *testing.T) {
+	opts, err := parseConsolidateOpts(nil, Flags{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.DryRun {
+		t.Fatal("DryRun must be true when the global --dry-run flag is set")
+	}
+
+	opts, err = parseConsolidateOpts(nil, Flags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.DryRun {
+		t.Fatal("DryRun must be false without the global flag")
+	}
+}
+
+func TestParseConsolidateOpts_LocalFlags(t *testing.T) {
+	opts, err := parseConsolidateOpts(
+		[]string{"--forget-refuted", "--synthesize", "--forget-below-trust", "0.3", "--replay-top-k", "5"},
+		Flags{DryRun: true},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.DryRun || !opts.ForgetRefuted || !opts.Synthesize {
+		t.Errorf("bool flags not set: %+v", opts)
+	}
+	if opts.ForgetBelowTrust != 0.3 {
+		t.Errorf("ForgetBelowTrust = %v, want 0.3", opts.ForgetBelowTrust)
+	}
+	if opts.ReplayTopK != 5 {
+		t.Errorf("ReplayTopK = %d, want 5", opts.ReplayTopK)
+	}
+}
+
+func TestParseConsolidateOpts_Errors(t *testing.T) {
+	cases := [][]string{
+		{"--unknown"},
+		{"--forget-below-trust"},        // missing value
+		{"--forget-below-trust", "1.5"}, // out of range
+		{"--replay-top-k"},              // missing value
+		{"--replay-top-k", "-2"},        // negative
+	}
+	for _, args := range cases {
+		if _, err := parseConsolidateOpts(args, Flags{}); err == nil {
+			t.Errorf("expected error for args %v", args)
+		}
+	}
+}

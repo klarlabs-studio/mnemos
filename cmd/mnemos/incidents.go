@@ -26,7 +26,7 @@ func handleIncident(args []string, _ Flags) {
 	case "list":
 		handleIncidentList(rest)
 	default:
-		exitWithMnemosError(false, NewUserError("unknown incident subcommand %q", sub))
+		exitWithMnemosError(false, NewUserError("unknown incident subcommand %q (want open, close, show, list)", sub))
 	}
 }
 
@@ -52,21 +52,45 @@ func handleIncidentOpen(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--id":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--id requires a value"))
+				return
+			}
 			id = args[i+1]
 			i++
 		case "--title":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--title requires a value"))
+				return
+			}
 			title = args[i+1]
 			i++
 		case "--summary":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--summary requires a value"))
+				return
+			}
 			summary = args[i+1]
 			i++
 		case "--severity":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--severity requires a value"))
+				return
+			}
 			severity = args[i+1]
 			i++
 		case "--root-claim":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--root-claim requires a value"))
+				return
+			}
 			rootClaim = args[i+1]
 			i++
 		case "--created-by":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--created-by requires a value"))
+				return
+			}
 			createdBy = args[i+1]
 			i++
 		default:
@@ -166,9 +190,17 @@ func handleIncidentList(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--severity":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--severity requires a value"))
+				return
+			}
 			severity = args[i+1]
 			i++
 		case "--status":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--status requires a value"))
+				return
+			}
 			status = args[i+1]
 			i++
 		default:

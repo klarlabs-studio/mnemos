@@ -49,25 +49,16 @@ type hookSpecificOutput struct {
 // handleHook dispatches `mnemos hook <name>`. It always exits 0; failures
 // degrade to "no context injected" rather than surfacing to the user.
 func handleHook(args []string) {
+	// The brain is pinned via the global --db flag (parsed in ParseFlags and
+	// exported as MNEMOS_DB_URL before dispatch), so the hook always targets
+	// the store the integration was set up against, regardless of the project
+	// directory Claude Code launched it from. Here we only need the sub-name.
 	name := ""
-	dbOverride := ""
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--db":
-			if i+1 < len(args) {
-				dbOverride = args[i+1]
-				i++
-			}
-		default:
-			if name == "" && !strings.HasPrefix(args[i], "-") {
-				name = args[i]
-			}
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") {
+			name = a
+			break
 		}
-	}
-	// Pin the brain the integration was set up against, regardless of the
-	// project directory Claude Code launched the hook from.
-	if dbOverride != "" {
-		_ = os.Setenv("MNEMOS_DB_URL", dbOverride)
 	}
 
 	ev := readHookEvent(os.Stdin)
@@ -135,9 +126,51 @@ type recallClaim struct {
 	Type       string
 	Text       string
 	TrustScore float64
+	Source     string // "global" | "repo" (blank = untagged)
 }
 
-// hookRecall (UserPromptSubmit) surfaces claims relevant to the user's prompt.
+// repoBrain resolves the opt-in repo brain for a session working directory: the
+// <repo>/.mnemos/mnemos.db of the nearest ancestor of cwd that has a .mnemos/
+// (created by `mnemos init --project`), plus the repo root. Returns ("","") when
+// the session isn't inside a repo that opted in — the hooks then use the global
+// brain only. Hosted mode has no local repo overlay, and a repo db equal to the
+// active (global) brain is not an overlay, so both yield ("",""). Returning the
+// root too lets callers avoid re-walking the filesystem.
+func repoBrain(cwd string) (dsn, repoRoot string) {
+	if hostedConfigured() || strings.TrimSpace(cwd) == "" {
+		return "", ""
+	}
+	dbPath, root, ok := findProjectDBFrom(cwd)
+	if !ok {
+		return "", ""
+	}
+	dsn = "sqlite://" + dbPath
+	if dsn == strings.TrimSpace(os.Getenv("MNEMOS_DB_URL")) {
+		return "", "" // the repo brain IS the pinned global brain; no overlay
+	}
+	return dsn, root
+}
+
+// withBrainDSN runs fn with MNEMOS_DB_URL temporarily set to dsn, restoring the
+// previous value afterward. Hooks are one-shot, single-goroutine processes, so
+// repointing the resolver at a second brain for one call is safe.
+func withBrainDSN(dsn string, fn func()) {
+	prev, had := os.LookupEnv("MNEMOS_DB_URL")
+	_ = os.Setenv("MNEMOS_DB_URL", dsn)
+	defer func() {
+		if had {
+			_ = os.Setenv("MNEMOS_DB_URL", prev)
+		} else {
+			_ = os.Unsetenv("MNEMOS_DB_URL")
+		}
+	}()
+	fn()
+}
+
+// hookRecall (UserPromptSubmit) surfaces claims relevant to the user's prompt,
+// federating the global brain with the current repo's brain (if the session is
+// inside an opted-in repo). Repo claims are more specific, so they lead and win
+// on duplicate text.
 func hookRecall(ev hookEvent) {
 	q := strings.TrimSpace(ev.Prompt)
 	if q == "" {
@@ -146,40 +179,81 @@ func hookRecall(ev hookEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 
-	var (
-		claims         []recallClaim
-		contradictions int
-	)
+	// Hosted brains are global-only for now (no local repo overlay).
 	if hostedConfigured() {
 		resp, err := hostedClient(12*time.Second).Search(ctx, q, client.SearchOptions{TopK: 6})
 		if err != nil || resp == nil {
 			return // fail-open
 		}
+		claims := make([]recallClaim, 0, len(resp.Claims))
 		for _, c := range resp.Claims {
-			claims = append(claims, recallClaim{Type: c.Type, Text: c.Text, TrustScore: c.TrustScore})
+			claims = append(claims, recallClaim{Type: c.Type, Text: c.Text, TrustScore: c.TrustScore, Source: "global"})
 		}
-		contradictions = len(resp.Contradictions)
-	} else {
-		out, err := mcpRunQuery(ctx, mcpQueryInput{Question: q})
-		if err != nil {
-			return // fail-open
-		}
-		if len(out.Claims) == 0 && strings.TrimSpace(out.Answer) == "" {
-			return
-		}
-		for _, c := range out.Claims {
-			claims = append(claims, recallClaim{Type: string(c.Type), Text: c.Text, TrustScore: c.TrustScore})
-		}
-		contradictions = len(out.Contradictions)
+		emitContext("UserPromptSubmit", renderRecall(claims, len(resp.Contradictions)))
+		return
 	}
-	emitContext("UserPromptSubmit", renderRecall(claims, contradictions))
+
+	// Global brain (the pinned MNEMOS_DB_URL).
+	globalClaims, globalContra := recallLocal(ctx, q, "global")
+
+	// Repo overlay, if the session is inside an opted-in repo.
+	var repoClaims []recallClaim
+	var repoContra int
+	if dsn, _ := repoBrain(ev.Cwd); dsn != "" {
+		withBrainDSN(dsn, func() {
+			repoClaims, repoContra = recallLocal(ctx, q, "repo")
+		})
+	}
+
+	claims, contra := mergeRecall(repoClaims, repoContra, globalClaims, globalContra)
+	emitContext("UserPromptSubmit", renderRecall(claims, contra))
+}
+
+// recallLocal queries the currently-resolved local brain, tagging each claim
+// with its source tier. Fail-open: any error yields no claims.
+func recallLocal(ctx context.Context, q, source string) ([]recallClaim, int) {
+	out, err := mcpRunQuery(ctx, mcpQueryInput{Question: q})
+	if err != nil {
+		return nil, 0
+	}
+	claims := make([]recallClaim, 0, len(out.Claims))
+	for _, c := range out.Claims {
+		claims = append(claims, recallClaim{Type: string(c.Type), Text: c.Text, TrustScore: c.TrustScore, Source: source})
+	}
+	return claims, len(out.Contradictions)
+}
+
+// mergeRecall combines repo (more specific — listed first, wins on duplicate
+// text) with global claims, de-duplicating by normalized text.
+func mergeRecall(repo []recallClaim, repoContra int, global []recallClaim, globalContra int) ([]recallClaim, int) {
+	seen := make(map[string]bool)
+	out := make([]recallClaim, 0, len(repo)+len(global))
+	for _, tier := range [][]recallClaim{repo, global} {
+		for _, c := range tier {
+			key := strings.ToLower(strings.TrimSpace(c.Text))
+			if key == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, c)
+		}
+	}
+	return out, repoContra + globalContra
 }
 
 // renderRecall renders a compact, citation-friendly context block. It caps the
-// claim list so the injection stays small.
+// claim list so the injection stays small. When a repo overlay contributed, each
+// claim is tagged with its tier so the model knows what's repo-specific.
 func renderRecall(claims []recallClaim, contradictions int) string {
 	if len(claims) == 0 {
 		return ""
+	}
+	hasRepo := false
+	for _, c := range claims {
+		if c.Source == "repo" {
+			hasRepo = true
+			break
+		}
 	}
 	var b strings.Builder
 	b.WriteString("Relevant knowledge from Mnemos (your long-term memory):\n")
@@ -189,10 +263,17 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 			fmt.Fprintf(&b, "  …and %d more (use the query_knowledge tool for the full set)\n", len(claims)-maxClaims)
 			break
 		}
-		fmt.Fprintf(&b, "  - [%s] %s (trust %.2f)\n", c.Type, strings.TrimSpace(c.Text), c.TrustScore)
+		tier := ""
+		if hasRepo && c.Source != "" {
+			tier = "{" + c.Source + "} "
+		}
+		fmt.Fprintf(&b, "  - %s[%s] %s (trust %.2f)\n", tier, c.Type, strings.TrimSpace(c.Text), c.TrustScore)
 	}
 	if contradictions > 0 {
 		fmt.Fprintf(&b, "  ⚠ %d contradiction(s) recorded on this topic — verify before relying.\n", contradictions)
+	}
+	if hasRepo {
+		b.WriteString("{repo} claims are specific to this repository and override {global} ones on conflict.\n")
 	}
 	b.WriteString("If this contradicts newer information, prefer the newer and note the conflict.")
 	return b.String()
@@ -204,34 +285,56 @@ func hookBrief(ev hookEvent) {
 	if ev.Source == "clear" || ev.Source == "compact" {
 		return
 	}
-	var claims, runs, contradictions int64
 	if hostedConfigured() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		m, err := hostedClient(10 * time.Second).Metrics(ctx)
-		if err != nil || m == nil {
+		if err != nil || m == nil || m.Claims == 0 {
 			return
 		}
-		claims, runs, contradictions = m.Claims, m.Runs, m.Contradictions
-	} else {
-		m, err := mcpRunMetrics(context.Background())
-		if err != nil {
-			return
+		emitContext("SessionStart", renderBrief(m.Claims, m.Runs, m.Contradictions, 0))
+		return
+	}
+
+	gm, err := mcpRunMetrics(context.Background())
+	if err != nil {
+		return
+	}
+	// Repo overlay, if the session is inside an opted-in repo.
+	var repoClaims int64
+	if dsn, repoRoot := repoBrain(ev.Cwd); dsn != "" {
+		// Sync-back: fold any human edits of the repo's AGENTS.md managed block
+		// back into the brain so the loop closes. This is the latency-sensitive
+		// SessionStart path, so it runs RULE-BASED (no LLM call) under a short
+		// timeout — session start must not hang on a slow/unreachable model. The
+		// thorough LLM pass happens at session end (capture) and on `sync-docs`.
+		if repoRoot != "" {
+			sbCtx, sbCancel := context.WithTimeout(context.Background(), 8*time.Second)
+			syncBackFromDocs(sbCtx, repoRoot, "AGENTS.md", dsn, false /* useLLM */)
+			sbCancel()
 		}
-		claims, runs, contradictions = m.Claims, m.Runs, m.Contradictions
+		withBrainDSN(dsn, func() {
+			if rm, e := mcpRunMetrics(context.Background()); e == nil {
+				repoClaims = rm.Claims
+			}
+		})
 	}
-	if claims == 0 {
-		return // empty brain: nothing worth announcing
+	if gm.Claims == 0 && repoClaims == 0 {
+		return // both tiers empty: nothing worth announcing
 	}
-	emitContext("SessionStart", renderBrief(claims, runs, contradictions))
+	emitContext("SessionStart", renderBrief(gm.Claims, gm.Runs, gm.Contradictions, repoClaims))
 }
 
-// renderBrief formats the session-start brain summary.
-func renderBrief(claims, runs, contradictions int64) string {
+// renderBrief formats the session-start brain summary. repoClaims > 0 adds a
+// note that this repo has its own scoped overlay.
+func renderBrief(claims, runs, contradictions, repoClaims int64) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Mnemos brain connected: %d claims across %d runs", claims, runs)
 	if contradictions > 0 {
 		fmt.Fprintf(&b, ", %d open contradiction(s)", contradictions)
+	}
+	if repoClaims > 0 {
+		fmt.Fprintf(&b, "; +%d claim(s) scoped to this repo", repoClaims)
 	}
 	b.WriteString(".\n")
 	b.WriteString("Use query_knowledge before answering questions about past decisions, and record new decisions/facts with process_text or record_decision.")
@@ -264,11 +367,29 @@ func hookCapture(ev hookEvent) {
 	// Local brain: auto-enable LLM/embeddings when a provider is configured on
 	// this machine; the pipeline degrades to rule-based extraction otherwise.
 	useLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
-	_, _ = mcpRunProcessText(ctx, "claude-code", mcpProcessTextInput{
-		Text:          text,
-		UseLLM:        useLLM,
-		UseEmbeddings: useLLM,
-	})
+	write := func() {
+		_, _ = mcpRunProcessText(ctx, "claude-code", mcpProcessTextInput{
+			Text:          text,
+			UseLLM:        useLLM,
+			UseEmbeddings: useLLM,
+		})
+	}
+	// Repo-first routing: a session inside an opted-in repo captures to the repo
+	// brain (keeping repo-specific knowledge local); otherwise the global brain.
+	if dsn, repoRoot := repoBrain(ev.Cwd); dsn != "" {
+		withBrainDSN(dsn, write)
+		// Absorb any human edits of the managed block into the brain (thorough,
+		// LLM when configured). We deliberately do NOT regenerate AGENTS.md here:
+		// regenerating from the brain would wipe a human note that didn't extract
+		// into a claim. Refreshing the committed doc is the explicit, non-
+		// destructive `mnemos sync-docs` (which absorbs then regenerates). Best-
+		// effort: never fail the hook over docs.
+		if repoRoot != "" {
+			syncBackFromDocs(ctx, repoRoot, "AGENTS.md", dsn, useLLM)
+		}
+		return
+	}
+	write()
 }
 
 // transcriptLine is the lenient shape we read from each JSONL transcript row.

@@ -22,6 +22,13 @@ type Flags struct {
 	// "--config=<path>"). Empty falls back to MNEMOS_CONFIG and then to
 	// walk-up / XDG discovery.
 	Config string
+	// DB is an explicit store DSN ("--db <dsn>" or "--db=<dsn>"). It is the
+	// most specific DSN source: main() exports it as MNEMOS_DB_URL for the
+	// whole process, overriding both the config file and any inherited
+	// MNEMOS_DB_URL. Empty falls back to that precedence chain. Making it a
+	// global flag means every command resolves the brain the same way — no
+	// more "--db works on `hook` but not on `metrics`".
+	DB string
 }
 
 // ParseFlags extracts known CLI flags from args and returns the remaining positional arguments.
@@ -34,6 +41,14 @@ func ParseFlags(args []string) (Flags, []string) {
 		// remaining logic only handles the space-separated form.
 		if v, ok := strings.CutPrefix(arg, "--config="); ok {
 			f.Config = v
+			continue
+		}
+		if v, ok := strings.CutPrefix(arg, "--db="); ok {
+			f.DB = v
+			continue
+		}
+		if v, ok := strings.CutPrefix(arg, "--as="); ok {
+			f.Actor = v
 			continue
 		}
 		switch strings.ToLower(arg) {
@@ -73,6 +88,14 @@ func ParseFlags(args []string) (Flags, []string) {
 			// MNEMOS_CONFIG / discovery.
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				f.Config = args[i+1]
+				i++
+			}
+		case "--db":
+			// --db wants the next arg as the store DSN. A trailing or
+			// flag-followed --db leaves DB empty, falling back to the
+			// MNEMOS_DB_URL / config / walk-up precedence chain.
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				f.DB = args[i+1]
 				i++
 			}
 		default:

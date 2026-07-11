@@ -16,48 +16,11 @@ import (
 //	mnemos consolidate [--dry-run] [--forget-below-trust <f>] [--forget-refuted]
 //	                   [--reinforce-validated] [--reinforce-playbooks]
 //	                   [--synthesize] [--replay-top-k <n>]
-func handleConsolidate(args []string, _ Flags) {
-	opts := mnemos.ConsolidateOptions{}
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--dry-run":
-			opts.DryRun = true
-		case "--forget-refuted":
-			opts.ForgetRefuted = true
-		case "--reinforce-validated":
-			opts.ReinforceValidated = true
-		case "--reinforce-playbooks":
-			opts.ReinforcePlaybooks = true
-		case "--synthesize":
-			opts.Synthesize = true
-		case "--forget-below-trust":
-			if i+1 >= len(args) {
-				exitWithMnemosError(false, NewUserError("--forget-below-trust requires a value"))
-				return
-			}
-			f, err := strconv.ParseFloat(args[i+1], 64)
-			if err != nil || f < 0 || f > 1 {
-				exitWithMnemosError(false, NewUserError("--forget-below-trust must be a float in [0, 1]"))
-				return
-			}
-			opts.ForgetBelowTrust = f
-			i++
-		case "--replay-top-k":
-			if i+1 >= len(args) {
-				exitWithMnemosError(false, NewUserError("--replay-top-k requires a value"))
-				return
-			}
-			n, err := strconv.Atoi(args[i+1])
-			if err != nil || n < 0 {
-				exitWithMnemosError(false, NewUserError("--replay-top-k must be a non-negative integer"))
-				return
-			}
-			opts.ReplayTopK = n
-			i++
-		default:
-			exitWithMnemosError(false, NewUserError("unknown flag %q", args[i]))
-			return
-		}
+func handleConsolidate(args []string, f Flags) {
+	opts, err := parseConsolidateOpts(args, f)
+	if err != nil {
+		exitWithMnemosError(false, err)
+		return
 	}
 
 	ctx := context.Background()
@@ -87,4 +50,47 @@ func handleConsolidate(args []string, _ Flags) {
 		"playbooks_synthesized": res.PlaybooksSynthesized,
 		"dry_run":               opts.DryRun,
 	})
+}
+
+// parseConsolidateOpts builds ConsolidateOptions from the sub-flags plus the
+// global flags. DryRun comes from f (the global --dry-run stripped by
+// ParseFlags), NOT from a local case — that was the bug where `consolidate
+// --dry-run` still mutated the store. Split out so the wiring is testable.
+func parseConsolidateOpts(args []string, f Flags) (mnemos.ConsolidateOptions, error) {
+	opts := mnemos.ConsolidateOptions{DryRun: f.DryRun}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--forget-refuted":
+			opts.ForgetRefuted = true
+		case "--reinforce-validated":
+			opts.ReinforceValidated = true
+		case "--reinforce-playbooks":
+			opts.ReinforcePlaybooks = true
+		case "--synthesize":
+			opts.Synthesize = true
+		case "--forget-below-trust":
+			if i+1 >= len(args) {
+				return opts, NewUserError("--forget-below-trust requires a value")
+			}
+			val, err := strconv.ParseFloat(args[i+1], 64)
+			if err != nil || val < 0 || val > 1 {
+				return opts, NewUserError("--forget-below-trust must be a float in [0, 1]")
+			}
+			opts.ForgetBelowTrust = val
+			i++
+		case "--replay-top-k":
+			if i+1 >= len(args) {
+				return opts, NewUserError("--replay-top-k requires a value")
+			}
+			n, err := strconv.Atoi(args[i+1])
+			if err != nil || n < 0 {
+				return opts, NewUserError("--replay-top-k must be a non-negative integer")
+			}
+			opts.ReplayTopK = n
+			i++
+		default:
+			return opts, NewUserError("unknown flag %q", args[i])
+		}
+	}
+	return opts, nil
 }

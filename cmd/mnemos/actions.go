@@ -19,8 +19,8 @@ import (
 // and `show` without churning main.go.
 func handleAction(args []string, _ Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: mnemos action record --kind <kind> --subject <name> [...]")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("action requires a subcommand: record, list"))
+		return
 	}
 	sub := args[0]
 	rest := args[1:]
@@ -30,16 +30,15 @@ func handleAction(args []string, _ Flags) {
 	case "list":
 		handleActionList(rest)
 	default:
-		fmt.Fprintf(os.Stderr, "error: unknown action subcommand %q\n", sub)
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("unknown action subcommand %q (want record, list)", sub))
 	}
 }
 
 // handleOutcome routes `mnemos outcome <subcommand> ...`.
 func handleOutcome(args []string, _ Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: mnemos outcome record --action <id> --result <success|failure|partial|unknown> [...]")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("outcome requires a subcommand: record, list"))
+		return
 	}
 	sub := args[0]
 	rest := args[1:]
@@ -49,8 +48,7 @@ func handleOutcome(args []string, _ Flags) {
 	case "list":
 		handleOutcomeList(rest)
 	default:
-		fmt.Fprintf(os.Stderr, "error: unknown outcome subcommand %q\n", sub)
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("unknown outcome subcommand %q (want record, list)", sub))
 	}
 }
 

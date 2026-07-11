@@ -7,10 +7,11 @@ import (
 
 func TestParseSetupArgs(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    []string
-		want    setupOpts
-		wantErr bool
+		name      string
+		args      []string
+		globalDSN string // the global --db flag value (parsed in ParseFlags)
+		want      setupOpts
+		wantErr   bool
 	}{
 		{
 			name: "defaults to claude-code user scope",
@@ -23,19 +24,15 @@ func TestParseSetupArgs(t *testing.T) {
 			want: setupOpts{target: "claude-code", project: true},
 		},
 		{
-			name: "explicit target and db",
-			args: []string{"claude-code", "--db", "postgres://x/y"},
-			want: setupOpts{target: "claude-code", dsn: "postgres://x/y"},
+			name:      "explicit target and db (db via global flag)",
+			args:      []string{"claude-code"},
+			globalDSN: "postgres://x/y",
+			want:      setupOpts{target: "claude-code", dsn: "postgres://x/y"},
 		},
 		{
 			name: "print flag",
 			args: []string{"--print"},
 			want: setupOpts{target: "claude-code", print: true},
-		},
-		{
-			name:    "db without value",
-			args:    []string{"--db"},
-			wantErr: true,
 		},
 		{
 			name:    "unknown flag",
@@ -45,7 +42,7 @@ func TestParseSetupArgs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseSetupArgs(tt.args)
+			got, err := parseSetupArgs(tt.args, tt.globalDSN)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil (%+v)", got)
@@ -85,6 +82,37 @@ func TestSQLiteFilePath(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveBinPath(t *testing.T) {
+	// A Homebrew install launches via the stable /opt/homebrew/bin/mnemos
+	// symlink. os.Executable() returns that absolute symlink path; resolveBinPath
+	// must keep it as-is rather than following it to a versioned Cellar path that
+	// `brew upgrade` deletes.
+	tests := []struct {
+		name string
+		exe  string
+		err  error
+		want string
+	}{
+		{"homebrew symlink kept intact", "/opt/homebrew/bin/mnemos", nil, "/opt/homebrew/bin/mnemos"},
+		{"plain absolute path", "/usr/local/bin/mnemos", nil, "/usr/local/bin/mnemos"},
+		{"error falls back to bare name", "", errStub, "mnemos"},
+		{"empty falls back to bare name", "", nil, "mnemos"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveBinPath(tt.exe, tt.err); got != tt.want {
+				t.Errorf("resolveBinPath(%q, %v) = %q, want %q", tt.exe, tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+var errStub = errStubType("boom")
+
+type errStubType string
+
+func (e errStubType) Error() string { return string(e) }
 
 func TestMCPJSONSnippetIsValidShape(t *testing.T) {
 	snippet := mcpJSONSnippet("/usr/local/bin/mnemos", "sqlite:///tmp/a.db", true)

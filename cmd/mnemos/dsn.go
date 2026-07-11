@@ -86,6 +86,23 @@ func resolveDSN() string {
 	return "sqlite://" + resolveDBPath()
 }
 
+// displayDSN returns the DSN actually in effect for this process, with any
+// password redacted, for human display (confirmations, log lines). Prefer it
+// over resolveDBPath() in user-facing messages: resolveDBPath() ignores
+// MNEMOS_DB_URL, so it can name a different store than the one a destructive
+// command will operate on.
+func displayDSN() string {
+	dsn := resolveDSN()
+	if u, err := url.Parse(dsn); err == nil && u.User != nil {
+		if _, hasPassword := u.User.Password(); hasPassword {
+			// "redacted" is alphanumeric so url.String() won't percent-encode it.
+			u.User = url.UserPassword(u.User.Username(), "redacted")
+			return u.String()
+		}
+	}
+	return dsn
+}
+
 // openConn opens a store connection through the registry using the
 // resolved DSN. Callers should use this instead of opening a raw
 // *sql.DB directly:

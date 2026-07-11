@@ -114,15 +114,14 @@ func saveProjectConfig(cfg registryConfig) (string, error) {
 // Today only `connect` exists; later: `disconnect`, `status`, `set-token`.
 func handleRegistry(args []string, _ Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "error: registry requires a subcommand")
-		fmt.Fprintln(os.Stderr, "  mnemos registry connect <url> [--token <token>]")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("registry requires a subcommand: connect"))
+		return
 	}
 	switch args[0] {
 	case "connect":
 		handleRegistryConnect(args[1:])
 	default:
-		exitWithMnemosError(false, NewUserError("unknown registry subcommand %q", args[0]))
+		exitWithMnemosError(false, NewUserError("unknown registry subcommand %q (want connect)", args[0]))
 	}
 }
 
@@ -326,6 +325,8 @@ func parseRegistryFlags(args []string) (string, string) {
 				token = args[i+1]
 				i++
 			}
+		default:
+			exitWithMnemosError(false, NewUserError("unknown flag %q", args[i]))
 		}
 	}
 	return regURL, token

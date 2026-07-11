@@ -22,7 +22,7 @@ import (
 // Everything is idempotent: re-running reports "already registered" rather
 // than erroring, and --force replaces an existing registration.
 func handleSetup(args []string, f Flags) {
-	opts, err := parseSetupArgs(args)
+	opts, err := parseSetupArgs(args, f.DB)
 	if err != nil {
 		exitWithMnemosError(false, err)
 		return
@@ -49,8 +49,10 @@ type setupOpts struct {
 	dsn     string // explicit DB DSN override
 }
 
-func parseSetupArgs(args []string) (setupOpts, error) {
-	opts := setupOpts{target: "claude-code"}
+// parseSetupArgs parses setup's own flags. The brain DSN arrives via globalDSN
+// (the global --db flag, parsed in ParseFlags) rather than a local --db case.
+func parseSetupArgs(args []string, globalDSN string) (setupOpts, error) {
+	opts := setupOpts{target: "claude-code", dsn: globalDSN}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
@@ -58,12 +60,6 @@ func parseSetupArgs(args []string) (setupOpts, error) {
 			opts.project = true
 		case "--print":
 			opts.print = true
-		case "--db":
-			if i+1 >= len(args) {
-				return opts, NewUserError("--db requires a DSN value")
-			}
-			opts.dsn = args[i+1]
-			i++
 		default:
 			if strings.HasPrefix(arg, "-") {
 				return opts, NewUserError("unknown setup flag %q", arg)
@@ -310,10 +306,27 @@ func projectDBPath() string {
 // selfPath returns the absolute path to this binary so the registration keeps
 // working even when Claude Code launches with a different PATH. Falls back to
 // the bare name (PATH lookup) if the executable path can't be determined.
+//
+// It deliberately does NOT resolve symlinks: os.Executable() already returns an
+// absolute path (the invocation path, e.g. the stable /opt/homebrew/bin/mnemos
+// symlink for a Homebrew install). Following that symlink would pin the
+// registration to a versioned Cellar path (…/Cellar/mnemos/0.81.0/bin/mnemos)
+// that `brew upgrade` deletes, silently breaking the MCP server and every hook.
+// The stable symlink survives upgrades, so we keep it. Only fall back to
+// symlink resolution when os.Executable() unexpectedly yields a relative path.
 func selfPath() string {
 	exe, err := os.Executable()
+	return resolveBinPath(exe, err)
+}
+
+// resolveBinPath is the pure core of selfPath, split out so the symlink policy
+// can be tested without depending on the test binary's own location.
+func resolveBinPath(exe string, err error) string {
 	if err != nil || exe == "" {
 		return "mnemos"
+	}
+	if filepath.IsAbs(exe) {
+		return exe
 	}
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		return resolved

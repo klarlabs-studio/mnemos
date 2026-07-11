@@ -72,20 +72,37 @@ func globalDBPath() string {
 // the project root (the directory containing .mnemos), and true. Stops at
 // the filesystem root or the user's home directory (whichever is reached
 // first) to avoid accidentally adopting a parent project's DB.
+//
+// The home directory is a hard stop that is checked BEFORE its own .mnemos:
+// $HOME/.mnemos is the global fallback dir (jwt-secret, user-global config),
+// not a project brain. Adopting it would shadow the XDG global brain for
+// essentially every directory under $HOME — see ADR 0008. Project brains live
+// strictly below $HOME; at or above home we fall through to the XDG default.
 func findProjectDB() (dbPath, projectRoot string, ok bool) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", "", false
 	}
+	return findProjectDBFrom(cwd)
+}
+
+// findProjectDBFrom is findProjectDB rooted at an explicit directory instead of
+// the process CWD. The hooks use it with the session's cwd (from the Claude Code
+// hook payload) to resolve a repo brain — the hook process's own CWD is not the
+// user's working directory.
+func findProjectDBFrom(startDir string) (dbPath, projectRoot string, ok bool) {
+	if startDir == "" {
+		return "", "", false
+	}
 	home, _ := os.UserHomeDir()
-	dir := cwd
+	dir := startDir
 	for {
+		if home != "" && dir == home {
+			return "", "", false
+		}
 		candidate := filepath.Join(dir, ".mnemos")
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 			return filepath.Join(candidate, "mnemos.db"), dir, true
-		}
-		if home != "" && dir == home {
-			return "", "", false
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -129,6 +146,16 @@ func main() {
 		os.Exit(int(ExitConfig))
 	} else if path != "" && flags.Verbose {
 		printProgress("config: loaded %s (%d value(s) applied)", path, len(applied))
+	}
+
+	// An explicit --db flag is the most specific DSN source, so it wins over
+	// both the config file (already hydrated above) and any inherited
+	// MNEMOS_DB_URL. Exporting it here means every command — not just the ones
+	// that used to parse --db themselves (hook/init/setup) — resolves the same
+	// brain via resolveDSN(). init/setup read flags.DB directly for the brain
+	// they configure; setting the env too is harmless (they re-pin it anyway).
+	if flags.DB != "" {
+		_ = os.Setenv("MNEMOS_DB_URL", flags.DB)
 	}
 
 	// Default to human-readable output in interactive terminals.
@@ -225,6 +252,10 @@ func main() {
 		handleSynthesize(args, flags)
 	case "consolidate":
 		handleConsolidate(args, flags)
+	case "sync-docs":
+		handleSyncDocs(args, flags)
+	case "rebuild":
+		handleRebuild(args, flags)
 	case "lessons":
 		handleLessons(args, flags)
 	case "verify":
@@ -1293,14 +1324,14 @@ func printUsage() {
 	fmt.Println("  init --url <url> [--token <jwt>]     Connect Claude Code to a hosted mnemos (HTTP MCP endpoint)")
 	fmt.Println("  init --service [--out <dir>]         Scaffold a hosted `mnemos serve` deployment (compose+config)")
 	fmt.Println("  setup                                Minimal: register only the MCP server (no hooks/config)")
+	fmt.Println("  doctor [--json]                      Diagnose brain/providers/config; exits non-zero if a check fails")
 	fmt.Println("")
 	fmt.Println("Serving:")
 	fmt.Println("  mcp                                  MCP server over stdio (default, for local Claude Code)")
 	fmt.Println("  mcp --http <addr> [--auth]           MCP server over HTTP for remote clients (JWT auth by default)")
 	fmt.Println("  mcp --http <addr> --require-tenant   Multi-tenant: every request needs a token with a tenant (postgres, RLS-isolated)")
-	fmt.Println("  serve [--grpc-port N]                REST + gRPC API service")
+	fmt.Println("  serve [--port N] [--grpc-port N]     REST + gRPC API service (default :7777)")
 	fmt.Println("  serve --require-tenant               Multi-tenant REST + gRPC: every request needs a token with a tenant (postgres, RLS)")
-	fmt.Println("  token issue --user <id> [--tenant T] Mint a user JWT (optionally scoped to tenant T)")
 	fmt.Println("")
 	fmt.Println("Pipeline Commands:")
 	fmt.Println("  ingest <path>                        Ingest a file as events")
@@ -1314,6 +1345,7 @@ func printUsage() {
 	fmt.Println("  process --text <content>             Same, from raw text")
 	fmt.Println("  process --llm <path>                 Use LLM-powered extraction")
 	fmt.Println("  process --llm --embed <path>         LLM extraction + embeddings")
+	fmt.Println("  claim record --text <t> [--type T]   Record a single claim directly (fact/decision/hypothesis)")
 	fmt.Println("")
 	fmt.Println("Query & Reporting:")
 	fmt.Println("  query [--run <run-id>] <question>    Query with evidence")
@@ -1331,19 +1363,44 @@ func printUsage() {
 	fmt.Println("  entities merge <winner> <loser>      Collapse one entity into another (manual canonicalisation)")
 	fmt.Println("  extract-entities [--all]             Backfill entity links over claims that lack them")
 	fmt.Println("  metrics [--human]                    Knowledge base statistics")
+	fmt.Println("  quality                              Memory-quality metrics (trust, staleness, contested, contradictions)")
 	fmt.Println("  audit [--include-embeddings]         Export the full knowledge base as JSON")
+	fmt.Println("")
+	fmt.Println("Decisions, Actions & Outcomes:")
+	fmt.Println("  decision record --statement <s> ...  Record an agent decision (plan/reasoning/risk/beliefs)")
+	fmt.Println("  decision list|show|attach-outcome    List, show, or attach an outcome to a decision")
+	fmt.Println("  action record --kind <k> [...]       Record an operational action")
+	fmt.Println("  action list [--subject S] [--run R]  List recorded actions")
+	fmt.Println("  outcome record --action <id> [...]   Record the observed outcome of an action")
+	fmt.Println("  outcome list [--action <id>]         List recorded outcomes")
+	fmt.Println("  incident open|close|show|list        Track incidents linked to root-cause claims")
+	fmt.Println("")
+	fmt.Println("Synthesis (lessons & playbooks):")
+	fmt.Println("  synthesize [--min-corroboration N]   Cluster action->outcome chains into lessons")
+	fmt.Println("  lessons list [--service S|--trigger T] List synthesised lessons")
+	fmt.Println("  playbook synthesize                  Cluster lessons by trigger into agent-ready playbooks")
+	fmt.Println("  playbook list | show <id>            List playbooks, or show one")
+	fmt.Println("  playbook <trigger>                   Look up the best playbook for a trigger")
+	fmt.Println("  export --kind lesson|playbook        Export a lesson/playbook to YAML-frontmatter markdown")
+	fmt.Println("  import <file.md>                     Import a lesson/playbook from markdown")
+	fmt.Println("  history --kind lesson|playbook       Show the version history of a lesson/playbook")
+	fmt.Println("")
+	fmt.Println("Truth Maintenance:")
 	fmt.Println("  resolve <winner> --over <loser>      Resolve a contradiction: winner -> resolved, loser -> deprecated")
 	fmt.Println("  resolve <new> --supersedes <old>     Temporal supersession: close old.valid_to at new.valid_from")
 	fmt.Println("  trust --test <requirement-ref>       Rank test_result claims for a requirement and pick a winner")
+	fmt.Println("  verify <claim-id> [--half-life-days N] Mark a claim re-verified (refreshes freshness/trust)")
 	fmt.Println("")
 	fmt.Println("Identity:")
 	fmt.Println("  user create --name <n> --email <e>   Create a user identity")
 	fmt.Println("  user list                            List users")
 	fmt.Println("  user revoke <id>                     Revoke a user (soft delete)")
-	fmt.Println("  token issue --user <id> [--ttl <d>]  Mint a JWT for a user (default ttl 90 days)")
+	fmt.Println("  token issue --user <id> [--ttl <d>]  Mint a JWT for a user (default ttl 90 days; --tenant T to scope)")
 	fmt.Println("  token revoke <jti>                   Add a JWT's jti to the denylist")
-	fmt.Println("  mcp                                  Start MCP server over stdio")
-	fmt.Println("  serve [--port <n>] [--grpc-port <n>] Start HTTP registry server (default :7777) with optional gRPC")
+	fmt.Println("  agent create --name <n>              Create an agent identity")
+	fmt.Println("  agent list | revoke <id>             List agents, or revoke one")
+	fmt.Println("  agent token issue --agent <id>       Mint a JWT for an agent (--tenant T to scope)")
+	fmt.Println("  agent heal [--json]                  Diagnose + repair an agent's belief set")
 	fmt.Println("")
 	fmt.Println("Registry Sync:")
 	fmt.Println("  registry connect <url> [--token T]   Wire this project to a remote registry")
@@ -1352,13 +1409,17 @@ func printUsage() {
 	fmt.Println("")
 	fmt.Println("Maintenance:")
 	fmt.Println("  reset [--keep-events] [--yes]        Wipe claims/relationships/embeddings (events optional)")
-	fmt.Println("  delete-claim <id> [<id>...]          Delete specific claims and their derived state")
-	fmt.Println("  delete-event <id> [<id>...]          Delete events and cascade to derived claims")
+	fmt.Println("  delete-claim <id> [<id>...] [--yes]  Delete specific claims and their derived state")
+	fmt.Println("  delete-event <id> [<id>...] [--yes]  Delete events and cascade to derived claims")
 	fmt.Println("  reembed [--force] [--dry-run]        (Re)generate claim embeddings under the current embed config")
 	fmt.Println("  recompute-trust [--all]              Rebuild trust_score for every claim under the current policy")
 	fmt.Println("  dedup [--threshold T] [--force]      Merge near-duplicate claims by embedding similarity (dry-run by default)")
-	fmt.Println("  consolidate [--forget-below-trust T] The cognitive \"sleep\" pass: dedupe + refresh trust, and")
-	fmt.Println("    [--forget-refuted] [--synthesize]  optionally forget/reinforce/synthesize/replay. Deterministic.")
+	fmt.Println("  consolidate [--dry-run] [--forget-below-trust T]  The cognitive \"sleep\" pass: dedupe + refresh trust,")
+	fmt.Println("    [--forget-refuted] [--synthesize]  and optionally forget/reinforce/synthesize/replay. Deterministic.")
+	fmt.Println("  sync-docs [--claude] [--file <name>] Write this repo's learnings into AGENTS.md (or CLAUDE.md) so")
+	fmt.Println("                                       agents follow them natively (mnemos-managed block)")
+	fmt.Println("  rebuild [--claude] [--file <name>]   Rebuild the gitignored repo brain from a committed AGENTS.md")
+	fmt.Println("                                       (run once after cloning a repo that has an AGENTS.md block)")
 	fmt.Println("")
 	fmt.Println("Flags:")
 	fmt.Println("  -h, --help     show this help message")
@@ -1372,8 +1433,9 @@ func printUsage() {
 	fmt.Println("  --force        with reembed/dedup: actually apply (default is dry-run)")
 	fmt.Println("  --dry-run      report what would change without writing")
 	fmt.Println("  --min-trust X  query: only return claims with trust_score ≥ X (X in [0, 1])")
-	fmt.Println("  -y, --yes      with reset: skip the confirmation prompt")
+	fmt.Println("  -y, --yes      skip the confirmation prompt (reset, delete-claim, delete-event)")
 	fmt.Println("  --config PATH  YAML config file (else MNEMOS_CONFIG, then .mnemos/mnemos.yaml, then ~/.config/mnemos/config.yaml)")
+	fmt.Println("  --db DSN       storage DSN for this command (overrides MNEMOS_DB_URL / config; any registered backend)")
 	fmt.Println("")
 	fmt.Println("Configuration:")
 	fmt.Println("  Settings come from the environment and/or a YAML config file.")
