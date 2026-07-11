@@ -8,6 +8,8 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.83.0] — 2026-07-11
+
 ### Added
 
 - **User-selected workspaces (the Cowork model, ADR 0010).** `mnemos workspace
