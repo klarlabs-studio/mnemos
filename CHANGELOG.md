@@ -8,7 +8,30 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.82.0] — 2026-07-11
+
 ### Added
+
+- **Central brain + repo-isolated knowledge (two-tier brain).** The global brain
+  now federates with an opt-in per-repo brain. `mnemos init --project` creates
+  `<repo>/.mnemos/mnemos.db`; the Claude Code hooks are repo-aware (via the
+  session cwd): recall federates global ∪ repo (repo claims tagged `{repo}`, win
+  on conflict), capture routes repo-first, and brief reports the repo overlay
+  count. A repo is modelled as an ADR-0007 tenant, keyed by git remote (path
+  fallback).
+- **`mnemos sync-docs`** writes a repo's high-signal learnings (decisions,
+  top-trust facts, open questions) into a delimited managed block in `AGENTS.md`
+  (or `--claude` / `--file`), so agents that auto-load those files follow them
+  natively; human content outside the markers is preserved. **Two-way sync-back:**
+  brief (fast) and capture (thorough) detect human edits inside the block and
+  ingest them into the brain, never overwriting the human's text.
+- **`mnemos rebuild`** reconstructs the gitignored repo-brain index from a
+  committed `AGENTS.md` after a clone; `sync-docs`/capture auto-maintain the
+  repo's `.gitignore`.
+- **`doctor` warns about an orphaned `$HOME/.mnemos` brain** (ADR 0008 migration
+  safety), telling an upgrading user how to adopt it.
+- Docs: ADR 0008, the central+repo design, the CLI UX review, and setup +
+  repo-brain workflow guides.
 
 - **MCP parity: working memory + temporal signals (cognitive layer, MCP batch 3
   — completes MCP parity).** New agent-facing MCP tools: `get_blocks` (an agent's
@@ -19,6 +42,24 @@ notable changes.
 
 ### Changed
 
+- **BREAKING — `$HOME/.mnemos` is no longer adopted as a project brain (ADR
+  0008).** It is the global fallback dir (jwt-secret, user config), not a
+  project root, so bare CLI from anywhere under `$HOME` now resolves the XDG
+  global brain instead of shadowing it. A brain deliberately kept at
+  `~/.mnemos/mnemos.db` must be selected explicitly (`MNEMOS_DB_URL` / `--db`, or
+  moved below a project dir); `doctor` warns when it detects one. No auto-migration.
+- **`--db` is now a global flag** accepted by every command (was only
+  `hook`/`init`/`setup`); it exports `MNEMOS_DB_URL` for the invocation.
+- **Destructive commands are gated and honest.** `delete-claim` / `delete-event`
+  now require `--yes` or an interactive confirm, and refuse (non-zero) rather
+  than silently no-op in a non-interactive context without `--yes`; reset/delete
+  confirmations show the real resolved DSN (password-redacted).
+- **Homebrew-safe setup.** `init` registers the stable binary path (e.g.
+  `/opt/homebrew/bin/mnemos`) instead of the versioned Cellar realpath, so the
+  MCP server and hooks survive `brew upgrade`.
+- `--help` lists every command (Phase 2–7 surfaces were undiscoverable); typo
+  suggestions rank against the full command set; usage errors route through the
+  structured path and list valid subcommands.
 - **Dependencies updated to latest.** Notably `go.klarlabs.de/mcp` v1.15.0 →
   v1.21.0, `go.klarlabs.de/bolt` v1.5.2 → v1.6.0, `go.klarlabs.de/statekit`
   v1.9.0 → v1.11.1, `go.klarlabs.de/fortify` v1.7.0 → v1.8.1, `google.golang.org/grpc`
@@ -29,6 +70,19 @@ notable changes.
 
 ### Fixed
 
+- **`selfPath()` broke the integration on `brew upgrade`.** It resolved symlinks,
+  pinning the MCP server + hooks to a versioned Cellar path that upgrades delete;
+  it now keeps the stable invocation path.
+- **`doctor` accuracy.** `project_root` reflects the `MNEMOS_DB_URL` override
+  instead of contradicting `store_open`.
+- **Dead global-flag collisions.** `consolidate --dry-run` no longer mutates the
+  store on a requested preview, and `doctor --json` emits JSON — both were
+  stripped as global flags but read from unreachable local cases.
+- **Repo-doc data-safety (found in review).** Session capture no longer
+  regenerates `AGENTS.md` from claims (which could wipe a human note that didn't
+  extract); it only absorbs edits. The brief sync-back is fast (rule-based,
+  bounded) so it can't stall session start, and the doc's baseline hash is
+  written only after a successful file write.
 - **Passive-mode recall now stems inflected forms (#159).** The `events_fts` /
   `claims_fts` tables used the default `unicode61` tokenizer (no stemming), so
   recall matched token-for-token: a claim stored as "issues automatic refunds"
