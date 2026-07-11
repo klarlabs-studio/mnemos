@@ -368,6 +368,36 @@ CREATE TABLE IF NOT EXISTS claim_expectations (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- global_schemas (ADR 0011 Phase B) — the neocortex (shared/global) tier: a
+-- promoted, de-identified generalization corroborated by N distinct tenants. Its
+-- provenance is COUNTS (distinct_tenants, evidence_count), never tenant ids or
+-- raw evidence ids.
+--
+-- INVERSE of the ADR-0007 RLS gotcha: this is the SHARED tier and MUST be
+-- readable across tenants, so it is DELIBERATELY NOT added to the `scoped` array
+-- below — it gets no `tenant` column and no tenant_isolation policy on purpose.
+-- Adding it to `scoped` would break the cross-tenant read the neocortex exists
+-- to provide. (Like users/revoked_tokens, but for the opposite reason: those are
+-- auth infra; this is the global brain.)
+CREATE TABLE IF NOT EXISTS global_schemas (
+    id text PRIMARY KEY,
+    statement text NOT NULL,
+    scope_service text NOT NULL DEFAULT '',
+    scope_env text NOT NULL DEFAULT '',
+    scope_team text NOT NULL DEFAULT '',
+    polarity text NOT NULL DEFAULT '',
+    distinct_tenants integer NOT NULL DEFAULT 0,
+    evidence_count integer NOT NULL DEFAULT 0,
+    confidence double precision NOT NULL DEFAULT 0,
+    surprise double precision NOT NULL DEFAULT 0,
+    has_surprise boolean NOT NULL DEFAULT false,
+    status text NOT NULL DEFAULT 'pending',
+    promoted_at timestamptz,
+    created_by text NOT NULL DEFAULT '<system>'
+);
+CREATE INDEX IF NOT EXISTS idx_global_schemas_status ON global_schemas(status);
+CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(promoted_at);
+
 -- ADR 0007: per-tenant isolation WITHIN a namespace. Each data table gets a
 -- `tenant` column defaulted from the `mnemos.tenant` GUC (pinned per connection by
 -- the provider), plus row-level security that filters every read/write to the

@@ -100,6 +100,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 		EntityRels:    sqlite.NewEntityRelationshipRepository(db),
 		Feedback:      sqlite.NewFeedbackRepository(db),
 		ClaimVersions: sqlite.NewClaimVersionRepository(db),
+		GlobalSchemas: sqlite.NewGlobalSchemaRepository(db),
 		Raw:           db,
 		Closer:        db.Close,
 	}, nil
