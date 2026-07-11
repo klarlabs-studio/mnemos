@@ -109,13 +109,16 @@ Still open:
    follow it natively. `mnemos sync-docs` regenerates a delimited, human-content-
    preserving managed block from the repo brain; it also fires after a repo
    capture. Decisions + top-trust facts + open questions.
-3. **Brief-time sync-back — NEXT:** at SessionStart, detect human edits inside
-   the managed block (content hash) and ingest the delta into the repo brain,
-   closing the two-way loop.
+3. **Brief-time sync-back — DONE:** at SessionStart, a content-hash check
+   detects human edits inside the managed block and ingests the delta into the
+   repo brain (dedup collapses known lines), then re-baselines the hash to
+   converge. Safety: it does NOT regenerate/overwrite, so a human note that
+   didn't extract into a claim is never silently wiped; the block is only
+   rewritten by explicit `sync-docs` or the capture regen. Two-way loop closed.
 4. **Rebuild — LATER:** `mnemos rebuild` reconstructs the gitignored `.db` from
    AGENTS.md + captured sessions after a clone.
 5. **Docs + `.gitignore` guidance — LATER:** commit AGENTS.md, ignore
-   `.mnemos/mnemos.db`.
+   `.mnemos/mnemos.db` and `.mnemos/.*.sha`.
 
 Two kinds of memory, one workflow:
 
