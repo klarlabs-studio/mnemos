@@ -70,13 +70,22 @@ func handlePromote(args []string, f Flags) {
 		global = &storeGlobalKnowledge{dsn: opts.globalDSN}
 	}
 
+	// Prediction-error ranking signal: aggregate domain.Expectation surprise
+	// across the tenant stores, keyed by operational scope (see
+	// newStoreSurpriseSource for the linkage rationale).
+	surprise, err := newStoreSurpriseSource(ctx, dsns)
+	if err != nil {
+		exitWithMnemosError(false, NewSystemError(err, "load prediction-error signal"))
+		return
+	}
+
 	// Resolve the display default so the audit output reflects the effective
 	// threshold the engine will apply (the engine defaults MinTenants internally).
 	if opts.engine.MinTenants <= 0 {
 		opts.engine.MinTenants = consolidate.DefaultMinTenants
 	}
 
-	p := consolidate.NewPromoter(global, nil)
+	p := consolidate.NewPromoter(global, surprise)
 	res, err := p.Promote(ctx, tenants, opts.engine)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "promote"))
@@ -182,4 +191,71 @@ func (g *storeGlobalKnowledge) VettedClaims(ctx context.Context) ([]domain.Claim
 		}
 	}
 	return vetted, nil
+}
+
+// scopeSurpriseSource is a store-backed consolidate.SurpriseSource. It ranks
+// promotion candidates by prediction-error (domain.Expectation surprise).
+//
+// Linkage rationale: in the current model a synthesized Lesson links to Actions
+// (Lesson.Evidence is []ActionID), while an Expectation keys on a ClaimID (a
+// decision/hypothesis). There is no direct Lesson→Claim edge, so the closest
+// real, honest signal is operational SCOPE: an Expectation belongs to a claim
+// with a Scope, and a Lesson carries the Scope of the action cluster it
+// generalizes. This source therefore aggregates, per exact Scope key, the PEAK
+// surprise of any resolved expectation on a claim in that scope, across every
+// tenant store, and answers SurpriseFor(lesson) by that lesson's Scope key.
+// Lessons whose scope has no observed expectation return hasData=false and fall
+// back to corroboration-count ranking. When a future model adds a direct
+// Lesson→belief edge this source can tighten to per-lesson without touching the
+// engine.
+type scopeSurpriseSource struct {
+	byScopeKey map[string]float64
+}
+
+func (s *scopeSurpriseSource) SurpriseFor(_ context.Context, lesson domain.Lesson) (float64, bool) {
+	v, ok := s.byScopeKey[lesson.Scope.Key()]
+	return v, ok
+}
+
+// newStoreSurpriseSource builds a scopeSurpriseSource by scanning every tenant
+// store for resolved expectations and recording the peak surprise per claim
+// scope. It never fails the pass on a provider that lacks expectations (nil
+// repo) — that store simply contributes no signal.
+func newStoreSurpriseSource(ctx context.Context, dsns []string) (consolidate.SurpriseSource, error) {
+	byScope := map[string]float64{}
+	for _, dsn := range dsns {
+		conn, err := store.Open(ctx, dsn)
+		if err != nil {
+			return nil, err
+		}
+		if conn.Expectations == nil {
+			_ = conn.Close()
+			continue
+		}
+		claims, err := conn.Claims.ListAll(ctx)
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		for _, c := range claims {
+			exp, ok, err := conn.Expectations.Get(ctx, c.ID)
+			if err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			if !ok {
+				continue
+			}
+			surprise, meaningful := exp.Surprise()
+			if !meaningful {
+				continue
+			}
+			key := c.Scope.Key()
+			if surprise > byScope[key] {
+				byScope[key] = surprise
+			}
+		}
+		_ = conn.Close()
+	}
+	return &scopeSurpriseSource{byScopeKey: byScope}, nil
 }

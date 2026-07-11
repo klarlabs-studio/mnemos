@@ -23,14 +23,20 @@
 //     the QUALITY signal (many tenants learned the same thing) and the PRIVACY
 //     gate (a single-tenant lesson cannot leak, because it never becomes a
 //     candidate).
-//  2. De-identification — the promoted schema keeps only the generalized
-//     statement, the corroboration count, and abstracted evidence counts; it
-//     carries no tenant id, no raw event text, no per-tenant evidence ids. If a
-//     statement contains a token we cannot safely strip, the candidate is
-//     dropped (fail closed).
+//  2. Token-level corroboration + de-identification — the promoted statement is
+//     NOT one tenant's verbatim text. Within a cleared group the engine picks
+//     the highest-confidence member EVERY content token of which was seen in
+//     ≥2 distinct tenants; if no member qualifies it fails closed (drops the
+//     group). This structurally guarantees every promoted word is cross-tenant
+//     corroborated, so a non-denylisted specific (a pet name, customer, internal
+//     term) unique to one tenant can never ride out. The denylist Deidentify
+//     runs as a second layer on the chosen statement. The promoted schema keeps
+//     only the generalized statement, corroboration count, and abstracted
+//     evidence counts — no tenant id, no raw event text, no per-tenant evidence
+//     ids.
 //  3. Contradiction — a candidate that contradicts a vetted global claim is not
-//     promoted silently; it is routed to Dissonant for operator / next-cycle
-//     resolution.
+//     promoted silently; it is routed to Dissonant. The check itself fails
+//     closed: if it cannot run, the candidate is skipped rather than promoted.
 //  4. Prediction-error ranking — surviving candidates are ranked by aggregate
 //     surprise (from domain.Expectation) of the decisions/claims backing them,
 //     highest first (learn hardest where the agent was most surprised).
@@ -71,11 +77,18 @@ const (
 // modestly sized federation.
 const DefaultMinTenants = 3
 
-// DefaultEquivalenceOverlap is the normalized-token-overlap ratio (intersection
-// over the smaller token set) at which two lesson statements are treated as
-// "the same lesson" for cross-tenant corroboration. Tuned to cluster genuine
-// paraphrases without collapsing distinct operational truths.
-const DefaultEquivalenceOverlap = 0.6
+// DefaultEquivalenceJaccard is the Jaccard similarity (|a∩b| / |a∪b|) at which
+// two lesson statements are treated as "the same lesson" for cross-tenant
+// corroboration. Jaccard (rather than overlap-over-smaller) is deliberately
+// strict: it penalizes the differing tokens in BOTH statements, so genuinely
+// different key nouns — "restart payments" vs "restart billing" — stay in
+// separate groups instead of collapsing into one falsely "corroborated" fact.
+const DefaultEquivalenceJaccard = 0.6
+
+// tokenCorroborationMinTenants is how many distinct tenants must have used a
+// content token before it may appear in a promoted statement. Two is the floor
+// that makes "corroborated" meaningful while remaining reachable.
+const tokenCorroborationMinTenants = 2
 
 // Options tunes a promotion pass. The zero value is usable and reproduces the
 // project defaults via withDefaults.
@@ -89,13 +102,15 @@ type Options struct {
 	// promoted immediately under GateAuto. Candidates below it are skipped with
 	// a reason rather than promoted. Defaults to domain.LessonConfidenceMin.
 	AutoConfidence float64
-	// EquivalenceOverlap is the statement-equivalence threshold used to cluster
-	// lessons across tenants. Defaults to DefaultEquivalenceOverlap.
-	EquivalenceOverlap float64
-	// SensitiveTokens is an operator-supplied denylist of tokens/substrings that
+	// EquivalenceJaccard is the statement-equivalence threshold used to cluster
+	// lessons across tenants. Defaults to DefaultEquivalenceJaccard.
+	EquivalenceJaccard float64
+	// SensitiveTokens is an operator-supplied denylist of tokens/phrases that
 	// must never appear in a promoted statement (customer names, PII markers,
-	// internal codenames). Matched case-insensitively as substrings. The tenant
-	// identifiers themselves are always added to this set automatically.
+	// internal codenames). Single tokens are matched on word boundaries; phrases
+	// (containing whitespace) are matched as substrings. The tenant identifiers
+	// themselves are always added to this set automatically. Entries shorter
+	// than minDenylistLen are ignored to avoid catastrophic over-blocking.
 	SensitiveTokens []string
 }
 
@@ -109,8 +124,8 @@ func (o Options) withDefaults() Options {
 	if o.AutoConfidence == 0 {
 		o.AutoConfidence = domain.LessonConfidenceMin
 	}
-	if o.EquivalenceOverlap == 0 {
-		o.EquivalenceOverlap = DefaultEquivalenceOverlap
+	if o.EquivalenceJaccard == 0 {
+		o.EquivalenceJaccard = DefaultEquivalenceJaccard
 	}
 	return o
 }
@@ -126,10 +141,10 @@ type TenantLessons struct {
 
 // PromotedLesson is a de-identified, generalized lesson ready for (or pending
 // approval into) the global tier. It carries NO tenant identifier, NO raw event
-// text, and NO per-tenant evidence ids — only aggregate counts. This is the
-// only shape that ever crosses the tenant→global boundary.
+// text, and NO per-tenant evidence ids — only aggregate counts. Every content
+// token of Statement was, by construction, observed in ≥2 distinct tenants.
 type PromotedLesson struct {
-	// Statement is the generalized, de-identified lesson text.
+	// Statement is the cross-tenant-corroborated, de-identified lesson text.
 	Statement string
 	// Scope is the operational scope shared by the corroborating lessons
 	// (service/env/team). It is retained only when it is identical across the
@@ -149,9 +164,9 @@ type PromotedLesson struct {
 	// Confidence is the representative (max) confidence among the corroborating
 	// lessons.
 	Confidence float64
-	// Surprise is the aggregate prediction-error backing the generalization
-	// (sum of per-lesson surprise from domain.Expectation). Zero when no
-	// expectation data was available; HasSurprise disambiguates.
+	// Surprise is the peak prediction-error backing the generalization (max
+	// per-member surprise from domain.Expectation). Zero when no expectation
+	// data was available; HasSurprise disambiguates.
 	Surprise    float64
 	HasSurprise bool
 }
@@ -180,23 +195,26 @@ type SkippedCandidate struct {
 // Skip reasons (machine-stable).
 const (
 	ReasonInsufficientCorroboration = "insufficient cross-tenant corroboration"
+	ReasonNoCorroboratedPhrasing    = "no cross-tenant-corroborated phrasing"
 	ReasonTenantSpecificToken       = "statement contains tenant-specific or sensitive token"
+	ReasonContradictionCheckFailed  = "contradiction check could not run"
 	ReasonBelowAutoConfidence       = "below auto-promote confidence threshold"
+	ReasonNoContentTokens           = "lesson has no content tokens to corroborate"
 )
 
 // Result is the structured, auditable output of a promotion pass. Every input
-// lesson group lands in exactly one bucket.
+// lesson lands in exactly one bucket (individually if it has no content tokens,
+// otherwise as part of exactly one group).
 type Result struct {
 	// Promoted are candidates released to the global tier (GateAuto, above
 	// threshold). Ordered by prediction-error ranking, highest surprise first.
 	Promoted []PromotedLesson
-	// Pending are candidates awaiting operator approval (GateOperator, or
-	// GateAuto candidates that are not below threshold are still promoted; only
-	// operator mode fills this). Ordered by the same ranking.
+	// Pending are candidates awaiting operator approval (GateOperator). Ordered
+	// by the same ranking.
 	Pending []PromotedLesson
 	// Dissonant are candidates that contradict vetted global knowledge.
 	Dissonant []DissonantCandidate
-	// Skipped are groups dropped by a gate, each with a reason.
+	// Skipped are groups (or lessons) dropped by a gate, each with a reason.
 	Skipped []SkippedCandidate
 }
 
@@ -208,10 +226,10 @@ type GlobalKnowledge interface {
 	VettedClaims(ctx context.Context) ([]domain.Claim, error)
 }
 
-// SurpriseSource supplies the aggregate prediction-error (surprise) that backs a
-// lesson, sourced from domain.Expectation reconciliation. It returns the
-// surprise scalar and whether any expectation data existed for the lesson. A nil
-// SurpriseSource means candidates rank purely by corroboration count.
+// SurpriseSource supplies the prediction-error (surprise) that backs a lesson,
+// sourced from domain.Expectation reconciliation. It returns the surprise scalar
+// and whether any expectation data existed for the lesson. A nil SurpriseSource
+// makes candidates rank purely by corroboration count.
 type SurpriseSource interface {
 	SurpriseFor(ctx context.Context, lesson domain.Lesson) (surprise float64, hasData bool)
 }
@@ -222,33 +240,51 @@ type Promoter struct {
 	global   GlobalKnowledge
 	surprise SurpriseSource
 	relate   relate.Engine
+	// detect is the contradiction detector (gate 3). It defaults to the
+	// relate-backed relateContradicts; it is a field so tests can inject a
+	// failing detector to exercise the fail-closed path.
+	detect func(statement string, globalClaims []domain.Claim) (conflict string, isDissonant bool, err error)
 }
 
 // NewPromoter builds a Promoter. Either dependency may be nil: a nil
 // GlobalKnowledge disables the contradiction gate (nothing is dissonant), and a
 // nil SurpriseSource makes ranking fall back to corroboration count.
 func NewPromoter(global GlobalKnowledge, surprise SurpriseSource) *Promoter {
-	return &Promoter{
+	p := &Promoter{
 		global:   global,
 		surprise: surprise,
 		relate:   relate.NewEngine(),
 	}
+	p.detect = p.relateContradicts
+	return p
 }
 
-// group is an internal cluster of equivalent lessons discovered across tenants.
+// member is one tenant's lesson inside a cluster, kept with its owning tenant
+// and precomputed tokens so per-token cross-tenant corroboration can be
+// computed for the group.
+type member struct {
+	tenant   string
+	lesson   domain.Lesson
+	tokens   map[string]struct{}
+	surprise float64
+	hasSurp  bool
+	// sortKey is the canonical ordering key (statement|tenant|id), making
+	// clustering deterministic and independent of input order.
+	sortKey string
+}
+
+// group is a cluster of equivalent lessons discovered across tenants.
 type group struct {
-	repTokens  map[string]struct{} // representative token set (first member)
-	statement  string              // representative statement (highest confidence)
-	scope      domain.Scope
-	scopeSet   bool
-	scopeDiv   bool // scope diverged across members
-	polarity   domain.LessonPolarity
-	tenants    map[string]struct{}
-	confidence float64
-	evidence   int
-	surprise   float64
-	hasSurp    bool
-	members    []domain.Lesson
+	anchor  map[string]struct{} // tokens of the canonically-first member — the merge signature
+	members []member
+}
+
+func (g *group) tenants() map[string]struct{} {
+	out := make(map[string]struct{}, len(g.members))
+	for _, m := range g.members {
+		out[m.tenant] = struct{}{}
+	}
+	return out
 }
 
 // Promote runs the five gates over the supplied per-tenant lessons and returns a
@@ -260,9 +296,39 @@ func (p *Promoter) Promote(ctx context.Context, tenants []TenantLessons, opts Op
 	// plus every tenant identifier (a tenant's own id must never surface).
 	denylist := buildDenylist(opts.SensitiveTokens, tenants)
 
-	// Gate 1 — cluster equivalent lessons across tenants and count distinct
-	// corroborating tenants.
-	groups := p.cluster(ctx, tenants, opts.EquivalenceOverlap)
+	var res Result
+
+	// Flatten to members, recording (gate 9) any lesson with no content tokens
+	// so nothing is silently dropped.
+	members := make([]member, 0)
+	for _, tl := range tenants {
+		for _, lesson := range tl.Lessons {
+			toks := relate.ContentTokens(lesson.Statement)
+			if len(toks) == 0 {
+				res.Skipped = append(res.Skipped, SkippedCandidate{
+					Statement:       lesson.Statement,
+					DistinctTenants: 0,
+					Reason:          ReasonNoContentTokens,
+				})
+				continue
+			}
+			s, hasData := 0.0, false
+			if p.surprise != nil {
+				s, hasData = p.surprise.SurpriseFor(ctx, lesson)
+			}
+			members = append(members, member{
+				tenant:   tl.Tenant,
+				lesson:   lesson,
+				tokens:   toks,
+				surprise: s,
+				hasSurp:  hasData,
+				sortKey:  lesson.Statement + "\x00" + tl.Tenant + "\x00" + lesson.ID,
+			})
+		}
+	}
+
+	// Gate 1 — cluster equivalent lessons across tenants, deterministically.
+	groups := clusterMembers(members, opts.EquivalenceJaccard)
 
 	// Fetch vetted global claims once for the contradiction gate.
 	var globalClaims []domain.Claim
@@ -274,29 +340,41 @@ func (p *Promoter) Promote(ctx context.Context, tenants []TenantLessons, opts Op
 		}
 	}
 
-	var res Result
 	var cleared []PromotedLesson
 
 	for _, g := range groups {
-		distinct := len(g.tenants)
+		tenantSet := g.tenants()
+		distinct := len(tenantSet)
 
 		// Gate 1: corroboration / privacy. A lesson in fewer than MinTenants
 		// distinct tenants can NEVER promote — this is the no-leak guarantee.
 		if distinct < opts.MinTenants {
 			res.Skipped = append(res.Skipped, SkippedCandidate{
-				Statement:       g.statement,
+				Statement:       representativeStatement(g),
 				DistinctTenants: distinct,
 				Reason:          ReasonInsufficientCorroboration,
 			})
 			continue
 		}
 
-		// Gate 2: de-identification. Fail closed if the statement carries a
-		// token we cannot safely strip.
-		clean, ok := Deidentify(g.statement, denylist)
+		// Gate 2a: token-level corroboration. Choose the highest-confidence
+		// member every content token of which was seen in ≥2 distinct tenants.
+		stmt, ok := corroboratedStatement(g)
 		if !ok {
 			res.Skipped = append(res.Skipped, SkippedCandidate{
-				Statement:       g.statement,
+				Statement:       representativeStatement(g),
+				DistinctTenants: distinct,
+				Reason:          ReasonNoCorroboratedPhrasing,
+			})
+			continue
+		}
+
+		// Gate 2b: de-identification. Fail closed if the chosen statement still
+		// carries a denylisted/tenant token.
+		clean, ok := Deidentify(stmt, denylist)
+		if !ok {
+			res.Skipped = append(res.Skipped, SkippedCandidate{
+				Statement:       stmt,
 				DistinctTenants: distinct,
 				Reason:          ReasonTenantSpecificToken,
 			})
@@ -305,19 +383,28 @@ func (p *Promoter) Promote(ctx context.Context, tenants []TenantLessons, opts Op
 
 		cand := PromotedLesson{
 			Statement:       clean,
-			Polarity:        g.polarity,
+			Polarity:        groupPolarity(g),
 			DistinctTenants: distinct,
-			EvidenceCount:   g.evidence,
-			Confidence:      g.confidence,
-			Surprise:        g.surprise,
-			HasSurprise:     g.hasSurp,
+			EvidenceCount:   groupEvidence(g),
+			Confidence:      groupConfidence(g),
+			Surprise:        groupSurprise(g),
+			HasSurprise:     groupHasSurprise(g),
 		}
-		if g.scopeSet && !g.scopeDiv {
-			cand.Scope = g.scope
+		if scope, shared := groupScope(g); shared {
+			cand.Scope = scope
 		}
 
-		// Gate 3: contradiction against vetted global knowledge.
-		if conflict, isDissonant := p.contradicts(cand.Statement, globalClaims); isDissonant {
+		// Gate 3: contradiction against vetted global knowledge — fail closed.
+		conflict, isDissonant, err := p.detect(cand.Statement, globalClaims)
+		if err != nil {
+			res.Skipped = append(res.Skipped, SkippedCandidate{
+				Statement:       cand.Statement,
+				DistinctTenants: distinct,
+				Reason:          ReasonContradictionCheckFailed,
+			})
+			continue
+		}
+		if isDissonant {
 			res.Dissonant = append(res.Dissonant, DissonantCandidate{
 				Candidate:     cand,
 				ConflictsWith: conflict,
@@ -328,8 +415,8 @@ func (p *Promoter) Promote(ctx context.Context, tenants []TenantLessons, opts Op
 		cleared = append(cleared, cand)
 	}
 
-	// Gate 4: prediction-error ranking. Highest aggregate surprise first;
-	// candidates without expectation data fall back to corroboration count.
+	// Gate 4: prediction-error ranking. Highest surprise first; candidates
+	// without expectation data fall back to corroboration count.
 	rankCandidates(cleared)
 
 	// Gate 5: gate policy.
@@ -353,85 +440,185 @@ func (p *Promoter) Promote(ctx context.Context, tenants []TenantLessons, opts Op
 	return res, nil
 }
 
-// cluster groups equivalent lessons across every tenant using greedy
-// normalized-token-overlap matching, aggregating per-group corroboration,
-// evidence, confidence and surprise.
-func (p *Promoter) cluster(ctx context.Context, tenants []TenantLessons, overlapThreshold float64) []group {
+// clusterMembers groups equivalent members using Jaccard similarity. It is
+// order-independent: members are sorted canonically first (so greedy assignment
+// is stable), then a group-merge fixpoint collapses any two groups whose anchor
+// token sets are equivalent — making the final Result invariant under any
+// permutation of the input.
+func clusterMembers(members []member, jaccardThreshold float64) []group {
+	sorted := make([]member, len(members))
+	copy(sorted, members)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].sortKey < sorted[j].sortKey })
+
 	var groups []group
-
-	for _, tl := range tenants {
-		for _, lesson := range tl.Lessons {
-			toks := contentTokens(lesson.Statement)
-			if len(toks) == 0 {
-				continue
+	for _, m := range sorted {
+		idx := -1
+		for i := range groups {
+			if jaccard(groups[i].anchor, m.tokens) >= jaccardThreshold {
+				idx = i
+				break
 			}
+		}
+		if idx == -1 {
+			groups = append(groups, group{anchor: m.tokens, members: []member{m}})
+			continue
+		}
+		groups[idx].members = append(groups[idx].members, m)
+	}
 
-			// Find the first group this lesson is equivalent to.
-			idx := -1
-			for i := range groups {
-				if tokenOverlapRatio(toks, groups[i].repTokens) >= overlapThreshold {
-					idx = i
+	// Fixpoint merge: collapse equivalent groups until stable. Anchors are the
+	// canonically-first member's tokens (groups were created in sorted order),
+	// so the merge target is deterministic.
+	for {
+		merged := false
+		for i := 0; i < len(groups) && !merged; i++ {
+			for j := i + 1; j < len(groups); j++ {
+				if jaccard(groups[i].anchor, groups[j].anchor) >= jaccardThreshold {
+					groups[i].members = append(groups[i].members, groups[j].members...)
+					groups = append(groups[:j], groups[j+1:]...)
+					merged = true
 					break
 				}
 			}
-
-			surprise, hasData := 0.0, false
-			if p.surprise != nil {
-				surprise, hasData = p.surprise.SurpriseFor(ctx, lesson)
-			}
-
-			if idx == -1 {
-				g := group{
-					repTokens:  toks,
-					statement:  lesson.Statement,
-					scope:      lesson.Scope,
-					scopeSet:   true,
-					polarity:   normPolarity(lesson.Polarity),
-					tenants:    map[string]struct{}{tl.Tenant: {}},
-					confidence: lesson.Confidence,
-					evidence:   len(lesson.Evidence),
-					members:    []domain.Lesson{lesson},
-				}
-				if hasData {
-					g.surprise = surprise
-					g.hasSurp = true
-				}
-				groups = append(groups, g)
-				continue
-			}
-
-			g := &groups[idx]
-			g.tenants[tl.Tenant] = struct{}{}
-			g.evidence += len(lesson.Evidence)
-			g.members = append(g.members, lesson)
-			if lesson.Confidence > g.confidence {
-				g.confidence = lesson.Confidence
-				g.statement = lesson.Statement // most-confident statement represents the group
-			}
-			if !g.scope.Equal(lesson.Scope) {
-				g.scopeDiv = true
-			}
-			if hasData {
-				g.surprise += surprise
-				g.hasSurp = true
-			}
+		}
+		if !merged {
+			break
 		}
 	}
 	return groups
 }
 
-// contradicts reports whether statement contradicts any vetted global claim,
-// reusing internal/relate's contradiction detection. The candidate statement is
-// treated as a "new" claim and the global claims as "existing"; any contradicts
-// edge crossing that boundary marks the candidate dissonant.
-func (p *Promoter) contradicts(statement string, globalClaims []domain.Claim) (string, bool) {
+// corroboratedStatement returns the statement of the highest-confidence member
+// whose EVERY content token was observed in ≥ tokenCorroborationMinTenants
+// distinct tenants. This structurally guarantees no promoted word is unique to a
+// single tenant. Returns ok=false when no member qualifies (fail closed).
+func corroboratedStatement(g group) (string, bool) {
+	// Per-token distinct-tenant sets across the whole group.
+	tokenTenants := make(map[string]map[string]struct{})
+	for _, m := range g.members {
+		for tok := range m.tokens {
+			set := tokenTenants[tok]
+			if set == nil {
+				set = make(map[string]struct{})
+				tokenTenants[tok] = set
+			}
+			set[m.tenant] = struct{}{}
+		}
+	}
+
+	// Candidate members ordered by confidence desc, then canonical key for
+	// determinism.
+	cand := make([]member, len(g.members))
+	copy(cand, g.members)
+	sort.SliceStable(cand, func(i, j int) bool {
+		if cand[i].lesson.Confidence != cand[j].lesson.Confidence {
+			return cand[i].lesson.Confidence > cand[j].lesson.Confidence
+		}
+		return cand[i].sortKey < cand[j].sortKey
+	})
+
+	for _, m := range cand {
+		allCorroborated := true
+		for tok := range m.tokens {
+			if len(tokenTenants[tok]) < tokenCorroborationMinTenants {
+				allCorroborated = false
+				break
+			}
+		}
+		if allCorroborated {
+			return m.lesson.Statement, true
+		}
+	}
+	return "", false
+}
+
+// representativeStatement is the statement used purely for audit/skip reporting
+// (the highest-confidence member's text). It is NEVER used as a promoted
+// statement — corroboratedStatement gates that.
+func representativeStatement(g group) string {
+	best := g.members[0]
+	for _, m := range g.members[1:] {
+		if m.lesson.Confidence > best.lesson.Confidence {
+			best = m
+		}
+	}
+	return best.lesson.Statement
+}
+
+func groupEvidence(g group) int {
+	total := 0
+	for _, m := range g.members {
+		total += len(m.lesson.Evidence)
+	}
+	return total
+}
+
+func groupConfidence(g group) float64 {
+	best := 0.0
+	for _, m := range g.members {
+		if m.lesson.Confidence > best {
+			best = m.lesson.Confidence
+		}
+	}
+	return best
+}
+
+// groupSurprise is the PEAK per-member surprise (max, not sum) so ranking
+// reflects the sharpest prediction error the generalization is built on rather
+// than being biased toward larger groups.
+func groupSurprise(g group) float64 {
+	best := 0.0
+	for _, m := range g.members {
+		if m.hasSurp && m.surprise > best {
+			best = m.surprise
+		}
+	}
+	return best
+}
+
+func groupHasSurprise(g group) bool {
+	for _, m := range g.members {
+		if m.hasSurp {
+			return true
+		}
+	}
+	return false
+}
+
+func groupPolarity(g group) domain.LessonPolarity {
+	// Use the highest-confidence member's polarity for a stable sense.
+	best := g.members[0]
+	for _, m := range g.members[1:] {
+		if m.lesson.Confidence > best.lesson.Confidence {
+			best = m
+		}
+	}
+	return normPolarity(best.lesson.Polarity)
+}
+
+// groupScope returns the scope shared by every member, and whether it is shared.
+func groupScope(g group) (domain.Scope, bool) {
+	s := g.members[0].lesson.Scope
+	for _, m := range g.members[1:] {
+		if !m.lesson.Scope.Equal(s) {
+			return domain.Scope{}, false
+		}
+	}
+	return s, true
+}
+
+// relateContradicts reports whether statement contradicts any vetted global
+// claim, reusing internal/relate's contradiction detection. It FAILS CLOSED: any
+// error from the detector is returned so the caller skips (never promotes)
+// rather than silently treating an unrunnable check as "no contradiction".
+func (p *Promoter) relateContradicts(statement string, globalClaims []domain.Claim) (string, bool, error) {
 	if len(globalClaims) == 0 {
-		return "", false
+		return "", false, nil
 	}
 	cand := domain.Claim{ID: "cand", Text: statement}
 	rels, err := p.relate.DetectIncremental([]domain.Claim{cand}, globalClaims)
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	byID := make(map[string]string, len(globalClaims))
 	for _, c := range globalClaims {
@@ -441,23 +628,22 @@ func (p *Promoter) contradicts(statement string, globalClaims []domain.Claim) (s
 		if r.Type != domain.RelationshipTypeContradicts {
 			continue
 		}
-		// Identify the global side of the edge.
 		if r.FromClaimID == "cand" {
 			if txt, ok := byID[r.ToClaimID]; ok {
-				return txt, true
+				return txt, true, nil
 			}
 		}
 		if r.ToClaimID == "cand" {
 			if txt, ok := byID[r.FromClaimID]; ok {
-				return txt, true
+				return txt, true, nil
 			}
 		}
 	}
-	return "", false
+	return "", false, nil
 }
 
 // rankCandidates sorts in place by prediction-error, highest surprise first,
-// then by corroboration count, then by confidence, then statement (stable,
+// then by corroboration count, then confidence, then statement (stable,
 // deterministic). Candidates without expectation data have Surprise 0 and thus
 // fall through to the corroboration tie-break — satisfying "lessons without
 // expectation data rank by corroboration count".
@@ -476,36 +662,66 @@ func rankCandidates(cands []PromotedLesson) {
 	})
 }
 
+// minDenylistLen is the shortest denylist entry that may be applied. Anything
+// shorter would over-block (a 1–2 char fragment matches almost any statement).
+const minDenylistLen = 3
+
 // Deidentify enforces the privacy floor on a promoted statement. It trims
-// surrounding whitespace and, if the statement contains any denylisted token or
-// substring (case-insensitive), returns ok=false so the caller drops the
-// candidate (fail closed). It never silently mutates meaning; a statement that
-// cannot be safely emitted is dropped, not scrubbed into something misleading.
+// surrounding whitespace and, if the statement contains any denylisted token
+// (matched on word boundaries) or phrase (matched as a substring), returns
+// ok=false so the caller drops the candidate (fail closed). It never silently
+// mutates meaning; a statement that cannot be safely emitted is dropped, not
+// scrubbed into something misleading.
 func Deidentify(statement string, denylist map[string]struct{}) (string, bool) {
 	clean := strings.TrimSpace(statement)
 	if clean == "" {
 		return "", false
 	}
 	lower := strings.ToLower(clean)
+	words := wordSet(lower)
 	for tok := range denylist {
-		if tok == "" {
+		if len(tok) < minDenylistLen {
 			continue
 		}
-		if strings.Contains(lower, tok) {
+		if strings.ContainsAny(tok, " \t") {
+			// Multi-word phrase: substring match.
+			if strings.Contains(lower, tok) {
+				return "", false
+			}
+			continue
+		}
+		// Single token: word-boundary match to avoid over-blocking (denylist
+		// "acme" must not veto the unrelated word "acmeter").
+		if _, ok := words[tok]; ok {
 			return "", false
 		}
 	}
 	return clean, true
 }
 
+// wordSet splits an already-lowercased string on any non-alphanumeric rune,
+// returning the set of word tokens — the boundary model used by Deidentify.
+func wordSet(lower string) map[string]struct{} {
+	fields := strings.FieldsFunc(lower, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	})
+	out := make(map[string]struct{}, len(fields))
+	for _, f := range fields {
+		out[f] = struct{}{}
+	}
+	return out
+}
+
 // buildDenylist merges operator-supplied sensitive tokens with every tenant
 // identifier (and its whitespace/underscore/hyphen-split parts, so a tenant id
-// like "acme-corp" also blocks the bare "acme"). All entries are lowercased.
+// like "acme-corp" also blocks the bare "acme"). All entries are lowercased;
+// entries shorter than minDenylistLen are dropped here so a short tenant id
+// cannot make Deidentify over-block everything.
 func buildDenylist(sensitive []string, tenants []TenantLessons) map[string]struct{} {
 	out := make(map[string]struct{})
 	add := func(s string) {
 		s = strings.ToLower(strings.TrimSpace(s))
-		if s != "" {
+		if len(s) >= minDenylistLen {
 			out[s] = struct{}{}
 		}
 	}
@@ -517,9 +733,7 @@ func buildDenylist(sensitive []string, tenants []TenantLessons) map[string]struc
 		for _, part := range strings.FieldsFunc(t.Tenant, func(r rune) bool {
 			return r == '-' || r == '_' || r == ' ' || r == '/' || r == '.'
 		}) {
-			if len(part) >= 3 { // skip trivial fragments that would over-block
-				add(part)
-			}
+			add(part)
 		}
 	}
 	return out
@@ -534,56 +748,10 @@ func normPolarity(p domain.LessonPolarity) domain.LessonPolarity {
 	return p
 }
 
-// --- normalization helpers (self-contained; mirror internal/relate's approach
-// without depending on its unexported internals) ---
-
-// promoteStopWords are common English words dropped before computing statement
-// overlap so equivalence keys on content, not grammar.
-var promoteStopWords = map[string]struct{}{
-	"the": {}, "a": {}, "an": {}, "is": {}, "are": {}, "was": {}, "were": {},
-	"be": {}, "been": {}, "being": {}, "have": {}, "has": {}, "had": {},
-	"do": {}, "does": {}, "did": {}, "will": {}, "would": {}, "shall": {},
-	"should": {}, "may": {}, "might": {}, "must": {}, "can": {}, "could": {},
-	"to": {}, "of": {}, "in": {}, "for": {}, "on": {}, "with": {}, "at": {},
-	"by": {}, "from": {}, "as": {}, "into": {}, "through": {}, "this": {},
-	"that": {}, "these": {}, "those": {}, "it": {}, "its": {}, "and": {},
-	"or": {}, "but": {}, "so": {}, "than": {}, "then": {},
-}
-
-// contentTokens lowercases text, strips punctuation and stop words, and applies
-// the same minimal stemming as internal/relate so "succeeds"/"succeed" collapse.
-func contentTokens(text string) map[string]struct{} {
-	words := strings.Fields(strings.ToLower(text))
-	out := make(map[string]struct{}, len(words))
-	for _, w := range words {
-		w = strings.Trim(w, ",.;:!?()[]{}\"'")
-		if w == "" {
-			continue
-		}
-		if _, ok := promoteStopWords[w]; ok {
-			continue
-		}
-		out[stem(w)] = struct{}{}
-	}
-	return out
-}
-
-func stem(word string) string {
-	if len(word) > 5 && strings.HasSuffix(word, "ed") {
-		return strings.TrimSuffix(word, "ed")
-	}
-	if len(word) > 5 && strings.HasSuffix(word, "es") {
-		return strings.TrimSuffix(word, "es")
-	}
-	if len(word) > 4 && strings.HasSuffix(word, "s") {
-		return strings.TrimSuffix(word, "s")
-	}
-	return word
-}
-
-// tokenOverlapRatio is |a ∩ b| / min(|a|, |b|) — the fraction of the smaller
-// token set that is shared. Empty sets never match.
-func tokenOverlapRatio(a, b map[string]struct{}) float64 {
+// jaccard is |a ∩ b| / |a ∪ b|. It penalizes tokens unique to EITHER set, so
+// two statements that share a common verb but differ on the key noun score low
+// and stay in separate clusters. Empty sets never match.
+func jaccard(a, b map[string]struct{}) float64 {
 	if len(a) == 0 || len(b) == 0 {
 		return 0
 	}
@@ -597,5 +765,9 @@ func tokenOverlapRatio(a, b map[string]struct{}) float64 {
 			inter++
 		}
 	}
-	return float64(inter) / float64(len(small))
+	union := len(a) + len(b) - inter
+	if union == 0 {
+		return 0
+	}
+	return float64(inter) / float64(union)
 }

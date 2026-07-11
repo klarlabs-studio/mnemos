@@ -2,6 +2,8 @@ package consolidate
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 
 	"go.klarlabs.de/mnemos/internal/domain"
@@ -82,10 +84,15 @@ func TestPromotion_NoSingleTenantLeak(t *testing.T) {
 	// Fact G: independently produced by three distinct tenants.
 	factG := "rollback on payments reliably resolves the incident"
 
+	// Alpha's copy of G carries a unique embellishment ("runbook17") AND the
+	// highest confidence — a naive "take the most-confident member verbatim"
+	// would leak it. Token-level corroboration must strip it.
+	factGAlpha := "rollback on payments reliably resolves the incident via runbook17"
+
 	tenants := []TenantLessons{
 		{Tenant: "alpha", Lessons: []domain.Lesson{
 			lesson("f1", "alpha", factF, 0.9, 4),
-			lesson("g1", "alpha", factG, 0.8, 3),
+			lesson("g1", "alpha", factGAlpha, 0.8, 3),
 		}},
 		{Tenant: "bravo", Lessons: []domain.Lesson{
 			lesson("g2", "bravo", factG, 0.7, 5),
@@ -104,6 +111,10 @@ func TestPromotion_NoSingleTenantLeak(t *testing.T) {
 	// G must appear in the promoted output.
 	if !hasStatement(res.Promoted, "rollback on payments") {
 		t.Fatalf("fact G (corroborated in 3 tenants) must be promoted; promoted=%+v", res.Promoted)
+	}
+	// Alpha's single-tenant embellishment must be stripped, not promoted.
+	if hasStatement(res.Promoted, "runbook17") || hasStatement(res.Pending, "runbook17") {
+		t.Fatalf("LEAK: single-tenant token 'runbook17' rode out on the promoted G statement: %+v", res.Promoted)
 	}
 
 	// F must NEVER appear anywhere it could leak: not promoted, not pending,
@@ -231,8 +242,8 @@ func TestPromotion_PredictionErrorOrdering(t *testing.T) {
 	tenants = append(tenants, mk("high", high)...)
 
 	surprise := fakeSurprise{byID: map[string]float64{
-		"low1": 0.1, "low2": 0.1, "low3": 0.1, // aggregate 0.3
-		"high1": 0.9, "high2": 0.9, "high3": 0.9, // aggregate 2.7
+		"low1": 0.1, "low2": 0.1, "low3": 0.1, // peak 0.1
+		"high1": 0.9, "high2": 0.9, "high3": 0.9, // peak 0.9
 	}}
 
 	p := NewPromoter(nil, surprise)
@@ -343,4 +354,173 @@ func TestPromotion_ScopeRetainedOnlyWhenShared(t *testing.T) {
 func withScope(l domain.Lesson, s domain.Scope) domain.Lesson {
 	l.Scope = s
 	return l
+}
+
+func withConf(l domain.Lesson, c float64) domain.Lesson {
+	l.Confidence = c
+	return l
+}
+
+// TestPromotion_TokenLevelCorroboration is the privacy-critical vector the
+// original guardrail passed vacuously: a group corroborated in 3 tenants where
+// exactly ONE member carries a non-denylisted specific token ("fluffy", a pet
+// name). Even though that member has the HIGHEST confidence, the token appears
+// in only one tenant, so it must be stripped from the promoted statement —
+// promotion falls back to a member whose every token is cross-tenant
+// corroborated. The specific token must never appear anywhere in the output.
+func TestPromotion_TokenLevelCorroboration(t *testing.T) {
+	corroborated := "restart on payments clears the queue"
+	leaky := "restart on payments clears the fluffy queue" // "fluffy" unique to t1
+
+	tenants := []TenantLessons{
+		// t1 has the leaky phrasing AND the highest confidence.
+		{Tenant: "t1", Lessons: []domain.Lesson{withConf(lesson("a", "t1", leaky, 0.99, 2), 0.99)}},
+		{Tenant: "t2", Lessons: []domain.Lesson{lesson("b", "t2", corroborated, 0.90, 2)}},
+		{Tenant: "t3", Lessons: []domain.Lesson{lesson("c", "t3", corroborated, 0.90, 2)}},
+	}
+
+	p := NewPromoter(nil, nil)
+	res, err := p.Promote(context.Background(), tenants, Options{Gate: GateAuto})
+	if err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	// A generalization DID promote (the corroborated phrasing).
+	if len(res.Promoted) != 1 {
+		t.Fatalf("expected the corroborated phrasing to promote, got %+v / skipped %+v", res.Promoted, res.Skipped)
+	}
+	// The single-tenant token must not appear ANYWHERE.
+	if hasStatement(res.Promoted, "fluffy") || hasStatement(res.Pending, "fluffy") {
+		t.Fatalf("LEAK: single-tenant token 'fluffy' rode out in a promoted statement: %+v", res.Promoted)
+	}
+	for _, d := range res.Dissonant {
+		if contains(d.Candidate.Statement, "fluffy") {
+			t.Fatalf("LEAK: single-tenant token 'fluffy' in dissonant output")
+		}
+	}
+	if !contains(res.Promoted[0].Statement, "restart on payments clears the queue") {
+		t.Fatalf("promoted statement should be the corroborated phrasing, got %q", res.Promoted[0].Statement)
+	}
+}
+
+// TestPromotion_NearParaphrasesDoNotMerge verifies the tightened (Jaccard)
+// equivalence: three tenants that each restart a DIFFERENT service on OOM share
+// the verb but not the key noun, so they must NOT collapse into one falsely
+// "3-tenant corroborated" fact — none promotes, and no service noun leaks.
+func TestPromotion_NearParaphrasesDoNotMerge(t *testing.T) {
+	tenants := []TenantLessons{
+		{Tenant: "t1", Lessons: []domain.Lesson{lesson("a", "t1", "restart payments on oom", 0.9, 2)}},
+		{Tenant: "t2", Lessons: []domain.Lesson{lesson("b", "t2", "restart billing on oom", 0.9, 2)}},
+		{Tenant: "t3", Lessons: []domain.Lesson{lesson("c", "t3", "restart search on oom", 0.9, 2)}},
+	}
+	p := NewPromoter(nil, nil)
+	res, err := p.Promote(context.Background(), tenants, Options{Gate: GateAuto})
+	if err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if len(res.Promoted) != 0 || len(res.Pending) != 0 {
+		t.Fatalf("distinct-key-noun paraphrases must NOT promote, got promoted=%+v pending=%+v", res.Promoted, res.Pending)
+	}
+	// They must stay as three SEPARATE single-tenant groups (proving they did
+	// not merge): each is skipped for insufficient corroboration, not for
+	// no-corroborated-phrasing (which would mean they had merged).
+	if len(res.Skipped) != 3 {
+		t.Fatalf("expected 3 separate single-tenant skips (no merge), got %+v", res.Skipped)
+	}
+	for _, s := range res.Skipped {
+		if s.Reason != ReasonInsufficientCorroboration {
+			t.Fatalf("paraphrases must stay unmerged (insufficient corroboration), got reason %q", s.Reason)
+		}
+	}
+	for _, noun := range []string{"payments", "billing", "search"} {
+		if hasStatement(res.Promoted, noun) || hasStatement(res.Pending, noun) {
+			t.Fatalf("LEAK: single-tenant service noun %q promoted", noun)
+		}
+	}
+}
+
+// TestPromotion_ContradictionCheckFailsClosed asserts that when the
+// contradiction detector cannot run (returns an error), the candidate is NOT
+// promoted — it is skipped with the check-failed reason. This is the gate-3
+// fail-closed guarantee.
+func TestPromotion_ContradictionCheckFailsClosed(t *testing.T) {
+	stmt := "rollback on payments reliably resolves the incident"
+	tenants := []TenantLessons{
+		{Tenant: "t1", Lessons: []domain.Lesson{lesson("a", "t1", stmt, 0.9, 2)}},
+		{Tenant: "t2", Lessons: []domain.Lesson{lesson("b", "t2", stmt, 0.9, 2)}},
+		{Tenant: "t3", Lessons: []domain.Lesson{lesson("c", "t3", stmt, 0.9, 2)}},
+	}
+	// A non-empty global forces the detector to run; the injected detector fails.
+	global := fakeGlobal{claims: []domain.Claim{{ID: "gc1", Text: "unrelated global claim"}}}
+	p := NewPromoter(global, nil)
+	p.detect = func(string, []domain.Claim) (string, bool, error) {
+		return "", false, errors.New("boom: detector unavailable")
+	}
+
+	res, err := p.Promote(context.Background(), tenants, Options{Gate: GateAuto})
+	if err != nil {
+		t.Fatalf("Promote should not surface the per-candidate detector error: %v", err)
+	}
+	if len(res.Promoted) != 0 || len(res.Pending) != 0 {
+		t.Fatalf("candidate must NOT promote when the contradiction check fails, got %+v", res.Promoted)
+	}
+	s, ok := skipReason(res, "rollback on payments")
+	if !ok || s.Reason != ReasonContradictionCheckFailed {
+		t.Fatalf("candidate must be skipped with the check-failed reason, got %+v ok=%v", s, ok)
+	}
+}
+
+// TestPromotion_OrderIndependent asserts the Result is invariant under any
+// permutation of tenants and of lessons within a tenant — the guarantee the
+// canonical sort + fixpoint merge exist to provide.
+func TestPromotion_OrderIndependent(t *testing.T) {
+	g := "rollback on payments reliably resolves the incident"
+	h := "restart on billing clears the stuck queue"
+	// Build a corpus: g in 3 tenants, h in 3 tenants, plus a single-tenant fact.
+	base := []TenantLessons{
+		{Tenant: "t1", Lessons: []domain.Lesson{lesson("g1", "t1", g, 0.9, 2), lesson("h1", "t1", h, 0.8, 1)}},
+		{Tenant: "t2", Lessons: []domain.Lesson{lesson("h2", "t2", h, 0.85, 1), lesson("g2", "t2", g, 0.7, 3)}},
+		{Tenant: "t3", Lessons: []domain.Lesson{lesson("g3", "t3", g, 0.75, 2), lesson("h3", "t3", h, 0.9, 1)}},
+		{Tenant: "t4", Lessons: []domain.Lesson{lesson("s1", "t4", "solo fact about widgets nobody else saw", 0.9, 1)}},
+	}
+	p := NewPromoter(nil, nil)
+	want, err := p.Promote(context.Background(), base, Options{Gate: GateAuto})
+	if err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	// Permutation: reverse tenant order and reverse lessons within each.
+	shuffled := make([]TenantLessons, len(base))
+	for i := range base {
+		src := base[len(base)-1-i]
+		rev := make([]domain.Lesson, len(src.Lessons))
+		for j := range src.Lessons {
+			rev[j] = src.Lessons[len(src.Lessons)-1-j]
+		}
+		shuffled[i] = TenantLessons{Tenant: src.Tenant, Lessons: rev}
+	}
+	got, err := p.Promote(context.Background(), shuffled, Options{Gate: GateAuto})
+	if err != nil {
+		t.Fatalf("Promote(shuffled): %v", err)
+	}
+
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("Result must be order-independent.\n want=%+v\n got =%+v", want, got)
+	}
+}
+
+// TestPromotion_NoContentTokensRecorded asserts a lesson with no content tokens
+// is not silently dropped — it lands in Skipped with the dedicated reason.
+func TestPromotion_NoContentTokensRecorded(t *testing.T) {
+	tenants := []TenantLessons{
+		{Tenant: "t1", Lessons: []domain.Lesson{lesson("a", "t1", "the a is of to", 0.9, 1)}},
+	}
+	p := NewPromoter(nil, nil)
+	res, err := p.Promote(context.Background(), tenants, Options{Gate: GateAuto})
+	if err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if len(res.Skipped) != 1 || res.Skipped[0].Reason != ReasonNoContentTokens {
+		t.Fatalf("stop-word-only lesson must be recorded as skipped with no-content-tokens reason, got %+v", res.Skipped)
+	}
 }
