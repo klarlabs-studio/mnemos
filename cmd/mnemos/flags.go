@@ -31,6 +31,26 @@ type Flags struct {
 	DB string
 }
 
+// splitEqualsFlags normalizes "--flag=value" tokens into the pair "--flag",
+// "value" so every parser — global (ParseFlags) and each command's local
+// space-form loop — transparently accepts the equals form. Run once on the raw
+// arg vector before ParseFlags. Bare flags, positionals, "--", and single-dash
+// tokens pass through untouched; a value may itself contain "=" (split on the
+// first only).
+func splitEqualsFlags(args []string) []string {
+	out := make([]string, 0, len(args))
+	for _, a := range args {
+		if strings.HasPrefix(a, "--") && a != "--" {
+			if i := strings.IndexByte(a, '='); i > 2 {
+				out = append(out, a[:i], a[i+1:])
+				continue
+			}
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 // ParseFlags extracts known CLI flags from args and returns the remaining positional arguments.
 func ParseFlags(args []string) (Flags, []string) {
 	var f Flags

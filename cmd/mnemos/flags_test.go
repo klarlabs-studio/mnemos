@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+func TestSplitEqualsFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"long flag with value", []string{"--kind=lesson"}, []string{"--kind", "lesson"}},
+		{"global flag with value", []string{"--as=felix"}, []string{"--as", "felix"}},
+		{"bare flag untouched", []string{"--dry-run"}, []string{"--dry-run"}},
+		{"positional with = untouched", []string{"query", "a=b and c=d"}, []string{"query", "a=b and c=d"}},
+		{"value may contain =", []string{"--metadata={\"k\":\"a=b\"}"}, []string{"--metadata", "{\"k\":\"a=b\"}"}},
+		{"double-dash sentinel untouched", []string{"--"}, []string{"--"}},
+		{"empty name not split", []string{"--=x"}, []string{"--=x"}},
+		{"mixed", []string{"export", "--kind=playbook", "--out", "p.md"}, []string{"export", "--kind", "playbook", "--out", "p.md"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := splitEqualsFlags(tt.in); !slices.Equal(got, tt.want) {
+				t.Errorf("splitEqualsFlags(%v) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseFlagsDB(t *testing.T) {
 	tests := []struct {
 		name     string

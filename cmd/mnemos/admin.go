@@ -46,7 +46,7 @@ func handleReset(args []string, f Flags) {
 		if keepEvents {
 			desc = "all claims, relationships, and embeddings (events kept)"
 		}
-		if !confirm(fmt.Sprintf("This will delete %s from %s. Continue?", desc, resolveDBPath())) {
+		if !confirm(fmt.Sprintf("This will delete %s from %s. Continue?", desc, displayDSN())) {
 			fmt.Println("aborted")
 			os.Exit(int(ExitSuccess))
 		}
@@ -77,6 +77,13 @@ func handleDeleteClaim(args []string, f Flags) {
 		os.Exit(int(ExitUsage))
 	}
 
+	if !f.Yes {
+		if !confirm(fmt.Sprintf("This will permanently delete %d claim(s) and their evidence/embeddings/relationships (%s) from %s. Continue?", len(args), strings.Join(args, ", "), displayDSN())) {
+			fmt.Println("aborted")
+			os.Exit(int(ExitSuccess))
+		}
+	}
+
 	err := runJob("delete-claim", map[string]string{"ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
 		var deletedClaims int64
 		// Each claim's full cascade (relationships, embedding,
@@ -102,6 +109,13 @@ func handleDeleteEvent(args []string, f Flags) {
 		fmt.Fprintln(os.Stderr, "error: delete-event requires at least one event id")
 		fmt.Fprintln(os.Stderr, "  mnemos delete-event <id> [<id>...]")
 		os.Exit(int(ExitUsage))
+	}
+
+	if !f.Yes {
+		if !confirm(fmt.Sprintf("This will permanently delete %d event(s) and cascade their dependent claims/evidence/embeddings/relationships (%s) from %s. Continue?", len(args), strings.Join(args, ", "), displayDSN())) {
+			fmt.Println("aborted")
+			os.Exit(int(ExitSuccess))
+		}
 	}
 
 	err := runJob("delete-event", map[string]string{"ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
@@ -335,7 +349,7 @@ func handleReembed(args []string, f Flags) {
 }
 
 func printResetSummary(c resetCounts, keepEvents bool) {
-	fmt.Printf("Reset complete (db=%s)\n", resolveDBPath())
+	fmt.Printf("Reset complete (db=%s)\n", displayDSN())
 	fmt.Printf("  claims:        %-8d (deleted)\n", c.Claims)
 	fmt.Printf("  evidence:      %-8d (deleted)\n", c.Evidence)
 	fmt.Printf("  status hist:   %-8d (deleted)\n", c.StatusHistory)

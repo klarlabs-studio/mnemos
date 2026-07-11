@@ -326,6 +326,8 @@ func parseRegistryFlags(args []string) (string, string) {
 				token = args[i+1]
 				i++
 			}
+		default:
+			exitWithMnemosError(false, NewUserError("unknown flag %q", args[i]))
 		}
 	}
 	return regURL, token

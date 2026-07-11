@@ -26,7 +26,7 @@ func handleDecision(args []string, _ Flags) {
 	case "attach-outcome":
 		handleDecisionAttachOutcome(rest)
 	default:
-		exitWithMnemosError(false, NewUserError("unknown decision subcommand %q", sub))
+		exitWithMnemosError(false, NewUserError("unknown decision subcommand %q (want record, list, show, attach-outcome)", sub))
 	}
 }
 
@@ -47,27 +47,51 @@ func parseDecisionRecordArgs(args []string) (decisionRecordArgs, error) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--id":
+			if i+1 >= len(args) {
+				return out, errorf("--id requires a value")
+			}
 			out.id = args[i+1]
 			i++
 		case "--statement":
+			if i+1 >= len(args) {
+				return out, errorf("--statement requires a value")
+			}
 			out.statement = args[i+1]
 			i++
 		case "--plan":
+			if i+1 >= len(args) {
+				return out, errorf("--plan requires a value")
+			}
 			out.plan = args[i+1]
 			i++
 		case "--reasoning":
+			if i+1 >= len(args) {
+				return out, errorf("--reasoning requires a value")
+			}
 			out.reasoning = args[i+1]
 			i++
 		case "--risk":
+			if i+1 >= len(args) {
+				return out, errorf("--risk requires a value")
+			}
 			out.risk = args[i+1]
 			i++
 		case "--belief":
+			if i+1 >= len(args) {
+				return out, errorf("--belief requires a value")
+			}
 			out.beliefs = append(out.beliefs, args[i+1])
 			i++
 		case "--alternative":
+			if i+1 >= len(args) {
+				return out, errorf("--alternative requires a value")
+			}
 			out.alternatives = append(out.alternatives, args[i+1])
 			i++
 		case "--chosen-at":
+			if i+1 >= len(args) {
+				return out, errorf("--chosen-at requires a value")
+			}
 			t, err := parseTimeArg(args[i+1])
 			if err != nil {
 				return out, err
@@ -75,6 +99,9 @@ func parseDecisionRecordArgs(args []string) (decisionRecordArgs, error) {
 			out.chosenAt = t
 			i++
 		case "--outcome":
+			if i+1 >= len(args) {
+				return out, errorf("--outcome requires a value")
+			}
 			out.outcomeID = args[i+1]
 			i++
 		default:
@@ -136,6 +163,10 @@ func handleDecisionList(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--risk":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--risk requires a value"))
+				return
+			}
 			risk = args[i+1]
 			i++
 		default:

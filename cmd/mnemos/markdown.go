@@ -23,12 +23,24 @@ func handleExport(args []string, _ Flags) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--kind":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--kind requires a value"))
+				return
+			}
 			kind = args[i+1]
 			i++
 		case "--id":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--id requires a value"))
+				return
+			}
 			id = args[i+1]
 			i++
 		case "--out":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--out requires a value"))
+				return
+			}
 			out = args[i+1]
 			i++
 		case "--provenance":
@@ -177,9 +189,17 @@ func handleHistory(args []string, _ Flags) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--kind":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--kind requires a value"))
+				return
+			}
 			kind = args[i+1]
 			i++
 		case "--id":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--id requires a value"))
+				return
+			}
 			id = args[i+1]
 			i++
 		default:

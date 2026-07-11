@@ -114,7 +114,22 @@ func printFirstRunHints() {
 	fmt.Println("")
 }
 
-var commands = []string{"ingest", "extract", "relate", "process", "query", "metrics", "mcp"}
+// commands is the full set of top-level commands, used both for typo
+// suggestions (suggestCommand) and as the single source of truth for what the
+// dispatcher accepts. Keep in sync with the switch in main.go.
+var commands = []string{
+	"init", "setup", "doctor",
+	"mcp", "serve",
+	"ingest", "extract", "relate", "process", "claim",
+	"query", "entities", "extract-entities", "metrics", "quality", "audit",
+	"decision", "action", "outcome", "incident",
+	"synthesize", "lessons", "playbook", "export", "import", "history",
+	"resolve", "trust", "verify",
+	"user", "token", "agent",
+	"registry", "push", "pull",
+	"reset", "delete-claim", "delete-event", "reembed", "recompute-trust", "dedup", "consolidate",
+	"hook",
+}
 
 // suggestCommand returns the closest known command to input, or "" if none is close.
 func suggestCommand(input string) string {

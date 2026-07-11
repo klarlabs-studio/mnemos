@@ -33,6 +33,10 @@ func handlePlaybookList(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--service":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--service requires a value"))
+				return
+			}
 			service = args[i+1]
 			i++
 		default:
@@ -102,6 +106,10 @@ func handlePlaybookSynthesize(args []string) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--min-lessons":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--min-lessons requires a value"))
+				return
+			}
 			n, err := strconv.Atoi(args[i+1])
 			if err != nil || n < 1 {
 				exitWithMnemosError(false, NewUserError("--min-lessons must be a positive integer"))
@@ -110,6 +118,10 @@ func handlePlaybookSynthesize(args []string) {
 			minLessons = n
 			i++
 		case "--min-confidence":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--min-confidence requires a value"))
+				return
+			}
 			f, err := strconv.ParseFloat(args[i+1], 64)
 			if err != nil || f < 0 || f > 1 {
 				exitWithMnemosError(false, NewUserError("--min-confidence must be a float in [0, 1]"))
