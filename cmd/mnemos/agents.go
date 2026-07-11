@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -22,13 +21,8 @@ import (
 // agent-shaped, not token-shaped.
 func handleAgent(args []string, f Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "error: agent requires a subcommand")
-		fmt.Fprintln(os.Stderr, "  mnemos agent create --name <n> --owner <user-id> --scope <s> [--scope <s>...] [--run <id>...]")
-		fmt.Fprintln(os.Stderr, "  mnemos agent list")
-		fmt.Fprintln(os.Stderr, "  mnemos agent revoke <agent-id>")
-		fmt.Fprintln(os.Stderr, "  mnemos agent token issue --agent <id> [--ttl <duration>]")
-		fmt.Fprintln(os.Stderr, "  mnemos agent heal --claim <id> --statement \"<new truth>\" [--reason \"...\"] [--json]")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("agent requires a subcommand: create, list, revoke, token, heal"))
+		return
 	}
 	switch args[0] {
 	case "create":
@@ -42,7 +36,7 @@ func handleAgent(args []string, f Flags) {
 	case "heal":
 		handleAgentHeal(args[1:], f)
 	default:
-		exitWithMnemosError(false, NewUserError("unknown agent subcommand %q", args[0]))
+		exitWithMnemosError(false, NewUserError("unknown agent subcommand %q (want create, list, revoke, token, heal)", args[0]))
 	}
 }
 

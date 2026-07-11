@@ -35,9 +35,8 @@ func handleReset(args []string, f Flags) {
 		case "--keep-events":
 			keepEvents = true
 		default:
-			fmt.Fprintf(os.Stderr, "error: unknown argument %q for reset\n", a)
-			fmt.Fprintln(os.Stderr, "  mnemos reset [--keep-events] [--yes]")
-			os.Exit(int(ExitUsage))
+			exitWithMnemosError(false, NewUserError("unknown argument %q for reset\n  mnemos reset [--keep-events] [--yes]", a))
+			return
 		}
 	}
 
@@ -72,9 +71,8 @@ func handleReset(args []string, f Flags) {
 
 func handleDeleteClaim(args []string, f Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "error: delete-claim requires at least one claim id")
-		fmt.Fprintln(os.Stderr, "  mnemos delete-claim <id> [<id>...]")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("delete-claim requires at least one claim id\n  mnemos delete-claim <id> [<id>...]"))
+		return
 	}
 
 	if !f.Yes {
@@ -106,9 +104,8 @@ func handleDeleteClaim(args []string, f Flags) {
 
 func handleDeleteEvent(args []string, f Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "error: delete-event requires at least one event id")
-		fmt.Fprintln(os.Stderr, "  mnemos delete-event <id> [<id>...]")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("delete-event requires at least one event id\n  mnemos delete-event <id> [<id>...]"))
+		return
 	}
 
 	if !f.Yes {
@@ -235,9 +232,8 @@ func printDedupePlan(plan pipeline.SemanticDedupePlan) {
 func handleRecomputeTrust(args []string, f Flags) {
 	for _, a := range args {
 		if a != "--all" {
-			fmt.Fprintf(os.Stderr, "error: unknown argument %q for recompute-trust\n", a)
-			fmt.Fprintln(os.Stderr, "  mnemos recompute-trust [--all]")
-			os.Exit(int(ExitUsage))
+			exitWithMnemosError(false, NewUserError("unknown argument %q for recompute-trust\n  mnemos recompute-trust [--all]", a))
+			return
 		}
 	}
 
@@ -264,9 +260,8 @@ func handleReembed(args []string, f Flags) {
 	for _, a := range args {
 		switch a {
 		default:
-			fmt.Fprintf(os.Stderr, "error: unknown argument %q for reembed\n", a)
-			fmt.Fprintln(os.Stderr, "  mnemos reembed [--force] [--dry-run]")
-			os.Exit(int(ExitUsage))
+			exitWithMnemosError(false, NewUserError("unknown argument %q for reembed\n  mnemos reembed [--force] [--dry-run]", a))
+			return
 		}
 	}
 

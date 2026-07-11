@@ -18,11 +18,8 @@ const defaultTokenTTL = 90 * 24 * time.Hour // 90 days
 // handleUser dispatches `mnemos user <subcommand>`.
 func handleUser(args []string, _ Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "error: user requires a subcommand")
-		fmt.Fprintln(os.Stderr, "  mnemos user create --name <n> --email <e>")
-		fmt.Fprintln(os.Stderr, "  mnemos user list")
-		fmt.Fprintln(os.Stderr, "  mnemos user revoke <id>")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("user requires a subcommand: create, list, revoke"))
+		return
 	}
 	switch args[0] {
 	case "create":
@@ -32,7 +29,7 @@ func handleUser(args []string, _ Flags) {
 	case "revoke":
 		handleUserRevoke(args[1:])
 	default:
-		exitWithMnemosError(false, NewUserError("unknown user subcommand %q", args[0]))
+		exitWithMnemosError(false, NewUserError("unknown user subcommand %q (want create, list, revoke)", args[0]))
 	}
 }
 
@@ -168,10 +165,8 @@ func handleUserRevoke(args []string) {
 // handleToken dispatches `mnemos token <subcommand>`.
 func handleToken(args []string, _ Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "error: token requires a subcommand")
-		fmt.Fprintln(os.Stderr, "  mnemos token issue --user <id> [--ttl <duration>]")
-		fmt.Fprintln(os.Stderr, "  mnemos token revoke <jti>")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("token requires a subcommand: issue, revoke"))
+		return
 	}
 	switch args[0] {
 	case "issue":
@@ -179,7 +174,7 @@ func handleToken(args []string, _ Flags) {
 	case "revoke":
 		handleTokenRevoke(args[1:])
 	default:
-		exitWithMnemosError(false, NewUserError("unknown token subcommand %q", args[0]))
+		exitWithMnemosError(false, NewUserError("unknown token subcommand %q (want issue, revoke)", args[0]))
 	}
 }
 

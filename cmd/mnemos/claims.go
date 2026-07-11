@@ -14,8 +14,8 @@ import (
 // handleClaim routes `mnemos claim <subcommand> ...`.
 func handleClaim(args []string, _ Flags) {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: mnemos claim record --text <text> [flags]")
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("claim requires a subcommand: record"))
+		return
 	}
 	sub := args[0]
 	rest := args[1:]
@@ -23,8 +23,7 @@ func handleClaim(args []string, _ Flags) {
 	case "record":
 		handleClaimRecord(rest)
 	default:
-		fmt.Fprintf(os.Stderr, "error: unknown claim subcommand %q\n", sub)
-		os.Exit(int(ExitUsage))
+		exitWithMnemosError(false, NewUserError("unknown claim subcommand %q (want record)", sub))
 	}
 }
 
