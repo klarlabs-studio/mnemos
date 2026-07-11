@@ -109,13 +109,16 @@ db:
 from `db.url` — so the walk-up (and any stray `.mnemos`) is bypassed. A
 project with its own `.mnemos/mnemos.yaml` still overrides, as intended.
 
-**Note for maintainers.** `init` inlines the DSN into hooks/MCP for a local
-sqlite brain but leaves manual CLI to the walk-up — that's the gap this
-divergence exposes. `init` (user scope) should arguably also write `db.url` to
-the global config. Changing `findProjectDB` to stop treating `$HOME/.mnemos`
-as a project root would fix it more fundamentally but is a **breaking change**
-for anyone deliberately using `~/.mnemos` as their brain, so it deserves its
-own ADR/PR rather than a drive-by.
+**Root-cause fix (ADR 0008).** `findProjectDB` now stops at `$HOME` *without*
+treating `$HOME/.mnemos` as a project root — it's the global fallback dir
+(jwt-secret, user-global config), not a brain. Bare CLI from anywhere under
+`$HOME` (with no closer project `.mnemos`) resolves the XDG global brain, so
+the CLI, hooks, and MCP agree by default and the jwt-secret ↔ resolver
+resurrection loop is broken. Project brains still work — they just have to live
+strictly **below** `$HOME`. See `docs/adr/0008-home-mnemos-not-a-project-root.md`.
+The `db.url` config pin above is now redundant on a fixed binary but is kept as
+an explicit override (and is still needed on the currently-installed 0.81.0
+until `brew upgrade`).
 
 ### 3. 🟡 `doctor` reported a brain it wasn't using (fixed)
 

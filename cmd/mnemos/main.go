@@ -72,6 +72,12 @@ func globalDBPath() string {
 // the project root (the directory containing .mnemos), and true. Stops at
 // the filesystem root or the user's home directory (whichever is reached
 // first) to avoid accidentally adopting a parent project's DB.
+//
+// The home directory is a hard stop that is checked BEFORE its own .mnemos:
+// $HOME/.mnemos is the global fallback dir (jwt-secret, user-global config),
+// not a project brain. Adopting it would shadow the XDG global brain for
+// essentially every directory under $HOME — see ADR 0008. Project brains live
+// strictly below $HOME; at or above home we fall through to the XDG default.
 func findProjectDB() (dbPath, projectRoot string, ok bool) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -80,12 +86,12 @@ func findProjectDB() (dbPath, projectRoot string, ok bool) {
 	home, _ := os.UserHomeDir()
 	dir := cwd
 	for {
+		if home != "" && dir == home {
+			return "", "", false
+		}
 		candidate := filepath.Join(dir, ".mnemos")
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 			return filepath.Join(candidate, "mnemos.db"), dir, true
-		}
-		if home != "" && dir == home {
-			return "", "", false
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

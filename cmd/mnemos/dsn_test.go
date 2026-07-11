@@ -37,15 +37,18 @@ func TestResolveDSN_URLEnvWinsEverything(t *testing.T) {
 // no-MNEMOS_DB_URL path: we wrap the resolved SQLite project file as
 // sqlite://<path> so the registry can dispatch.
 func TestResolveDSN_FallsBackToSQLiteFromProjectPath(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("HOME", root)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("MNEMOS_DB_URL", "")
-	if err := os.Mkdir(filepath.Join(root, ".mnemos"), 0o755); err != nil {
+	// Project below home (ADR 0008: $HOME/.mnemos is the global fallback dir,
+	// not a project brain).
+	proj := filepath.Join(home, "proj")
+	if err := os.MkdirAll(filepath.Join(proj, ".mnemos"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	t.Chdir(root)
+	t.Chdir(proj)
 
-	want := "sqlite://" + filepath.Join(root, ".mnemos", "mnemos.db")
+	want := "sqlite://" + filepath.Join(proj, ".mnemos", "mnemos.db")
 	if got := resolveDSN(); got != want {
 		t.Errorf("resolveDSN = %q, want %q", got, want)
 	}
