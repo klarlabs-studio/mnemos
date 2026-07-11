@@ -152,11 +152,22 @@ brain, signal-to-noise matters more than capture latency (capture is
 background and fail-open). Worth considering: `init` could prefer a stronger
 locally-available model over the smallest one.
 
-### 5. ⚪ Minor CLI inconsistency
+### 5. 🟡 CLI `--db` inconsistency (fixed)
 
-`mnemos hook` accepts `--db <dsn>`, but `mnemos metrics`/`query` do not — they
-only read `MNEMOS_DB_URL`. Mildly surprising; a global `--db` flag would be
-more discoverable. (Not fixed — cosmetic.)
+**Symptom.** `mnemos hook … --db <dsn>` worked, but `mnemos metrics --db <dsn>`
+failed with `unknown argument "--db"`. `--db` was parsed ad hoc by `hook`,
+`init`, and `setup` (three copies), while every brain-resolving command
+(`metrics`, `query`, `process`, `ingest`, `extract`, `relate`, …) had none —
+they only read `MNEMOS_DB_URL`.
+
+**Fix.** Promoted `--db` to a **global flag** parsed once in `ParseFlags`
+(`--db <dsn>` and `--db=<dsn>`, mirroring `--config`). `main()` exports it as
+`MNEMOS_DB_URL` before dispatch as the most specific DSN source — overriding
+the config file and any inherited `MNEMOS_DB_URL`. Every command now resolves
+the brain identically via `resolveDSN()`; `hook`/`init`/`setup` route through
+the same flag (the existing `mnemos hook recall --db …` registration string
+still works verbatim). Documented in `--help`.
+→ commit `fix(cli): make --db a global flag so every command resolves the brain uniformly`
 
 ---
 
@@ -167,7 +178,8 @@ more discoverable. (Not fixed — cosmetic.)
 - ✅ `qwen2.5:14b` extraction + `nomic-embed-text` embeddings, verified healthy
 - ✅ recall / brief / capture / MCP all verified end-to-end
 - ✅ Old 529-claim brain archived to `~/.mnemos/mnemos.db.archived-2026-07-11`
-- ✅ Two code fixes committed on `fix/homebrew-selfpath-and-doctor-override`
+- ✅ `--db` now works on every command (global flag)
+- ✅ Three code fixes committed on `fix/homebrew-selfpath-and-doctor-override`
 
 **Restart Claude Code** so it reconnects the MCP server and picks up the hooks.
 Confirm with `/mcp` (mnemos → Connected) and `/hooks`.
