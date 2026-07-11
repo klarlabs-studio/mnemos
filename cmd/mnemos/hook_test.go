@@ -41,9 +41,16 @@ func TestRenderRecall(t *testing.T) {
 }
 
 func TestRenderBrief(t *testing.T) {
-	got := renderBrief(12, 3, 2)
+	got := renderBrief(12, 3, 2, 0)
 	if !strings.Contains(got, "12 claims across 3 runs") || !strings.Contains(got, "2 open contradiction") {
 		t.Errorf("brief wrong: %q", got)
+	}
+	if strings.Contains(got, "scoped to this repo") {
+		t.Errorf("no repo overlay expected: %q", got)
+	}
+	withRepo := renderBrief(12, 3, 0, 5)
+	if !strings.Contains(withRepo, "+5 claim(s) scoped to this repo") {
+		t.Errorf("repo overlay note missing: %q", withRepo)
 	}
 }
 

@@ -83,8 +83,19 @@ func findProjectDB() (dbPath, projectRoot string, ok bool) {
 	if err != nil {
 		return "", "", false
 	}
+	return findProjectDBFrom(cwd)
+}
+
+// findProjectDBFrom is findProjectDB rooted at an explicit directory instead of
+// the process CWD. The hooks use it with the session's cwd (from the Claude Code
+// hook payload) to resolve a repo brain — the hook process's own CWD is not the
+// user's working directory.
+func findProjectDBFrom(startDir string) (dbPath, projectRoot string, ok bool) {
+	if startDir == "" {
+		return "", "", false
+	}
 	home, _ := os.UserHomeDir()
-	dir := cwd
+	dir := startDir
 	for {
 		if home != "" && dir == home {
 			return "", "", false
