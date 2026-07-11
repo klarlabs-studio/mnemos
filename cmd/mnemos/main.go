@@ -256,6 +256,8 @@ func main() {
 		handleConsolidate(args, flags)
 	case "sync-docs":
 		handleSyncDocs(args, flags)
+	case "rebuild":
+		handleRebuild(args, flags)
 	case "lessons":
 		handleLessons(args, flags)
 	case "verify":
@@ -1418,6 +1420,8 @@ func printUsage() {
 	fmt.Println("    [--forget-refuted] [--synthesize]  and optionally forget/reinforce/synthesize/replay. Deterministic.")
 	fmt.Println("  sync-docs [--claude] [--file <name>] Write this repo's learnings into AGENTS.md (or CLAUDE.md) so")
 	fmt.Println("                                       agents follow them natively (mnemos-managed block)")
+	fmt.Println("  rebuild [--claude] [--file <name>]   Rebuild the gitignored repo brain from a committed AGENTS.md")
+	fmt.Println("                                       (run once after cloning a repo that has an AGENTS.md block)")
 	fmt.Println("")
 	fmt.Println("Flags:")
 	fmt.Println("  -h, --help     show this help message")

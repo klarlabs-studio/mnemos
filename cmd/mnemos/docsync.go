@@ -149,7 +149,124 @@ func syncRepoDocs(ctx context.Context, repoRoot, fileName, brainDSN string) (pat
 	if werr := os.WriteFile(path, []byte(updated), 0o644); werr != nil { //nolint:gosec // agent-facing doc, world-readable by design
 		return path, false, werr
 	}
+	// Keep the derived index + hash sidecars out of git so only the doc is
+	// committed. Best-effort.
+	ensureRepoGitignore(repoRoot)
 	return path, true, nil
+}
+
+// ensureRepoGitignore makes sure the repo's .gitignore excludes the derived
+// repo-brain index and hash sidecars, so AGENTS.md is committed but the local,
+// rebuildable .db is not. Idempotent: appends only patterns not already
+// present. Best-effort — never fails a caller.
+func ensureRepoGitignore(repoRoot string) {
+	patterns := []string{
+		".mnemos/mnemos.db",
+		".mnemos/mnemos.db-shm",
+		".mnemos/mnemos.db-wal",
+		".mnemos/.*.sha",
+	}
+	path := filepath.Join(repoRoot, ".gitignore")
+	existing := ""
+	if data, err := os.ReadFile(path); err == nil { //nolint:gosec // repo-local
+		existing = string(data)
+	}
+	have := make(map[string]bool)
+	for line := range strings.SplitSeq(existing, "\n") {
+		have[strings.TrimSpace(line)] = true
+	}
+	var add []string
+	for _, p := range patterns {
+		if !have[p] {
+			add = append(add, p)
+		}
+	}
+	if len(add) == 0 {
+		return
+	}
+	var b strings.Builder
+	b.WriteString(existing)
+	if existing != "" && !strings.HasSuffix(existing, "\n") {
+		b.WriteByte('\n')
+	}
+	if existing != "" {
+		b.WriteByte('\n')
+	}
+	b.WriteString("# mnemos: derived repo-brain index (rebuild with `mnemos rebuild`)\n")
+	for _, p := range add {
+		b.WriteString(p + "\n")
+	}
+	_ = os.WriteFile(path, []byte(b.String()), 0o644) //nolint:gosec // repo-local ignore file
+}
+
+// handleRebuild implements `mnemos rebuild` — reconstruct the gitignored repo
+// brain index (<repo>/.mnemos/mnemos.db) from the committed agent doc's managed
+// block after a fresh clone. Reads AGENTS.md (or --claude / --file) at the repo
+// root, ingests its learnings into a freshly-created repo brain, and baselines
+// the sync-back hash.
+func handleRebuild(args []string, f Flags) {
+	fileName := "AGENTS.md"
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--claude":
+			fileName = "CLAUDE.md"
+		case "--agents":
+			fileName = "AGENTS.md"
+		case "--file":
+			if i+1 >= len(args) {
+				exitWithMnemosError(f.Verbose, NewUserError("--file requires a filename"))
+				return
+			}
+			fileName = args[i+1]
+			i++
+		default:
+			exitWithMnemosError(f.Verbose, NewUserError("unknown rebuild flag %q", args[i]))
+			return
+		}
+	}
+
+	cwd, _ := os.Getwd()
+	repoRoot := gitTopLevel(cwd)
+	if repoRoot == "" {
+		repoRoot = cwd
+	}
+	docPath := filepath.Join(repoRoot, fileName)
+	data, err := os.ReadFile(docPath) //nolint:gosec // repo-local doc
+	if err != nil {
+		exitWithMnemosError(f.Verbose, NewUserError("no %s at repo root %s — nothing to rebuild from", fileName, repoRoot))
+		return
+	}
+	inner, ok := extractManagedBlock(string(data))
+	if !ok {
+		exitWithMnemosError(f.Verbose, NewUserError("%s has no mnemos managed block — nothing to rebuild from", fileName))
+		return
+	}
+	text := blockBulletsText(inner)
+	if strings.TrimSpace(text) == "" {
+		exitWithMnemosError(f.Verbose, NewUserError("the mnemos block in %s has no learnings to rebuild from", fileName))
+		return
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, ".mnemos"), 0o750); err != nil {
+		exitWithMnemosError(f.Verbose, NewSystemError(err, "create .mnemos dir"))
+		return
+	}
+	brainDSN := "sqlite://" + filepath.Join(repoRoot, ".mnemos", "mnemos.db")
+
+	ctx := context.Background()
+	withBrainDSN(brainDSN, func() {
+		_, _ = mcpRunProcessText(ctx, "rebuild:"+fileName, mcpProcessTextInput{
+			Text:          text,
+			UseLLM:        f.LLM,
+			UseEmbeddings: f.Embed,
+		})
+	})
+	// Baseline the sync-back hash to the committed block so the next brief
+	// doesn't treat it as a fresh human edit and re-ingest.
+	writeStoredDocHash(repoRoot, fileName, blockHash(inner))
+	ensureRepoGitignore(repoRoot)
+
+	lines := strings.Count(strings.TrimSpace(text), "\n") + 1
+	fmt.Printf("Rebuilt repo brain %s from %s (%d learning line(s)).\n", brainDSN, docPath, lines)
 }
 
 // ---- sync-back: fold human edits of the managed block into the brain ----

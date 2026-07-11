@@ -1,9 +1,42 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestEnsureRepoGitignore(t *testing.T) {
+	dir := t.TempDir()
+	ensureRepoGitignore(dir)
+	first, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("gitignore not written: %v", err)
+	}
+	for _, want := range []string{".mnemos/mnemos.db", ".mnemos/.*.sha"} {
+		if !strings.Contains(string(first), want) {
+			t.Errorf("gitignore missing %q:\n%s", want, first)
+		}
+	}
+	// Idempotent: a second call changes nothing.
+	ensureRepoGitignore(dir)
+	second, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if string(second) != string(first) {
+		t.Errorf("not idempotent:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+
+	// Preserves existing entries.
+	dir2 := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir2, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ensureRepoGitignore(dir2)
+	got, _ := os.ReadFile(filepath.Join(dir2, ".gitignore"))
+	if !strings.Contains(string(got), "node_modules/") || !strings.Contains(string(got), ".mnemos/mnemos.db") {
+		t.Errorf("should preserve existing and add mnemos patterns:\n%s", got)
+	}
+}
 
 func TestUpsertManagedBlock_InsertsIntoEmpty(t *testing.T) {
 	got := upsertManagedBlock("", "hello")
