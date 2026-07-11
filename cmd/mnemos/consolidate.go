@@ -17,6 +17,15 @@ import (
 //	                   [--reinforce-validated] [--reinforce-playbooks]
 //	                   [--synthesize] [--replay-top-k <n>]
 func handleConsolidate(args []string, f Flags) {
+	// The promotion pass (ADR 0011 Phase B) is a distinct, read-only sub-mode of
+	// consolidate: tenant→global promotion rather than in-store maintenance.
+	for _, a := range args {
+		if a == "--promote" {
+			handlePromote(args, f)
+			return
+		}
+	}
+
 	opts, err := parseConsolidateOpts(args, f)
 	if err != nil {
 		exitWithMnemosError(false, err)
