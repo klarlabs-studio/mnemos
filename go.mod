@@ -13,7 +13,7 @@ require (
 	go.klarlabs.de/axi v1.4.0
 	go.klarlabs.de/bolt v1.5.2
 	go.klarlabs.de/fortify v1.8.1
-	go.klarlabs.de/mcp v1.21.0
+	go.klarlabs.de/mcp v1.22.0
 	go.klarlabs.de/statekit v1.9.0
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.82.0
