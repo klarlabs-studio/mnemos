@@ -256,6 +256,8 @@ func main() {
 		handleSyncDocs(args, flags)
 	case "rebuild":
 		handleRebuild(args, flags)
+	case "repo-tenant":
+		handleRepoTenant(args, flags)
 	case "lessons":
 		handleLessons(args, flags)
 	case "verify":
@@ -1332,6 +1334,7 @@ func printUsage() {
 	fmt.Println("  mcp --http <addr> --require-tenant   Multi-tenant: every request needs a token with a tenant (postgres, RLS-isolated)")
 	fmt.Println("  serve [--port N] [--grpc-port N]     REST + gRPC API service (default :7777)")
 	fmt.Println("  serve --require-tenant               Multi-tenant REST + gRPC: every request needs a token with a tenant (postgres, RLS)")
+	fmt.Println("  repo-tenant [--json]                 Print this repo's derived hosted tenant id (ADR 0009), for `token issue --tenant`")
 	fmt.Println("")
 	fmt.Println("Pipeline Commands:")
 	fmt.Println("  ingest <path>                        Ingest a file as events")

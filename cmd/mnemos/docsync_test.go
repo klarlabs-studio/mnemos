@@ -7,6 +7,33 @@ import (
 	"testing"
 )
 
+func TestDeriveHostedTenant(t *testing.T) {
+	// Empty in → empty out.
+	if deriveHostedTenant("") != "" {
+		t.Error("empty key → empty tenant")
+	}
+	// Stable + valid tenant id, identical for the same remote (clone portability).
+	a := deriveHostedTenant("git@github.com:acme/widgets.git")
+	b := deriveHostedTenant("git@github.com:acme/widgets.git")
+	if a != b {
+		t.Errorf("not deterministic: %q vs %q", a, b)
+	}
+	if !validTenantID(a) {
+		t.Errorf("derived tenant %q is not a valid tnt id", a)
+	}
+	if !strings.HasPrefix(a, "repo_") {
+		t.Errorf("tenant should be repo_-prefixed: %q", a)
+	}
+	// Different repos → different tenants.
+	if deriveHostedTenant("git@github.com:acme/other.git") == a {
+		t.Error("distinct repos must derive distinct tenants")
+	}
+	// A weird key (all non-alphanumeric) still yields a valid id.
+	if got := deriveHostedTenant("://@@@"); !validTenantID(got) {
+		t.Errorf("degenerate key → invalid tenant %q", got)
+	}
+}
+
 func TestEnsureRepoGitignore(t *testing.T) {
 	dir := t.TempDir()
 	ensureRepoGitignore(dir)
