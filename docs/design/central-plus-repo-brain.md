@@ -1,5 +1,13 @@
 # Brainstorm: a central brain that also holds repo-isolated knowledge
 
+> **Status: v1 implemented** (Option A, repo-first routing). The recall/brief/
+> capture hooks are now repo-aware via `ev.Cwd`: recall federates global ∪ repo
+> (repo wins, tagged `{repo}`/`{global}`), capture routes to the repo brain when
+> inside an opted-in repo (`mnemos init --project`), and brief reports both
+> counts. Follow-ups still open: the MCP `scope` param, the "remember globally"
+> escape hatch, and the committed-repo-brain share format (markdown vs binary
+> `.db`) — see Open questions.
+
 **Goal.** Keep the single central/global brain that follows you across every
 Claude Code session, but let knowledge that *belongs to a repo* stay with that
 repo — surfaced when you work there, invisible everywhere else, and (optionally)
