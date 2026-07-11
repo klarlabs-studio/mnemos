@@ -109,7 +109,7 @@ func toInputMap(in any) (map[string]any, error) {
 // a *sql.DB here.
 func mcpExecutorMap(actor string, getWatcher func() (*Watcher, error)) map[string]domain.ActionExecutor {
 	return map[string]domain.ActionExecutor{
-		"exec.query_knowledge": toolExecutor[mcpQueryInput, mcpQueryOutput]{run: func(ctx context.Context, in mcpQueryInput) (mcpQueryOutput, error) { return mcpRunQuery(ctx, in) }, summary: querySummary},
+		"exec.query_knowledge": toolExecutor[mcpQueryInput, mcpQueryOutput]{run: func(ctx context.Context, in mcpQueryInput) (mcpQueryOutput, error) { return mcpRunQueryScoped(ctx, in) }, summary: querySummary},
 		"exec.process_text": toolExecutor[mcpProcessTextInput, mcpProcessTextOutput]{run: func(ctx context.Context, in mcpProcessTextInput) (mcpProcessTextOutput, error) {
 			return mcpRunProcessText(ctx, mcpActorFor(ctx, actor), in)
 		}, summary: processTextSummary, evidence: processTextEvidence},
