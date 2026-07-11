@@ -100,18 +100,22 @@ Still open:
    DB) vs namespace-per-tenant — mnemos already supports both; pick per
    deployment.
 
-### Proposed v2 build slice (on top of the shipped v1)
+### v2 build slice — status
 
-1. **Tenant resolution:** `repoTenant(cwd)` = git remote (fallback path hash);
-   thread it as the repo tier's identity (today v1 keys off the `.mnemos` file
-   location — this generalizes it).
-2. **`mnemos export --repo` → `CONTEXT.md`:** generate the committed artifact
-   from the repo tenant (identity + decisions + open threads + next steps).
-3. **Brief-time sync-back:** at SessionStart, if `CONTEXT.md` changed since last
-   ingest (content hash), ingest the delta into the repo brain, then brief.
-4. **Rebuild:** `mnemos rebuild` (or auto on first use) reconstructs the
-   gitignored `.db` index from `CONTEXT.md` + captured sessions after a clone.
-5. **Docs + `.gitignore` guidance:** commit `CONTEXT.md`, ignore `mnemos.db`.
+1. **Tenant resolution — DONE:** `repoTenantKey(cwd)` = git remote (fallback
+   path). Stamped into the committed doc's header.
+2. **Write learnings into AGENTS.md/CLAUDE.md — DONE:** the committed artifact is
+   `AGENTS.md` (or `CLAUDE.md`) itself, not a separate `CONTEXT.md`, so agents
+   follow it natively. `mnemos sync-docs` regenerates a delimited, human-content-
+   preserving managed block from the repo brain; it also fires after a repo
+   capture. Decisions + top-trust facts + open questions.
+3. **Brief-time sync-back — NEXT:** at SessionStart, detect human edits inside
+   the managed block (content hash) and ingest the delta into the repo brain,
+   closing the two-way loop.
+4. **Rebuild — LATER:** `mnemos rebuild` reconstructs the gitignored `.db` from
+   AGENTS.md + captured sessions after a clone.
+5. **Docs + `.gitignore` guidance — LATER:** commit AGENTS.md, ignore
+   `.mnemos/mnemos.db`.
 
 Two kinds of memory, one workflow:
 
