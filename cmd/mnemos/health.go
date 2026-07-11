@@ -12,10 +12,11 @@ import (
 	"go.klarlabs.de/mnemos/internal/llm"
 )
 
-// healthCheck is one row in the deep health response. Status is
-// always one of "ok", "skipped" (no provider configured), or
-// "failed". Detail carries either the failure message or a brief
-// "what we tried" hint when ok.
+// healthCheck is one row in the deep health response. Status is one
+// of "ok", "skipped" (no provider configured), "warn" (advisory —
+// e.g. an orphaned home brain; does not fail health), or "failed".
+// Detail carries either the failure message or a brief "what we
+// tried" hint when ok.
 type healthCheck struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`

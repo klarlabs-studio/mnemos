@@ -55,6 +55,15 @@ func runDoctorChecks(ctx context.Context) healthCheckResult {
 		probeJWTSecret(),
 	}
 
+	// Migration safety for ADR 0008: if a non-empty $HOME/.mnemos/mnemos.db
+	// exists but is not the active brain, it is orphaned — no longer auto-loaded
+	// by the walk-up. Surface it (with recovery steps) so an upgrading user whose
+	// brain lived there isn't silently left staring at an empty store. Only shown
+	// when actually detected, so a stock install stays quiet.
+	if shadow, present := probeHomeBrainShadow(); present {
+		checks = append(checks, shadow)
+	}
+
 	dbCheck, conn := probeDoctorDB(ctx)
 	checks = append(checks, dbCheck)
 	if conn != nil {
@@ -87,6 +96,35 @@ func runDoctorChecks(ctx context.Context) healthCheckResult {
 		}
 	}
 	return healthCheckResult{Healthy: healthy, Checks: checks}
+}
+
+// probeHomeBrainShadow detects an orphaned brain at $HOME/.mnemos/mnemos.db —
+// a non-empty store that ADR 0008 no longer auto-loads because $HOME/.mnemos is
+// the global fallback dir, not a project root. It returns (check, true) only
+// when such a brain exists and is NOT the active DSN, so doctor stays quiet on
+// a stock install. The status is "warn": advisory, not a failure.
+func probeHomeBrainShadow() (healthCheck, bool) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return healthCheck{}, false
+	}
+	homeBrain := filepath.Join(home, ".mnemos", "mnemos.db")
+	info, statErr := os.Stat(homeBrain)
+	if statErr != nil || info.IsDir() || info.Size() == 0 {
+		return healthCheck{}, false // no home brain to worry about
+	}
+	// If the home brain IS the active brain (explicitly selected via
+	// MNEMOS_DB_URL / --db / config), it isn't orphaned — nothing to warn about.
+	if p, ok := sqliteFilePath(resolveDSN()); ok && filepath.Clean(p) == filepath.Clean(homeBrain) {
+		return healthCheck{}, false
+	}
+	return healthCheck{
+		Name:   "home_brain",
+		Status: "warn",
+		Detail: fmt.Sprintf(
+			"unused brain at %s (%.1f MB) is no longer auto-loaded (ADR 0008); to use it: `mnemos init --db sqlite://%s` (or set MNEMOS_DB_URL), else it can be ignored",
+			homeBrain, float64(info.Size())/(1024*1024), homeBrain),
+	}, true
 }
 
 func probeProjectRoot() healthCheck {
@@ -173,6 +211,8 @@ func printDoctorHuman(r healthCheckResult) {
 			mark = "✗"
 		case "skipped":
 			mark = "·"
+		case "warn":
+			mark = "⚠"
 		}
 		fmt.Printf("  %s %-16s %-8s %s\n", mark, c.Name, c.Status, c.Detail)
 	}
