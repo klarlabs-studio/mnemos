@@ -46,6 +46,85 @@ func TestWorkspaceRegistry_RoundTripAndResolve(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRegistry_ActivePinOverridesFolder(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	aFolder := filepath.Join(t.TempDir(), "a")
+	bFolder := filepath.Join(t.TempDir(), "b")
+	reg := workspaceRegistry{Workspaces: map[string]*workspace{
+		"a": {Folders: []string{aFolder}, DB: "sqlite:///w/a.db"},
+		"b": {Folders: []string{bFolder}, DB: "sqlite:///w/b.db"},
+	}, Active: "b"}
+	if err := saveWorkspaceRegistry(reg); err != nil {
+		t.Fatal(err)
+	}
+
+	// A pin overrides folder resolution: cwd inside a's folder still resolves b.
+	if dsn, name, folder := resolveWorkspaceBrain(aFolder); name != "b" || dsn != "sqlite:///w/b.db" || folder != bFolder {
+		t.Errorf("pinned: (%q,%q,%q), want b/%s", dsn, name, folder, bFolder)
+	}
+	// Even with an empty cwd the pin resolves.
+	if _, name, _ := resolveWorkspaceBrain(""); name != "b" {
+		t.Errorf("pin with empty cwd → %q, want b", name)
+	}
+
+	// Clearing the pin restores folder-based resolution.
+	reg.Active = ""
+	if err := saveWorkspaceRegistry(reg); err != nil {
+		t.Fatal(err)
+	}
+	if _, name, _ := resolveWorkspaceBrain(aFolder); name != "a" {
+		t.Errorf("unpinned: cwd in a → %q, want a", name)
+	}
+
+	// A pin at a workspace that no longer exists falls through to folders.
+	reg.Active = "gone"
+	if err := saveWorkspaceRegistry(reg); err != nil {
+		t.Fatal(err)
+	}
+	if _, name, _ := resolveWorkspaceBrain(aFolder); name != "a" {
+		t.Errorf("stale pin → %q, want folder match a", name)
+	}
+}
+
+func TestWorkspaceExportImport_RoundTrip(t *testing.T) {
+	// Source machine: a workspace with local folders.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	srcFolder := filepath.Join(t.TempDir(), "src")
+	reg := workspaceRegistry{Workspaces: map[string]*workspace{
+		"acme": {Folders: []string{srcFolder}, DB: "sqlite:///src/acme.db"},
+	}}
+	if err := saveWorkspaceRegistry(reg); err != nil {
+		t.Fatal(err)
+	}
+	def := filepath.Join(t.TempDir(), "acme.yaml")
+	handleWorkspaceExport([]string{"acme", "--out", def}, Flags{})
+
+	// Target machine: a fresh registry; import with a machine-local folder.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dstFolder := filepath.Join(t.TempDir(), "dst")
+	handleWorkspaceImport([]string{def, "--folder", dstFolder}, Flags{})
+
+	got := loadWorkspaceRegistry()
+	ws := got.Workspaces["acme"]
+	if ws == nil {
+		t.Fatal("acme not imported")
+	}
+	// Folder was overridden to the local path...
+	if len(ws.Folders) != 1 || ws.Folders[0] != filepath.Clean(dstFolder) {
+		t.Errorf("imported folders = %v, want [%s]", ws.Folders, dstFolder)
+	}
+	// ...but the name (hence hosted tenant) is preserved — the shared identity.
+	if deriveHostedTenant("acme") == "" {
+		t.Fatal("tenant derivation broken")
+	}
+	// And the imported workspace activates from the new folder.
+	if _, name, _ := resolveWorkspaceBrain(dstFolder); name != "acme" {
+		t.Errorf("imported workspace didn't activate: %q", name)
+	}
+}
+
 func TestWorkspaceRegistry_EmptyWhenNoFile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	reg := loadWorkspaceRegistry()
