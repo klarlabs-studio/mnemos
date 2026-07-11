@@ -8,6 +8,17 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`mnemos workspace use <name>`** pins a workspace regardless of cwd (an
+  `active:` field in the registry that overrides folder resolution) — for working
+  from a folder outside the workspace's list. `use --none` clears it; `list`
+  marks the pinned one.
+- **`mnemos workspace export <name>` / `import <file>`** share a workspace
+  definition across machines. The name is the portable identity (same hosted
+  tenant everywhere), so folders/db are machine-specific hints the importer
+  overrides with `--folder` / `--db` (import defaults to a machine-local brain).
+
 ## [0.83.0] — 2026-07-11
 
 ### Added

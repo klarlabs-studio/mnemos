@@ -72,9 +72,19 @@ has to re-select it per session.
   federation stack gains workspaces for free.
 
 **Negative / open**
-- The registry is a per-machine file; sharing a workspace *definition* across
-  machines (not just its hosted tenant) is manual for now.
-- A `workspace use <name>` explicit override (pin regardless of cwd) is not built
-  — folder-membership is the only activation. Add later if needed.
 - Internal identifiers (the MCP `scope=repo` enum, `claim_provenance=repo`) still
   say "repo"; only user-facing recall/brief wording was renamed to "workspace".
+
+**Follow-ups (implemented after the initial cut)**
+- **Explicit pin.** `workspace use <name>` records an `active:` field in the
+  registry that overrides folder resolution — the session federates that
+  workspace regardless of cwd (for working from a folder outside its list).
+  `use --none` clears it; `list` marks the pinned one; removing a pinned
+  workspace clears the pin.
+- **Shareable definition.** `workspace export <name> [--out <file>]` emits a
+  portable YAML (name, folders, db, tenant); `workspace import <file>
+  [--folder …] [--db …]` recreates it on another machine. The **name** is the
+  shared identity — it derives the same hosted tenant everywhere — so folders/db
+  are treated as machine-specific hints the importer overrides (import defaults
+  to a machine-local brain). Guarded by `TestWorkspaceRegistry_ActivePinOverridesFolder`
+  and `TestWorkspaceExportImport_RoundTrip`.
