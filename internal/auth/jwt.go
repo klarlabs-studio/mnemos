@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -144,6 +145,35 @@ func (c Claims) EffectiveTenant(requested string) (string, bool) {
 		return requested, true
 	}
 	return "", false
+}
+
+// tenantIDRE is the charset a tenant id must match to be safe to interpolate
+// into `SET mnemos.tenant` / a derived namespace (ADR 0007): quote- and
+// backslash-free. This is the single source of truth — REST, gRPC, and MCP all
+// validate through ValidTenantID so the cross-tenant boundary can't drift.
+var tenantIDRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
+
+// ReservedDefaultTenant is the unscoped partition. A token must never be scoped
+// to it (that would grant the global/default data), so it is rejected as an
+// explicit tenant even though it matches the charset.
+const ReservedDefaultTenant = "__default__"
+
+// ValidTenantID reports whether id is a well-formed, non-reserved tenant id.
+func ValidTenantID(id string) bool {
+	return id != ReservedDefaultTenant && tenantIDRE.MatchString(id)
+}
+
+// ResolveTenant is the one place every request-scoping surface (REST/gRPC/MCP)
+// authorizes a per-request tenant selection: it applies EffectiveTenant AND the
+// charset validation, returning (tenant, true) only when both pass — fail
+// closed. Keeping this in one function means a future isolation hardening can't
+// be applied to one surface and missed on another.
+func (c Claims) ResolveTenant(requested string) (string, bool) {
+	eff, ok := c.EffectiveTenant(requested)
+	if !ok || !ValidTenantID(eff) {
+		return "", false
+	}
+	return eff, true
 }
 
 // Issuer mints new JWTs. It does not store anything — the resulting

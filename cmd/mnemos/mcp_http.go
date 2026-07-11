@@ -13,6 +13,15 @@ import (
 	"go.klarlabs.de/mnemos/internal/auth"
 )
 
+// mcpSelectedTenant resolves the tenant a multi-tenant MCP request is authorized
+// to use: the X-Mnemos-Tenant selection validated against the token's tnt/tnts
+// grant (ADR 0009). ok=false denies. Shared by the authorize hook and the
+// context-scoping hook — and unit-tested — so both agree on the header name and
+// the fail-closed decision.
+func mcpSelectedTenant(claims *auth.Claims, r *http.Request) (string, bool) {
+	return claims.ResolveTenant(r.Header.Get("X-Mnemos-Tenant"))
+}
+
 // serveMCPHTTP serves the assembled MCP server over Streamable HTTP (+ SSE)
 // instead of stdio, so a hosted Mnemos can be reached by remote MCP clients
 // like Claude Code via `claude mcp add --transport http`. It reuses the exact
@@ -45,13 +54,8 @@ func serveMCPHTTP(ctx context.Context, srv *mcp.Server, addr string, requireAuth
 			if requireTenant {
 				// Honor an optional per-request tenant (X-Mnemos-Tenant) within
 				// the token's tnt/tnts grant (ADR 0009); else the single tenant.
-				requested := strings.TrimSpace(r.Header.Get("X-Mnemos-Tenant"))
-				eff, ok := claims.EffectiveTenant(requested)
-				if !ok {
+				if _, ok := mcpSelectedTenant(claims, r); !ok {
 					return errors.New("not authorized for the requested tenant (needs a matching tnt/tnts grant)")
-				}
-				if !validTenantID(eff) {
-					return fmt.Errorf("tenant %q is malformed", eff)
 				}
 			}
 			return nil
@@ -71,8 +75,7 @@ func serveMCPHTTP(ctx context.Context, srv *mcp.Server, addr string, requireAuth
 			}
 			reqCtx = withClaims(reqCtx, claims)
 			if requireTenant {
-				requested := strings.TrimSpace(r.Header.Get("X-Mnemos-Tenant"))
-				if eff, ok := claims.EffectiveTenant(requested); ok && validTenantID(eff) {
+				if eff, ok := mcpSelectedTenant(claims, r); ok {
 					reqCtx = withTenant(reqCtx, eff)
 				}
 			}

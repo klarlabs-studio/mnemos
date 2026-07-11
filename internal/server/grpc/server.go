@@ -6,9 +6,7 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 
@@ -103,15 +101,6 @@ func (s *Server) WithTenantScoping(openConn func(ctx context.Context, tenant str
 type tenantConnKey struct{}
 type tenantWriterKey struct{}
 type tenantKey struct{}
-
-// tenantIDRE mirrors the postgres provider's tenantRE (ADR 0007): a
-// quote/backslash-free charset. The reserved __default__ is rejected so no
-// bearer can scope to the global partition.
-var tenantIDRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
-
-func validTenantID(id string) bool {
-	return id != "__default__" && tenantIDRE.MatchString(id)
-}
 
 func withTenant(ctx context.Context, t string) context.Context {
 	return context.WithValue(ctx, tenantKey{}, t)
@@ -311,11 +300,11 @@ func (s *Server) validateToken(ctx context.Context, raw string) (context.Context
 		requested := ""
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			if v := md.Get("x-mnemos-tenant"); len(v) > 0 {
-				requested = strings.TrimSpace(v[0])
+				requested = v[0]
 			}
 		}
-		eff, ok := claims.EffectiveTenant(requested)
-		if !ok || !validTenantID(eff) {
+		eff, ok := claims.ResolveTenant(requested)
+		if !ok {
 			return nil, status.Errorf(codes.Unauthenticated, "not authorized for the requested tenant (needs a matching tnt/tnts grant)")
 		}
 		ctx = withTenant(ctx, eff)

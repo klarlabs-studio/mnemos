@@ -152,9 +152,8 @@ func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant bo
 			// A request may select a tenant (X-Mnemos-Tenant) within the token's
 			// grant (tnt or the tnts allowlist, ADR 0009); otherwise the token's
 			// single tenant is used. Fail closed on an unauthorized/malformed one.
-			requested := strings.TrimSpace(r.Header.Get("X-Mnemos-Tenant"))
-			eff, ok := claims.EffectiveTenant(requested)
-			if !ok || !validTenantID(eff) {
+			eff, ok := claims.ResolveTenant(r.Header.Get("X-Mnemos-Tenant"))
+			if !ok {
 				writeError(w, http.StatusUnauthorized, "not authorized for the requested tenant (needs a matching tnt/tnts grant)")
 				return
 			}
