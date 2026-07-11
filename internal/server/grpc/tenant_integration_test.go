@@ -329,3 +329,93 @@ func TestGRPC_CachedTenantConnSurvivesMultipleRPCs(t *testing.T) {
 		t.Errorf("expected the cache-aware closer to be called per RPC; got %d calls", closes)
 	}
 }
+
+// TestGRPC_TenantAllowlist_SelectionAndDenial exercises ADR 0009 Phase 2: a
+// token carrying a tnts allowlist may select any allowed tenant per request via
+// x-mnemos-tenant metadata (routing to that tenant, isolated), and is denied for
+// a tenant outside its grant.
+func TestGRPC_TenantAllowlist_SelectionAndDenial(t *testing.T) {
+	ctx := context.Background()
+	baseDSN := "sqlite://" + t.TempDir() + "/mnemos.db"
+	base, err := store.Open(ctx, baseDSN)
+	if err != nil {
+		t.Fatalf("open base: %v", err)
+	}
+	t.Cleanup(func() { _ = base.Close() })
+
+	secret, err := auth.GenerateSecret()
+	if err != nil {
+		t.Fatalf("secret: %v", err)
+	}
+	issuer := auth.NewIssuer(secret)
+	verifier := auth.NewVerifier(secret, base.RevokedTokens)
+	user := domain.User{ID: "usr_allow", Status: domain.UserStatusActive, CreatedAt: time.Now()}
+	// One token allowed for both "acme" (default) and "repo_x".
+	tok, _, err := issuer.IssueUserTokenWithTenants(user, "acme", []string{"acme", "repo_x"}, time.Hour)
+	if err != nil {
+		t.Fatalf("issue allowlist token: %v", err)
+	}
+
+	srvImpl := mnemosgrpc.NewServer(base, verifier, testLogger(), "test").
+		WithTenantScoping(func(ctx context.Context, tenant string) (*store.Conn, error) {
+			return store.Open(ctx, baseDSN+"?namespace="+store.TenantNamespace(tenant))
+		}, func(c *store.Conn) { _ = c.Close() })
+	gs := grpclib.NewServer(grpclib.UnaryInterceptor(srvImpl.UnaryInterceptor()))
+	srvImpl.Register(gs)
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() { _ = gs.Serve(lis) }()
+	defer gs.GracefulStop()
+	cc, err := grpclib.NewClient(lis.Addr().String(), grpclib.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() { _ = cc.Close() }()
+	client := mnemosv1.NewMnemosServiceClient(cc)
+
+	authTenant := func(tenant string) context.Context {
+		c := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok)
+		if tenant != "" {
+			c = metadata.AppendToOutgoingContext(c, "x-mnemos-tenant", tenant)
+		}
+		return c
+	}
+
+	now := timestamppb.New(time.Now().UTC())
+	// Write to the default tenant (no selection → "acme").
+	if _, err := client.AppendEvents(authTenant(""), &mnemosv1.AppendEventsRequest{
+		Events: []*mnemosv1.Event{{Id: "ev-acme", RunId: "r", SchemaVersion: "v1", Content: "acme", SourceInputId: "in", Timestamp: now, IngestedAt: now}},
+	}); err != nil {
+		t.Fatalf("append to default tenant: %v", err)
+	}
+	// Select the OTHER allowed tenant: it must not see acme's event (isolated).
+	repoList, err := client.ListEvents(authTenant("repo_x"), &mnemosv1.ListEventsRequest{})
+	if err != nil {
+		t.Fatalf("list as repo_x: %v", err)
+	}
+	for _, e := range repoList.Events {
+		if e.Id == "ev-acme" {
+			t.Fatalf("ISOLATION BREACH: repo_x saw acme's event")
+		}
+	}
+	// Selecting the default tenant sees the event.
+	acmeList, err := client.ListEvents(authTenant("acme"), &mnemosv1.ListEventsRequest{})
+	if err != nil {
+		t.Fatalf("list as acme: %v", err)
+	}
+	found := false
+	for _, e := range acmeList.Events {
+		if e.Id == "ev-acme" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("selecting the default tenant should see its own event")
+	}
+	// Selecting a tenant OUTSIDE the allowlist is denied.
+	if _, err := client.ListEvents(authTenant("forbidden"), &mnemosv1.ListEventsRequest{}); err == nil {
+		t.Fatal("selecting a tenant outside the allowlist must be denied")
+	}
+}

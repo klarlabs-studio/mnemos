@@ -149,12 +149,15 @@ func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant bo
 		ctx = withScopes(ctx, claims.Scopes)
 		ctx = withAllowedRuns(ctx, claims.Runs)
 		if requireTenant {
-			t := strings.TrimSpace(claims.Tenant)
-			if !validTenantID(t) {
-				writeError(w, http.StatusUnauthorized, "token has no valid tenant (tnt) claim; this server requires one")
+			// A request may select a tenant (X-Mnemos-Tenant) within the token's
+			// grant (tnt or the tnts allowlist, ADR 0009); otherwise the token's
+			// single tenant is used. Fail closed on an unauthorized/malformed one.
+			eff, ok := claims.ResolveTenant(r.Header.Get("X-Mnemos-Tenant"))
+			if !ok {
+				writeError(w, http.StatusUnauthorized, "not authorized for the requested tenant (needs a matching tnt/tnts grant)")
 				return
 			}
-			ctx = withTenant(ctx, t)
+			ctx = withTenant(ctx, eff)
 		}
 		h.ServeHTTP(w, r.WithContext(ctx))
 	})

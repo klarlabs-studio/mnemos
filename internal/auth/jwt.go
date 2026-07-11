@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -57,8 +58,14 @@ type Claims struct {
 	// multi-tenant server scopes the bearer's reads/writes to this tenant via
 	// the Postgres `mnemos.tenant` GUC + row-level security. Empty means the
 	// token carries no tenant (a multi-tenant server denies it; a single-tenant
-	// server ignores it).
+	// server ignores it). With a Tenants allowlist, Tenant is the default tenant
+	// used when a request selects none.
 	Tenant string `json:"tnt,omitempty"`
+	// Tenants is an optional allowlist (ADR 0009): the set of tenants a request
+	// may select via an X-Mnemos-Tenant header / gRPC metadata. It lets one
+	// token federate its personal tenant with a repo tenant without weakening
+	// per-request RLS isolation. Empty means "only Tenant is allowed".
+	Tenants []string `json:"tnts,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -100,6 +107,73 @@ func (c Claims) AllowsRun(runID string) bool {
 		}
 	}
 	return false
+}
+
+// AllowsTenant reports whether the bearer may act as the given tenant: it is the
+// token's Tenant, or a member of its Tenants allowlist (ADR 0009). Exact match
+// only — tenants are opaque isolation boundaries, never globbed.
+func (c Claims) AllowsTenant(tenant string) bool {
+	tenant = strings.TrimSpace(tenant)
+	if tenant == "" {
+		return false
+	}
+	if tenant == strings.TrimSpace(c.Tenant) {
+		return true
+	}
+	for _, t := range c.Tenants {
+		if strings.TrimSpace(t) == tenant {
+			return true
+		}
+	}
+	return false
+}
+
+// EffectiveTenant resolves the tenant a request should be scoped to, given an
+// optional per-request selection (X-Mnemos-Tenant header / gRPC metadata) and
+// the token's grants (ADR 0009). Returns (tenant, true) when authorized,
+// ("", false) when denied — fail closed:
+//   - requested == "": fall back to the token's single Tenant (backward compat);
+//     denied when the token carries no Tenant.
+//   - requested set: authorized iff AllowsTenant(requested).
+func (c Claims) EffectiveTenant(requested string) (string, bool) {
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		t := strings.TrimSpace(c.Tenant)
+		return t, t != ""
+	}
+	if c.AllowsTenant(requested) {
+		return requested, true
+	}
+	return "", false
+}
+
+// tenantIDRE is the charset a tenant id must match to be safe to interpolate
+// into `SET mnemos.tenant` / a derived namespace (ADR 0007): quote- and
+// backslash-free. This is the single source of truth — REST, gRPC, and MCP all
+// validate through ValidTenantID so the cross-tenant boundary can't drift.
+var tenantIDRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
+
+// ReservedDefaultTenant is the unscoped partition. A token must never be scoped
+// to it (that would grant the global/default data), so it is rejected as an
+// explicit tenant even though it matches the charset.
+const ReservedDefaultTenant = "__default__"
+
+// ValidTenantID reports whether id is a well-formed, non-reserved tenant id.
+func ValidTenantID(id string) bool {
+	return id != ReservedDefaultTenant && tenantIDRE.MatchString(id)
+}
+
+// ResolveTenant is the one place every request-scoping surface (REST/gRPC/MCP)
+// authorizes a per-request tenant selection: it applies EffectiveTenant AND the
+// charset validation, returning (tenant, true) only when both pass — fail
+// closed. Keeping this in one function means a future isolation hardening can't
+// be applied to one surface and missed on another.
+func (c Claims) ResolveTenant(requested string) (string, bool) {
+	eff, ok := c.EffectiveTenant(requested)
+	if !ok || !ValidTenantID(eff) {
+		return "", false
+	}
+	return eff, true
 }
 
 // Issuer mints new JWTs. It does not store anything — the resulting
@@ -178,11 +252,19 @@ func (i *Issuer) IssueUserToken(user domain.User, ttl time.Duration) (token, jti
 // IssueUserTokenWithTenant mints a user JWT scoped to a tenant (ADR 0007). An
 // empty tenant behaves exactly like IssueUserToken.
 func (i *Issuer) IssueUserTokenWithTenant(user domain.User, tenant string, ttl time.Duration) (token, jti string, err error) {
+	return i.IssueUserTokenWithTenants(user, tenant, nil, ttl)
+}
+
+// IssueUserTokenWithTenants mints a user JWT with a tenant + optional tenant
+// allowlist (ADR 0009). tenant is the default (used when a request selects
+// none); tenants is the set a request may select via X-Mnemos-Tenant. An empty
+// tenant and empty tenants behave like IssueUserToken.
+func (i *Issuer) IssueUserTokenWithTenants(user domain.User, tenant string, tenants []string, ttl time.Duration) (token, jti string, err error) {
 	scopes := user.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{"*"}
 	}
-	return i.issue(user.ID, TokenKindUser, append([]string(nil), scopes...), nil, tenant, ttl)
+	return i.issue(user.ID, TokenKindUser, append([]string(nil), scopes...), nil, tenant, append([]string(nil), tenants...), ttl)
 }
 
 // IssueAgentToken mints a JWT for an automated agent, valid for ttl.
@@ -191,7 +273,7 @@ func (i *Issuer) IssueUserTokenWithTenant(user domain.User, tenant string, ttl t
 // prefer IssueAgentTokenWithScopes so each agent's authority is
 // explicit.
 func (i *Issuer) IssueAgentToken(agentID string, ttl time.Duration) (token, jti string, err error) {
-	return i.issue(agentID, TokenKindAgent, []string{"*"}, nil, "", ttl)
+	return i.issue(agentID, TokenKindAgent, []string{"*"}, nil, "", nil, ttl)
 }
 
 // IssueAgentTokenWithScopes mints an agent JWT carrying the supplied
@@ -218,10 +300,10 @@ func (i *Issuer) IssueAgentTokenFull(agentID string, scopes, runs []string, tena
 }
 
 func (i *Issuer) issueAgent(agentID string, scopes, runs []string, tenant string, ttl time.Duration) (string, string, error) {
-	return i.issue(agentID, TokenKindAgent, append([]string(nil), scopes...), append([]string(nil), runs...), tenant, ttl)
+	return i.issue(agentID, TokenKindAgent, append([]string(nil), scopes...), append([]string(nil), runs...), tenant, nil, ttl)
 }
 
-func (i *Issuer) issue(subject string, kind TokenKind, scopes, runs []string, tenant string, ttl time.Duration) (string, string, error) {
+func (i *Issuer) issue(subject string, kind TokenKind, scopes, runs []string, tenant string, tenants []string, ttl time.Duration) (string, string, error) {
 	if subject == "" {
 		return "", "", errors.New("subject is required")
 	}
@@ -234,11 +316,12 @@ func (i *Issuer) issue(subject string, kind TokenKind, scopes, runs []string, te
 	}
 	now := time.Now().UTC()
 	claims := Claims{
-		UserID: subject,
-		Kind:   kind,
-		Scopes: scopes,
-		Runs:   runs,
-		Tenant: tenant,
+		UserID:  subject,
+		Kind:    kind,
+		Scopes:  scopes,
+		Runs:    runs,
+		Tenant:  tenant,
+		Tenants: tenants,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(now),

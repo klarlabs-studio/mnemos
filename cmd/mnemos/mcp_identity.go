@@ -4,24 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"go.klarlabs.de/mnemos/internal/auth"
 )
 
-// tenantIDRE mirrors the postgres provider's tenantRE (ADR 0007): a
-// quote/backslash-free charset safe to interpolate into `SET mnemos.tenant`.
-var tenantIDRE = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
-
-// reservedDefaultTenant is the unscoped partition. A bearer token must never be
-// scoped to it (that would grant access to the global/default data), so it is
-// rejected as an explicit tenant even though it matches the charset.
-const reservedDefaultTenant = "__default__"
-
-// validTenantID reports whether id is a well-formed, non-reserved tenant id.
+// validTenantID reports whether id is a well-formed, non-reserved tenant id. It
+// delegates to auth.ValidTenantID — the single source of truth shared with the
+// gRPC surface so the cross-tenant boundary can't drift between transports.
 func validTenantID(id string) bool {
-	return id != reservedDefaultTenant && tenantIDRE.MatchString(id)
+	return auth.ValidTenantID(id)
 }
 
 // Per-request identity for the HTTP MCP transport. When `mnemos mcp --http`

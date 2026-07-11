@@ -180,7 +180,7 @@ func handleToken(args []string, _ Flags) {
 
 func handleTokenIssue(args []string) {
 	userID := ""
-	tenant := ""
+	var tenants []string
 	ttl := defaultTokenTTL
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -196,7 +196,18 @@ func handleTokenIssue(args []string) {
 				exitWithMnemosError(false, NewUserError("--tenant requires a value"))
 				return
 			}
-			tenant = args[i+1]
+			tenants = append(tenants, args[i+1])
+			i++
+		case "--tenants":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--tenants requires a comma-separated list"))
+				return
+			}
+			for part := range strings.SplitSeq(args[i+1], ",") {
+				if p := strings.TrimSpace(part); p != "" {
+					tenants = append(tenants, p)
+				}
+			}
 			i++
 		case "--ttl":
 			if i+1 >= len(args) {
@@ -223,9 +234,12 @@ func handleTokenIssue(args []string) {
 		exitWithMnemosError(false, NewUserError("--user is required"))
 		return
 	}
-	tenant = strings.TrimSpace(tenant)
-	if tenant != "" && !validTenantID(tenant) {
-		exitWithMnemosError(false, NewUserError("invalid --tenant %q (allowed: letters, digits, . _ : -, max 128)", tenant))
+	// The first tenant is the default (used when a request selects none); all of
+	// them form the tnts allowlist a request may select (ADR 0009). One tenant =
+	// a plain single-tenant token; the allowlist stays empty.
+	tenant, allowTenants, terr := resolveTokenTenants(tenants)
+	if terr != nil {
+		exitWithMnemosError(false, terr)
 		return
 	}
 
@@ -251,7 +265,7 @@ func handleTokenIssue(args []string) {
 		exitWithMnemosError(false, NewSystemError(err, "load JWT secret"))
 		return
 	}
-	token, jti, err := auth.NewIssuer(secret).IssueUserTokenWithTenant(user, tenant, ttl)
+	token, jti, err := auth.NewIssuer(secret).IssueUserTokenWithTenants(user, tenant, allowTenants, ttl)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "issue token"))
 		return
@@ -261,9 +275,40 @@ func handleTokenIssue(args []string) {
 	if tenantDisplay == "" {
 		tenantDisplay = "(none)"
 	}
+	if len(allowTenants) > 0 {
+		tenantDisplay += " (allowlist: " + strings.Join(allowTenants, ", ") + ")"
+	}
 	fmt.Printf("user=%s tenant=%s jti=%s expires_in=%s\n", user.ID, tenantDisplay, jti, ttl)
 	fmt.Println("\nToken (save this — it will not be shown again):")
 	fmt.Println(token)
+}
+
+// resolveTokenTenants normalizes the --tenant/--tenants inputs into a default
+// tenant + an optional allowlist (ADR 0009). It trims, drops blanks, dedups
+// (order-preserving), and validates each id. 0 tenants → ("", nil); 1 → that
+// tenant, no allowlist; >1 → the first as default plus the full allowlist.
+func resolveTokenTenants(raw []string) (defaultTenant string, allowlist []string, err error) {
+	seen := map[string]bool{}
+	var uniq []string
+	for _, t := range raw {
+		t = strings.TrimSpace(t)
+		if t == "" || seen[t] {
+			continue
+		}
+		if !validTenantID(t) {
+			return "", nil, NewUserError("invalid tenant %q (allowed: letters, digits, . _ : -, max 128)", t)
+		}
+		seen[t] = true
+		uniq = append(uniq, t)
+	}
+	switch len(uniq) {
+	case 0:
+		return "", nil, nil
+	case 1:
+		return uniq[0], nil, nil
+	default:
+		return uniq[0], uniq, nil
+	}
 }
 
 func handleTokenRevoke(args []string) {

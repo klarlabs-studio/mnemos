@@ -1,6 +1,6 @@
 # ADR 0009: Repo-as-tenant in a hosted central brain, with federated reads
 
-- **Status:** Accepted (design); Phase 1 implemented
+- **Status:** Accepted (design); Phases 1 & 2 implemented
 - **Date:** 2026-07-11
 - **Deciders:** Felix Geelhaar
 - **Scope:** Mnemos hosted mode (`mnemos serve` / `mcp --http --require-tenant`)
@@ -131,7 +131,14 @@ committing the repo brain. The personal tenant stays private.
 
 - **Phase 1 (this ADR):** tenant derivation (`deriveHostedTenant`) + the
   `mnemos repo-tenant` command. No behavior change to existing hosted mode.
-- **Phase 2:** `tnts` token allowlist + per-request tenant selection in the auth
-  hook (REST/gRPC/MCP), guarded by cross-tenant isolation tests.
-- **Phase 3:** client per-request tenant + hosted hook federation + `init --url
-  --project`.
+- **Phase 2 (implemented):** the `tnts` token allowlist (`Claims.Tenants` +
+  `AllowsTenant`/`EffectiveTenant`, minted via `token issue --tenant A --tenant
+  B` / `--tenants A,B`) and per-request tenant selection — an `X-Mnemos-Tenant`
+  header (REST/MCP-HTTP) or `x-mnemos-tenant` gRPC metadata, validated against
+  the grant and fail-closed in all three auth paths. RLS stays single-tenant per
+  request. Guarded by `TestEffectiveTenant_FailClosed`,
+  `TestGRPC_TenantAllowlist_SelectionAndDenial`, and the existing cross-tenant
+  isolation suite.
+- **Phase 3:** client per-request tenant (`internal/client` sends the header) +
+  hosted hook federation (recall/brief/capture over two tenant-scoped requests)
+  + `init --url --project`.
