@@ -21,17 +21,16 @@ import (
 // Exits with code 0 when nothing failed (skipped checks are fine);
 // exits with code 1 when any check is "failed", so CI can use it as
 // a smoke test.
-func handleDoctor(args []string, _ Flags) {
-	jsonOut := false
+func handleDoctor(args []string, f Flags) {
+	// --json is a GLOBAL flag stripped by ParseFlags, so it arrives via f, not
+	// args. A local `case "--json"` (with a `_ Flags` signature) was dead code —
+	// `mnemos doctor --json` rendered human output. Any remaining args are
+	// unexpected.
 	for _, a := range args {
-		switch a {
-		case "--json":
-			jsonOut = true
-		default:
-			exitWithMnemosError(false, NewUserError("unknown doctor flag %q", a))
-			return
-		}
+		exitWithMnemosError(false, NewUserError("unknown doctor flag %q", a))
+		return
 	}
+	jsonOut := f.JSON
 
 	report := runDoctorChecks(context.Background())
 	if jsonOut {
