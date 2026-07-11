@@ -7,48 +7,43 @@ import (
 	"time"
 )
 
-// Scope narrows an entity (Claim, Lesson, Playbook, Decision) to a
+// Context narrows an entity (Belief, Schema, Reflex, Decision) to a
 // specific operational context. Synthesis and query paths cluster
-// and filter strictly within a scope so a "rollback works for
+// and filter strictly within a context so a "rollback works for
 // payments" record cannot quietly contaminate "rollback works for
-// search". Empty scope means "applies everywhere" — the small set
+// search". Empty context means "applies everywhere" — the small set
 // of cross-cutting truths.
 //
-// Phase 8 adds Scope to Claim and Decision; the existing
-// LessonScope alias preserves callers that already used it.
-type Scope struct {
+// Phase 8 adds Context (née Scope) to Claim/Belief and Decision; the
+// existing LessonScope alias preserves callers that already used it.
+type Context struct {
 	Service string
 	Env     string
 	Team    string
 }
 
-// LessonScope is the original name from Phase 3. Kept as an alias so
-// existing call sites (and future ones that prefer the explicit
-// "lesson scope" reading) compile unchanged.
-type LessonScope = Scope
-
-// IsEmpty reports whether all scope fields are unset.
-func (s Scope) IsEmpty() bool {
+// IsEmpty reports whether all context fields are unset.
+func (s Context) IsEmpty() bool {
 	return s.Service == "" && s.Env == "" && s.Team == ""
 }
 
-// Equal compares two scopes by value. Used by the cluster grouping
+// Equal compares two contexts by value. Used by the cluster grouping
 // pass so two actions with the same (service, env, team) sort into
 // the same bucket regardless of map ordering.
-func (s Scope) Equal(o Scope) bool {
+func (s Context) Equal(o Context) bool {
 	return s.Service == o.Service && s.Env == o.Env && s.Team == o.Team
 }
 
 // Key returns a stable string form for map indexing during synthesis.
-func (s Scope) Key() string {
+func (s Context) Key() string {
 	return s.Service + "|" + s.Env + "|" + s.Team
 }
 
 // Matches reports whether s satisfies the filter f. Empty fields in
-// f are wildcards: a filter of {Service:"payments"} matches any scope
+// f are wildcards: a filter of {Service:"payments"} matches any context
 // whose Service is "payments" regardless of Env/Team. Used by query
-// paths that accept partial-scope filters.
-func (s Scope) Matches(f Scope) bool {
+// paths that accept partial-context filters.
+func (s Context) Matches(f Context) bool {
 	if f.Service != "" && s.Service != f.Service {
 		return false
 	}
@@ -61,68 +56,102 @@ func (s Scope) Matches(f Scope) bool {
 	return true
 }
 
-// LessonPolarity classifies a lesson as a positive pattern to repeat
-// or a negative pattern (anti-lesson) to avoid.
-type LessonPolarity string
+// Back-compat aliases (ADR 0011 Phase A) — remove at API v2.
 
-// Supported LessonPolarity values.
+// Scope is the pre-ADR-0011 name for Context; kept as a back-compat
+// alias so existing call sites compile unchanged.
+type Scope = Context
+
+// LessonScope is the original Phase 3 name for Context (predating even
+// Scope); kept as a back-compat alias.
+type LessonScope = Context
+
+// SchemaPolarity classifies a schema as a positive pattern to repeat
+// or a negative pattern (anti-schema) to avoid.
+type SchemaPolarity string
+
+// Supported SchemaPolarity values.
 const (
-	// LessonPolarityPositive marks clusters where the dominant outcome
+	// SchemaPolarityPositive marks clusters where the dominant outcome
 	// is success — a pattern worth repeating.
-	LessonPolarityPositive LessonPolarity = "positive"
-	// LessonPolarityNegative marks clusters where the dominant outcome
-	// is failure — an anti-lesson that warns operators away from a
+	SchemaPolarityPositive SchemaPolarity = "positive"
+	// SchemaPolarityNegative marks clusters where the dominant outcome
+	// is failure — an anti-schema that warns operators away from a
 	// known bad pattern.
-	LessonPolarityNegative LessonPolarity = "negative"
+	SchemaPolarityNegative SchemaPolarity = "negative"
 )
 
-// Lesson is a validated operational truth derived from one or more
-// Action -> Outcome chains. Lessons are the synthesis layer's output:
+// LessonPolarity is the pre-ADR-0011 name for SchemaPolarity; kept as
+// a back-compat alias (remove at API v2).
+type LessonPolarity = SchemaPolarity
+
+// Back-compat aliases (ADR 0011 Phase A) — remove at API v2.
+const (
+	// LessonPolarityPositive is the pre-ADR-0011 name for SchemaPolarityPositive.
+	LessonPolarityPositive = SchemaPolarityPositive
+	// LessonPolarityNegative is the pre-ADR-0011 name for SchemaPolarityNegative.
+	LessonPolarityNegative = SchemaPolarityNegative
+)
+
+// Schema is a validated operational truth derived from one or more
+// Action -> Outcome chains. Schemas are the synthesis layer's output:
 // they answer "what have we learned?" rather than "what do we
-// believe?" (claims) or "what happened?" (events / actions).
+// believe?" (beliefs) or "what happened?" (episodes / actions).
 //
-// Evidence is the list of Action ids that corroborated the lesson at
+// Evidence is the list of Action ids that corroborated the schema at
 // derivation time. Confidence is in [0,1] and reflects corroboration
 // count, outcome consistency, and recency — see internal/synthesize.
 //
 // LastVerified ticks forward when a fresh action+outcome pair re-
-// confirms the lesson, supporting the temporal-validity hardening of
+// confirms the schema, supporting the temporal-validity hardening of
 // Phase 4 (decay-aware trust).
 //
 // Polarity is "positive" for success patterns and "negative" for
-// anti-lessons derived from failure clusters. Empty is treated as
+// anti-schemas derived from failure clusters. Empty is treated as
 // positive for backward compatibility.
-type Lesson struct {
+type Schema struct {
 	ID           string
 	Statement    string
 	Scope        LessonScope
-	Trigger      string   // optional — short label like "latency_spike_after_deploy" used for clustering and playbook lookup
+	Trigger      string   // optional — short label like "latency_spike_after_deploy" used for clustering and playbook/reflex lookup
 	Kind         string   // optional free-form classifier (e.g. "rollback", "scale-up"), preserved verbatim
-	Evidence     []string // Action ids that corroborated this lesson
+	Evidence     []string // Action ids that corroborated this schema
 	Confidence   float64
-	Polarity     LessonPolarity // "positive" or "negative"; empty is treated as positive for backward compat
+	Polarity     SchemaPolarity // "positive" or "negative"; empty is treated as positive for backward compat
 	DerivedAt    time.Time
 	LastVerified time.Time
 	Source       string // "synthesize" for engine-derived, "human" for hand-authored
 	CreatedBy    string
 }
 
-// LessonConfidenceMin is the floor below which the synthesis layer
-// drops a candidate lesson rather than emitting it. Tuned so a 3/3
+// Lesson is the pre-ADR-0011 name for Schema; kept as a back-compat
+// alias (remove at API v2).
+type Lesson = Schema
+
+// SchemaConfidenceMin is the floor below which the synthesis layer
+// drops a candidate schema rather than emitting it. Tuned so a 3/3
 // success cluster lands above the floor and a 2/3 success / 1/3
 // contradiction cluster lands below.
-const LessonConfidenceMin = 0.55
+const SchemaConfidenceMin = 0.55
 
-// LessonMinCorroboration is the smallest number of distinct
+// SchemaMinCorroboration is the smallest number of distinct
 // corroborating actions required before the synthesis layer will
-// emit a lesson. Lower than 3 produces noisy folklore; higher slows
+// emit a schema. Lower than 3 produces noisy folklore; higher slows
 // the system's ability to learn from a thin corpus.
-const LessonMinCorroboration = 3
+const SchemaMinCorroboration = 3
+
+// Back-compat aliases (ADR 0011 Phase A) — remove at API v2.
+const (
+	// LessonConfidenceMin is the pre-ADR-0011 name for SchemaConfidenceMin.
+	LessonConfidenceMin = SchemaConfidenceMin
+	// LessonMinCorroboration is the pre-ADR-0011 name for SchemaMinCorroboration.
+	LessonMinCorroboration = SchemaMinCorroboration
+)
 
 // Validate enforces minimum invariants for persistence. Empty scope
-// is permitted (cross-cutting lessons) but evidence must have at
-// least one entry — a lesson without provenance is folklore.
-func (l Lesson) Validate() error {
+// is permitted (cross-cutting schemas) but evidence must have at
+// least one entry — a schema without provenance is folklore.
+func (l Schema) Validate() error {
 	if strings.TrimSpace(l.ID) == "" {
 		return errors.New("lesson id is required")
 	}

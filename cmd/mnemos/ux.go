@@ -124,7 +124,7 @@ var commands = []string{
 	"query", "entities", "extract-entities", "metrics", "quality", "audit",
 	"decision", "action", "outcome", "incident",
 	"synthesize", "lessons", "playbook", "export", "import", "history",
-	"resolve", "trust", "verify",
+	"resolve", "trust", "verify", "reconsolidate",
 	"user", "token", "agent", "repo-tenant",
 	"registry", "push", "pull",
 	"reset", "delete-claim", "delete-event", "reembed", "recompute-trust", "dedup", "consolidate",

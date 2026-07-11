@@ -212,8 +212,8 @@ type Input struct {
 	CreatedAt time.Time
 }
 
-// Event represents a single timestamped piece of knowledge extracted from an input.
-type Event struct {
+// Episode represents a single timestamped piece of knowledge extracted from an input.
+type Episode struct {
 	ID            string
 	RunID         string
 	SchemaVersion string
@@ -222,12 +222,16 @@ type Event struct {
 	Timestamp     time.Time
 	Metadata      map[string]string
 	IngestedAt    time.Time
-	CreatedBy     string // user id of the actor that created this event; "<system>" for unattributed
+	CreatedBy     string // user id of the actor that created this episode; "<system>" for unattributed
 }
 
-// Claim represents an assertion derived from one or more events,
+// Event is the pre-ADR-0011 name for Episode; kept as a back-compat
+// alias (remove at API v2).
+type Event = Episode
+
+// Belief represents an assertion derived from one or more episodes,
 // carrying a type, confidence score, and lifecycle status.
-type Claim struct {
+type Belief struct {
 	ID         string
 	Text       string
 	Type       ClaimType
@@ -323,6 +327,10 @@ type Claim struct {
 	ConfidenceComponents map[string]float64
 }
 
+// Claim is the pre-ADR-0011 name for Belief; kept as a back-compat
+// alias (remove at API v2).
+type Claim = Belief
+
 // ClaimVersion is one row of a claim's full text/confidence/status
 // audit trail (Refs #38). Versions accumulate on every Upsert path
 // so a future read can answer "what did this claim say at version
@@ -377,7 +385,7 @@ type ClaimFeedback struct {
 // A claim is in force while ValidFrom ≤ t and (ValidTo is zero OR t < ValidTo).
 // Zero ValidFrom counts as "valid from the beginning of time" so legacy
 // rows that predate v0.8 still answer "yes" to current queries.
-func (c Claim) IsValidAt(t time.Time) bool {
+func (c Belief) IsValidAt(t time.Time) bool {
 	if !c.ValidFrom.IsZero() && t.Before(c.ValidFrom) {
 		return false
 	}
@@ -389,25 +397,33 @@ func (c Claim) IsValidAt(t time.Time) bool {
 
 // IsSuperseded reports whether the claim has been replaced by another
 // (i.e., ValidTo is set). Useful for filtering history-aware queries.
-func (c Claim) IsSuperseded() bool {
+func (c Belief) IsSuperseded() bool {
 	return !c.ValidTo.IsZero()
 }
 
-// ClaimEvidence links a Claim to the Event that supports it.
-type ClaimEvidence struct {
+// BeliefEvidence links a Belief to the Episode that supports it.
+type BeliefEvidence struct {
 	ClaimID string
 	EventID string
 }
 
-// Relationship represents a directed edge between two claims.
-type Relationship struct {
+// ClaimEvidence is the pre-ADR-0011 name for BeliefEvidence; kept as a
+// back-compat alias (remove at API v2).
+type ClaimEvidence = BeliefEvidence
+
+// Association represents a directed edge between two beliefs.
+type Association struct {
 	ID          string
 	Type        RelationshipType
 	FromClaimID string
 	ToClaimID   string
 	CreatedAt   time.Time
-	CreatedBy   string // user id of the actor that created this relationship
+	CreatedBy   string // user id of the actor that created this association
 }
+
+// Relationship is the pre-ADR-0011 name for Association; kept as a
+// back-compat alias (remove at API v2).
+type Relationship = Association
 
 // CompilationJob tracks the state of an asynchronous compilation task.
 type CompilationJob struct {
@@ -756,8 +772,8 @@ const (
 // Answer holds the result of a query, including supporting claims and contradictions.
 type Answer struct {
 	AnswerText       string
-	Claims           []Claim
-	Contradictions   []Relationship
+	Claims           []Belief
+	Contradictions   []Association
 	TimelineEventIDs []string
 	// ClaimProvenance maps claim ID to a human-readable origin: "local"
 	// for claims sourced from this project's events, or "<registry-url>"
@@ -797,9 +813,9 @@ type Answer struct {
 	Confidence float64
 }
 
-// Validate checks that the Claim has a non-empty ID and text, a confidence
+// Validate checks that the Belief has a non-empty ID and text, a confidence
 // between 0 and 1, and a valid type and status.
-func (c Claim) Validate() error {
+func (c Belief) Validate() error {
 	if strings.TrimSpace(c.ID) == "" {
 		return errors.New("claim id is required")
 	}
@@ -968,7 +984,7 @@ type ProvenanceReport struct {
 }
 
 // Validate checks that both ClaimID and EventID are non-empty.
-func (e ClaimEvidence) Validate() error {
+func (e BeliefEvidence) Validate() error {
 	if strings.TrimSpace(e.ClaimID) == "" {
 		return errors.New("claim evidence claim_id is required")
 	}
@@ -988,9 +1004,9 @@ func (e ClaimEvidence) Validate() error {
 // legitimate edge cases still fit.
 const MaxEventContentBytes = 64 * 1024
 
-// Validate checks that an Event has the minimum required fields and
+// Validate checks that an Episode has the minimum required fields and
 // that Content stays within MaxEventContentBytes.
-func (e Event) Validate() error {
+func (e Episode) Validate() error {
 	if strings.TrimSpace(e.ID) == "" {
 		return errors.New("event id is required")
 	}
@@ -1009,10 +1025,10 @@ func (e Event) Validate() error {
 	return nil
 }
 
-// Validate checks that a Relationship has the required fields and a
-// valid type, and that it doesn't self-reference (a claim can't
+// Validate checks that an Association has the required fields and a
+// valid type, and that it doesn't self-reference (a belief can't
 // support or contradict itself — that's either a no-op or a bug).
-func (r Relationship) Validate() error {
+func (r Association) Validate() error {
 	if strings.TrimSpace(r.ID) == "" {
 		return errors.New("relationship id is required")
 	}

@@ -262,7 +262,9 @@ func main() {
 		handleWorkspace(args, flags)
 	case "lessons":
 		handleLessons(args, flags)
-	case "verify":
+	case "verify", "reconsolidate":
+		// "reconsolidate" is a brain-vocabulary alias for "verify" (ADR 0011
+		// Phase A) — both re-confirm claims/beliefs against fresh evidence.
 		handleVerify(args, flags)
 	case "trust":
 		handleTrust(args, flags)
