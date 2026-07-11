@@ -38,33 +38,39 @@ Same federation logic, two backends. v1 is the local-file case of this more
 general model; a hosted central brain becomes "one store, one tenant per repo,
 plus the default (personal) tenant." A team/org is just another tenant level.
 
-### 2. Markdown is the source of truth; the `.db` is a derived index
+### 2. Mnemos is the source of truth; the repo carries a committed context artifact that syncs back
 
-This is the Agent-OS technique, and it dissolves the "SQLite conflicts badly in
-git" problem. Agent OS keeps durable knowledge as **human-editable, append-only
-markdown** — `AGENTS.md` (identity), `decisions.md` (append-only; superseded
-entries get `→ superseded [date]`, never deleted), `open-threads.md`,
-`status.md` — with a brief/capture/compact session lifecycle. mnemos already has
-a markdown round-trip layer (lessons/playbooks ↔ YAML-frontmatter).
+The **mnemos brain (the repo tenant) is authoritative** — not the markdown. But
+every repo should **carry, in git, a human-readable context artifact**: enough
+for a person or agent who clones it to know where the project stands and what's
+next. mnemos **generates** that artifact from the repo tier, and — the key move
+— **detects edits to it and feeds them back** into the brain. Two-way,
+brain-canonical. This borrows Agent OS's markdown/lifecycle techniques without
+making markdown the store.
 
-Marry them for the repo tier:
+- **Generated, committed context** (`<repo>/.mnemos/CONTEXT.md`, or `AGENTS.md`):
+  mnemos exports the repo tenant's high-signal knowledge in Agent-OS-shaped
+  markdown — project identity, key **decisions** (append-only; superseded
+  entries marked `→ superseded [date]`), **open threads / next steps**. Committed,
+  diff-able, always current: the "onboarding brief" that travels with the code so
+  a new teammate or a fresh agent session has real context immediately.
+- **The `.db` stays a local, gitignored index** (or a namespace in the central
+  store) — rebuildable, never committed. No binary merge conflicts.
+- **Sync-back (detect → ingest):** when a human edits the committed context
+  (adds a decision, closes a thread), mnemos detects the change — via the
+  existing `watch_file` primitive, or a content-hash check at session **brief** —
+  and ingests the delta into the brain. Humans edit readable markdown; the brain
+  absorbs it and remains canonical.
 
-- **Commit the markdown, gitignore the `.db`.** `<repo>/.mnemos/*.md` is the
-  reviewable, diff-able, PR-able source of truth; `<repo>/.mnemos/mnemos.db` is
-  a local, rebuildable index (`mnemos import` / a `rebuild` step). No binary
-  merge conflicts; the repo brain travels with the code as text.
-- **Map the Agent-OS files onto mnemos concepts:**
-  - `AGENTS.md` → repo identity/context, injected at **brief**.
-  - `decisions.md` (append-only + supersession) → mnemos **decisions/claims**
-    with `resolve --supersedes` / temporal `valid_to` (the model already exists).
-  - `open-threads.md` / `status.md` → a repo-scoped **working-memory** surface
-    that brief reads ("3 open threads in this repo").
-  - session **capture** writes both the claim (into the index) and, optionally,
-    a human session log — same as Agent OS `/capture`.
-  - **compaction** (`/mem-compact`) → mnemos `consolidate` already digests +
-    dedupes; point it at the repo tier on a schedule.
-- **Staleness:** adopt the Agent-OS `updated:` frontmatter + "verify if
-  untouched N days" so stale repo knowledge is flagged, not trusted blindly.
+Flow: **brain → (export) → committed CONTEXT.md → (human edits) → (detect) →
+brain.** The tenant key (git remote, fallback path) ties the loop together: a
+clone resolves to the same remote → the same repo tenant → mnemos links the
+committed context to the (rebuilt or hosted) repo brain.
+
+Agent-OS concept mapping stays: `decisions.md` ↔ mnemos decisions/claims with
+`resolve --supersedes` / temporal `valid_to`; `open-threads`/`status` ↔ a
+repo-scoped working-memory surface read at brief; `/capture` ↔ session capture;
+`/mem-compact` ↔ `consolidate`; the `updated:` frontmatter ↔ staleness flagging.
 
 ### What this changes about v1
 
@@ -74,17 +80,38 @@ a hosted central store, and (b) a committed-markdown source-of-truth so a repo
 brain is shareable as text. They compose — the `.db` is always derivable from
 the markdown + captured sessions.
 
-### Decisions this raises
+### Decisions
 
-1. **Tenant key:** git remote URL vs repo-root path (or: remote when present,
-   path hash offline). Determines shareability and clone-portability.
-2. **Markdown schema:** adopt the Agent-OS file set verbatim
-   (`AGENTS.md`/`decisions.md`/`open-threads.md`/`status.md`) vs a mnemos-native
-   export shape vs a bridge that reads both.
-3. **Rebuild ergonomics:** `mnemos import` on demand, a hook that rebuilds the
-   index when the markdown is newer, or a `mnemos rebuild` command.
-4. **Central-store placement:** for the hosted case, repo-tenant via Postgres
-   RLS (one DB) vs namespace-per-tenant — mnemos already supports both.
+- **Tenant key — DECIDED:** git remote URL when present (portable across clones
+  and teammates), fall back to a repo-root path hash offline.
+- **Source of truth — DECIDED:** the mnemos brain (repo tenant) is canonical; the
+  committed `CONTEXT.md` is a generated, human-editable artifact whose edits sync
+  back. Agent-OS-shaped markdown, not a new store.
+
+Still open:
+
+1. **Detect mechanism for sync-back:** a `watch_file` daemon (live) vs a
+   content-hash check at session **brief** (cheap, no daemon) vs both. Lean
+   brief-time hash for v2, watch as an upgrade.
+2. **CONTEXT.md contents:** exactly what "enough context to work on the next
+   things" includes — identity + top decisions + open threads + next steps is
+   the starting cut; tune by what's actually useful at clone time.
+3. **Central-store placement (hosted case):** repo-tenant via Postgres RLS (one
+   DB) vs namespace-per-tenant — mnemos already supports both; pick per
+   deployment.
+
+### Proposed v2 build slice (on top of the shipped v1)
+
+1. **Tenant resolution:** `repoTenant(cwd)` = git remote (fallback path hash);
+   thread it as the repo tier's identity (today v1 keys off the `.mnemos` file
+   location — this generalizes it).
+2. **`mnemos export --repo` → `CONTEXT.md`:** generate the committed artifact
+   from the repo tenant (identity + decisions + open threads + next steps).
+3. **Brief-time sync-back:** at SessionStart, if `CONTEXT.md` changed since last
+   ingest (content hash), ingest the delta into the repo brain, then brief.
+4. **Rebuild:** `mnemos rebuild` (or auto on first use) reconstructs the
+   gitignored `.db` index from `CONTEXT.md` + captured sessions after a clone.
+5. **Docs + `.gitignore` guidance:** commit `CONTEXT.md`, ignore `mnemos.db`.
 
 Two kinds of memory, one workflow:
 
