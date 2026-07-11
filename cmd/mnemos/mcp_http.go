@@ -43,12 +43,15 @@ func serveMCPHTTP(ctx context.Context, srv *mcp.Server, addr string, requireAuth
 				return fmt.Errorf("invalid token: %w", err)
 			}
 			if requireTenant {
-				t := strings.TrimSpace(claims.Tenant)
-				if t == "" {
-					return errors.New("token has no tenant (tnt) claim; this server requires one")
+				// Honor an optional per-request tenant (X-Mnemos-Tenant) within
+				// the token's tnt/tnts grant (ADR 0009); else the single tenant.
+				requested := strings.TrimSpace(r.Header.Get("X-Mnemos-Tenant"))
+				eff, ok := claims.EffectiveTenant(requested)
+				if !ok {
+					return errors.New("not authorized for the requested tenant (needs a matching tnt/tnts grant)")
 				}
-				if !validTenantID(t) {
-					return fmt.Errorf("token tenant %q is malformed", t)
+				if !validTenantID(eff) {
+					return fmt.Errorf("tenant %q is malformed", eff)
 				}
 			}
 			return nil
@@ -67,8 +70,11 @@ func serveMCPHTTP(ctx context.Context, srv *mcp.Server, addr string, requireAuth
 				return reqCtx
 			}
 			reqCtx = withClaims(reqCtx, claims)
-			if requireTenant && validTenantID(strings.TrimSpace(claims.Tenant)) {
-				reqCtx = withTenant(reqCtx, strings.TrimSpace(claims.Tenant))
+			if requireTenant {
+				requested := strings.TrimSpace(r.Header.Get("X-Mnemos-Tenant"))
+				if eff, ok := claims.EffectiveTenant(requested); ok && validTenantID(eff) {
+					reqCtx = withTenant(reqCtx, eff)
+				}
 			}
 			return reqCtx
 		}))

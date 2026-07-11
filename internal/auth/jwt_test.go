@@ -276,6 +276,58 @@ func TestAgentTokenWithRuns_RoundTripsAndAllowsRun(t *testing.T) {
 	}
 }
 
+func TestAllowsTenant(t *testing.T) {
+	c := Claims{Tenant: "personal", Tenants: []string{"personal", "repo_x"}}
+	for _, tt := range []struct {
+		tenant string
+		want   bool
+	}{
+		{"personal", true},   // == Tenant
+		{"repo_x", true},     // in allowlist
+		{"repo_y", false},    // not granted
+		{"", false},          // empty never allowed
+		{" personal ", true}, // trimmed
+	} {
+		if got := c.AllowsTenant(tt.tenant); got != tt.want {
+			t.Errorf("AllowsTenant(%q) = %v, want %v", tt.tenant, got, tt.want)
+		}
+	}
+	// A token with no tenant at all allows nothing.
+	if (Claims{}).AllowsTenant("anything") {
+		t.Error("empty token must not allow any tenant")
+	}
+}
+
+func TestEffectiveTenant_FailClosed(t *testing.T) {
+	multi := Claims{Tenant: "personal", Tenants: []string{"personal", "repo_x"}}
+	single := Claims{Tenant: "solo"}
+	none := Claims{}
+
+	cases := []struct {
+		name      string
+		c         Claims
+		requested string
+		want      string
+		ok        bool
+	}{
+		{"no selection → single tenant", single, "", "solo", true},
+		{"no selection, no tenant → deny", none, "", "", false},
+		{"select allowed member", multi, "repo_x", "repo_x", true},
+		{"select the default", multi, "personal", "personal", true},
+		{"select disallowed → deny", multi, "repo_y", "", false},
+		{"single token, select other → deny", single, "repo_x", "", false},
+		{"multi, no selection → default tenant", multi, "", "personal", true},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := tt.c.EffectiveTenant(tt.requested)
+			if got != tt.want || ok != tt.ok {
+				t.Errorf("EffectiveTenant(%q) = (%q,%v), want (%q,%v)", tt.requested, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
 func TestAllowsRun_EmptyWhitelistMeansUnrestricted(t *testing.T) {
 	c := Claims{} // no Runs at all
 	if !c.AllowsRun("any-run-id") {
