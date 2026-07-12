@@ -501,6 +501,16 @@ func hookCapture(ev hookEvent) {
 		if repoRoot != "" {
 			syncBackFromDocs(ctx, repoRoot, "AGENTS.md", dsn, useLLM)
 		}
+		// Opt-in float-back (MNEMOS_FLOATBACK_ON_CAPTURE, default OFF): after the
+		// repo/workspace capture completes, promote important learnings up into the
+		// central brain. Skipped entirely when the flag is off, so the default
+		// capture path is byte-identical. Best-effort and content-addressed
+		// (idempotent), on its own short-timeout context so it never hangs the hook.
+		if floatbackOnCaptureEnabled() {
+			fbCtx, fbCancel := context.WithTimeout(context.Background(), 20*time.Second)
+			floatBackOnCapture(fbCtx, dsn)
+			fbCancel()
+		}
 		return
 	}
 	write()

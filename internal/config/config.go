@@ -122,6 +122,14 @@ type Config struct {
 		Timeout scalar `yaml:"timeout"`
 	} `yaml:"job"`
 
+	// Floatback tunes the local upward flow that promotes important repo/workspace
+	// learnings into the personal central brain (`mnemos float-back`). OnCapture is
+	// an opt-in (default false): when true, a session-end capture inside a
+	// repo/workspace also floats those learnings up, best-effort.
+	Floatback struct {
+		OnCapture scalar `yaml:"on_capture"`
+	} `yaml:"floatback"`
+
 	// Precedence selects the read-time federation policy (ADR 0011 Phase C):
 	// tenant-wins (default), global-wins, or surface-dissonance. It decides which
 	// tier wins — or whether the conflict is surfaced — when a federated read
@@ -186,6 +194,8 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_FEEDBACK_DECAY", c.Feedback.Decay},
 
 		{"MNEMOS_JOB_TIMEOUT", c.Job.Timeout},
+
+		{"MNEMOS_FLOATBACK_ON_CAPTURE", c.Floatback.OnCapture},
 
 		{"MNEMOS_PRECEDENCE", c.Precedence},
 	}
