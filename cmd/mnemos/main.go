@@ -294,6 +294,8 @@ func main() {
 		handleHistory(args, flags)
 	case "quality":
 		handleQuality(flags)
+	case "curiosity":
+		handleCuriosity(args, flags)
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown command %q\n", command)
 		if suggestion := suggestCommand(command); suggestion != "" {
@@ -1386,6 +1388,7 @@ func printUsage() {
 	fmt.Println("  extract-entities [--all]             Backfill entity links over claims that lack them")
 	fmt.Println("  metrics [--human]                    Knowledge base statistics")
 	fmt.Println("  quality                              Memory-quality metrics (trust, staleness, contested, contradictions)")
+	fmt.Println("  curiosity [--limit N] [--human]      What to learn/verify next: gap-driven acquisition queue (ADR 0013)")
 	fmt.Println("  audit [--include-embeddings]         Export the full knowledge base as JSON")
 	fmt.Println("")
 	fmt.Println("Decisions, Actions & Outcomes:")

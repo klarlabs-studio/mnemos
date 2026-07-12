@@ -170,6 +170,35 @@ func TestIsStale_PerClaimHalfLifeShortensDecay(t *testing.T) {
 	}
 }
 
+func TestStaleness_ZeroRefIsFresh(t *testing.T) {
+	now := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	if got := Staleness(time.Time{}, time.Time{}, now, 0); got != 0 {
+		t.Fatalf("no reference timestamp should yield 0 staleness, got %.4f", got)
+	}
+}
+
+func TestStaleness_GrowsWithAge(t *testing.T) {
+	now := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	fresh := Staleness(now.AddDate(0, 0, -1), time.Time{}, now, 0)
+	old := Staleness(now.AddDate(0, 0, -180), time.Time{}, now, 0)
+	if !(old > fresh) {
+		t.Fatalf("older claim must be more stale: old=%.4f fresh=%.4f", old, fresh)
+	}
+	if old < 0 || old > 1 {
+		t.Fatalf("staleness must stay in [0,1], got %.4f", old)
+	}
+}
+
+func TestStaleness_LastVerifiedRescues(t *testing.T) {
+	now := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	old := now.AddDate(0, 0, -180)
+	verified := now.AddDate(0, 0, -1)
+	// A recent verification resets the reference, so staleness drops.
+	if s := Staleness(old, verified, now, 0); s > Staleness(old, time.Time{}, now, 0) {
+		t.Fatalf("a recent last-verified must reduce staleness, got %.4f", s)
+	}
+}
+
 func TestScoreWithAuthority_ZeroAuthorityIsNeutral(t *testing.T) {
 	now := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	base := Score(0.8, 5, now, now)

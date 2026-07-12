@@ -121,7 +121,7 @@ var commands = []string{
 	"init", "setup", "doctor",
 	"mcp", "serve",
 	"ingest", "extract", "relate", "process", "claim",
-	"query", "entities", "extract-entities", "metrics", "quality", "audit",
+	"query", "entities", "extract-entities", "metrics", "quality", "curiosity", "audit",
 	"decision", "action", "outcome", "incident",
 	"synthesize", "lessons", "playbook", "export", "import", "history",
 	"resolve", "trust", "verify", "reconsolidate",
