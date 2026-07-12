@@ -69,6 +69,12 @@ type llmClaim struct {
 	Type       string           `json:"type"`
 	Confidence float64          `json:"confidence"`
 	Entities   []llmClaimEntity `json:"entities,omitempty"`
+	// SubjectClass is the ADR 0012 subject classification the v1.5+
+	// prompt emits: "individual" (about a specific named instance) or
+	// "class" (about a category/concept). Omitted/empty means the model
+	// declined to classify — treated as unknown (non-promotable). Older
+	// prompt versions never set it, so a nil/empty value is normal.
+	SubjectClass string `json:"subject_class,omitempty"`
 }
 
 // llmClaimEntity is the per-claim entity tag the v1.4+ prompt emits.
@@ -229,12 +235,13 @@ func (e LLMEngine) buildClaims(rawClaims []llmClaim, sourceEvents []domain.Event
 		confidence := clamp(rc.Confidence, 0.5, 0.95)
 
 		claim := domain.Claim{
-			ID:         claimID,
-			Text:       text,
-			Type:       claimType,
-			Confidence: confidence,
-			Status:     domain.ClaimStatusActive,
-			CreatedAt:  e.now().UTC(),
+			ID:           claimID,
+			Text:         text,
+			Type:         claimType,
+			Confidence:   confidence,
+			Status:       domain.ClaimStatusActive,
+			SubjectClass: subjectClassForClaim(rc),
+			CreatedAt:    e.now().UTC(),
 		}
 		if err := claim.Validate(); err != nil {
 			continue // Skip invalid claims from LLM.
@@ -512,6 +519,34 @@ func extractFirstJSONValue(s string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// subjectClassForClaim resolves an extracted claim's ADR 0012 subject
+// class. It prefers the LLM's explicit "subject_class" (individual/class),
+// normalized; when the model omits it or emits an unrecognised value it
+// falls back to the entity-based heuristic over the claim's SUBJECT
+// entities (domain.SubjectClassFromEntityTypes), and finally to unknown.
+// Unknown is fail-safe: it is never eligible for promotion.
+func subjectClassForClaim(rc llmClaim) domain.SubjectClass {
+	if sc := domain.SubjectClass(rc.SubjectClass).Normalized(); sc != domain.SubjectClassUnknown {
+		return sc
+	}
+	// Fall back to the entity-based inference: classify from the types of
+	// the entities the claim is ABOUT (role "subject"). Absent subject
+	// entities yields unknown — the safe, non-promotable default.
+	var subjectTypes []domain.EntityType
+	for _, ent := range rc.Entities {
+		if strings.EqualFold(strings.TrimSpace(ent.Role), "subject") {
+			// Pass the raw (lowered) type. An empty/unrecognised type is
+			// NOT coerced to a class-level concept: SubjectClassFromEntityTypes
+			// treats any non-concept type as individual, so an untyped subject
+			// fails closed to individual (private) rather than widening
+			// promotion eligibility.
+			typ := strings.TrimSpace(strings.ToLower(ent.Type))
+			subjectTypes = append(subjectTypes, domain.EntityType(typ))
+		}
+	}
+	return domain.SubjectClassFromEntityTypes(subjectTypes)
 }
 
 // parseLLMClaimType converts LLM string output to a domain ClaimType.
