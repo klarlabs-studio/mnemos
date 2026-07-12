@@ -645,6 +645,18 @@ type ConsolidateOptions struct {
 	// The mirror of ForgetRefuted; together they route the surprise signal both ways.
 	ReinforceValidated bool
 
+	// AssignCredit, when true, runs credit assignment (ADR 0014): it propagates the
+	// signed prediction error of each resolved Expectation back to the beliefs that
+	// informed the Decision it predicted — validated predictions credit their
+	// beliefs, refuted ones blame them — as a bounded, decayed, ATTRIBUTED trust
+	// delta layered on the evidence-based base. This is the capstone learning loop:
+	// trust comes to reflect not only "is this corroborated?" but "did acting on it
+	// work out?". Deterministic and idempotent (re-running never double-credits);
+	// every change records its driving decision/prediction in confidence_components.
+	// A no-op on stores without decisions/expectations or a credit-persisting claim
+	// repository. Off by default.
+	AssignCredit bool
+
 	// ReplayTopK, when > 0, rehearses the K most important currently-valid claims
 	// during the sleep pass — prioritized experience replay. Claims are ranked by
 	// salience × recency (the surprise term folds in once the prediction loop
@@ -691,6 +703,10 @@ type ConsolidateResult struct {
 	// Validated is the number of claims freshened because their latest outcome
 	// verdict confirmed them — 0 unless ReinforceValidated was set, and 0 on a dry run.
 	Validated int
+	// Credited is the number of beliefs whose trust was nudged by credit assignment
+	// (ADR 0014) because a decision they informed had its prediction resolved — 0
+	// unless AssignCredit was set, and 0 on a dry run.
+	Credited int
 	// PlaybooksReinforced is the number of playbooks whose confidence was moved by
 	// observed outcomes — 0 unless ReinforcePlaybooks was set, and 0 on a dry run.
 	PlaybooksReinforced int

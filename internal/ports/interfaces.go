@@ -137,6 +137,26 @@ type TrustScorer interface {
 	CountClaimsBelowTrust(ctx context.Context, threshold float64) (int64, error)
 }
 
+// BeliefCreditWriter is the optional capability to persist an attributed
+// belief-credit update produced by credit assignment (ADR 0014): a claim's
+// confidence_components audit map plus the resulting trust_score, written
+// together and without the claim-version churn a full Upsert would incur.
+//
+// Only backends that fully round-trip confidence_components implement it (SQLite,
+// and therefore local libSQL, plus the in-memory store). The credit pass
+// type-asserts for it, exactly like [TrustScorer]: a backend that does not
+// persist the credit audit map simply skips credit assignment rather than
+// mutating trust it could not attribute — the ADR-0011 "no silent trust change"
+// guardrail applied at the storage seam.
+type BeliefCreditWriter interface {
+	// ApplyBeliefCredit overwrites the claim's confidence_components with
+	// components (nil clears the map to '{}') and sets its trust_score. Callers
+	// pass the already-merged component map (non-credit entries preserved, credit
+	// entries replaced) so the write is a plain assignment and re-running is
+	// idempotent.
+	ApplyBeliefCredit(ctx context.Context, claimID string, components map[string]float64, trustScore float64) error
+}
+
 // RelationshipRepository persists and retrieves relationships between claims.
 type RelationshipRepository interface {
 	Upsert(ctx context.Context, relationships []domain.Relationship) error

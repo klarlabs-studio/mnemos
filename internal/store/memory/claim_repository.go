@@ -463,6 +463,31 @@ func (r ClaimRepository) RecomputeTrust(_ context.Context, score func(confidence
 	return count, nil
 }
 
+// ApplyBeliefCredit implements [ports.BeliefCreditWriter]: it overwrites a
+// claim's confidence_components (the credit-assignment audit map) and its
+// trust_score together. Callers pass the already-merged component map, so the
+// write is a plain assignment and re-running is idempotent.
+func (r ClaimRepository) ApplyBeliefCredit(_ context.Context, claimID string, components map[string]float64, trustScore float64) error {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	c, ok := r.state.claims[claimID]
+	if !ok {
+		return fmt.Errorf("apply belief credit: claim %s not found", claimID)
+	}
+	if len(components) == 0 {
+		c.ConfidenceComponents = nil
+	} else {
+		cp := make(map[string]float64, len(components))
+		for k, v := range components {
+			cp[k] = v
+		}
+		c.ConfidenceComponents = cp
+	}
+	c.TrustScore = trustScore
+	r.state.claims[claimID] = c
+	return nil
+}
+
 // AverageTrust returns the mean trust score across every stored
 // claim, or 0 when none exist.
 func (r ClaimRepository) AverageTrust(_ context.Context) (float64, error) {

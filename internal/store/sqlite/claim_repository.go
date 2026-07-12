@@ -460,6 +460,27 @@ func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confiden
 	return len(rows), nil
 }
 
+// ApplyBeliefCredit implements [ports.BeliefCreditWriter]: it writes the
+// credit-assignment result for one claim — the merged confidence_components audit
+// map and the resulting trust_score — in a single UPDATE, bypassing the
+// claim_versions / status_history churn a full Upsert would append. The
+// confidence_components column already exists in the schema, so credit
+// assignment needs no migration. Idempotent: callers pass an already-merged map,
+// so re-running writes the same value.
+func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, components map[string]float64, trustScore float64) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE claims SET confidence_components = ?, trust_score = ? WHERE id = ?`,
+		encodeConfidenceComponents(components), trustScore, claimID)
+	if err != nil {
+		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, sql.ErrNoRows)
+	}
+	return nil
+}
+
 // AverageTrust returns the mean trust_score across all claims; 0 when
 // the table is empty.
 func (r ClaimRepository) AverageTrust(ctx context.Context) (float64, error) {
