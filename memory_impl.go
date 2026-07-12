@@ -1059,7 +1059,62 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 			res.AssociationsDecayed = decayed
 		}
 	}
+	// Inhibition decay (ADR 0016): pull each claim's retrieval-suppression weight back
+	// toward 0 so a competitive-inhibition penalty is temporary — a formerly-beaten
+	// contradiction loser recovers its retrievability unless the winner keeps winning.
+	// Never touches trust.
+	if opts.DecayInhibition {
+		decayed, ierr := m.decayInhibition(ctx)
+		if ierr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: decay inhibition: %w", ierr)
+		}
+		res.InhibitionDecayed = decayed
+	}
 	return res, nil
+}
+
+// inhibitionDecayRetain sheds half of a claim's competitive-inhibition weight each
+// consolidation pass, and inhibitionDecayFloor is the residue below which the component
+// is removed outright — so a suppression fully clears after a few sleeps unless renewed.
+const (
+	inhibitionDecayRetain = 0.5
+	inhibitionDecayFloor  = 0.01
+)
+
+// decayInhibition pulls every claim's competitive-inhibition weight (ADR 0016) toward 0,
+// preserving all other confidence_components and passing trust through UNCHANGED (the
+// suppression is retrievability-only). Reuses the credit writer; a no-op on backends
+// that don't persist confidence_components.
+func (m *memory) decayInhibition(ctx context.Context) (int, error) {
+	writer, ok := m.conn.Claims.(ports.BeliefCreditWriter)
+	if !ok {
+		return 0, nil
+	}
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list claims: %w", err)
+	}
+	decayed := 0
+	for _, c := range all {
+		cur, has := c.ConfidenceComponents[domain.InhibitionComponentKey]
+		if !has || cur <= 0 {
+			continue
+		}
+		merged := make(map[string]float64, len(c.ConfidenceComponents))
+		for k, v := range c.ConfidenceComponents {
+			merged[k] = v
+		}
+		if next := cur * inhibitionDecayRetain; next < inhibitionDecayFloor {
+			delete(merged, domain.InhibitionComponentKey) // fully cleared
+		} else {
+			merged[domain.InhibitionComponentKey] = next
+		}
+		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, c.TrustScore); err != nil {
+			return decayed, fmt.Errorf("decay inhibition %s: %w", c.ID, err)
+		}
+		decayed++
+	}
+	return decayed, nil
 }
 
 // associationDecayRetain is the fraction of an edge's over-base strength kept per

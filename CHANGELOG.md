@@ -8,6 +8,41 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.93.0] — 2026-07-12
+
+### Added
+
+- **Competitive inhibition — retrieval-induced forgetting (ADR 0016).** Closes the last
+  deferred mechanism of ADR 0015 §6. Recalling a belief that *decisively* beats a rival
+  in a contradiction now actively (and reversibly) suppresses the rival's
+  **retrievability** — the loser ranks lower on later recalls, so a settled contradiction
+  stops resurfacing the loser.
+  - Because a contradiction loser is *contested, not disproven*, inhibition is
+    deliberately careful: **retrievability only — never trust, status, or lifecycle**;
+    **bounded** (a ranking penalty ≤0.2 that tips ties, never sinks a genuinely better
+    match); **reversible** (it decays toward 0 during consolidation); and
+    **guardrailed** (a promoted or high-salience loser is never suppressed).
+  - `query --inhibit` / `MNEMOS_INHIBIT` (agent-consumer queries) writes a bounded
+    `inhibition` weight to the beaten loser's `confidence_components` — reusing the
+    existing `BeliefCreditWriter` with **trust passed through unchanged**, so no new
+    store capability and no possible silent trust change. Single-shot, best-effort, at
+    the same read-path write-back seam as the Hebbian / reconsolidation write-backs.
+  - `consolidate --decay-inhibition` pulls each claim's inhibition weight back toward 0
+    (halving per pass, clearing below a floor), so a suppression is temporary and a
+    formerly-beaten loser recovers its retrievability unless the winner keeps winning.
+    `ConsolidateResult.InhibitionDecayed`.
+  - Ranking applies the (inert-when-absent) penalty on every query, so a persisted
+    suppression keeps biasing later recalls — `--inhibit` gates *writing*, not reading.
+
+  This closes ADR 0015's deferred concrete work; **predictive coding** remains the sole
+  documented north star.
+
+### Fixed
+
+- **`query --salient` / `query --hebbian` no longer hang.** Both flags failed to consume
+  their token in the query-arg parser, so `query --salient <question>` (or `--hebbian`)
+  would infinite-loop. Both now advance like every other flag; guarded by a parser test.
+
 ## [0.92.0] — 2026-07-12
 
 ### Added
