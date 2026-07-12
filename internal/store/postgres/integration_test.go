@@ -139,6 +139,12 @@ func TestPostgres_LessonSubjectClassRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
+	// Seed the action the lesson's evidence references (FK: lesson_evidence.action_id).
+	if err := conn.Actions.Append(ctx, domain.Action{
+		ID: "act-subject-1", Kind: domain.ActionKindDeploy, Subject: "svc", At: now, CreatedBy: "u-test", CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed action: %v", err)
+	}
 	lesson := domain.Lesson{
 		ID:           "ls-subject-1",
 		Statement:    "class-level pattern",
