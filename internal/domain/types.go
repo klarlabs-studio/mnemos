@@ -432,6 +432,22 @@ type Association struct {
 	ToClaimID   string
 	CreatedAt   time.Time
 	CreatedBy   string // user id of the actor that created this association
+	// Strength is the Hebbian co-activation weight of the edge (ADR 0015 §4):
+	// how often the two beliefs have fired together at retrieval. It starts at the
+	// base 1.0 (one association) and StrengthenAssociations increments it; spreading
+	// activation weights each edge by it so well-worn associations prime more strongly.
+	// A zero value reads as the base 1.0 (unset), so pre-strength edges are neutral.
+	Strength float64
+}
+
+// EffectiveStrength returns the edge's Hebbian strength, treating the zero value as
+// the base 1.0 so an edge that predates the strength column (or was created without
+// one) is neutral rather than weightless.
+func (a Association) EffectiveStrength() float64 {
+	if a.Strength <= 0 {
+		return 1
+	}
+	return a.Strength
 }
 
 // Relationship is the pre-ADR-0011 name for Association; kept as a
@@ -1074,6 +1090,9 @@ func (r Association) Validate() error {
 	}
 	if !IsValidRelationshipType(r.Type) {
 		return fmt.Errorf("relationship type %q invalid", r.Type)
+	}
+	if r.Strength < 0 {
+		return fmt.Errorf("relationship %s strength %v is negative", r.ID, r.Strength)
 	}
 	return nil
 }

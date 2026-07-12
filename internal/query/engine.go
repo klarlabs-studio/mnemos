@@ -192,6 +192,14 @@ type AnswerOptions struct {
 	// `query --salient` / MNEMOS_SALIENCE. A claim with no salience component sits
 	// at the neutral baseline and contributes a zero term.
 	Salient bool
+	// Hebbian enables the co-activation write-back (ADR 0015 §4): after the answer is
+	// resolved, the existing association edges among the top co-retrieved beliefs are
+	// strengthened ("fire together, wire together"), so well-worn associations prime
+	// more strongly on later `--prime` recalls. A bounded, best-effort WRITE on the
+	// read path — off by default; toggled by `query --hebbian` / MNEMOS_HEBBIAN. Only
+	// existing edges are touched (co-retrieval is not itself a typed relationship);
+	// backends that cannot persist edge strength skip it.
+	Hebbian bool
 }
 
 // Answer searches all stored events for the best answer to the given question.
@@ -215,6 +223,23 @@ func (e Engine) Answer(question string) (domain.Answer, error) {
 // return results the caller explicitly excluded.
 func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.Answer, error) {
 	ctx := context.Background()
+	ans, err := e.resolveAnswer(ctx, question, opts)
+	if err != nil {
+		return domain.Answer{}, err
+	}
+	// Hebbian co-activation (ADR 0015 §4): the beliefs returned together this query
+	// "fired together", so strengthen the existing association edges among them.
+	// Opt-in and single-shot — placed HERE, on the finally-chosen answer, rather than
+	// inside answerWithEvents (which can run twice under corrective retrieval) so it
+	// fires once on what was actually returned. Best-effort: never fails a read.
+	e.strengthenCoactivation(ctx, opts, ans)
+	return ans, nil
+}
+
+// resolveAnswer runs the recall pass and the corrective-retrieval fallback, returning
+// the answer that will be surfaced. Factored out of AnswerWithOptions so the Hebbian
+// write-back there sees exactly one final answer regardless of which pass produced it.
+func (e Engine) resolveAnswer(ctx context.Context, question string, opts AnswerOptions) (domain.Answer, error) {
 	ans, usedFastPath, err := e.answerOnce(ctx, question, opts)
 	if err != nil {
 		return domain.Answer{}, err
@@ -234,6 +259,43 @@ func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.A
 		return corrected, nil
 	}
 	return ans, nil
+}
+
+// Hebbian co-activation write-back tunables (ADR 0015 §4).
+const (
+	// hebbianCoactivationTopN bounds how many of the answer's beliefs count as
+	// "co-retrieved" — the focus of the answer, not its long tail.
+	hebbianCoactivationTopN = 8
+	// hebbianDelta is the strength increment one co-activation adds to each edge
+	// among the co-retrieved set; hebbianMaxStrength caps accumulation (shared with
+	// the spreading-activation saturation point so a maxed edge maps to the max boost).
+	hebbianDelta       = 1.0
+	hebbianMaxStrength = strengthActivationCap
+)
+
+// strengthenCoactivation raises the strength of existing edges among the top
+// co-retrieved beliefs of ans (ADR 0015 §4). Opt-in via AnswerOptions.Hebbian and
+// type-asserted: a backend that cannot persist strength is skipped rather than
+// guessed at. It never creates edges — only ones that already connect two members of
+// the set are strengthened. Best-effort by design: a write failure must not fail the
+// read, so the error is intentionally dropped.
+func (e Engine) strengthenCoactivation(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
+	if !opts.Hebbian || len(ans.Claims) < 2 {
+		return
+	}
+	strengthener, ok := e.relationships.(ports.RelationshipStrengthener)
+	if !ok {
+		return
+	}
+	n := len(ans.Claims)
+	if n > hebbianCoactivationTopN {
+		n = hebbianCoactivationTopN
+	}
+	ids := make([]string, 0, n)
+	for _, c := range ans.Claims[:n] {
+		ids = append(ids, c.ID)
+	}
+	_, _ = strengthener.StrengthenAssociations(ctx, ids, hebbianDelta, hebbianMaxStrength)
 }
 
 // answerOnce runs a single recall pass and reports whether it took the native

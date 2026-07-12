@@ -231,7 +231,7 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 	in := strings.Join(placeholders, ",")
 
 	//nolint:gosec // G201: placeholders are literal "?", IDs flow through ? bindings
-	q := "SELECT id, type, from_claim_id, to_claim_id, created_at, created_by FROM relationships WHERE from_claim_id IN (" + in + ") OR to_claim_id IN (" + in + ")"
+	q := "SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength FROM relationships WHERE from_claim_id IN (" + in + ") OR to_claim_id IN (" + in + ")"
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim ids: %w", err)
@@ -242,8 +242,9 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 	for rows.Next() {
 		var (
 			id, typ, from, to, createdStr, createdBy string
+			strength                                 float64
 		)
-		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy); err != nil {
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &strength); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, createdStr)
@@ -257,10 +258,43 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 			ToClaimID:   to,
 			CreatedAt:   t,
 			CreatedBy:   createdBy,
+			Strength:    strength,
 		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate relationship rows: %w", err)
 	}
 	return out, nil
+}
+
+// StrengthenAssociations implements [ports.RelationshipStrengthener] (ADR 0015 §4):
+// it raises the strength of every edge whose BOTH endpoints are in claimIDs — a
+// single `from IN set AND to IN set` predicate catches intra-set edges in either
+// direction — by delta, capped at maxStrength. Only existing edges are touched; no
+// edge is created. Returns the number of edges matched.
+func (r RelationshipRepository) StrengthenAssociations(ctx context.Context, claimIDs []string, delta, maxStrength float64) (int, error) {
+	if delta <= 0 || len(claimIDs) < 2 {
+		return 0, nil
+	}
+	placeholders := make([]string, 0, len(claimIDs))
+	for range claimIDs {
+		placeholders = append(placeholders, "?")
+	}
+	in := strings.Join(placeholders, ",")
+	args := make([]any, 0, 2+len(claimIDs)*2)
+	args = append(args, delta, maxStrength)
+	for _, id := range claimIDs {
+		args = append(args, id)
+	}
+	for _, id := range claimIDs {
+		args = append(args, id)
+	}
+	//nolint:gosec // G201: placeholders are literal "?", IDs flow through ? bindings
+	q := "UPDATE relationships SET strength = MIN(strength + ?, ?) WHERE from_claim_id IN (" + in + ") AND to_claim_id IN (" + in + ")"
+	res, err := r.db.ExecContext(ctx, q, args...)
+	if err != nil {
+		return 0, fmt.Errorf("strengthen associations: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }

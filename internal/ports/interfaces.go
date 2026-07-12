@@ -191,6 +191,21 @@ type RelationshipRepository interface {
 	DeleteAll(ctx context.Context) error
 }
 
+// RelationshipStrengthener is an optional capability (ADR 0015 §4, Hebbian
+// co-activation): raise the stored strength of EXISTING association edges among a
+// set of co-retrieved beliefs — "fire together, wire together". It is type-asserted
+// exactly like [BeliefCreditWriter]: a backend that cannot persist a strength column
+// simply skips strengthening rather than inventing edges or resetting weights. It
+// never creates edges (co-retrieval is not itself a typed relationship) — only edges
+// that already connect two members of the set are strengthened.
+type RelationshipStrengthener interface {
+	// StrengthenAssociations increments (by delta, capped at maxStrength) the strength
+	// of every stored edge whose BOTH endpoints are in claimIDs, in either direction.
+	// Returns the number of edges strengthened. delta<=0 or fewer than two ids is a
+	// no-op.
+	StrengthenAssociations(ctx context.Context, claimIDs []string, delta, maxStrength float64) (int, error)
+}
+
 // ExtractionEngine extracts structured claims from domain events.
 type ExtractionEngine interface {
 	ExtractClaims([]domain.Event) ([]domain.Claim, error)

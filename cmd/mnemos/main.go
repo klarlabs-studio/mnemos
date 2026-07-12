@@ -543,6 +543,7 @@ func handleQuery(args []string, f Flags) {
 			Visibility:     qa.visibility,
 			Prime:          qa.prime || spreadingActivationEnv(),
 			Salient:        qa.salient || salienceEnv(),
+			Hebbian:        qa.hebbian || hebbianEnv(),
 		}
 		if entity != "" {
 			entRepo := conn.Entities
@@ -1379,6 +1380,7 @@ func printUsage() {
 	fmt.Println("  query --hops <N> --kind <list>       Restrict hop expansion to comma-separated edge kinds")
 	fmt.Println("  query --prime <question>             Prime associated beliefs via spreading activation (ADR 0013 §2)")
 	fmt.Println("  query --salient <question>           Bias recall toward high-stakes beliefs (ADR 0013 §4)")
+	fmt.Println("  query --hebbian <question>           Strengthen associations among co-retrieved beliefs (ADR 0015 §4)")
 	fmt.Println("                                          (e.g. causes,validates,refutes)")
 	fmt.Println("  query --llm <question>               Query with LLM-grounded answer")
 	fmt.Println("  query --min-trust X <question>       Only return claims with trust_score >= X (X in [0, 1])")
@@ -1538,6 +1540,11 @@ type queryArgs struct {
 	// strongly-associated beliefs are primed up. Off by default; set by
 	// --prime or a truthy MNEMOS_SPREADING_ACTIVATION.
 	prime bool
+	// hebbian enables the Hebbian co-activation write-back (ADR 0015 §4): after the
+	// answer resolves, existing edges among the co-retrieved beliefs are strengthened,
+	// so worn associations prime more strongly later. Off by default (it WRITES on a
+	// read); set by --hebbian or a truthy MNEMOS_HEBBIAN.
+	hebbian bool
 	// salient enables salience-biased retrieval (ADR 0013 §4): a bounded stakes
 	// term is blended into the similarity score so a high-stakes belief outranks a
 	// trivial one of equal similarity. Off by default; set by --salient or a truthy
@@ -1611,6 +1618,8 @@ func parseQueryArgs(args []string) (queryArgs, error) {
 			questionArgs = questionArgs[1:]
 		case "--salient":
 			out.salient = true
+		case "--hebbian":
+			out.hebbian = true
 			questionArgs = questionArgs[1:]
 		case "--entity":
 			if len(questionArgs) < 2 {
@@ -1702,6 +1711,18 @@ func spreadingActivationEnv() bool {
 // stakes bias on globally without the per-query --salient flag.
 func salienceEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_SALIENCE"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// hebbianEnv reports whether the Hebbian co-activation write-back (ADR 0015 §4) is
+// enabled via the MNEMOS_HEBBIAN env var. Truthy values ("1"/"true"/"yes") turn it on
+// globally without the per-query --hebbian flag.
+func hebbianEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_HEBBIAN"))) {
 	case "1", "true", "yes":
 		return true
 	default:

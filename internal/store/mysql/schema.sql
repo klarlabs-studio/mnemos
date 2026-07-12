@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS relationships (
   to_claim_id   VARCHAR(190) NOT NULL,
   created_at    DATETIME(6)  NOT NULL,
   created_by    VARCHAR(190) NOT NULL DEFAULT '<system>',
+  strength      DOUBLE       NOT NULL DEFAULT 1,
   PRIMARY KEY (id),
   UNIQUE KEY uniq_relationships_edge (type, from_claim_id, to_claim_id),
   KEY idx_relationships_from_claim   (from_claim_id),
