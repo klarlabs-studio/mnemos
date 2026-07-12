@@ -50,9 +50,29 @@ func TestServiceScaffoldContent(t *testing.T) {
 		file     string
 		contains []string
 	}{
-		{"docker-compose.yml", []string{"postgres:16", "MNEMOS_DB_URL", "8080:8080"}},
-		{"mnemos.yaml", []string{"serve:", "port: 8080"}},
-		{".env.example", []string{"MNEMOS_JWT_SECRET"}},
+		{"docker-compose.yml", []string{
+			"postgres:16",
+			"MNEMOS_DB_URL",
+			"8080:8080",
+			// Mode D: multi-tenant serve + a guarded, required signing secret.
+			"serve --require-tenant",
+			"MNEMOS_JWT_SECRET:?",
+		}},
+		{"mnemos.yaml", []string{"serve:", "port: 8080", "require-tenant"}},
+		{".env.example", []string{
+			"MNEMOS_JWT_SECRET",
+			// The secret must be flagged REQUIRED with a generation hint.
+			"REQUIRED",
+			"openssl rand -hex 32",
+		}},
+		{"README-mnemos-service.md", []string{
+			"serve --require-tenant",
+			"--tenant",
+			"mnemos token issue --user",
+			// Both the required-secret preflight and the single-tenant escape.
+			"cannot issue usable tokens",
+			"Single-tenant",
+		}},
 	}
 	for _, tc := range cases {
 		data, err := os.ReadFile(filepath.Join(dir, tc.file))
