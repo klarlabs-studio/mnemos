@@ -92,7 +92,7 @@ UPDATE claims SET trust_score = ? WHERE id = ?;
 -- name: ListClaimTrustInputs :many
 -- Inputs to recompute trust_score for every claim: confidence, the count of
 -- DISTINCT evidence-event authors and of total events (so corroboration can be
--- graded by independence — an echo-chamber guard), and the most-recent evidence
+-- graded by independence - an echo-chamber guard), and the most-recent evidence
 -- timestamp. LEFT JOIN so claims with no evidence still appear; the caller treats
 -- the missing aggregate as 0/empty.
 SELECT
