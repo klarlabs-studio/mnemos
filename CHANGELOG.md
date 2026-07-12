@@ -8,6 +8,34 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.94.0] — 2026-07-12
+
+### Added
+
+- **Predictive coding — the hierarchical prediction-error surface (ADR 0017).** Takes
+  the first concrete, *safe* step toward the ADR-0015 north star: it makes the brain's
+  prediction error **observable**. `mnemos predictive-error` (and the read-only
+  `Memory.PredictiveError` method) reports prediction error at each level of the memory
+  hierarchy and a single aggregate — the observable form of the free-energy objective
+  predictive coding minimizes.
+  - Four levels, each reusing a signal that already existed but was **siloed**:
+    **outcome** (mean saturated `Expectation.Surprise` over resolved decision
+    predictions), **schema** (peak surprise backing promoted generalizations),
+    **dissonance** (active high-stakes contradictions per belief, via `Hypercorrections`),
+    and **calibration** (expected calibration error, `Calibration().ECE`).
+  - Each level yields an error in `[0,1]` with a sample count; the **total** is the mean
+    over only the levels that *have* data, and the **hotspot** names the level where the
+    model is most wrong. A level with no signal is excluded — sparse evidence never reads
+    as a well-predicted model.
+  - **Strictly read-only** — no write path, no store change, no new schema. It unifies
+    four existing error signals into the one cross-level "where is my model most wrong?"
+    view the free-energy framing calls for. Human + JSON output, mirroring `curiosity`.
+
+  This is the *measurement* layer. The generative model and active free-energy
+  minimization (consolidation choosing revisions to reduce total prediction error)
+  remain the documented north star — ADR 0017 converts it from "someday" into "measured,
+  and here is the meter."
+
 ## [0.93.0] — 2026-07-12
 
 ### Added

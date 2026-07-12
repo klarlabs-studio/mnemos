@@ -96,4 +96,5 @@ Shipped in v0.93.0: the `inhibition` component + `EffectiveInhibition`, the
 `query --inhibit` write-back, the negative ranking term, `consolidate --decay-inhibition`,
 guardrails, and tests (the write-back seam, the ranking penalty, the promoted/salience
 skips, and the decay). This closes ADR 0015's deferred concrete work; **predictive
-coding** remains the sole documented north star.
+coding** remains the sole documented north star (its measurement layer since shipped —
+see ADR 0017).
