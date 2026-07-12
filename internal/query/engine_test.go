@@ -42,6 +42,21 @@ type fakeClaimRepo struct {
 	// verifiedRecorder, when non-nil, records each MarkVerified'd claim id so a test
 	// can assert the reconsolidation freshness touch fired on the recalled set.
 	verifiedRecorder *[]string
+	// creditWrites, when non-nil, records the components map written by each
+	// ApplyBeliefCredit call (keyed by claim id) so a test can assert the
+	// competitive-inhibition write-back. Also makes the fake a ports.BeliefCreditWriter.
+	creditWrites *map[string]map[string]float64
+}
+
+func (f fakeClaimRepo) ApplyBeliefCredit(_ context.Context, claimID string, components map[string]float64, _ float64) error {
+	if f.creditWrites != nil {
+		cp := make(map[string]float64, len(components))
+		for k, v := range components {
+			cp[k] = v
+		}
+		(*f.creditWrites)[claimID] = cp
+	}
+	return nil
 }
 
 func (f fakeClaimRepo) Upsert(_ context.Context, _ []domain.Claim) error { return nil }

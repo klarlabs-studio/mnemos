@@ -16,7 +16,7 @@ import (
 //	mnemos consolidate [--dry-run] [--forget-below-trust <f>] [--forget-refuted]
 //	                   [--reinforce-validated] [--reinforce-playbooks] [--credit]
 //	                   [--salience] [--plastic] [--decay-associations]
-//	                   [--synthesize] [--replay-top-k <n>]
+//	                   [--decay-inhibition] [--synthesize] [--replay-top-k <n>]
 //
 // --plastic engages the ADR-0015 adaptive learning-rate controls on the credit stage
 // (metaplasticity + neuromodulation); MNEMOS_PLASTICITY_SENSITIVITY tunes the latter.
@@ -87,6 +87,8 @@ func parseConsolidateOpts(args []string, f Flags) (mnemos.ConsolidateOptions, er
 			opts.Plastic = true
 		case "--decay-associations":
 			opts.DecayAssociations = true
+		case "--decay-inhibition":
+			opts.DecayInhibition = true
 		case "--reinforce-playbooks":
 			opts.ReinforcePlaybooks = true
 		case "--synthesize":

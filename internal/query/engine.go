@@ -206,6 +206,15 @@ type AnswerOptions struct {
 	// WRITE on the read path — off by default; toggled by `query --reconsolidate` /
 	// MNEMOS_RECONSOLIDATE. It refreshes liveness only (last_verified), never trust.
 	Reconsolidate bool
+	// Inhibit enables competitive inhibition / retrieval-induced forgetting (ADR 0016):
+	// after the answer resolves, each decisively-beaten contradiction loser (from the
+	// agent-mode Verdicts) has its RETRIEVABILITY bounded-suppressed — it ranks lower on
+	// later recalls — never its trust or status. A bounded, reversible (it decays via
+	// `consolidate --decay-inhibition`), best-effort WRITE on the read path; off by
+	// default; toggled by `query --inhibit` / MNEMOS_INHIBIT. Promoted and high-salience
+	// losers are protected. Only meaningful for a ConsumerAgent query (which resolves
+	// contradiction winners/losers).
+	Inhibit bool
 }
 
 // Answer searches all stored events for the best answer to the given question.
@@ -244,6 +253,10 @@ func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.A
 	// memory alive). Same single-shot, opt-in, best-effort seam as the Hebbian
 	// write-back above.
 	e.reconsolidateRecalled(ctx, opts, ans)
+	// Competitive inhibition (ADR 0016): recalling a decisive contradiction winner
+	// suppresses the retrievability of the rival it beat. Same opt-in, single-shot,
+	// best-effort seam; retrievability only, never trust.
+	e.inhibitLosers(ctx, opts, ans)
 	return ans, nil
 }
 
@@ -327,6 +340,50 @@ func (e Engine) reconsolidateRecalled(ctx context.Context, opts AnswerOptions, a
 	}
 	for _, c := range ans.Claims[:n] {
 		_ = e.claims.MarkVerified(ctx, c.ID, now, 0)
+	}
+}
+
+// inhibitLosers suppresses the retrievability of decisively-beaten contradiction losers
+// (ADR 0016). For each agent-mode Verdict carrying both a winner and a loser, it
+// accumulates a bounded inhibition magnitude on the loser's `inhibition` component — so
+// the loser ranks lower on later recalls — while preserving every other component and
+// passing the loser's trust through UNCHANGED (retrievability only, never trust). It
+// reuses ports.BeliefCreditWriter (type-asserted; skipped if the backend can't persist
+// components) and protects promoted / high-salience losers. Opt-in, best-effort: a
+// suppression-write failure never fails the read, so errors are intentionally dropped.
+func (e Engine) inhibitLosers(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
+	if !opts.Inhibit || len(ans.Verdicts) == 0 {
+		return
+	}
+	writer, ok := e.claims.(ports.BeliefCreditWriter)
+	if !ok {
+		return
+	}
+	for _, v := range ans.Verdicts {
+		if v.LoserClaimID == "" || v.WinnerClaimID == "" {
+			continue // escalations carry no decisive loser
+		}
+		losers, err := e.claims.ListByIDs(ctx, []string{v.LoserClaimID})
+		if err != nil || len(losers) == 0 {
+			continue
+		}
+		l := losers[0]
+		if l.Lifecycle == domain.ClaimLifecyclePromoted {
+			continue // never suppress human-endorsed knowledge
+		}
+		if l.EffectiveSalience() >= inhibitionSalienceProtectFloor {
+			continue // never suppress a high-stakes belief
+		}
+		merged := make(map[string]float64, len(l.ConfidenceComponents)+1)
+		for k, val := range l.ConfidenceComponents {
+			merged[k] = val
+		}
+		next := merged[domain.InhibitionComponentKey] + inhibitionDelta
+		if next > inhibitionMax {
+			next = inhibitionMax
+		}
+		merged[domain.InhibitionComponentKey] = next
+		_ = writer.ApplyBeliefCredit(ctx, l.ID, merged, l.TrustScore)
 	}
 }
 
@@ -1610,11 +1667,18 @@ func (e Engine) rankClaimsByHybrid(ctx context.Context, question string, claims 
 		}
 		if s == 0 {
 			s = -1 // signal-less claim; sinks below any positive hit but keeps original order
-		} else if salienceBias {
+		} else {
 			// Bounded stakes term (ADR 0013 §4): tips ties toward the higher-stakes
-			// belief. Applied only to signal-bearing claims so a signal-less claim
-			// stays pinned below any hit at its -1 sentinel.
-			s += salienceScoreDelta(cl)
+			// belief. Opt-in (salienceBias). Applied only to signal-bearing claims so a
+			// signal-less claim stays pinned below any hit at its -1 sentinel.
+			if salienceBias {
+				s += salienceScoreDelta(cl)
+			}
+			// Competitive-inhibition penalty (ADR 0016): a suppressed contradiction
+			// loser ranks lower. Always applied (a persisted suppression must keep
+			// biasing later recalls), but inert when the claim carries no inhibition
+			// component — so recall is unchanged until inhibition is used.
+			s += inhibitionScoreDelta(cl)
 		}
 		scoredClaims = append(scoredClaims, scored{claim: cl, score: s, idx: i})
 	}

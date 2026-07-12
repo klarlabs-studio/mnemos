@@ -545,6 +545,7 @@ func handleQuery(args []string, f Flags) {
 			Salient:        qa.salient || salienceEnv(),
 			Hebbian:        qa.hebbian || hebbianEnv(),
 			Reconsolidate:  qa.reconsolidate || reconsolidateEnv(),
+			Inhibit:        qa.inhibit || inhibitEnv(),
 		}
 		if entity != "" {
 			entRepo := conn.Entities
@@ -1383,6 +1384,7 @@ func printUsage() {
 	fmt.Println("  query --salient <question>           Bias recall toward high-stakes beliefs (ADR 0013 §4)")
 	fmt.Println("  query --hebbian <question>           Strengthen associations among co-retrieved beliefs (ADR 0015 §4)")
 	fmt.Println("  query --reconsolidate <question>     Refresh liveness of recalled beliefs — the testing effect (ADR 0015 §5)")
+	fmt.Println("  query --inhibit <question>           Suppress retrievability of beaten contradiction losers (ADR 0016)")
 	fmt.Println("                                          (e.g. causes,validates,refutes)")
 	fmt.Println("  query --llm <question>               Query with LLM-grounded answer")
 	fmt.Println("  query --min-trust X <question>       Only return claims with trust_score >= X (X in [0, 1])")
@@ -1552,6 +1554,10 @@ type queryArgs struct {
 	// decay. Off by default (it WRITES on a read); set by --reconsolidate or a truthy
 	// MNEMOS_RECONSOLIDATE.
 	reconsolidate bool
+	// inhibit enables competitive inhibition (ADR 0016): a decisively-beaten
+	// contradiction loser has its retrievability bounded-suppressed (never its trust).
+	// Off by default (it WRITES on a read); set by --inhibit or a truthy MNEMOS_INHIBIT.
+	inhibit bool
 	// salient enables salience-biased retrieval (ADR 0013 §4): a bounded stakes
 	// term is blended into the similarity score so a high-stakes belief outranks a
 	// trivial one of equal similarity. Off by default; set by --salient or a truthy
@@ -1625,10 +1631,15 @@ func parseQueryArgs(args []string) (queryArgs, error) {
 			questionArgs = questionArgs[1:]
 		case "--salient":
 			out.salient = true
+			questionArgs = questionArgs[1:]
 		case "--hebbian":
 			out.hebbian = true
+			questionArgs = questionArgs[1:]
 		case "--reconsolidate":
 			out.reconsolidate = true
+			questionArgs = questionArgs[1:]
+		case "--inhibit":
+			out.inhibit = true
 			questionArgs = questionArgs[1:]
 		case "--entity":
 			if len(questionArgs) < 2 {
@@ -1744,6 +1755,18 @@ func hebbianEnv() bool {
 // it on globally without the per-query --reconsolidate flag.
 func reconsolidateEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_RECONSOLIDATE"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// inhibitEnv reports whether competitive inhibition (ADR 0016) is enabled via the
+// MNEMOS_INHIBIT env var. Truthy values ("1"/"true"/"yes") turn it on globally without
+// the per-query --inhibit flag.
+func inhibitEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_INHIBIT"))) {
 	case "1", "true", "yes":
 		return true
 	default:

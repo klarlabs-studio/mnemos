@@ -713,6 +713,14 @@ type ConsolidateOptions struct {
 	// Off by default; a no-op on backends that don't persist edge strength.
 	DecayAssociations bool
 
+	// DecayInhibition, when true, pulls every claim's competitive-inhibition weight
+	// (ADR 0016) back toward 0 during the sleep pass, so a retrieval-induced
+	// suppression is TEMPORARY — it must be renewed by repeated winning to persist, and
+	// a formerly-suppressed contradiction loser recovers its retrievability over a few
+	// consolidations. Trust is never touched. Off by default; a no-op on backends that
+	// don't persist confidence_components.
+	DecayInhibition bool
+
 	// ReinforcePlaybooks bends each playbook's confidence toward the observed
 	// success rate of the outcomes recorded against the actions its lessons were
 	// derived from — the skill-learning half of the sleep pass. Synthesize writes
@@ -777,6 +785,10 @@ type ConsolidateResult struct {
 	// toward the base 1.0 (ADR 0015 §5) — 0 unless DecayAssociations was set, 0 on a
 	// dry run, and 0 on a backend that doesn't persist edge strength.
 	AssociationsDecayed int
+	// InhibitionDecayed is the number of claims whose competitive-inhibition weight
+	// (ADR 0016) was pulled back toward 0 — 0 unless DecayInhibition was set, 0 on a dry
+	// run, and 0 on a backend that doesn't persist confidence_components.
+	InhibitionDecayed int
 	// LessonsSynthesized / PlaybooksSynthesized count the skills (re-)derived — 0
 	// unless Synthesize was set, and 0 on a dry run.
 	LessonsSynthesized   int
