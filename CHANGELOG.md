@@ -8,6 +8,33 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.91.0] — 2026-07-12
+
+### Added
+
+- **Learning dynamics, batch 2a — association plasticity (ADR 0015 §4).** The belief
+  association graph becomes *plastic*: edges now carry a Hebbian **`strength`** and
+  strengthen with use.
+  - **`relationships.strength` column** (DEFAULT 1.0) across every backend — sqlite
+    (versioned migration v21, so existing DBs backfill in place), postgres, mysql
+    (inline in `CREATE TABLE`), memory, and libSQL (via sqlite). Fresh and existing
+    graphs read the base 1.0, so nothing changes until an edge is co-activated.
+  - **Hebbian co-activation — "fire together, wire together."** `query --hebbian`
+    (or `MNEMOS_HEBBIAN`) strengthens the existing edges among the beliefs a query
+    returns together, via the new `ports.RelationshipStrengthener` capability. A
+    bounded, best-effort, opt-in **write on the read path**, placed on the finally
+    chosen answer (single-shot, not double-fired by corrective retrieval). It never
+    invents edges — co-retrieval is not itself a typed relationship — and backends
+    that cannot persist strength skip it.
+  - **Strength-weighted spreading activation.** `query --prime` now weights each
+    association edge by its Hebbian strength, so a well-worn association primes up to
+    1.5× as strongly (saturating), while a base-strength edge stays exactly neutral —
+    priming is byte-for-byte unchanged until edges wire.
+
+  Verified on live Postgres + MySQL (strength round-trip + `StrengthenAssociations`
+  parity), with unit coverage for the weighting curve and the write-back seam. Batch 2b
+  (reconsolidation + active/competitive forgetting and weak-edge pruning) is tracked next.
+
 ## [0.90.0] — 2026-07-12
 
 ### Added

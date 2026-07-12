@@ -1,11 +1,15 @@
 # ADR 0015: Learning dynamics — replay, association plasticity, and neuromodulation
 
 - **Status:** Accepted; phased rollout.
-  - **Batch 1 (v0.90.0) — learning-rate cluster, no schema change:** metaplasticity,
-    neuromodulation/volatility, replay-with-surprise + forgetting-protection.
-  - **Batch 2 (v0.91.0) — association-plasticity cluster:** Hebbian co-activation,
-    reconsolidation write-back, active (competitive) forgetting + edge pruning,
-    weighted spreading activation. Adds a `strength` column to the association graph.
+  - **Batch 1 (v0.90.0, shipped) — learning-rate cluster, no schema change:**
+    metaplasticity, neuromodulation/volatility, replay-with-surprise +
+    forgetting-protection.
+  - **Batch 2a (v0.91.0, shipped) — association-plasticity core:** the `strength`
+    column on the association graph (all backends), Hebbian co-activation write-back
+    (`query --hebbian`), and strength-weighted spreading activation.
+  - **Batch 2b (planned) — the remaining write-backs:** reconsolidation (retrieval as
+    a freshness touch) and active (competitive) forgetting + weak-edge pruning. Builds
+    on 2a's `strength` column.
 - **Date:** 2026-07-12
 - **Deciders:** Felix Geelhaar
 - **Scope:** The cognitive core's *learning dynamics* — how memory **changes over
@@ -229,9 +233,20 @@ is a research-scale change, deliberately **out of scope** for this ADR's batches
 
 ## Rollout
 
-1. **Batch 1 — metaplasticity, neuromodulation, replay** (v0.90.0). No schema change;
-   all in the consolidation path + a new `internal/plasticity` package + config leaves.
-2. **Batch 2 — Hebbian, reconsolidation, active forgetting/pruning, weighted spreading**
-   (v0.91.0). The `strength` column across all backends (fix the Postgres conflict
-   target first), the opt-in query write-back seam, verified on live pg + mysql.
-3. **Predictive coding** — north star; revisit as its own ADR when the batches settle.
+1. **Batch 1 — metaplasticity, neuromodulation, replay** (v0.90.0, shipped). No schema
+   change; all in the consolidation path + a new `internal/plasticity` package + config.
+2. **Batch 2a — the `strength` column + Hebbian + weighted spreading** (v0.91.0,
+   shipped). Added `relationships.strength` (DEFAULT 1) across sqlite (versioned
+   migration v21), postgres, mysql (inline in CREATE TABLE), and memory; the
+   `ports.RelationshipStrengthener` capability (`StrengthenAssociations`); the
+   `query --hebbian` / `MNEMOS_HEBBIAN` write-back at the `AnswerWithOptions` seam; and
+   strength-weighted spreading (a base-1 edge stays neutral, so priming is unchanged
+   until edges wire). No sqlc change — the Upsert relies on the column DEFAULT and
+   there is no shared scanner to force column-parity beyond `ListByClaimIDs` (pg/mysql
+   do share `collectRelationshipRows`, so all three of their SELECTs were updated in
+   lockstep). Verified on live Postgres + MySQL. The pre-existing Postgres
+   `ON CONFLICT (id)` edge-upsert quirk was left untouched: 2a strengthens via a
+   dedicated UPDATE, not a re-Upsert, so it does not depend on the conflict target.
+3. **Batch 2b — reconsolidation + active forgetting/pruning** (planned). The retrieval
+   freshness touch and competitive inhibition / weak-edge pruning, on 2a's column.
+4. **Predictive coding** — north star; revisit as its own ADR when the batches settle.

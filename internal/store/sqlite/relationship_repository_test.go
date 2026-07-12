@@ -46,3 +46,93 @@ func TestRelationshipRepositoryUpsertAndListByClaim(t *testing.T) {
 		t.Fatalf("ListByClaim type = %q, want supports", rels[0].Type)
 	}
 }
+
+// TestRelationshipStrength_DefaultAndStrengthen covers the ADR-0015 §4 Hebbian
+// strength column: new edges default to the base 1.0, ListByClaimIDs reads it back,
+// and StrengthenAssociations increments only intra-set edges (either direction),
+// caps at maxStrength, preserves strength across a re-Upsert, and no-ops on <2 ids.
+func TestRelationshipStrength_DefaultAndStrengthen(t *testing.T) {
+	db := openTestDB(t)
+	defer closeDB(db)
+	ctx := context.Background()
+	claimRepo := NewClaimRepository(db)
+	relRepo := NewRelationshipRepository(db)
+
+	now := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+	claims := []domain.Claim{
+		{ID: "a", Text: "A", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "b", Text: "B", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "c", Text: "C", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+	}
+	if err := claimRepo.Upsert(ctx, claims); err != nil {
+		t.Fatalf("Upsert claims: %v", err)
+	}
+	edges := []domain.Relationship{
+		{ID: "ab", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "b", CreatedAt: now},
+		{ID: "bc", Type: domain.RelationshipTypeSupports, FromClaimID: "b", ToClaimID: "c", CreatedAt: now},
+	}
+	if err := relRepo.Upsert(ctx, edges); err != nil {
+		t.Fatalf("Upsert edges: %v", err)
+	}
+
+	strengthOf := func(id string) float64 {
+		rels, err := relRepo.ListByClaimIDs(ctx, []string{"a", "b", "c"})
+		if err != nil {
+			t.Fatalf("ListByClaimIDs: %v", err)
+		}
+		for _, r := range rels {
+			if r.ID == id {
+				return r.Strength
+			}
+		}
+		t.Fatalf("edge %s not found", id)
+		return 0
+	}
+
+	// Default: a fresh edge reads back at the base 1.0.
+	if got := strengthOf("ab"); got != 1 {
+		t.Fatalf("fresh edge strength = %v, want 1 (default)", got)
+	}
+
+	// Strengthen the {a,b} set: only edge ab qualifies (both endpoints in set); bc
+	// is excluded (c not in set).
+	n, err := relRepo.StrengthenAssociations(ctx, []string{"a", "b"}, 1.0, 10)
+	if err != nil {
+		t.Fatalf("StrengthenAssociations: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("strengthened %d edges, want 1 (only ab)", n)
+	}
+	if got := strengthOf("ab"); got != 2 {
+		t.Errorf("ab strength = %v, want 2", got)
+	}
+	if got := strengthOf("bc"); got != 1 {
+		t.Errorf("bc strength = %v, want 1 (untouched)", got)
+	}
+
+	// Re-Upsert of ab must PRESERVE its accumulated strength (ON CONFLICT keeps it).
+	if err := relRepo.Upsert(ctx, []domain.Relationship{edges[0]}); err != nil {
+		t.Fatalf("re-Upsert ab: %v", err)
+	}
+	if got := strengthOf("ab"); got != 2 {
+		t.Errorf("re-Upsert reset strength to %v, want preserved 2", got)
+	}
+
+	// Cap: many increments saturate at maxStrength.
+	for i := 0; i < 20; i++ {
+		if _, err := relRepo.StrengthenAssociations(ctx, []string{"a", "b"}, 1.0, 5); err != nil {
+			t.Fatalf("strengthen loop: %v", err)
+		}
+	}
+	if got := strengthOf("ab"); got != 5 {
+		t.Errorf("capped strength = %v, want 5", got)
+	}
+
+	// No-op: fewer than two ids, or non-positive delta.
+	if n, _ := relRepo.StrengthenAssociations(ctx, []string{"a"}, 1.0, 10); n != 0 {
+		t.Errorf("single-id strengthen should be a no-op, got %d", n)
+	}
+	if n, _ := relRepo.StrengthenAssociations(ctx, []string{"a", "b"}, 0, 10); n != 0 {
+		t.Errorf("zero-delta strengthen should be a no-op, got %d", n)
+	}
+}

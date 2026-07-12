@@ -257,6 +257,7 @@ type storedRelationship struct {
 	ToClaimID   string
 	CreatedAt   time.Time
 	CreatedBy   string
+	Strength    float64 // Hebbian co-activation weight (ADR 0015 §4); 0 reads as base 1.0
 }
 
 type embeddingKey struct {

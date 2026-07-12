@@ -105,13 +105,17 @@ CREATE TABLE IF NOT EXISTS claim_evidence (
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_event_id ON claim_evidence(event_id);
 
 CREATE TABLE IF NOT EXISTS relationships (
-  id            text        PRIMARY KEY,
-  type          text        NOT NULL,
-  from_claim_id text        NOT NULL REFERENCES claims(id),
-  to_claim_id   text        NOT NULL REFERENCES claims(id),
-  created_at    timestamptz NOT NULL,
-  created_by    text        NOT NULL DEFAULT '<system>'
+  id            text             PRIMARY KEY,
+  type          text             NOT NULL,
+  from_claim_id text             NOT NULL REFERENCES claims(id),
+  to_claim_id   text             NOT NULL REFERENCES claims(id),
+  created_at    timestamptz      NOT NULL,
+  created_by    text             NOT NULL DEFAULT '<system>',
+  strength      double precision NOT NULL DEFAULT 1
 );
+-- ADR 0015 §4: Hebbian co-activation weight for existing DBs (fresh ones get it
+-- inline above). Backfills to the base 1.0 so spreading activation is unchanged.
+ALTER TABLE relationships ADD COLUMN IF NOT EXISTS strength double precision NOT NULL DEFAULT 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_unique_edge
   ON relationships(type, from_claim_id, to_claim_id);

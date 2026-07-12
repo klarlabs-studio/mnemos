@@ -125,11 +125,56 @@ func (f fakeClaimRepo) ListIDsMissingEmbedding(_ context.Context) ([]string, err
 
 type fakeRelationshipRepo struct {
 	rels map[string][]domain.Relationship
+	// strengthenedWith, when non-nil, records each StrengthenAssociations call's id
+	// set so a test can assert the Hebbian write-back fired with the co-retrieved set.
+	strengthenedWith *[][]string
 }
 
 func (f fakeRelationshipRepo) Upsert(_ context.Context, _ []domain.Relationship) error { return nil }
-func (f fakeRelationshipRepo) RepointEndpoint(_ context.Context, _, _ string) error    { return nil }
-func (f fakeRelationshipRepo) DeleteByClaim(_ context.Context, _ string) error         { return nil }
+
+// StrengthenAssociations implements ports.RelationshipStrengthener faithfully over the
+// fake's dual-indexed edge map (an edge is stored under both endpoints, so both copies
+// are incremented). Records the call set when a recorder is wired.
+func (f fakeRelationshipRepo) StrengthenAssociations(_ context.Context, claimIDs []string, delta, maxStrength float64) (int, error) {
+	if delta <= 0 || len(claimIDs) < 2 {
+		return 0, nil
+	}
+	if f.strengthenedWith != nil {
+		*f.strengthenedWith = append(*f.strengthenedWith, append([]string(nil), claimIDs...))
+	}
+	set := make(map[string]bool, len(claimIDs))
+	for _, id := range claimIDs {
+		set[id] = true
+	}
+	matched := map[string]bool{}
+	for _, id := range claimIDs {
+		for _, r := range f.rels[id] {
+			if set[r.FromClaimID] && set[r.ToClaimID] {
+				matched[r.ID] = true
+			}
+		}
+	}
+	for key := range f.rels {
+		list := f.rels[key]
+		for i := range list {
+			if !matched[list[i].ID] {
+				continue
+			}
+			s := list[i].Strength
+			if s <= 0 {
+				s = 1
+			}
+			s += delta
+			if s > maxStrength {
+				s = maxStrength
+			}
+			list[i].Strength = s
+		}
+	}
+	return len(matched), nil
+}
+func (f fakeRelationshipRepo) RepointEndpoint(_ context.Context, _, _ string) error { return nil }
+func (f fakeRelationshipRepo) DeleteByClaim(_ context.Context, _ string) error      { return nil }
 func (f fakeRelationshipRepo) ListByClaim(_ context.Context, claimID string) ([]domain.Relationship, error) {
 	return f.rels[claimID], nil
 }

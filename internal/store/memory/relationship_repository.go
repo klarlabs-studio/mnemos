@@ -36,6 +36,7 @@ func (r RelationshipRepository) Upsert(_ context.Context, relationships []domain
 			ToClaimID:   rel.ToClaimID,
 			CreatedAt:   rel.CreatedAt.UTC(),
 			CreatedBy:   actorOr(rel.CreatedBy),
+			Strength:    rel.Strength,
 		}
 	}
 	return nil
@@ -177,5 +178,44 @@ func (s storedRelationship) toDomain() domain.Relationship {
 		ToClaimID:   s.ToClaimID,
 		CreatedAt:   s.CreatedAt,
 		CreatedBy:   s.CreatedBy,
+		Strength:    s.Strength,
 	}
+}
+
+// StrengthenAssociations implements [ports.RelationshipStrengthener] (ADR 0015 §4):
+// it raises the strength of every stored edge whose BOTH endpoints are in claimIDs
+// (either direction) by delta, capped at maxStrength. The current strength is read
+// through the base-1.0 convention (a zero/unset weight counts as 1) so a pre-strength
+// edge lands at 1+delta, matching the SQL backends' DEFAULT 1. Only existing edges are
+// touched. Returns the number strengthened.
+func (r RelationshipRepository) StrengthenAssociations(_ context.Context, claimIDs []string, delta, maxStrength float64) (int, error) {
+	if delta <= 0 || len(claimIDs) < 2 {
+		return 0, nil
+	}
+	wanted := make(map[string]struct{}, len(claimIDs))
+	for _, id := range claimIDs {
+		wanted[id] = struct{}{}
+	}
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	n := 0
+	for id, rel := range r.state.relationships {
+		_, fromHit := wanted[rel.FromClaimID]
+		_, toHit := wanted[rel.ToClaimID]
+		if !fromHit || !toHit {
+			continue
+		}
+		s := rel.Strength
+		if s <= 0 {
+			s = 1 // base convention, matches domain.Association.EffectiveStrength
+		}
+		s += delta
+		if s > maxStrength {
+			s = maxStrength
+		}
+		rel.Strength = s
+		r.state.relationships[id] = rel
+		n++
+	}
+	return n, nil
 }

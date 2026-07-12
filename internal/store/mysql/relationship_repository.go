@@ -51,7 +51,7 @@ ON DUPLICATE KEY UPDATE
 // ListByClaim returns relationships touching the given claim.
 func (r RelationshipRepository) ListByClaim(ctx context.Context, claimID string) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx, `
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
 FROM relationships WHERE from_claim_id = ? OR to_claim_id = ?`, claimID, claimID)
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim: %w", err)
@@ -157,7 +157,7 @@ func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 // ListAll returns every relationship ordered by created_at ascending.
 func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx, `
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
 FROM relationships ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list all relationships: %w", err)
@@ -176,7 +176,7 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 	args2 := append(append([]any{}, args...), args...)
 	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
 	q := `
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
 FROM relationships
 WHERE from_claim_id IN (` + placeholders + `) OR to_claim_id IN (` + placeholders + `)`
 	rows, err := r.db.QueryContext(ctx, q, args2...)
@@ -192,11 +192,36 @@ func collectRelationshipRows(rows *sql.Rows) ([]domain.Relationship, error) {
 	for rows.Next() {
 		var rel domain.Relationship
 		var typ string
-		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy); err != nil {
+		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy, &rel.Strength); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		rel.Type = domain.RelationshipType(typ)
 		out = append(out, rel)
 	}
 	return out, rows.Err()
+}
+
+// StrengthenAssociations implements [ports.RelationshipStrengthener] (ADR 0015 §4):
+// it raises the strength of every edge whose BOTH endpoints are in claimIDs — a
+// single `from IN set AND to IN set` predicate catches intra-set edges in either
+// direction — by delta, capped at maxStrength. Only existing edges are touched; no
+// edge is created. Returns the number of edges matched.
+func (r RelationshipRepository) StrengthenAssociations(ctx context.Context, claimIDs []string, delta, maxStrength float64) (int, error) {
+	if delta <= 0 || len(claimIDs) < 2 {
+		return 0, nil
+	}
+	placeholders, args := inPlaceholders(claimIDs)
+	execArgs := make([]any, 0, 2+len(args)*2)
+	execArgs = append(execArgs, delta, maxStrength)
+	execArgs = append(execArgs, args...)
+	execArgs = append(execArgs, args...)
+	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
+	q := `UPDATE relationships SET strength = LEAST(strength + ?, ?)
+WHERE from_claim_id IN (` + placeholders + `) AND to_claim_id IN (` + placeholders + `)`
+	res, err := r.db.ExecContext(ctx, q, execArgs...)
+	if err != nil {
+		return 0, fmt.Errorf("strengthen associations: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }

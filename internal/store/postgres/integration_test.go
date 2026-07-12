@@ -787,3 +787,79 @@ func TestPostgres_ClaimConfidenceComponentsRoundTrip(t *testing.T) {
 		t.Errorf("no components should read back empty, got %+v", got3[0].ConfidenceComponents)
 	}
 }
+
+// TestPostgres_RelationshipStrengthRoundTrip verifies the ADR-0015 §4 Hebbian
+// strength column persists on Postgres: new edges default to 1.0, ListByClaimIDs
+// reads it back, and ports.RelationshipStrengthener increments only intra-set edges
+// (either direction), caps at maxStrength, and is preserved across a re-Upsert.
+func TestPostgres_RelationshipStrengthRoundTrip(t *testing.T) {
+	conn := withConn(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	claims := []domain.Claim{
+		{ID: "a", Text: "A", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "b", Text: "B", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "c", Text: "C", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+	}
+	if err := conn.Claims.Upsert(ctx, claims); err != nil {
+		t.Fatalf("Upsert claims: %v", err)
+	}
+	edges := []domain.Relationship{
+		{ID: "ab", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "b", CreatedAt: now},
+		{ID: "bc", Type: domain.RelationshipTypeSupports, FromClaimID: "b", ToClaimID: "c", CreatedAt: now},
+	}
+	if err := conn.Relationships.Upsert(ctx, edges); err != nil {
+		t.Fatalf("Upsert edges: %v", err)
+	}
+	strengthOf := func(id string) float64 {
+		rels, err := conn.Relationships.ListByClaimIDs(ctx, []string{"a", "b", "c"})
+		if err != nil {
+			t.Fatalf("ListByClaimIDs: %v", err)
+		}
+		for _, r := range rels {
+			if r.ID == id {
+				return r.Strength
+			}
+		}
+		t.Fatalf("edge %s not found", id)
+		return 0
+	}
+	if got := strengthOf("ab"); got != 1 {
+		t.Fatalf("fresh edge strength = %v, want 1 (default)", got)
+	}
+
+	strengthener, ok := conn.Relationships.(ports.RelationshipStrengthener)
+	if !ok {
+		t.Fatal("pg RelationshipRepository does not implement ports.RelationshipStrengthener")
+	}
+	n, err := strengthener.StrengthenAssociations(ctx, []string{"a", "b"}, 1.0, 5)
+	if err != nil {
+		t.Fatalf("StrengthenAssociations: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("strengthened %d edges, want 1 (only ab)", n)
+	}
+	if got := strengthOf("ab"); got != 2 {
+		t.Errorf("ab strength = %v, want 2", got)
+	}
+	if got := strengthOf("bc"); got != 1 {
+		t.Errorf("bc strength = %v, want 1 (untouched)", got)
+	}
+	// Re-Upsert preserves accumulated strength.
+	if err := conn.Relationships.Upsert(ctx, []domain.Relationship{edges[0]}); err != nil {
+		t.Fatalf("re-Upsert ab: %v", err)
+	}
+	if got := strengthOf("ab"); got != 2 {
+		t.Errorf("re-Upsert reset strength to %v, want preserved 2", got)
+	}
+	// Cap.
+	for i := 0; i < 20; i++ {
+		if _, err := strengthener.StrengthenAssociations(ctx, []string{"a", "b"}, 1.0, 5); err != nil {
+			t.Fatalf("strengthen loop: %v", err)
+		}
+	}
+	if got := strengthOf("ab"); got != 5 {
+		t.Errorf("capped strength = %v, want 5", got)
+	}
+}

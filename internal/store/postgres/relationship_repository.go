@@ -54,7 +54,7 @@ ON CONFLICT (id) DO UPDATE SET
 // ListByClaim satisfies the corresponding ports method.
 func (r RelationshipRepository) ListByClaim(ctx context.Context, claimID string) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
 FROM %s WHERE from_claim_id = $1 OR to_claim_id = $1`, qualify(r.ns, "relationships")), claimID)
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim: %w", err)
@@ -175,7 +175,7 @@ func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 // ListAll satisfies the corresponding ports method.
 func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
 FROM %s ORDER BY created_at ASC`, qualify(r.ns, "relationships")))
 	if err != nil {
 		return nil, fmt.Errorf("list all relationships: %w", err)
@@ -190,7 +190,7 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 		return []domain.Relationship{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
 FROM %s WHERE from_claim_id = ANY($1) OR to_claim_id = ANY($1)`, qualify(r.ns, "relationships")), pgArray(claimIDs))
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim ids: %w", err)
@@ -204,11 +204,31 @@ func collectRelationshipRows(rows *sql.Rows) ([]domain.Relationship, error) {
 	for rows.Next() {
 		var rel domain.Relationship
 		var typ string
-		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy); err != nil {
+		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy, &rel.Strength); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		rel.Type = domain.RelationshipType(typ)
 		out = append(out, rel)
 	}
 	return out, rows.Err()
+}
+
+// StrengthenAssociations implements [ports.RelationshipStrengthener] (ADR 0015 §4):
+// it raises the strength of every edge whose BOTH endpoints are in claimIDs — a
+// single `from = ANY AND to = ANY` predicate catches intra-set edges in either
+// direction — by delta, capped at maxStrength. Only existing edges are touched; no
+// edge is created. Returns the number of edges matched.
+func (r RelationshipRepository) StrengthenAssociations(ctx context.Context, claimIDs []string, delta, maxStrength float64) (int, error) {
+	if delta <= 0 || len(claimIDs) < 2 {
+		return 0, nil
+	}
+	res, err := r.db.ExecContext(ctx, fmt.Sprintf(`
+UPDATE %s SET strength = LEAST(strength + $1, $2)
+WHERE from_claim_id = ANY($3) AND to_claim_id = ANY($3)`, qualify(r.ns, "relationships")),
+		delta, maxStrength, pgArray(claimIDs))
+	if err != nil {
+		return 0, fmt.Errorf("strengthen associations: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }

@@ -789,3 +789,70 @@ func newEvent(id, runID, content string) domain.Event {
 		CreatedBy:     domain.SystemUser,
 	}
 }
+
+// TestRelationshipRepository_StrengthenAssociations covers the memory backend's
+// ADR-0015 §4 Hebbian increment: only intra-set edges (either direction) are
+// strengthened, the base-1.0 convention applies to unset edges, and the cap holds.
+func TestRelationshipRepository_StrengthenAssociations(t *testing.T) {
+	t.Parallel()
+	conn := openMemory(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	rels := []domain.Relationship{
+		{ID: "ab", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "b", CreatedAt: now},
+		{ID: "bc", Type: domain.RelationshipTypeSupports, FromClaimID: "b", ToClaimID: "c", CreatedAt: now},
+	}
+	if err := conn.Relationships.Upsert(ctx, rels); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	strengthener, ok := conn.Relationships.(ports.RelationshipStrengthener)
+	if !ok {
+		t.Fatal("memory RelationshipRepository does not implement ports.RelationshipStrengthener")
+	}
+	strengthOf := func(id string) float64 {
+		all, err := conn.Relationships.ListAll(ctx)
+		if err != nil {
+			t.Fatalf("ListAll: %v", err)
+		}
+		for _, r := range all {
+			if r.ID == id {
+				return r.EffectiveStrength()
+			}
+		}
+		t.Fatalf("edge %s not found", id)
+		return 0
+	}
+
+	// Unset edge reads as the base 1.0.
+	if got := strengthOf("ab"); got != 1 {
+		t.Fatalf("unset edge EffectiveStrength = %v, want 1", got)
+	}
+	// Strengthen {a,b}: ab qualifies (base 1 -> 2), bc excluded (c not in set).
+	n, err := strengthener.StrengthenAssociations(ctx, []string{"a", "b"}, 1.0, 5)
+	if err != nil {
+		t.Fatalf("StrengthenAssociations: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("strengthened %d, want 1", n)
+	}
+	if got := strengthOf("ab"); got != 2 {
+		t.Errorf("ab strength = %v, want 2", got)
+	}
+	if got := strengthOf("bc"); got != 1 {
+		t.Errorf("bc strength = %v, want 1 (untouched)", got)
+	}
+	// Cap.
+	for i := 0; i < 20; i++ {
+		if _, err := strengthener.StrengthenAssociations(ctx, []string{"a", "b"}, 1.0, 5); err != nil {
+			t.Fatalf("loop: %v", err)
+		}
+	}
+	if got := strengthOf("ab"); got != 5 {
+		t.Errorf("capped strength = %v, want 5", got)
+	}
+	// No-op guards.
+	if n, _ := strengthener.StrengthenAssociations(ctx, []string{"a"}, 1, 5); n != 0 {
+		t.Errorf("single-id should no-op, got %d", n)
+	}
+}

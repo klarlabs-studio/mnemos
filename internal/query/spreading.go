@@ -75,6 +75,27 @@ func edgeActivationWeight(t domain.RelationshipType) float64 {
 	}
 }
 
+// Hebbian strength weighting (ADR 0015 §4) for spreading activation. A base edge
+// (strength 1) contributes factor 1.0 — so a graph whose edges have never been
+// co-activated primes exactly as before this feature — and a well-worn edge primes up
+// to (1 + strengthActivationBoost)× as strongly, saturating at strengthActivationCap.
+const (
+	strengthActivationBoost = 0.5
+	strengthActivationCap   = 10.0
+)
+
+// strengthActivationFactor maps an edge's Hebbian strength to a bounded spreading
+// multiplier in [1, 1+strengthActivationBoost], neutral (1.0) at the base strength 1.
+func strengthActivationFactor(strength float64) float64 {
+	if strength <= 1 {
+		return 1
+	}
+	if strength > strengthActivationCap {
+		strength = strengthActivationCap
+	}
+	return 1 + strengthActivationBoost*(strength-1)/(strengthActivationCap-1)
+}
+
 // applySpreadingActivation re-ranks claims by blending each claim's direct
 // similarity rank with an associative activation spread over the relationship
 // graph from the top-ranked seeds. The input claims are assumed already ordered
@@ -134,7 +155,10 @@ func (e Engine) applySpreadingActivation(ctx context.Context, claims []domain.Cl
 		}
 		next := make(map[string]float64)
 		for _, rel := range rels {
-			w := edgeActivationWeight(rel.Type)
+			// Type weight scaled by the edge's Hebbian strength (ADR 0015 §4): a
+			// frequently co-retrieved association primes more strongly. Base-strength
+			// edges keep their exact type weight, so this is a no-op until edges wire.
+			w := edgeActivationWeight(rel.Type) * strengthActivationFactor(rel.EffectiveStrength())
 			// Priming is associative, so an edge cues in both directions.
 			spreadAcross(rel.FromClaimID, rel.ToClaimID, w, frontier, visited, present, activation, next)
 			spreadAcross(rel.ToClaimID, rel.FromClaimID, w, frontier, visited, present, activation, next)

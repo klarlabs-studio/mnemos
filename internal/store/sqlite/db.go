@@ -545,7 +545,10 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 // v20 (ADR 0012) adds claims.subject_class so the claim-derived knowledge
 // promotion path can read back a claim's SubjectClass — paired with the
 // column-add entry in expectedColumns below.
-const currentSchemaVersion = 20
+// v21 (ADR 0015 §4) adds relationships.strength — the Hebbian co-activation weight.
+// Existing edges backfill to the base 1.0 via the DEFAULT, so pre-strength graphs are
+// neutral until co-retrieval strengthens them.
+const currentSchemaVersion = 21
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -641,6 +644,10 @@ var expectedColumns = []addMissingColumn{
 	// this column persist would drop it and claims read back 'unknown',
 	// leaving the claim-derived knowledge promotion path inert.
 	{"claims", "subject_class", "TEXT NOT NULL DEFAULT ''"},
+	// v21 - Hebbian co-activation weight (ADR 0015 §4). Existing edges backfill to
+	// the base 1.0, so spreading activation is unchanged until StrengthenAssociations
+	// raises an edge from repeated co-retrieval.
+	{"relationships", "strength", "REAL NOT NULL DEFAULT 1"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for
