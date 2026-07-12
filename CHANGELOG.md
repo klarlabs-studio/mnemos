@@ -8,6 +8,39 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.90.0] — 2026-07-12
+
+### Added
+
+- **Learning dynamics, batch 1 — the adaptive learning-rate cluster (ADR 0015).**
+  Three brain/NN mechanisms that govern how trust *changes*, all on the consolidation
+  path, all no-schema-change, all defaulting to today's behaviour:
+  - **Metaplasticity — crystallization (§1).** A belief that has been stable for a
+    long time (old + often-verified + recently confirmed) now *resists* credit churn,
+    while staying breakable by strong disconfirmation (blame is resisted less than
+    credit). The plasticity of plasticity, distinct from trust decay. Applied as a
+    per-belief update-resistance factor on credit assignment; hard-bounded so trust
+    still moves at most ±`CreditCap`.
+  - **Neuromodulation — global plasticity gain (§2).** A new `internal/plasticity`
+    volatility detector reads the recent prediction-error series and raises the
+    effective learning rate when the environment becomes less predictable (unexpected
+    uncertainty → encode mode) and lowers it when it settles (consolidate mode) — the
+    acetylcholine/norepinephrine gain control. Bounded to `[MinGain, MaxGain]`; tuned
+    by `MNEMOS_PLASTICITY_SENSITIVITY` (0 disables just this half).
+  - **Prioritized replay + interference protection (§3).** Replay priority now folds
+    in each belief's **surprise** (high-stakes *and* high-prediction-error memories
+    rehearse first), and the replay set is **protected from the same pass's trust-decay
+    forgetting** — the rehearse↔prune coupling that gives Complementary Learning
+    Systems its catastrophic-forgetting protection, so consolidating new knowledge can
+    no longer sweep away a high-priority memory rehearsed alongside it.
+
+  Engaged together by `consolidate --plastic` (metaplasticity + neuromodulation on the
+  credit stage); replay's surprise term and the forgetting-protection coupling are
+  strict, always-on improvements within `--replay-top-k`. With `--plastic` off, credit
+  assignment is byte-for-byte unchanged. `ConsolidateResult` gains `PlasticityGain` and
+  `ReplayProtected` for observability. Batch 2 (Hebbian co-activation, reconsolidation,
+  active forgetting/pruning — the association-graph `strength` column) is tracked next.
+
 ## [0.89.1] — 2026-07-12
 
 ### Fixed

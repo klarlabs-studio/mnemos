@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"os"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,6 +27,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/kernel"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/plasticity"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/relate"
@@ -906,6 +909,23 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 			res.TrustRefreshed = n
 		}
 	}
+	// Learning dynamics (ADR 0015) share one scan of the recent prediction-error
+	// series: neuromodulation derives the global plasticity gain from it (§2), and
+	// replay folds each belief's surprise into its rehearsal priority (§3). Computed
+	// once here — after the trust recompute, before credit and replay consume it —
+	// and only when a consumer is enabled, so the common (no-learning-dynamics) pass
+	// pays nothing.
+	var (
+		surpriseSeries  []float64
+		surpriseByClaim map[string]float64
+	)
+	if opts.Plastic || opts.ReplayTopK > 0 {
+		series, byClaim, oerr := m.observedSurprises(ctx)
+		if oerr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: observe surprise: %w", oerr)
+		}
+		surpriseSeries, surpriseByClaim = series, byClaim
+	}
 	// Credit assignment (ADR 0014): propagate the signed prediction error of each
 	// resolved Expectation back to the beliefs that informed the decision it
 	// predicted — validated predictions credit their beliefs, refuted ones blame
@@ -914,8 +934,17 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 	// not only "is this corroborated?" but "did acting on it work out?". Runs here,
 	// right after the base recompute and BEFORE forgetting, so a belief reality
 	// refuted can be swept up by --forget-below-trust in the same pass.
+	//
+	// When Plastic (ADR 0015) the update rate is modulated: the global neuromodulatory
+	// gain (from the surprise series above) and, per belief, its metaplastic
+	// resistance — both bounded so trust still moves at most ±CreditCap.
 	if opts.AssignCredit {
-		credited, cerr := m.assignCredit(ctx)
+		gain := 1.0
+		if opts.Plastic {
+			gain = plasticity.Gain(surpriseSeries, plasticity.DefaultRecentWindow, plasticitySensitivity())
+			res.PlasticityGain = gain
+		}
+		credited, cerr := m.assignCredit(ctx, opts.Plastic, gain)
 		if cerr != nil {
 			return res, fmt.Errorf("mnemos: consolidate: assign credit: %w", cerr)
 		}
@@ -934,15 +963,35 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.SalienceTagged = tagged
 	}
+	// Replay-set selection (ADR 0015 §3), computed here — after salience derivation,
+	// before forgetting — so the same top-K memories rehearsed at the end of the pass
+	// are shielded from this pass's trust-decay pruning below (the rehearse↔prune
+	// coupling that gives CLS its interference protection). Ranking = trust × salience
+	// × recency × surprise; freshening happens last so it forward-protects too.
+	var replayIDs []string
+	var replayProtected map[string]bool
+	if opts.ReplayTopK > 0 {
+		ids, rerr := m.rankForReplay(ctx, surpriseByClaim, opts.ReplayTopK)
+		if rerr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: rank replay: %w", rerr)
+		}
+		replayIDs = ids
+		replayProtected = make(map[string]bool, len(ids))
+		for _, id := range ids {
+			replayProtected[id] = true
+		}
+	}
 	// Active forgetting: prune stale, low-trust, non-promoted claims — the
 	// offline synaptic renormalisation the brain does during sleep. Reduced
-	// retrievability, not erasure (marked deprecated, history preserved).
+	// retrievability, not erasure (marked deprecated, history preserved). A memory in
+	// the replay set is protected (ADR 0015 §3).
 	if opts.ForgetBelowTrust > 0 {
-		forgotten, ferr := m.forgetStaleClaims(ctx, opts.ForgetBelowTrust)
+		forgotten, protectedSkipped, ferr := m.forgetStaleClaims(ctx, opts.ForgetBelowTrust, replayProtected)
 		if ferr != nil {
 			return res, fmt.Errorf("mnemos: consolidate: forget: %w", ferr)
 		}
 		res.Forgotten = forgotten
+		res.ReplayProtected = protectedSkipped
 	}
 	// Surprise-driven forgetting: a belief an observed outcome REFUTED should stop
 	// surfacing — the prediction-error loop closing. Independent of trust decay.
@@ -988,9 +1037,10 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 	}
 	// Prioritized replay: rehearse the most important memories so they resist the
 	// decay that prunes the mundane — the SWS rehearsal stage. Forward-looking (it
-	// freshens for future passes), so it runs last.
+	// freshens for future passes), so it runs last. The set was chosen before
+	// forgetting (above) so the same memories were also protected this pass.
 	if opts.ReplayTopK > 0 {
-		replayed, rperr := m.replayTopK(ctx, opts.ReplayTopK)
+		replayed, rperr := m.replayFreshen(ctx, replayIDs)
 		if rperr != nil {
 			return res, fmt.Errorf("mnemos: consolidate: replay: %w", rperr)
 		}
@@ -1003,19 +1053,30 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 // age — recent memories are rehearsed preferentially (recency-weighted replay).
 const replayRecencyHalfLifeDays = 30.0
 
-// replayTopK rehearses the K currently-valid claims of highest priority
-// (salience × recency) by bumping their freshness — prioritized experience replay.
-func (m *memory) replayTopK(ctx context.Context, k int) (int, error) {
+// replaySurpriseWeight bounds how much a belief's prediction error lifts its replay
+// priority (ADR 0015 §3): a fully-surprising belief is rehearsed up to
+// (1 + replaySurpriseWeight)× a same-salience unsurprising one. Kept modest so
+// surprise reorders within a salience tier rather than overriding it.
+const replaySurpriseWeight = 1.0
+
+// rankForReplay returns the currently-valid claim IDs ranked by replay priority,
+// highest first, truncated to the top k (ADR 0015 §3). Priority = intrinsic
+// importance (trust.Salience) × recency × the bounded STAKES multiplier (ADR 0013
+// §4) × a surprise factor (1 + replaySurpriseWeight·surprise): a high-consequence,
+// recently-active, high-prediction-error belief is rehearsed first. surpriseByClaim
+// may be nil (surprise factor collapses to 1). The ranking is computed before
+// forgetting so the returned set can also be protected from the same pass's pruning.
+func (m *memory) rankForReplay(ctx context.Context, surpriseByClaim map[string]float64, k int) ([]string, error) {
 	if k <= 0 {
-		return 0, nil
+		return nil, nil
 	}
 	all, err := m.conn.Claims.ListAll(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("list claims: %w", err)
+		return nil, fmt.Errorf("list claims: %w", err)
 	}
 	evidence, err := m.conn.Claims.ListAllEvidence(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("list evidence: %w", err)
+		return nil, fmt.Errorf("list evidence: %w", err)
 	}
 	evidenceCount := make(map[string]int, len(all))
 	for _, e := range evidence {
@@ -1032,25 +1093,44 @@ func (m *memory) replayTopK(ctx context.Context, k int) (int, error) {
 			continue // only rehearse currently-valid memories
 		}
 		// Priority = intrinsic importance (trust.Salience) × recency × a bounded
-		// STAKES multiplier (ADR 0013 §4): a high-consequence belief is rehearsed
-		// preferentially. The multiplier is a re-weighting, not a gate — the
-		// currently-valid check above still decides eligibility, so stakes reorder
-		// what is already admitted and never smuggle in an ineligible memory. A
-		// neutral (unmarked) claim yields a 1.0 multiplier, leaving the score intact.
+		// STAKES multiplier (ADR 0013 §4) × a surprise factor (ADR 0015 §3): a
+		// high-consequence, high-prediction-error belief is rehearsed preferentially.
+		// Every factor is a re-weighting, not a gate — the currently-valid check above
+		// still decides eligibility, so they reorder what is already admitted and never
+		// smuggle in an ineligible memory. A neutral, unsurprising claim yields 1.0
+		// multipliers, leaving the base score intact.
+		surprise := 0.0
+		if surpriseByClaim != nil {
+			if s, ok := surpriseByClaim[c.ID]; ok {
+				surprise = s
+			}
+		}
 		score := trust.SalienceOf(c, evidenceCount[c.ID]) *
 			replayRecency(c, now) *
-			consolidate.SaliencePriorityMultiplier(c.EffectiveSalience())
+			consolidate.SaliencePriorityMultiplier(c.EffectiveSalience()) *
+			(1 + replaySurpriseWeight*surprise)
 		ranked = append(ranked, pri{c.ID, score})
 	}
 	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
 	if len(ranked) > k {
 		ranked = ranked[:k]
 	}
+	ids := make([]string, len(ranked))
+	for i, p := range ranked {
+		ids[i] = p.id
+	}
+	return ids, nil
+}
+
+// replayFreshen rehearses the given claims by bumping their freshness — the write
+// half of prioritized experience replay. Returns the count actually freshened.
+func (m *memory) replayFreshen(ctx context.Context, ids []string) (int, error) {
+	now := time.Now().UTC()
 	replayed := 0
-	for _, p := range ranked {
+	for _, id := range ids {
 		// Rehearse: bump last_verified (0 half-life keeps any existing override).
-		if err := m.conn.Claims.MarkVerified(ctx, p.id, now, 0); err != nil {
-			return replayed, fmt.Errorf("replay claim %s: %w", p.id, err)
+		if err := m.conn.Claims.MarkVerified(ctx, id, now, 0); err != nil {
+			return replayed, fmt.Errorf("replay claim %s: %w", id, err)
 		}
 		replayed++
 	}
@@ -1164,6 +1244,73 @@ func (m *memory) reinforceValidatedClaims(ctx context.Context) (int, error) {
 	return n, nil
 }
 
+// plasticitySensitivity reads the neuromodulation sensitivity knob (ADR 0015 §2) —
+// how strongly recent surprise volatility scales the global plasticity gain. Default
+// 1.0 (active whenever --plastic is set); MNEMOS_PLASTICITY_SENSITIVITY=0 disables
+// just the neuromodulation half, leaving per-belief metaplasticity on.
+func plasticitySensitivity() float64 {
+	v := os.Getenv("MNEMOS_PLASTICITY_SENSITIVITY")
+	if v == "" {
+		return 1.0
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || f < 0 {
+		return 1.0
+	}
+	return f
+}
+
+// observedSurprises gathers the observed prediction errors of the beliefs that
+// informed recorded decisions — the shared substrate for the two ADR-0015 mechanisms
+// that consume surprise: neuromodulation (the time-ordered series, for the global
+// plasticity gain) and prioritized replay (the per-belief map, for rehearsal
+// priority). Each belief carrying a resolved (observed) expectation contributes
+// exp.Surprise() once; the series is ordered oldest→newest by the expectation's
+// creation time. Empty (not an error) on stores without decisions/expectations.
+func (m *memory) observedSurprises(ctx context.Context) ([]float64, map[string]float64, error) {
+	if m.conn.Expectations == nil || m.conn.Decisions == nil {
+		return nil, nil, nil
+	}
+	decisions, err := m.conn.Decisions.ListAll(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list decisions: %w", err)
+	}
+	type obs struct {
+		at       time.Time
+		surprise float64
+	}
+	var samples []obs
+	byClaim := map[string]float64{}
+	seen := map[string]bool{}
+	for _, d := range decisions {
+		for _, b := range d.Beliefs {
+			if seen[b] {
+				continue
+			}
+			seen[b] = true
+			exp, ok, gerr := m.conn.Expectations.Get(ctx, b)
+			if gerr != nil {
+				return nil, nil, fmt.Errorf("get expectation %s: %w", b, gerr)
+			}
+			if !ok {
+				continue
+			}
+			s, ok := exp.Surprise()
+			if !ok {
+				continue // unobserved prediction — no error yet
+			}
+			byClaim[b] = s
+			samples = append(samples, obs{at: exp.CreatedAt, surprise: s})
+		}
+	}
+	sort.SliceStable(samples, func(i, j int) bool { return samples[i].at.Before(samples[j].at) })
+	series := make([]float64, len(samples))
+	for i, s := range samples {
+		series[i] = s.surprise
+	}
+	return series, byClaim, nil
+}
+
 // assignCredit runs credit assignment (ADR 0014): it propagates the signed
 // prediction error of each resolved Expectation back to the beliefs that informed
 // the Decision it predicted, as a bounded, attributed, idempotent trust delta on
@@ -1190,10 +1337,11 @@ func (m *memory) reinforceValidatedClaims(ctx context.Context) (int, error) {
 // ([ports.BeliefCreditWriter]) — credit is never applied where it could not be
 // attributed. Relies on RecomputeTrust having run first (Consolidate does so
 // immediately before), so each claim's TrustScore is the evidence-based base.
-func (m *memory) assignCredit(ctx context.Context) (int, error) {
+func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float64) (int, error) {
 	if m.conn.Expectations == nil || m.conn.Decisions == nil {
 		return 0, nil
 	}
+	now := time.Now().UTC()
 	writer, ok := m.conn.Claims.(ports.BeliefCreditWriter)
 	if !ok {
 		return 0, nil // backend does not persist the credit audit map — skip, don't guess
@@ -1246,7 +1394,14 @@ func (m *memory) assignCredit(ctx context.Context) (int, error) {
 		}
 		// base+creditSum: c.TrustScore is the evidence base (RecomputeTrust just ran),
 		// so applying the clamped credit sum each pass is idempotent and self-healing.
-		newTrust := clamp01(c.TrustScore + credit.SumFor(fresh))
+		// Under Plastic (ADR 0015) the sum is modulated by the belief's metaplastic
+		// resistance (crystallization) and the global neuromodulatory gain; with it off
+		// (resistance=1, gain=1) this is exactly credit.SumFor — behaviour unchanged.
+		resistance := 1.0
+		if metaplastic {
+			resistance = credit.ResistanceFor(c, now)
+		}
+		newTrust := clamp01(c.TrustScore + credit.SumForModulated(fresh, resistance, gain))
 		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, newTrust); err != nil {
 			return credited, fmt.Errorf("apply belief credit %s: %w", c.ID, err)
 		}
@@ -1399,17 +1554,20 @@ const salienceProtectFloor = 0.66
 // point-in-time query can still see what was once believed). This is forgetting
 // as reduced retrievability, not erasure. Promoted (human-endorsed) claims are
 // never forgotten, regardless of decay. Already-invalidated claims are skipped.
-// Intrinsically salient claims are also protected — see the salience gate below.
-func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64) (int, error) {
+// Intrinsically salient claims are also protected — see the salience gate below —
+// as are claims in the same pass's replay set (protected, ADR 0015 §3), passed in.
+// Returns (forgotten, protectedSkipped): the second counts claims that WOULD have
+// been forgotten but were spared by the replay-set protection.
+func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64, protected map[string]bool) (int, int, error) {
 	all, err := m.conn.Claims.ListAll(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("list claims: %w", err)
+		return 0, 0, fmt.Errorf("list claims: %w", err)
 	}
 	// Evidence counts feed the salience score's corroboration term. One scan of
 	// all links → per-claim count; cheap next to iterating every claim.
 	evidence, err := m.conn.Claims.ListAllEvidence(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("list evidence: %w", err)
+		return 0, 0, fmt.Errorf("list evidence: %w", err)
 	}
 	evidenceCount := make(map[string]int, len(all))
 	for _, e := range evidence {
@@ -1417,6 +1575,7 @@ func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64) (int
 	}
 	now := time.Now().UTC()
 	forgotten := 0
+	protectedSkipped := 0
 	for _, c := range all {
 		if !c.ValidTo.IsZero() {
 			continue // already invalidated (superseded or previously forgotten)
@@ -1435,12 +1594,19 @@ func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64) (int
 		if trust.SalienceOf(c, evidenceCount[c.ID]) >= salienceProtectFloor {
 			continue
 		}
+		// Replay-set protection (ADR 0015 §3): a memory rehearsed this pass is not
+		// pruned by the same pass — the rehearse↔prune coupling. Counted so the
+		// result can report how many low-trust memories replay actually shielded.
+		if protected[c.ID] {
+			protectedSkipped++
+			continue
+		}
 		if err := m.conn.Claims.SetValidity(ctx, c.ID, now); err != nil {
-			return forgotten, fmt.Errorf("invalidate stale claim %s: %w", c.ID, err)
+			return forgotten, protectedSkipped, fmt.Errorf("invalidate stale claim %s: %w", c.ID, err)
 		}
 		forgotten++
 	}
-	return forgotten, nil
+	return forgotten, protectedSkipped, nil
 }
 
 // hypercorrectionTrustFloor is how established the challenged claim must be for a
