@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	axidomain "go.klarlabs.de/axi/domain"
 	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/credit"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
@@ -27,6 +28,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/salience"
 	"go.klarlabs.de/mnemos/internal/store"
 	"go.klarlabs.de/mnemos/internal/trust"
 	"go.klarlabs.de/mnemos/providers"
@@ -919,6 +921,19 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.Credited = credited
 	}
+	// Unified salience / stakes (ADR 0013 §4): derive each belief's consequence-
+	// severity weight from the risk level and outcome severity of the decisions it
+	// informed, writing it to confidence_components (no schema change — the same
+	// map credit reuses). Salience biases retrieval (`query --salient`) and the
+	// replay priority below, so it runs before replay so a freshly-tagged belief is
+	// rehearsed preferentially in the same pass.
+	if opts.AssignSalience {
+		tagged, serr := m.deriveSalience(ctx)
+		if serr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: assign salience: %w", serr)
+		}
+		res.SalienceTagged = tagged
+	}
 	// Active forgetting: prune stale, low-trust, non-promoted claims — the
 	// offline synaptic renormalisation the brain does during sleep. Reduced
 	// retrievability, not erasure (marked deprecated, history preserved).
@@ -1016,7 +1031,16 @@ func (m *memory) replayTopK(ctx context.Context, k int) (int, error) {
 		if !c.ValidTo.IsZero() {
 			continue // only rehearse currently-valid memories
 		}
-		ranked = append(ranked, pri{c.ID, trust.SalienceOf(c, evidenceCount[c.ID]) * replayRecency(c, now)})
+		// Priority = intrinsic importance (trust.Salience) × recency × a bounded
+		// STAKES multiplier (ADR 0013 §4): a high-consequence belief is rehearsed
+		// preferentially. The multiplier is a re-weighting, not a gate — the
+		// currently-valid check above still decides eligibility, so stakes reorder
+		// what is already admitted and never smuggle in an ineligible memory. A
+		// neutral (unmarked) claim yields a 1.0 multiplier, leaving the score intact.
+		score := trust.SalienceOf(c, evidenceCount[c.ID]) *
+			replayRecency(c, now) *
+			consolidate.SaliencePriorityMultiplier(c.EffectiveSalience())
+		ranked = append(ranked, pri{c.ID, score})
 	}
 	sort.SliceStable(ranked, func(i, j int) bool { return ranked[i].score > ranked[j].score })
 	if len(ranked) > k {
@@ -1231,6 +1255,99 @@ func (m *memory) assignCredit(ctx context.Context) (int, error) {
 		}
 	}
 	return credited, nil
+}
+
+// deriveSalience derives the unified salience / stakes weight (ADR 0013 §4) for
+// beliefs that informed a Decision and writes it to the belief's
+// confidence_components map under domain.SalienceComponentKey — the same
+// no-new-column pattern credit assignment uses, so no store schema changes.
+//
+// Sourcing. For each decision, every belief it lists gets a candidate salience
+// from the pure [salience.Compute]: the decision's RiskLevel and, when the
+// decision has a linked outcome, that outcome's severity (higher risk/severity ⇒
+// higher salience). A belief cited by several decisions takes the MAX across them
+// ("highest stakes wins"). The derived value is then combined by max with any
+// value already on the claim, so an explicit override (claim record --salience /
+// claim salience set) is never lowered and re-running is idempotent (max is a
+// stable fixpoint).
+//
+// Persistence reuses ports.BeliefCreditWriter.ApplyBeliefCredit — the existing
+// component-writer capability — passing the claim's CURRENT trust score unchanged
+// (salience is inert to trust; only credit moves it). Degrades to a no-op when the
+// store lacks decisions or a component-persisting claim repository. Returns the
+// number of beliefs whose salience component was written.
+func (m *memory) deriveSalience(ctx context.Context) (int, error) {
+	if m.conn.Decisions == nil {
+		return 0, nil
+	}
+	writer, ok := m.conn.Claims.(ports.BeliefCreditWriter)
+	if !ok {
+		return 0, nil // backend does not persist confidence_components — skip, don't guess
+	}
+
+	decisions, err := m.conn.Decisions.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list decisions: %w", err)
+	}
+
+	// Derived stakes per belief: the max salience implied by every decision that
+	// took it as a load-bearing input.
+	derived := make(map[string]float64)
+	for _, d := range decisions {
+		in := salience.Inputs{RiskLevel: d.RiskLevel}
+		if strings.TrimSpace(d.OutcomeID) != "" && m.conn.Outcomes != nil {
+			if oc, oerr := m.conn.Outcomes.GetByID(ctx, d.OutcomeID); oerr == nil {
+				in.Outcome = oc.Result
+				in.HasOutcome = true
+			}
+		}
+		s := salience.Compute(in)
+		for _, b := range d.Beliefs {
+			if strings.TrimSpace(b) == "" {
+				continue
+			}
+			if s > derived[b] {
+				derived[b] = s
+			}
+		}
+	}
+	if len(derived) == 0 {
+		return 0, nil
+	}
+
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list claims: %w", err)
+	}
+	tagged := 0
+	for _, c := range all {
+		want, isBelief := derived[c.ID]
+		if !isBelief {
+			continue
+		}
+		cur, hadExplicit := c.Salience()
+		// Highest stakes wins: never lower an existing (possibly explicit) salience.
+		if hadExplicit && cur >= want {
+			continue
+		}
+		// Salience TAGGING only elevates: a derived value at or below the neutral
+		// baseline carries no stakes signal worth recording, so an unmarked belief a
+		// low/medium-risk decision touched is left neutral rather than pushed down.
+		if !hadExplicit && want <= domain.NeutralSalience {
+			continue
+		}
+		merged := make(map[string]float64, len(c.ConfidenceComponents)+1)
+		for k, v := range c.ConfidenceComponents {
+			merged[k] = v
+		}
+		merged[domain.SalienceComponentKey] = want
+		// Trust is unchanged — salience is inert to trust (only credit moves it).
+		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, c.TrustScore); err != nil {
+			return tagged, fmt.Errorf("write salience for %s: %w", c.ID, err)
+		}
+		tagged++
+	}
+	return tagged, nil
 }
 
 // forgetRefutedClaims invalidates currently-valid, non-promoted claims that an

@@ -128,6 +128,17 @@ type ClaimItem struct {
 	// [go.klarlabs.de/mnemos/internal/consolidate.FloatGlobalComponent]
 	// ("float:global"). Ordinary claims leave this false.
 	Global bool
+
+	// Salience is an explicit unified salience / stakes weight (ADR 0013 §4) for
+	// the claim, in [0,1] — how much it MATTERS if acting on it goes wrong,
+	// independent of how corroborated or fresh it is. It is recorded as the reserved
+	// confidence-component key
+	// [go.klarlabs.de/mnemos/internal/domain.SalienceComponentKey] ("salience") and
+	// biases both retrieval (`query --salient`) and consolidation replay priority.
+	// HasSalience distinguishes an intentional 0.0 (trivial) from "unset"; when
+	// false the claim carries no salience component and reads as neutral (0.5).
+	Salience    float64
+	HasSalience bool
 }
 
 // ClaimLifecycle is the human-promotion state of a claim. It is
@@ -657,6 +668,19 @@ type ConsolidateOptions struct {
 	// repository. Off by default.
 	AssignCredit bool
 
+	// AssignSalience, when true, derives the unified salience / stakes weight (ADR
+	// 0013 §4) for beliefs that informed a Decision, from the decision's risk level
+	// and its linked outcome's severity — higher risk/severity ⇒ higher salience.
+	// The value lands in the belief's confidence_components under the reserved
+	// [go.klarlabs.de/mnemos/internal/domain.SalienceComponentKey] (no schema
+	// change — the same map credit assignment reuses), and biases both retrieval
+	// (`query --salient`) and consolidation replay priority. It is combined with any
+	// existing salience by max ("highest stakes wins"), so an explicit override
+	// (`claim record --salience` / `claim salience set`) is never lowered and
+	// re-running is idempotent. Deterministic, no LLM; a no-op on stores without
+	// decisions or a component-persisting claim repository. Off by default.
+	AssignSalience bool
+
 	// ReplayTopK, when > 0, rehearses the K most important currently-valid claims
 	// during the sleep pass — prioritized experience replay. Claims are ranked by
 	// salience × recency (the surprise term folds in once the prediction loop
@@ -707,6 +731,10 @@ type ConsolidateResult struct {
 	// (ADR 0014) because a decision they informed had its prediction resolved — 0
 	// unless AssignCredit was set, and 0 on a dry run.
 	Credited int
+	// SalienceTagged is the number of beliefs whose salience / stakes weight (ADR
+	// 0013 §4) was derived and written from a decision's risk level or outcome
+	// severity — 0 unless AssignSalience was set, and 0 on a dry run.
+	SalienceTagged int
 	// PlaybooksReinforced is the number of playbooks whose confidence was moved by
 	// observed outcomes — 0 unless ReinforcePlaybooks was set, and 0 on a dry run.
 	PlaybooksReinforced int

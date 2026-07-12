@@ -193,6 +193,22 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 	if item.Global {
 		claim.ConfidenceComponents = map[string]float64{consolidate.FloatGlobalComponent: 1}
 	}
+	// An explicit salience / stakes weight (ADR 0013 §4) rides as the reserved
+	// "salience" confidence component, biasing retrieval and consolidation. Like
+	// --global it is inert to the scalar Confidence/trust; it is clamped to [0,1].
+	if item.HasSalience {
+		if claim.ConfidenceComponents == nil {
+			claim.ConfidenceComponents = map[string]float64{}
+		}
+		s := item.Salience
+		switch {
+		case s < 0:
+			s = 0
+		case s > 1:
+			s = 1
+		}
+		claim.ConfidenceComponents[domain.SalienceComponentKey] = s
+	}
 
 	// Snapshot the existing corpus BEFORE upserting so edge detection compares the
 	// new claim against prior claims only (not itself). Best-effort: a read miss
