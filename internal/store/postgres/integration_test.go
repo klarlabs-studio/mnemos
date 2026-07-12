@@ -144,6 +144,7 @@ func TestPostgres_LessonSubjectClassRoundTrip(t *testing.T) {
 		Statement:    "class-level pattern",
 		Confidence:   0.8,
 		SubjectClass: domain.SubjectClassClass,
+		Evidence:     []string{"act-subject-1"}, // Validate() requires >=1 evidence action id
 		DerivedAt:    now,
 		LastVerified: now,
 	}
