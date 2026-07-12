@@ -260,6 +260,8 @@ func main() {
 		handleSynthesize(args, flags)
 	case "consolidate":
 		handleConsolidate(args, flags)
+	case "float-back":
+		handleFloatBack(args, flags)
 	case "sync-docs":
 		handleSyncDocs(args, flags)
 	case "rebuild":
@@ -1363,6 +1365,7 @@ func printUsage() {
 	fmt.Println("  process --llm <path>                 Use LLM-powered extraction")
 	fmt.Println("  process --llm --embed <path>         LLM extraction + embeddings")
 	fmt.Println("  claim record --text <t> [--type T]   Record a single claim directly (fact/decision/hypothesis)")
+	fmt.Println("  claim record --global --text <t>     Record a claim tagged to always float up to the central brain")
 	fmt.Println("")
 	fmt.Println("Query & Reporting:")
 	fmt.Println("  query [--run <run-id>] <question>    Query with evidence")
@@ -1443,6 +1446,8 @@ func printUsage() {
 	fmt.Println("  workspace use <name> | use --none    Pin a workspace regardless of cwd (or clear the pin)")
 	fmt.Println("  workspace export <name> [--out <f>]  Emit a shareable workspace definition; import recreates it")
 	fmt.Println("  workspace import <file> [--folder <d>] on another machine (--folder/--db adjust local paths)")
+	fmt.Println("  float-back [--from <path|dsn>]        Float important repo/workspace learnings up into the central brain")
+	fmt.Println("    [--to <dsn>] [--min-trust X] [--apply]  (dry-run by default; --global-tagged claims float unconditionally)")
 	fmt.Println("")
 	fmt.Println("Flags:")
 	fmt.Println("  -h, --help     show this help message")

@@ -41,6 +41,7 @@ func handleClaimRecord(args []string) {
 		eventIDs   = fs.String("event-ids", "", "comma-separated event ids to link as evidence")
 		validFrom  = fs.String("valid-from", "", "RFC3339 timestamp when the claim first became true")
 		validUntil = fs.String("valid-until", "", "RFC3339 timestamp when the claim stopped being true")
+		global     = fs.Bool("global", false, "tag the claim to always float up to the central brain via `mnemos float-back`")
 	)
 	if err := fs.Parse(args); err != nil {
 		exitWithMnemosError(false, NewUserError("%v", err))
@@ -56,6 +57,7 @@ func handleClaimRecord(args []string) {
 		Type:       *claimType,
 		Confidence: *confidence,
 		RunID:      *runID,
+		Global:     *global,
 	}
 	if *eventIDs != "" {
 		for id := range strings.SplitSeq(*eventIDs, ",") {

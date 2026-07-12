@@ -8,6 +8,7 @@ import (
 	"time"
 
 	axidomain "go.klarlabs.de/axi/domain"
+	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ingest"
 	"go.klarlabs.de/mnemos/internal/parser"
@@ -185,6 +186,12 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		ValidFrom:  item.ValidFrom,
 		ValidTo:    item.ValidUntil,
 		Lifecycle:  domain.ClaimLifecycle(item.Lifecycle),
+	}
+	// The --global "remember globally" tag rides as a reserved confidence
+	// component, so `mnemos float-back` can promote it unconditionally. The
+	// scalar Confidence stays canonical; this component is inert to trust.
+	if item.Global {
+		claim.ConfidenceComponents = map[string]float64{consolidate.FloatGlobalComponent: 1}
 	}
 
 	// Snapshot the existing corpus BEFORE upserting so edge detection compares the
