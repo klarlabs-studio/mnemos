@@ -20,7 +20,7 @@ func TestServe_CognitiveEndpointsDelegate(t *testing.T) {
 	}
 	defer func() { _ = mem.Close() }()
 
-	srv := httptest.NewServer(newServerMuxWithMemory(conn, mem, false, true))
+	srv := httptest.NewServer(newServerMuxWithMemory(conn, mem, false, true, true))
 	defer srv.Close()
 
 	for _, path := range []string{
@@ -68,7 +68,7 @@ func TestServe_WhoKnowsRequiresQuery(t *testing.T) {
 	}
 	defer func() { _ = mem.Close() }()
 
-	srv := httptest.NewServer(newServerMuxWithMemory(conn, mem, false, true))
+	srv := httptest.NewServer(newServerMuxWithMemory(conn, mem, false, true, true))
 	defer srv.Close()
 	resp, err := http.Get(srv.URL + "/v1/who-knows")
 	if err != nil {

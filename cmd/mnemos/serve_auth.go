@@ -91,37 +91,59 @@ func requireScope(w http.ResponseWriter, r *http.Request, want string) bool {
 }
 
 // jwtAuthMiddleware enforces JWT auth. Secure by default: every request —
-// reads included — requires a valid token, EXCEPT infra endpoints (health,
-// landing, Prometheus) and, only when the operator explicitly opts in with
-// publicReads (serve --public-reads / MNEMOS_PUBLIC_READS), anonymous GET/HEAD/
-// OPTIONS reads. Multi-tenant mode (requireTenant) always authenticates every
-// request so a tenant can be resolved, and ignores publicReads.
+// reads included — requires a valid token, EXCEPT bare-liveness/static infra
+// endpoints (health probes, marketing landing, SPA shell) and, only when the
+// operator explicitly opts in with publicReads (serve --public-reads /
+// MNEMOS_PUBLIC_READS), anonymous GET/HEAD/OPTIONS reads. Multi-tenant mode
+// (requireTenant) always authenticates every request so a tenant can be
+// resolved, and ignores publicReads.
+//
+// Prometheus metrics (/internal/metrics) are AUTHENTICATED by default — the RED
+// series expose per-route traffic shape and latency, which must not be
+// world-readable on a hosted listener. An operator scraping over a trusted
+// internal network opts out with metricsPublic (serve --metrics-public /
+// MNEMOS_METRICS_PUBLIC); it is deliberately never covered by the --public-reads
+// anonymous-GET bypass, so a public read API can't inadvertently expose metrics.
 //
 // On authenticated methods:
 //   - Missing or malformed Authorization header → 401
 //   - Invalid signature / expired / revoked token → 401
 //   - Valid token → user id from the `sub` claim lands on the request
 //     context for created_by stamping.
-func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant, publicReads bool) http.Handler {
+func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant, publicReads, metricsPublic bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/v1/leads" {
 			h.ServeHTTP(w, r)
 			return
 		}
-		// Infra/public endpoints never require a token (health probes, landing
-		// pages, Prometheus) — even in multi-tenant mode.
+		// Bare-liveness and static infra endpoints never require a token — even
+		// in multi-tenant mode. They expose no knowledge/tenant data: /health(z)
+		// is a bare 200, / and /app are static HTML, and the SPA fetches its data
+		// from the now-authenticated /v1/* API. (/internal/metrics is handled
+		// separately below — it is NOT anonymous by default.)
 		switch r.URL.Path {
-		case "/health", "/healthz", "/", "/app", "/internal/metrics":
+		case "/health", "/healthz", "/", "/app":
 			h.ServeHTTP(w, r)
 			return
 		}
 
-		// Secure by default: reads require a token too. Only when the operator
-		// explicitly opts into a public read API (--public-reads /
-		// MNEMOS_PUBLIC_READS) do anonymous GET/HEAD/OPTIONS reads pass. In
-		// multi-tenant mode EVERY request must present a token so its tenant can
-		// be resolved — there is no anonymous tenant, and public-reads is ignored.
-		if publicReads && !requireTenant && (r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions) {
+		// Prometheus metrics: anonymous only when the operator explicitly opts in
+		// with --metrics-public / MNEMOS_METRICS_PUBLIC. Otherwise it falls
+		// through to the bearer check below — and is deliberately excluded from
+		// the public-reads anonymous-read bypass so a public read API never also
+		// exposes metrics.
+		if r.URL.Path == "/internal/metrics" {
+			if metricsPublic {
+				h.ServeHTTP(w, r)
+				return
+			}
+		} else if publicReads && !requireTenant && (r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions) {
+			// Secure by default: reads require a token too. Only when the operator
+			// explicitly opts into a public read API (--public-reads /
+			// MNEMOS_PUBLIC_READS) do anonymous GET/HEAD/OPTIONS reads pass. In
+			// multi-tenant mode EVERY request must present a token so its tenant
+			// can be resolved — there is no anonymous tenant, so public-reads is
+			// ignored.
 			h.ServeHTTP(w, r)
 			return
 		}

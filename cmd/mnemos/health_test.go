@@ -44,7 +44,9 @@ func TestHealth_DeepIncludesDBProbe(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/health?deep=true")
+	// The deep subsystem report now lives behind auth at /internal/ready
+	// (newServerMux runs with public reads so anonymous GET reaches it here).
+	resp, err := http.Get(srv.URL + "/internal/ready")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
