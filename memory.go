@@ -121,6 +121,13 @@ type ClaimItem struct {
 	// aware corroboration, per-source calibration, and the who-knows-what directory
 	// in a multi-worker store — set it to the worker that produced the claim.
 	CreatedBy string
+
+	// Global, when true, tags the claim to always float up to the personal
+	// central brain via `mnemos float-back`, regardless of trust or generality.
+	// It is recorded as the reserved confidence-component key
+	// [go.klarlabs.de/mnemos/internal/consolidate.FloatGlobalComponent]
+	// ("float:global"). Ordinary claims leave this false.
+	Global bool
 }
 
 // ClaimLifecycle is the human-promotion state of a claim. It is
