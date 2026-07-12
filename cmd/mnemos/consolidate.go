@@ -15,7 +15,7 @@ import (
 //
 //	mnemos consolidate [--dry-run] [--forget-below-trust <f>] [--forget-refuted]
 //	                   [--reinforce-validated] [--reinforce-playbooks] [--credit]
-//	                   [--synthesize] [--replay-top-k <n>]
+//	                   [--salience] [--synthesize] [--replay-top-k <n>]
 func handleConsolidate(args []string, f Flags) {
 	// The promotion pass (ADR 0011 Phase B) is a distinct, read-only sub-mode of
 	// consolidate: tenant→global promotion rather than in-store maintenance.
@@ -55,6 +55,7 @@ func handleConsolidate(args []string, f Flags) {
 		"validated":             res.Validated,
 		"playbooks_reinforced":  res.PlaybooksReinforced,
 		"credited":              res.Credited,
+		"salience_tagged":       res.SalienceTagged,
 		"replayed":              res.Replayed,
 		"lessons_synthesized":   res.LessonsSynthesized,
 		"playbooks_synthesized": res.PlaybooksSynthesized,
@@ -76,6 +77,8 @@ func parseConsolidateOpts(args []string, f Flags) (mnemos.ConsolidateOptions, er
 			opts.ReinforceValidated = true
 		case "--credit":
 			opts.AssignCredit = true
+		case "--salience":
+			opts.AssignSalience = true
 		case "--reinforce-playbooks":
 			opts.ReinforcePlaybooks = true
 		case "--synthesize":

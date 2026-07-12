@@ -184,6 +184,14 @@ type AnswerOptions struct {
 	// spreadWeightActivation / spreadActivationCap) so a weakly-ranked belief
 	// can never outrank a strong direct match on association alone.
 	Prime bool
+	// Salient enables salience-biased retrieval (ADR 0013 §4). When true, a small,
+	// bounded stakes term (derived from each claim's salience confidence-component)
+	// is blended into the similarity score, so a high-stakes belief outranks a
+	// trivial one of EQUAL similarity while a materially better match still wins.
+	// Off by default so ordinary recall is byte-for-byte unchanged; toggled by
+	// `query --salient` / MNEMOS_SALIENCE. A claim with no salience component sits
+	// at the neutral baseline and contributes a zero term.
+	Salient bool
 }
 
 // Answer searches all stored events for the best answer to the given question.
@@ -603,8 +611,11 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 		claims = filtered
 	}
 
-	// Re-rank claims by semantic similarity when embeddings are available.
-	claims = e.rankClaimsByCosine(ctx, q, claims)
+	// Re-rank claims by semantic similarity when embeddings are available. When
+	// salience bias is enabled (ADR 0013 §4), a bounded stakes term is blended into
+	// the similarity score so a high-stakes belief outranks a trivial one of equal
+	// similarity; off by default so ordinary recall is unchanged.
+	claims = e.rankClaimsByHybrid(ctx, q, claims, opts.Salient)
 
 	// Boost claims matching the question's intent (e.g., "decisions" → decision type).
 	claims = boostClaimsByQuestionIntent(q, claims)
@@ -1457,6 +1468,16 @@ func (e Engine) bm25ClaimScores(ctx context.Context, question string, limit int)
 // idx tiebreak so callers see "embedding-less" claims at the bottom
 // rather than randomly shuffled.
 func (e Engine) rankClaimsByCosine(ctx context.Context, question string, claims []domain.Claim) []domain.Claim {
+	return e.rankClaimsByHybrid(ctx, question, claims, false)
+}
+
+// rankClaimsByHybrid is rankClaimsByCosine with an optional salience bias (ADR
+// 0013 §4). When salienceBias is true a small, bounded stakes term
+// (salienceScoreDelta) is added to each signal-bearing claim's normalized score,
+// so a high-stakes belief outranks a trivial one of equal similarity while a
+// materially better match still wins. With salienceBias false it is byte-for-byte
+// the pre-existing hybrid ranker.
+func (e Engine) rankClaimsByHybrid(ctx context.Context, question string, claims []domain.Claim, salienceBias bool) []domain.Claim {
 	if len(claims) <= 1 {
 		return claims
 	}
@@ -1495,6 +1516,11 @@ func (e Engine) rankClaimsByCosine(ctx context.Context, question string, claims 
 		}
 		if s == 0 {
 			s = -1 // signal-less claim; sinks below any positive hit but keeps original order
+		} else if salienceBias {
+			// Bounded stakes term (ADR 0013 §4): tips ties toward the higher-stakes
+			// belief. Applied only to signal-bearing claims so a signal-less claim
+			// stays pinned below any hit at its -1 sentinel.
+			s += salienceScoreDelta(cl)
 		}
 		scoredClaims = append(scoredClaims, scored{claim: cl, score: s, idx: i})
 	}

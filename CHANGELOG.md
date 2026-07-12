@@ -8,6 +8,23 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Unified salience / stakes (ADR 0013 §4) — bias retrieval and consolidation by
+  consequence severity.** Beliefs now carry a `salience` weight in `[0,1]` — the
+  amygdala's stakes tag — so a high-consequence fact is recalled and consolidated
+  preferentially over a trivial one of equal similarity or trust. It is sourced
+  from a linked decision's `risk_level`, an outcome's severity, or an explicit
+  override (`mnemos claim record --salience <0..1>`, `mnemos claim salience set
+  <id> <0..1>`), and reuses the existing `confidence_components` map (reserved
+  `salience` key) — **no new store column, no schema migration** (the same
+  no-new-column pattern credit assignment established). Retrieval bias is opt-in
+  and bounded (`query --salient` / `MNEMOS_SALIENCE`) so a stronger match still
+  wins; consolidation replay priority is scaled by a bounded multiplier that
+  reorders — never bypasses — the ADR-0012 eligibility and ADR-0011 no-leak gates.
+  `consolidate --salience` derives and persists stakes from decision/outcome
+  signals (idempotent; highest stakes wins, never lowering an explicit override).
+
 ## [0.88.0] — 2026-07-12
 
 ### Added

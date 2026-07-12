@@ -542,6 +542,7 @@ func handleQuery(args []string, f Flags) {
 			IncludeHistory: includeHistory,
 			Visibility:     qa.visibility,
 			Prime:          qa.prime || spreadingActivationEnv(),
+			Salient:        qa.salient || salienceEnv(),
 		}
 		if entity != "" {
 			entRepo := conn.Entities
@@ -1377,6 +1378,7 @@ func printUsage() {
 	fmt.Println("  query --hops <N> <question>          Expand result claims via N hops of supports/contradicts")
 	fmt.Println("  query --hops <N> --kind <list>       Restrict hop expansion to comma-separated edge kinds")
 	fmt.Println("  query --prime <question>             Prime associated beliefs via spreading activation (ADR 0013 §2)")
+	fmt.Println("  query --salient <question>           Bias recall toward high-stakes beliefs (ADR 0013 §4)")
 	fmt.Println("                                          (e.g. causes,validates,refutes)")
 	fmt.Println("  query --llm <question>               Query with LLM-grounded answer")
 	fmt.Println("  query --min-trust X <question>       Only return claims with trust_score >= X (X in [0, 1])")
@@ -1536,6 +1538,11 @@ type queryArgs struct {
 	// strongly-associated beliefs are primed up. Off by default; set by
 	// --prime or a truthy MNEMOS_SPREADING_ACTIVATION.
 	prime bool
+	// salient enables salience-biased retrieval (ADR 0013 §4): a bounded stakes
+	// term is blended into the similarity score so a high-stakes belief outranks a
+	// trivial one of equal similarity. Off by default; set by --salient or a truthy
+	// MNEMOS_SALIENCE.
+	salient bool
 }
 
 func parseQueryArgs(args []string) (queryArgs, error) {
@@ -1601,6 +1608,9 @@ func parseQueryArgs(args []string) (queryArgs, error) {
 			questionArgs = questionArgs[1:]
 		case "--prime":
 			out.prime = true
+			questionArgs = questionArgs[1:]
+		case "--salient":
+			out.salient = true
 			questionArgs = questionArgs[1:]
 		case "--entity":
 			if len(questionArgs) < 2 {
@@ -1680,6 +1690,18 @@ done:
 // flag; anything else (including unset) leaves it off.
 func spreadingActivationEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_SPREADING_ACTIVATION"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// salienceEnv reports whether salience-biased retrieval (ADR 0013 §4) is enabled
+// via the MNEMOS_SALIENCE env var. Truthy values ("1"/"true"/"yes") turn the
+// stakes bias on globally without the per-query --salient flag.
+func salienceEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_SALIENCE"))) {
 	case "1", "true", "yes":
 		return true
 	default:
