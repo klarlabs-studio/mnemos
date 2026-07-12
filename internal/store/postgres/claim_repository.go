@@ -47,8 +47,8 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 
 	now := time.Now().UTC()
 	upsert := fmt.Sprintf(`
-INSERT INTO %s (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, lifecycle, subject_class)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, $9, $10)
+INSERT INTO %s (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, lifecycle, subject_class, confidence_components)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, $9, $10, $11)
 ON CONFLICT (id) DO UPDATE SET
   text = EXCLUDED.text,
   type = EXCLUDED.type,
@@ -56,7 +56,8 @@ ON CONFLICT (id) DO UPDATE SET
   status = EXCLUDED.status,
   valid_from = EXCLUDED.valid_from,
   lifecycle = EXCLUDED.lifecycle,
-  subject_class = EXCLUDED.subject_class`, qualify(r.ns, "claims"))
+  subject_class = EXCLUDED.subject_class,
+  confidence_components = EXCLUDED.confidence_components`, qualify(r.ns, "claims"))
 	historyInsert := fmt.Sprintf(`
 INSERT INTO %s (claim_id, from_status, to_status, changed_at, reason, changed_by)
 VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
@@ -79,7 +80,7 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 		if _, err := tx.ExecContext(ctx, upsert,
 			claim.ID, claim.Text, string(claim.Type), claim.Confidence,
 			string(claim.Status), claim.CreatedAt.UTC(), actorOr(claim.CreatedBy),
-			validFrom.UTC(), string(claim.Lifecycle), string(claim.SubjectClass),
+			validFrom.UTC(), string(claim.Lifecycle), string(claim.SubjectClass), encodeConfidenceComponents(claim.ConfidenceComponents),
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
 		}
@@ -135,7 +136,7 @@ func (r ClaimRepository) ListByEventIDs(ctx context.Context, eventIDs []string) 
 		return []domain.Claim{}, nil
 	}
 	q := fmt.Sprintf(`
-SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.lifecycle, c.subject_class
+SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.lifecycle, c.subject_class, c.confidence_components
 FROM %s c
 JOIN %s ce ON ce.claim_id = c.id
 WHERE ce.event_id = ANY($1)
@@ -176,7 +177,7 @@ func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]do
 		return []domain.Claim{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class, confidence_components
 FROM %s WHERE id = ANY($1)`, qualify(r.ns, "claims")), pgArray(claimIDs))
 	if err != nil {
 		return nil, fmt.Errorf("list claims by ids: %w", err)
@@ -237,7 +238,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 // ListAll satisfies the corresponding ports method.
 func (r ClaimRepository) ListAll(ctx context.Context) ([]domain.Claim, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class, confidence_components
 FROM %s ORDER BY created_at ASC`, qualify(r.ns, "claims")))
 	if err != nil {
 		return nil, fmt.Errorf("list all claims: %w", err)
@@ -255,7 +256,7 @@ func (r ClaimRepository) ListByTestRequirementRef(ctx context.Context, ref strin
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class, confidence_components
 FROM %s
 WHERE type = 'test_result' AND test_requirement_ref = $1
 ORDER BY test_last_run_at DESC, created_at DESC`, qualify(r.ns, "claims")), ref)
@@ -451,6 +452,24 @@ func (r ClaimRepository) SetLifecycle(ctx context.Context, claimID string, lifec
 	return nil
 }
 
+// ApplyBeliefCredit overwrites the claim's confidence_components map and sets its
+// trust_score together (the ports.BeliefCreditWriter capability, ADR 0014). The
+// caller passes the already-merged map, so the write is a plain assignment and
+// re-running is idempotent. This is what lets credit assignment + salience persist
+// on the hosted backend (they store in confidence_components).
+func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, components map[string]float64, trustScore float64) error {
+	stmt := fmt.Sprintf(`UPDATE %s SET confidence_components = $1, trust_score = $2 WHERE id = $3`, qualify(r.ns, "claims"))
+	res, err := r.db.ExecContext(ctx, stmt, encodeConfidenceComponents(components), trustScore, claimID)
+	if err != nil {
+		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, sql.ErrNoRows)
+	}
+	return nil
+}
+
 // RecomputeTrust applies the supplied scoring function to every
 // claim. Returns the count touched.
 func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
@@ -548,12 +567,12 @@ func collectClaimRows(rows *sql.Rows) ([]domain.Claim, error) {
 
 func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	var c domain.Claim
-	var typ, status, lifecycle, subjectClass string
+	var typ, status, lifecycle, subjectClass, confidenceComponents string
 	var validFrom sql.NullTime
 	var validTo sql.NullTime
 	if err := rows.Scan(
 		&c.ID, &c.Text, &typ, &c.Confidence, &status,
-		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &lifecycle, &subjectClass,
+		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &lifecycle, &subjectClass, &confidenceComponents,
 	); err != nil {
 		return domain.Claim{}, fmt.Errorf("scan claim row: %w", err)
 	}
@@ -561,6 +580,7 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	c.Status = domain.ClaimStatus(status)
 	c.Lifecycle = domain.ClaimLifecycle(lifecycle)
 	c.SubjectClass = domain.SubjectClass(subjectClass)
+	c.ConfidenceComponents = decodeConfidenceComponents(confidenceComponents)
 	if validFrom.Valid {
 		c.ValidFrom = validFrom.Time
 	}

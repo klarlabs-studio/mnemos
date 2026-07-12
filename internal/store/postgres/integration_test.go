@@ -736,3 +736,54 @@ func TestPostgres_CrossTenantIsolation(t *testing.T) {
 		})
 	}
 }
+
+// TestPostgres_ClaimConfidenceComponentsRoundTrip verifies the ADR-0014/0013
+// credit + salience audit map (confidence_components) persists and round-trips on
+// Postgres, and that the ports.BeliefCreditWriter capability writes it in place.
+func TestPostgres_ClaimConfidenceComponentsRoundTrip(t *testing.T) {
+	conn := withConn(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	comps := map[string]float64{"salience": 0.8, "credit:d1/p1": -0.05}
+	claim := domain.Claim{
+		ID: "cl-cc-1", Text: "component claim", Type: domain.ClaimTypeFact,
+		Confidence: 0.7, Status: domain.ClaimStatusActive, CreatedAt: now,
+		ConfidenceComponents: comps,
+	}
+	if err := conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	got, err := conn.Claims.ListByIDs(ctx, []string{"cl-cc-1"})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("ListByIDs: %v (len %d)", err, len(got))
+	}
+	if got[0].ConfidenceComponents["salience"] != 0.8 || got[0].ConfidenceComponents["credit:d1/p1"] != -0.05 {
+		t.Fatalf("components round-trip = %+v, want salience=0.8 credit:d1/p1=-0.05", got[0].ConfidenceComponents)
+	}
+
+	// BeliefCreditWriter overwrites the map + trust together.
+	w, ok := conn.Claims.(ports.BeliefCreditWriter)
+	if !ok {
+		t.Fatal("pg ClaimRepository does not implement ports.BeliefCreditWriter")
+	}
+	if err := w.ApplyBeliefCredit(ctx, "cl-cc-1", map[string]float64{"salience": 0.8, "credit:d1/p1": 0.1}, 0.42); err != nil {
+		t.Fatalf("ApplyBeliefCredit: %v", err)
+	}
+	got2, _ := conn.Claims.ListByIDs(ctx, []string{"cl-cc-1"})
+	if got2[0].ConfidenceComponents["credit:d1/p1"] != 0.1 || got2[0].TrustScore != 0.42 {
+		t.Fatalf("after credit: comps=%+v trust=%v", got2[0].ConfidenceComponents, got2[0].TrustScore)
+	}
+
+	// A claim with no components reads back empty (not a crash on NULL/{}).
+	if err := conn.Claims.Upsert(ctx, []domain.Claim{{
+		ID: "cl-cc-2", Text: "x", Type: domain.ClaimTypeFact,
+		Confidence: 0.5, Status: domain.ClaimStatusActive, CreatedAt: now,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	got3, _ := conn.Claims.ListByIDs(ctx, []string{"cl-cc-2"})
+	if len(got3[0].ConfidenceComponents) != 0 {
+		t.Errorf("no components should read back empty, got %+v", got3[0].ConfidenceComponents)
+	}
+}
