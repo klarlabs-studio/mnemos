@@ -98,7 +98,7 @@ func enumerateTenants(ctx context.Context, baseDSN string) ([]store.TenantScope,
 // LessonRepository.ListAll's projection and evidence hydration.
 func readTenantLessons(ctx context.Context, db *sql.DB, repo LessonRepository, ns, tenant string) ([]domain.Lesson, error) {
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, subject_class
 FROM %s WHERE tenant = $1 ORDER BY confidence DESC, derived_at DESC`, qualify(ns, "lessons")), tenant)
 	if err != nil {
 		return nil, err

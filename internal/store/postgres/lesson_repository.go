@@ -39,13 +39,14 @@ func (r LessonRepository) Append(ctx context.Context, lesson domain.Lesson) erro
 		lastVerified = lesson.LastVerified.UTC()
 	}
 	_, err := r.db.ExecContext(ctx, fmt.Sprintf(`
-INSERT INTO %s (id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO %s (id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, subject_class)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO UPDATE SET
   statement = EXCLUDED.statement,
   confidence = EXCLUDED.confidence,
   derived_at = EXCLUDED.derived_at,
-  last_verified = EXCLUDED.last_verified`, qualify(r.ns, "lessons")),
+  last_verified = EXCLUDED.last_verified,
+  subject_class = EXCLUDED.subject_class`, qualify(r.ns, "lessons")),
 		lesson.ID, lesson.Statement,
 		lesson.Scope.Service, lesson.Scope.Env, lesson.Scope.Team,
 		lesson.Trigger, lesson.Kind,
@@ -54,6 +55,7 @@ ON CONFLICT (id) DO UPDATE SET
 		lastVerified,
 		source,
 		actorOr(lesson.CreatedBy),
+		string(lesson.SubjectClass),
 	)
 	if err != nil {
 		return fmt.Errorf("insert lesson: %w", err)
@@ -69,7 +71,7 @@ ON CONFLICT (id) DO UPDATE SET
 // GetByID returns the lesson plus its evidence.
 func (r LessonRepository) GetByID(ctx context.Context, id string) (domain.Lesson, error) {
 	row := r.db.QueryRowContext(ctx, fmt.Sprintf(`
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, subject_class
 FROM %s WHERE id = $1`, qualify(r.ns, "lessons")), id)
 	l, err := scanLessonRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -89,7 +91,7 @@ FROM %s WHERE id = $1`, qualify(r.ns, "lessons")), id)
 // ListByService returns lessons scoped to the given service.
 func (r LessonRepository) ListByService(ctx context.Context, service string) ([]domain.Lesson, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, subject_class
 FROM %s WHERE scope_service = $1 ORDER BY confidence DESC, derived_at DESC`, qualify(r.ns, "lessons")), service)
 	if err != nil {
 		return nil, fmt.Errorf("list lessons by service: %w", err)
@@ -101,7 +103,7 @@ FROM %s WHERE scope_service = $1 ORDER BY confidence DESC, derived_at DESC`, qua
 // ListByTrigger returns lessons matching a trigger label.
 func (r LessonRepository) ListByTrigger(ctx context.Context, trigger string) ([]domain.Lesson, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, subject_class
 FROM %s WHERE trigger = $1 ORDER BY confidence DESC, derived_at DESC`, qualify(r.ns, "lessons")), trigger)
 	if err != nil {
 		return nil, fmt.Errorf("list lessons by trigger: %w", err)
@@ -113,7 +115,7 @@ FROM %s WHERE trigger = $1 ORDER BY confidence DESC, derived_at DESC`, qualify(r
 // ListAll returns every lesson, highest confidence first.
 func (r LessonRepository) ListAll(ctx context.Context) ([]domain.Lesson, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, subject_class
 FROM %s ORDER BY confidence DESC, derived_at DESC`, qualify(r.ns, "lessons")))
 	if err != nil {
 		return nil, fmt.Errorf("list all lessons: %w", err)
@@ -247,6 +249,7 @@ VALUES ($1, $2::jsonb, $3, $4)`, qualify(r.ns, "lesson_versions")),
 func scanLessonRow(row *sql.Row) (domain.Lesson, error) {
 	var l domain.Lesson
 	var lastVerified sql.NullTime
+	var subjectClass string
 	if err := row.Scan(
 		&l.ID, &l.Statement,
 		&l.Scope.Service, &l.Scope.Env, &l.Scope.Team,
@@ -254,18 +257,21 @@ func scanLessonRow(row *sql.Row) (domain.Lesson, error) {
 		&l.Confidence,
 		&l.DerivedAt, &lastVerified,
 		&l.Source, &l.CreatedBy,
+		&subjectClass,
 	); err != nil {
 		return domain.Lesson{}, err
 	}
 	if lastVerified.Valid {
 		l.LastVerified = lastVerified.Time
 	}
+	l.SubjectClass = domain.SubjectClass(subjectClass)
 	return l, nil
 }
 
 func scanLessonRows(rows *sql.Rows) (domain.Lesson, error) {
 	var l domain.Lesson
 	var lastVerified sql.NullTime
+	var subjectClass string
 	if err := rows.Scan(
 		&l.ID, &l.Statement,
 		&l.Scope.Service, &l.Scope.Env, &l.Scope.Team,
@@ -273,12 +279,14 @@ func scanLessonRows(rows *sql.Rows) (domain.Lesson, error) {
 		&l.Confidence,
 		&l.DerivedAt, &lastVerified,
 		&l.Source, &l.CreatedBy,
+		&subjectClass,
 	); err != nil {
 		return domain.Lesson{}, err
 	}
 	if lastVerified.Valid {
 		l.LastVerified = lastVerified.Time
 	}
+	l.SubjectClass = domain.SubjectClass(subjectClass)
 	return l, nil
 }
 

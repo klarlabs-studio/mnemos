@@ -130,6 +130,64 @@ func TestPostgres_EventRoundTrip(t *testing.T) {
 	}
 }
 
+// TestPostgres_LessonSubjectClassRoundTrip verifies the ADR 0012
+// subject_class column persists on the hand-written Postgres lessons
+// repo — written on insert, refreshed on upsert, and read back into
+// domain.Schema.SubjectClass.
+func TestPostgres_LessonSubjectClassRoundTrip(t *testing.T) {
+	conn := withConn(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	// Seed the action the lesson's evidence references (FK: lesson_evidence.action_id).
+	if err := conn.Actions.Append(ctx, domain.Action{
+		ID: "act-subject-1", Kind: domain.ActionKindDeploy, Subject: "svc", At: now, CreatedBy: "u-test", CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed action: %v", err)
+	}
+	lesson := domain.Lesson{
+		ID:           "ls-subject-1",
+		Statement:    "class-level pattern",
+		Confidence:   0.8,
+		SubjectClass: domain.SubjectClassClass,
+		Evidence:     []string{"act-subject-1"}, // Validate() requires >=1 evidence action id
+		DerivedAt:    now,
+		LastVerified: now,
+	}
+	if err := conn.Lessons.Append(ctx, lesson); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	got, err := conn.Lessons.GetByID(ctx, lesson.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.SubjectClass != domain.SubjectClassClass {
+		t.Fatalf("GetByID SubjectClass = %q, want %q", got.SubjectClass, domain.SubjectClassClass)
+	}
+
+	all, err := conn.Lessons.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(all) != 1 || all[0].SubjectClass != domain.SubjectClassClass {
+		t.Fatalf("ListAll SubjectClass round-trip failed: %+v", all)
+	}
+
+	// Upsert with a different class must overwrite (EXCLUDED.subject_class).
+	lesson.SubjectClass = domain.SubjectClassIndividual
+	if err := conn.Lessons.Append(ctx, lesson); err != nil {
+		t.Fatalf("Append (upsert): %v", err)
+	}
+	got, err = conn.Lessons.GetByID(ctx, lesson.ID)
+	if err != nil {
+		t.Fatalf("GetByID after upsert: %v", err)
+	}
+	if got.SubjectClass != domain.SubjectClassIndividual {
+		t.Fatalf("upsert did not refresh SubjectClass: got %q", got.SubjectClass)
+	}
+}
+
 func TestPostgres_ClaimUpsertWithStatusHistory(t *testing.T) {
 	conn := withConn(t)
 	ctx := context.Background()

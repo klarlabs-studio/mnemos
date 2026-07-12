@@ -49,6 +49,7 @@ func (r LessonRepository) Append(_ context.Context, lesson domain.Lesson) error 
 		Kind:         lesson.Kind,
 		Confidence:   lesson.Confidence,
 		Polarity:     lesson.Polarity,
+		SubjectClass: lesson.SubjectClass,
 		DerivedAt:    lesson.DerivedAt.UTC(),
 		LastVerified: lesson.LastVerified.UTC(),
 		Source:       source,
@@ -193,6 +194,7 @@ type storedLesson struct {
 	Kind         string
 	Confidence   float64
 	Polarity     domain.LessonPolarity
+	SubjectClass domain.SubjectClass
 	DerivedAt    time.Time
 	LastVerified time.Time
 	Source       string
@@ -208,6 +210,7 @@ func (s storedLesson) toDomain() domain.Lesson {
 		Kind:         s.Kind,
 		Confidence:   s.Confidence,
 		Polarity:     s.Polarity,
+		SubjectClass: s.SubjectClass,
 		DerivedAt:    s.DerivedAt,
 		LastVerified: s.LastVerified,
 		Source:       s.Source,
