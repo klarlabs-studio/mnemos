@@ -105,6 +105,100 @@ func TestHandlePromote_ApplyOperatorThenApprove(t *testing.T) {
 	}
 }
 
+// seedTenantNamespaceLesson writes one synthesized schema into a TENANT
+// PARTITION of a single multi-tenant base store, scoped by the tenant's derived
+// namespace (namespace-per-tenant physical isolation, ADR 0007).
+func seedTenantNamespaceLesson(t *testing.T, baseDSN, tenantID, id, statement string) {
+	t.Helper()
+	ns := store.TenantNamespace(tenantID)
+	seedTenantLesson(t, store.SetDSNParam(baseDSN, "namespace", ns), id, statement)
+}
+
+// TestHandlePromote_AllTenants_Sqlite proves the deferred ADR-0011 "live
+// multi-tenant reads": `--all-tenants --db <dsn>` enumerates the tenants of ONE
+// multi-tenant store and feeds the SAME engine — a fact corroborated across
+// three tenants promotes, while a single-tenant fact is skipped (the no-leak
+// floor holds through the enumeration path).
+func TestHandlePromote_AllTenants_Sqlite(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	baseDSN := "sqlite://" + filepath.Join(dir, "brain.db")
+
+	corroborated := "rolling back a failed deploy restores service availability"
+	for _, name := range []string{"t1", "t2", "t3"} {
+		seedTenantNamespaceLesson(t, baseDSN, name, name+"_l", corroborated)
+	}
+	// A fact only ONE tenant ever produced — must never promote.
+	singleTenant := "the frobnicator widget on tenant four needs a manual poke"
+	seedTenantNamespaceLesson(t, baseDSN, "t4", "t4_l", singleTenant)
+
+	globalDSN := "sqlite://" + filepath.Join(dir, "global.db")
+	args := []string{
+		"--promote", "--gate", "operator", "--apply",
+		"--all-tenants", "--db", baseDSN,
+		"--global-dsn", globalDSN,
+	}
+	out := captureStdout(t, func() { handlePromote(args, Flags{}) })
+
+	// Four tenant partitions were discovered and scanned.
+	if !contains(out, `"tenants_scanned": 4`) {
+		t.Fatalf("expected 4 tenants scanned in output, got: %s", out)
+	}
+
+	gconn, err := store.Open(ctx, globalDSN)
+	if err != nil {
+		t.Fatalf("open global: %v", err)
+	}
+	defer func() { _ = gconn.Close() }()
+
+	pending, err := gconn.GlobalSchemas.ListByStatus(ctx, domain.GlobalSchemaStatusPending)
+	if err != nil {
+		t.Fatalf("list pending: %v", err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("want exactly 1 promoted (pending) schema, got %d: %+v", len(pending), pending)
+	}
+	got := pending[0]
+	if got.Statement != corroborated {
+		t.Fatalf("promoted statement mismatch: %q", got.Statement)
+	}
+	if got.DistinctTenants != 3 {
+		t.Fatalf("want 3 corroborating tenants, got %d", got.DistinctTenants)
+	}
+	// The single-tenant fact must never appear in the neocortex.
+	for _, s := range pending {
+		if s.Statement == singleTenant || contains(s.Statement, "frobnicator") {
+			t.Fatalf("LEAK: single-tenant fact promoted: %q", s.Statement)
+		}
+	}
+}
+
+// contains is a tiny substring helper for stdout assertions.
+func contains(s, sub string) bool {
+	return len(sub) == 0 || (len(s) >= len(sub) && indexOf(s, sub) >= 0)
+}
+
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestHandlePromote_AllTenantsRejectsExplicitDSNs confirms the two tenant inputs
+// are mutually exclusive.
+func TestHandlePromote_AllTenantsRejectsExplicitDSNs(t *testing.T) {
+	parsed, err := parsePromoteOpts([]string{"--promote", "--all-tenants", "--tenant-dsn", "sqlite:///tmp/x.db"}, Flags{})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !parsed.allTenants || len(parsed.tenantDSNs) != 1 {
+		t.Fatalf("parse did not capture both inputs: %+v", parsed)
+	}
+}
+
 // TestHandlePromote_DryRunDoesNotWrite confirms the default (no --apply) never
 // writes to the global store.
 func TestHandlePromote_DryRunDoesNotWrite(t *testing.T) {
