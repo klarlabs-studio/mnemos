@@ -167,12 +167,13 @@ complement to the contradiction engine.
 
 ## Rollout
 
-**All five shipped (2026-07-12).** One follow-up remains: credit + salience persist
-into `confidence_components`, which sqlite/libsql/memory round-trip but the
-Postgres/MySQL claim repos do not yet — so those two trust-updating mechanisms are
-currently a no-op on the hosted backend (they work fully on the local/default
-sqlite path). The fix is a repo-mapping change only (the column already exists) plus
-a `BeliefCreditWriter` implementation for pg/mysql — tracked as the next store task.
+**All five shipped (2026-07-12), and the hosted round-trip closed (#196).** Credit +
+salience persist into `confidence_components`; sqlite/libsql/memory always round-tripped
+it, and as of #196 the Postgres/MySQL claim repos do too — they now SELECT/Upsert the
+column on every claim path and implement `BeliefCreditWriter` (`ApplyBeliefCredit`
+overwrites `confidence_components` + `trust_score` together). Both trust-updating
+mechanisms therefore work identically on the local (sqlite) and hosted (pg/mysql)
+backends, verified by round-trip integration tests on live Postgres + MySQL.
 
 1. **Credit assignment** — its own ADR + the outcome→belief-trust loop (reconcile
    expectations/outcomes → propagate bounded, decayed, attributed trust deltas to
