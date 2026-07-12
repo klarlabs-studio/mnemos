@@ -8,6 +8,8 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.85.1] — 2026-07-12
+
 ### Security
 
 - **`mnemos serve` reads now require authentication by default.** Previously,
