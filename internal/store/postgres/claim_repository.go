@@ -47,15 +47,16 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 
 	now := time.Now().UTC()
 	upsert := fmt.Sprintf(`
-INSERT INTO %s (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, lifecycle)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, $9)
+INSERT INTO %s (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, lifecycle, subject_class)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, $9, $10)
 ON CONFLICT (id) DO UPDATE SET
   text = EXCLUDED.text,
   type = EXCLUDED.type,
   confidence = EXCLUDED.confidence,
   status = EXCLUDED.status,
   valid_from = EXCLUDED.valid_from,
-  lifecycle = EXCLUDED.lifecycle`, qualify(r.ns, "claims"))
+  lifecycle = EXCLUDED.lifecycle,
+  subject_class = EXCLUDED.subject_class`, qualify(r.ns, "claims"))
 	historyInsert := fmt.Sprintf(`
 INSERT INTO %s (claim_id, from_status, to_status, changed_at, reason, changed_by)
 VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
@@ -78,7 +79,7 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 		if _, err := tx.ExecContext(ctx, upsert,
 			claim.ID, claim.Text, string(claim.Type), claim.Confidence,
 			string(claim.Status), claim.CreatedAt.UTC(), actorOr(claim.CreatedBy),
-			validFrom.UTC(), string(claim.Lifecycle),
+			validFrom.UTC(), string(claim.Lifecycle), string(claim.SubjectClass),
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
 		}
@@ -134,7 +135,7 @@ func (r ClaimRepository) ListByEventIDs(ctx context.Context, eventIDs []string) 
 		return []domain.Claim{}, nil
 	}
 	q := fmt.Sprintf(`
-SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.lifecycle
+SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.lifecycle, c.subject_class
 FROM %s c
 JOIN %s ce ON ce.claim_id = c.id
 WHERE ce.event_id = ANY($1)
@@ -175,7 +176,7 @@ func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]do
 		return []domain.Claim{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class
 FROM %s WHERE id = ANY($1)`, qualify(r.ns, "claims")), pgArray(claimIDs))
 	if err != nil {
 		return nil, fmt.Errorf("list claims by ids: %w", err)
@@ -236,7 +237,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 // ListAll satisfies the corresponding ports method.
 func (r ClaimRepository) ListAll(ctx context.Context) ([]domain.Claim, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class
 FROM %s ORDER BY created_at ASC`, qualify(r.ns, "claims")))
 	if err != nil {
 		return nil, fmt.Errorf("list all claims: %w", err)
@@ -254,7 +255,7 @@ func (r ClaimRepository) ListByTestRequirementRef(ctx context.Context, ref strin
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class
 FROM %s
 WHERE type = 'test_result' AND test_requirement_ref = $1
 ORDER BY test_last_run_at DESC, created_at DESC`, qualify(r.ns, "claims")), ref)
@@ -547,18 +548,19 @@ func collectClaimRows(rows *sql.Rows) ([]domain.Claim, error) {
 
 func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	var c domain.Claim
-	var typ, status, lifecycle string
+	var typ, status, lifecycle, subjectClass string
 	var validFrom sql.NullTime
 	var validTo sql.NullTime
 	if err := rows.Scan(
 		&c.ID, &c.Text, &typ, &c.Confidence, &status,
-		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &lifecycle,
+		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &lifecycle, &subjectClass,
 	); err != nil {
 		return domain.Claim{}, fmt.Errorf("scan claim row: %w", err)
 	}
 	c.Type = domain.ClaimType(typ)
 	c.Status = domain.ClaimStatus(status)
 	c.Lifecycle = domain.ClaimLifecycle(lifecycle)
+	c.SubjectClass = domain.SubjectClass(subjectClass)
 	if validFrom.Valid {
 		c.ValidFrom = validFrom.Time
 	}

@@ -64,6 +64,10 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_env      text             NOT 
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_team     text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS confidence_components jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS lifecycle text NOT NULL DEFAULT '';
+-- ADR 0012: subject-class eligibility gate on claims. Plain column, defaulted
+-- to '' (unknown). Persists domain.Claim.SubjectClass so the claim-derived
+-- knowledge promotion path reads it back instead of always seeing 'unknown'.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS subject_class text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);
 CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 

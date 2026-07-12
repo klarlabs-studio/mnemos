@@ -121,6 +121,7 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 			Visibility:           visibilityOrDefault(claim.Visibility),
 			ConfidenceComponents: encodeConfidenceComponents(claim.ConfidenceComponents),
 			Lifecycle:            string(claim.Lifecycle),
+			SubjectClass:         string(claim.SubjectClass),
 		})
 		if err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
@@ -219,7 +220,7 @@ func (r ClaimRepository) ListByEventIDs(ctx context.Context, eventIDs []string) 
 	}
 
 	query := fmt.Sprintf(`
-SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.half_life_days, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle
+SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.half_life_days, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class
 FROM claims c
 JOIN claim_evidence ce ON ce.claim_id = c.id
 WHERE ce.event_id IN (%s)
@@ -350,7 +351,7 @@ func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]do
 	}
 
 	query := fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, last_verified, verify_count, half_life_days, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, last_verified, verify_count, half_life_days, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class
 FROM claims
 WHERE id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201: placeholders are literal "?" strings, not user input
 
@@ -729,6 +730,7 @@ func mapSQLClaim(row sqlcgen.Claim) (domain.Claim, error) {
 		Visibility:           domain.Visibility(visibilityOrDefault(domain.Visibility(row.Visibility))),
 		ConfidenceComponents: decodeConfidenceComponents(row.ConfidenceComponents),
 		Lifecycle:            domain.ClaimLifecycle(row.Lifecycle),
+		SubjectClass:         domain.SubjectClass(row.SubjectClass),
 	}
 	if lv, perr := parseOptionalTime(row.LastVerified); perr != nil {
 		return domain.Claim{}, fmt.Errorf("parse claim last_verified: %w", perr)
@@ -824,6 +826,7 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		visibility           string
 		confidenceComponents string
 		lifecycle            string
+		subjectClass         string
 	)
 
 	if err := scanner.Scan(
@@ -860,6 +863,7 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		&visibility,
 		&confidenceComponents,
 		&lifecycle,
+		&subjectClass,
 	); err != nil {
 		return domain.Claim{}, err
 	}
@@ -880,6 +884,7 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 	claim.Visibility = domain.Visibility(visibilityOrDefault(domain.Visibility(visibility)))
 	claim.ConfidenceComponents = decodeConfidenceComponents(confidenceComponents)
 	claim.Lifecycle = domain.ClaimLifecycle(lifecycle)
+	claim.SubjectClass = domain.SubjectClass(subjectClass)
 	if lastVerified != "" {
 		if t, perr := time.Parse(time.RFC3339Nano, lastVerified); perr == nil {
 			claim.LastVerified = t

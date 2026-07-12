@@ -68,6 +68,10 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_env      VARCHAR(64)  NOT NULL
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_team     VARCHAR(190) NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS confidence_components JSON NULL;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS lifecycle VARCHAR(32) NOT NULL DEFAULT '';
+-- ADR 0012: subject-class eligibility gate on claims. Plain column, defaulted
+-- to '' (unknown). Persists domain.Claim.SubjectClass so the claim-derived
+-- knowledge promotion path reads it back instead of always seeing 'unknown'.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS subject_class VARCHAR(32) NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS entities (
   id              VARCHAR(190) NOT NULL,

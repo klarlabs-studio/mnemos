@@ -110,7 +110,7 @@ func enumerateTenants(ctx context.Context, baseDSN string) ([]store.TenantScope,
 // and the ORDER BY are added.
 func readTenantClaims(ctx context.Context, db *sql.DB, ns, tenant string) ([]domain.Claim, error) {
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle, subject_class
 FROM %s WHERE tenant = $1 ORDER BY created_at ASC`, qualify(ns, "claims")), tenant)
 	if err != nil {
 		return nil, err

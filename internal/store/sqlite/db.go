@@ -107,7 +107,8 @@ CREATE TABLE IF NOT EXISTS claims (
 	test_last_modified TEXT NOT NULL DEFAULT '',
 	test_last_run_at TEXT NOT NULL DEFAULT '',
 	test_pass_count INTEGER NOT NULL DEFAULT 0,
-	test_fail_count INTEGER NOT NULL DEFAULT 0
+	test_fail_count INTEGER NOT NULL DEFAULT 0,
+	subject_class TEXT NOT NULL DEFAULT ''
 );
 -- idx_claims_trust_score and idx_claims_valid_to are created by
 -- migrate() after the v1→v2 / v2→v3 ALTER TABLEs add the columns on
@@ -541,7 +542,10 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 // v19 (ADR 0011 Phase B) adds the global_schemas table (neocortex tier). It is
 // a new table, so it auto-creates via CREATE TABLE IF NOT EXISTS above and needs
 // no column-add entry; the version bump keeps user_version in step.
-const currentSchemaVersion = 19
+// v20 (ADR 0012) adds claims.subject_class so the claim-derived knowledge
+// promotion path can read back a claim's SubjectClass — paired with the
+// column-add entry in expectedColumns below.
+const currentSchemaVersion = 20
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -632,6 +636,11 @@ var expectedColumns = []addMissingColumn{
 	// v18 - schema subject class (ADR 0012): 'individual' | 'class' | ''
 	// (unknown). Only class-level schemas may promote to the global brain.
 	{"lessons", "subject_class", "TEXT NOT NULL DEFAULT ''"},
+	// v20 - claim subject class (ADR 0012): the belief-level analogue of the
+	// lessons column above. Extraction sets domain.Claim.SubjectClass; without
+	// this column persist would drop it and claims read back 'unknown',
+	// leaving the claim-derived knowledge promotion path inert.
+	{"claims", "subject_class", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for

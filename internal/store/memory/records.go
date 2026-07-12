@@ -171,6 +171,7 @@ type storedClaim struct {
 	Scope                domain.Scope
 	ConfidenceComponents map[string]float64
 	Lifecycle            domain.ClaimLifecycle
+	SubjectClass         domain.SubjectClass
 }
 
 func (c storedClaim) toDomain() domain.Claim {
@@ -198,6 +199,7 @@ func (c storedClaim) toDomain() domain.Claim {
 		Scope:                c.Scope,
 		ConfidenceComponents: components,
 		Lifecycle:            c.Lifecycle,
+		SubjectClass:         c.SubjectClass,
 	}
 }
 
@@ -235,6 +237,7 @@ func storedClaimFromDomain(c domain.Claim) storedClaim {
 		Scope:                c.Scope,
 		ConfidenceComponents: components,
 		Lifecycle:            c.Lifecycle,
+		SubjectClass:         c.SubjectClass,
 	}
 }
 

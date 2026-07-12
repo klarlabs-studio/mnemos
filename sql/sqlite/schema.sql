@@ -47,7 +47,10 @@ CREATE TABLE IF NOT EXISTS claims (
   test_fail_count INTEGER NOT NULL DEFAULT 0,
   visibility TEXT NOT NULL DEFAULT 'team',
   confidence_components TEXT NOT NULL DEFAULT '{}',
-  lifecycle TEXT NOT NULL DEFAULT ''
+  lifecycle TEXT NOT NULL DEFAULT '',
+  -- subject_class (ADR 0012): 'individual' | 'class' | '' (unknown). Only
+  -- class-level claims may ever promote to the shared global brain.
+  subject_class TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);

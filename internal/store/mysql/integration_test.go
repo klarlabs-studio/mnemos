@@ -160,6 +160,65 @@ func TestMySQL_LessonSubjectClassRoundTrip(t *testing.T) {
 	}
 }
 
+// TestMySQL_ClaimSubjectClassRoundTrip verifies the ADR 0012 subject_class
+// column persists on the hand-written MySQL claims repo — written on insert,
+// refreshed on upsert (VALUES(subject_class)), and read back into
+// domain.Claim.SubjectClass through the shared collectClaimRows scanner.
+func TestMySQL_ClaimSubjectClassRoundTrip(t *testing.T) {
+	conn := withConn(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	if err := conn.Events.Append(ctx, domain.Event{
+		ID: "ev-sc-1", RunID: "r", SchemaVersion: "1", Content: "x",
+		SourceInputID: "in", Timestamp: now, IngestedAt: now, CreatedBy: domain.SystemUser,
+	}); err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+
+	claim := domain.Claim{
+		ID: "cl-sc-1", Text: "class-level belief", Type: domain.ClaimTypeFact,
+		Confidence: 0.8, Status: domain.ClaimStatusActive,
+		CreatedAt: now, CreatedBy: "u-test",
+		SubjectClass: domain.SubjectClassClass,
+	}
+	if err := conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if err := conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{{ClaimID: "cl-sc-1", EventID: "ev-sc-1"}}); err != nil {
+		t.Fatalf("UpsertEvidence: %v", err)
+	}
+
+	all, err := conn.Claims.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(all) != 1 || all[0].SubjectClass != domain.SubjectClassClass {
+		t.Fatalf("ListAll SubjectClass round-trip failed: %+v", all)
+	}
+
+	byIDs, err := conn.Claims.ListByIDs(ctx, []string{"cl-sc-1"})
+	if err != nil {
+		t.Fatalf("ListByIDs: %v", err)
+	}
+	if len(byIDs) != 1 || byIDs[0].SubjectClass != domain.SubjectClassClass {
+		t.Fatalf("ListByIDs SubjectClass round-trip failed: %+v", byIDs)
+	}
+
+	// Upsert with a different class must overwrite (VALUES(subject_class)).
+	claim.SubjectClass = domain.SubjectClassIndividual
+	if err := conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {
+		t.Fatalf("Upsert (refresh): %v", err)
+	}
+	byIDs, err = conn.Claims.ListByIDs(ctx, []string{"cl-sc-1"})
+	if err != nil {
+		t.Fatalf("ListByIDs after refresh: %v", err)
+	}
+	if len(byIDs) != 1 || byIDs[0].SubjectClass != domain.SubjectClassIndividual {
+		t.Fatalf("upsert did not refresh SubjectClass: %+v", byIDs)
+	}
+}
+
 func TestMySQL_ClaimUpsertWithStatusHistory(t *testing.T) {
 	conn := withConn(t)
 	ctx := context.Background()
