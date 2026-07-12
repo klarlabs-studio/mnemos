@@ -8,6 +8,32 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.88.0] — 2026-07-12
+
+### Added
+
+- **Claim-derived knowledge promotion (ADR 0012 "Path A") — the pet-medical model,
+  now functional end-to-end.** Domain knowledge promotes to the global brain via
+  its own path, distinct from operational action→outcome Lessons: a tenant's
+  **`class`-level claims** ("Golden Retrievers are predisposed to diabetes", a
+  novel spider's envenomation) are synthesized into knowledge schemas
+  (`SynthesizeKnowledgeSchemas`, clustered by the same tokenization as cross-tenant
+  promotion) and flow through the existing promotion gates — emergent across
+  tenants or curated from a single source — while **`individual`-subject claims
+  (a specific pet/owner) are structurally excluded, fail-closed, at every step**.
+  `consolidate --promote` unions operational lessons with knowledge schemas on
+  both the explicit `--tenant-dsn` and `--all-tenants` paths.
+- **`subject_class` persisted on the claims table (all backends).** Extraction's
+  classification now survives a store round-trip (sqlite/postgres/mysql/memory),
+  which is what makes the knowledge path above actually promote instead of reading
+  everything back as `unknown`.
+
+### Fixed
+
+- **Postgres `ListClaimsForEntity` SELECT/Scan mismatch** (pre-existing): it
+  projected 10 columns while the shared scanner expected 11 (missing `lifecycle`),
+  a latent runtime failure with no test coverage — now aligned.
+
 ## [0.87.0] — 2026-07-12
 
 ### Added
