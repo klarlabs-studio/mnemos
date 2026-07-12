@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -60,6 +61,24 @@ type Options struct {
 	// classification is wired end-to-end. This preserves the pre-ADR-0012
 	// behaviour (empty SubjectClass) for callers that do not supply it.
 	SubjectClassForAction func(action domain.Action) domain.SubjectClass
+
+	// PriorSchemas are the already-established schemas a freshly synthesized
+	// cluster is assessed against for schema-consistency fast-assimilation
+	// (ADR 0013 §5). When a cluster's statement is CONSISTENT with one of these
+	// (and does not contradict it), its confidence earns a bounded, additive
+	// assimilation boost so schema-consistent information consolidates faster; a
+	// cluster that CONTRADICTS a prior schema earns no boost and is left for the
+	// existing dissonance/accommodation path (promote.go gate 3). The boost is
+	// applied via consolidate.AssessAssimilation and is capped at
+	// consolidate.MaxAssimilationBoost — it accelerates integration, it never
+	// bypasses the MinCorroboration cluster-size gate here nor the ADR-0012
+	// subject-eligibility / ADR-0007 no-leak gates downstream.
+	//
+	// A prior schema whose id equals the cluster's own id is skipped, so a
+	// cluster never assimilates into (and reinforces) itself across re-runs.
+	//
+	// When empty (the default), synthesis behaves exactly as before — no boost.
+	PriorSchemas []domain.Schema
 }
 
 func (o Options) withDefaults() Options {
@@ -91,6 +110,10 @@ type Result struct {
 	LessonsEmitted int
 	Skipped        int      // dropped below MinCorroboration or MinConfidence
 	LessonIDs      []string // ids of every lesson emitted (or refreshed)
+	// Assimilated counts clusters whose confidence earned a schema-consistency
+	// fast-assimilation boost (ADR 0013 §5) because their statement matched a
+	// prior schema. Zero when Options.PriorSchemas is empty.
+	Assimilated int
 }
 
 // Synthesize runs one full pass over the action and outcome stores
@@ -131,6 +154,18 @@ func Synthesize(ctx context.Context, actions ports.ActionRepository, outcomes po
 		if !consistent {
 			res.Skipped++
 			continue
+		}
+		// ADR 0013 §5: schema-consistency fast-assimilation. If this cluster's
+		// statement is consistent with an already-established schema (and does not
+		// contradict one), accelerate its consolidation with a bounded, additive
+		// confidence boost applied BEFORE the MinConfidence gate — a faster
+		// confidence ramp for schema-consistent information. A contradicting
+		// cluster earns no boost (the accommodation path owns it downstream). The
+		// boost is capped and never bypasses the MinCorroboration cluster-size gate
+		// above.
+		if boost := assimilationBoost(c, opts, clusterID(c)); boost > 0 {
+			score = math.Min(1.0, score+boost)
+			res.Assimilated++
 		}
 		if score < opts.MinConfidence {
 			res.Skipped++
@@ -260,6 +295,35 @@ func scoreCluster(c cluster, halfLifeDays float64, now time.Time) (float64, bool
 	recency := math.Exp(-ageDays * math.Ln2 / halfLifeDays)
 
 	return corroboration * consistency * recency, true
+}
+
+// assimilationBoost returns the bounded schema-consistency boost (ADR 0013 §5)
+// for a cluster, or 0 when there are no prior schemas, when the cluster's
+// statement matches no prior schema, or when it CONTRADICTS one (that is the
+// accommodation case — no acceleration, the dissonance path owns it). The prior
+// schema whose id equals selfID is excluded so a cluster never assimilates into
+// itself across synthesis re-runs. The decision is delegated to the pure
+// consolidate.AssessAssimilation so synthesis and promotion share one definition
+// of "schema-consistent".
+func assimilationBoost(c cluster, opts Options, selfID string) float64 {
+	if len(opts.PriorSchemas) == 0 {
+		return 0
+	}
+	priors := make([]domain.Schema, 0, len(opts.PriorSchemas))
+	for _, s := range opts.PriorSchemas {
+		if s.ID == selfID {
+			continue
+		}
+		priors = append(priors, s)
+	}
+	if len(priors) == 0 {
+		return 0
+	}
+	sig := consolidate.AssessAssimilation(composeStatement(c), priors, consolidate.AssimilationOptions{})
+	if sig.Consistent() {
+		return sig.Boost
+	}
+	return 0
 }
 
 func flattenOutcomes(c cluster) []domain.Outcome {
