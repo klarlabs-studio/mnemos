@@ -130,6 +130,14 @@ type Config struct {
 		OnCapture scalar `yaml:"on_capture"`
 	} `yaml:"floatback"`
 
+	// Plasticity tunes the ADR-0015 neuromodulation control on `consolidate --plastic`.
+	// Sensitivity scales how strongly recent surprise-volatility moves the global
+	// learning-rate gain (default 1.0; 0 disables just neuromodulation, leaving
+	// per-belief metaplasticity active).
+	Plasticity struct {
+		Sensitivity scalar `yaml:"sensitivity"`
+	} `yaml:"plasticity"`
+
 	// Precedence selects the read-time federation policy (ADR 0011 Phase C):
 	// tenant-wins (default), global-wins, or surface-dissonance. It decides which
 	// tier wins — or whether the conflict is surfaced — when a federated read
@@ -196,6 +204,8 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_JOB_TIMEOUT", c.Job.Timeout},
 
 		{"MNEMOS_FLOATBACK_ON_CAPTURE", c.Floatback.OnCapture},
+
+		{"MNEMOS_PLASTICITY_SENSITIVITY", c.Plasticity.Sensitivity},
 
 		{"MNEMOS_PRECEDENCE", c.Precedence},
 	}

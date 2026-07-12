@@ -682,12 +682,27 @@ type ConsolidateOptions struct {
 	AssignSalience bool
 
 	// ReplayTopK, when > 0, rehearses the K most important currently-valid claims
-	// during the sleep pass — prioritized experience replay. Claims are ranked by
-	// salience × recency (the surprise term folds in once the prediction loop
-	// lands) and the top K have their freshness bumped (a re-verification), so the
-	// memories that matter most resist the decay that prunes the mundane tail. The
-	// SWS rehearsal stage, fed by a scheduler instead of a uniform scan. 0 disables.
+	// during the sleep pass — prioritized experience replay (ADR 0015 §3). Claims
+	// are ranked by salience × recency × surprise (high-stakes AND high-prediction-
+	// error memories replay first) and the top K have their freshness bumped (a
+	// re-verification). Coupled to forgetting: when ForgetBelowTrust is also set, the
+	// replay set is protected from the same pass's trust-decay pruning — the
+	// rehearse↔prune cycle that gives CLS its interference protection, so
+	// consolidating new knowledge cannot sweep away a high-priority memory rehearsed
+	// alongside it. 0 disables.
 	ReplayTopK int
+
+	// Plastic, when true, engages the two ADR-0015 adaptive-learning-rate controls on
+	// the credit-assignment stage (so it only matters together with AssignCredit):
+	// per-belief METAPLASTICITY (a long-stable, often-verified belief resists credit
+	// churn but stays breakable by strong disconfirmation) and the global
+	// NEUROMODULATORY gain (recent prediction-error volatility raises the effective
+	// learning rate, a settled series lowers it). Both are bounded so trust still
+	// moves at most ±CreditCap; the gain's strength is tuned by
+	// MNEMOS_PLASTICITY_SENSITIVITY (0 disables just the neuromodulation half). Off by
+	// default — with it off, credit assignment behaves exactly as before. See
+	// [go.klarlabs.de/mnemos/internal/credit.SumForModulated].
+	Plastic bool
 
 	// ReinforcePlaybooks bends each playbook's confidence toward the observed
 	// success rate of the outcomes recorded against the actions its lessons were
@@ -741,6 +756,14 @@ type ConsolidateResult struct {
 	// Replayed is the number of high-priority claims rehearsed (freshness bumped) —
 	// 0 unless ReplayTopK was set, and 0 on a dry run.
 	Replayed int
+	// ReplayProtected is how many of the replayed claims were consequently shielded
+	// from this pass's trust-decay forgetting (ADR 0015 §3 rehearse↔prune coupling) —
+	// 0 unless both ReplayTopK and ForgetBelowTrust were set.
+	ReplayProtected int
+	// PlasticityGain is the global neuromodulatory gain applied to credit this pass
+	// (ADR 0015 §2): 1.0 is neutral, > 1 a more-plastic (volatile) regime, < 1 a more
+	// conservative one. 0 when Plastic was off (credit ran at the nominal rate).
+	PlasticityGain float64
 	// LessonsSynthesized / PlaybooksSynthesized count the skills (re-)derived — 0
 	// unless Synthesize was set, and 0 on a dry run.
 	LessonsSynthesized   int

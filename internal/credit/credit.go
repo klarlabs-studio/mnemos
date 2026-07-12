@@ -20,6 +20,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -43,6 +44,97 @@ const (
 	// blame saturates: an extreme outlier can't dominate a merely-wrong belief.
 	refuteSaturation = 3.0
 )
+
+// Learning-dynamics modulation bounds (ADR 0015). These govern the two adaptive
+// learning-rate controls layered over the base credit update by [SumForModulated]:
+// per-belief metaplasticity (crystallization) and the global neuromodulatory gain.
+const (
+	// MinResistance is the strongest crystallization a long-stable, often-verified
+	// belief reaches: it still updates at MinResistance of the nominal rate, so a
+	// crystallized belief resists churn without ever fully fossilizing.
+	MinResistance = 0.25
+
+	// BlameBreakability keeps a crystallized belief disconfirmable. Metaplasticity
+	// resists CREDIT fully (a stable belief shouldn't keep inflating) but resists
+	// BLAME only partway toward MinResistance, so strong disconfirmation still moves
+	// a long-held belief — the asymmetry that disconfirmation is more informative
+	// than confirmation. 1.0 = blame ignores resistance entirely; 0.0 = blame
+	// resisted as much as credit.
+	BlameBreakability = 0.6
+
+	// MinGain / MaxGain bound the global neuromodulatory plasticity gain (ADR 0015
+	// §2). A high-volatility regime raises the effective learning rate toward MaxGain
+	// (encode mode); a stable one lowers it toward MinGain (consolidate mode). The
+	// gain is hard-bounded here so no volatility signal can move trust past ±CreditCap.
+	MinGain = 0.5
+	MaxGain = 2.0
+
+	// resistanceAgeHalfLifeDays / resistanceVerifyHalf set how fast a belief
+	// crystallizes with age and repeated verification: each saturates at its
+	// half-value at these points (30 days old, 3 verifications).
+	resistanceAgeHalfLifeDays = 30.0
+	resistanceVerifyHalf      = 3.0
+)
+
+// ResistanceFor returns a belief's metaplastic update-resistance in
+// [MinResistance, 1] (ADR 0015 §1): how much its crystallization damps an incoming
+// credit delta. Stability grows with age since creation, verification count, and
+// recency of the last verification — a young, rarely-verified, or long-unverified
+// belief is fully plastic (resistance → 1); an old, often-verified, recently
+// confirmed one resists (→ MinResistance). Pure and deterministic given now.
+func ResistanceFor(c domain.Claim, now time.Time) float64 {
+	ref := c.CreatedAt
+	ageDays := now.Sub(ref).Hours() / 24
+	if ageDays < 0 {
+		ageDays = 0
+	}
+	ageF := ageDays / (ageDays + resistanceAgeHalfLifeDays)
+
+	verifyF := float64(c.VerifyCount) / (float64(c.VerifyCount) + resistanceVerifyHalf)
+
+	// A belief not re-verified in a while is losing its crystallization, so recency
+	// pulls stability back down (falls back to creation time when never verified).
+	lv := c.LastVerified
+	if lv.IsZero() || lv.Before(ref) {
+		lv = ref
+	}
+	recencyDays := now.Sub(lv).Hours() / 24
+	if recencyDays < 0 {
+		recencyDays = 0
+	}
+	recencyF := resistanceAgeHalfLifeDays / (recencyDays + resistanceAgeHalfLifeDays)
+
+	// All three must be high to crystallize (product, not sum). stability 0 →
+	// resistance 1 (fully plastic); stability 1 → MinResistance.
+	stability := ageF * verifyF * recencyF
+	return 1 - stability*(1-MinResistance)
+}
+
+// SumForModulated is [SumFor] with the two ADR-0015 learning-rate controls applied:
+// per-belief metaplasticity (resistance, from [ResistanceFor]) and the global
+// neuromodulatory gain. resistance down-scales updates for stable beliefs — but
+// blame is resisted less than credit ([BlameBreakability]) so a crystallized belief
+// stays breakable. gain scales the whole update by the global volatility signal. The
+// result is still hard-clamped to ±CreditCap regardless of gain, so neuromodulation
+// can change how FAST trust moves but never how FAR. Passing resistance=1, gain=1
+// recovers [SumFor] exactly (the neutral, backward-compatible path).
+func SumForModulated(contribs []Contribution, resistance, gain float64) float64 {
+	resistance = clampf(resistance, MinResistance, 1)
+	gain = clampf(gain, MinGain, MaxGain)
+	sum := 0.0
+	for _, c := range contribs {
+		d := c.Delta * gain
+		if d >= 0 {
+			d *= resistance // crystallization resists credit fully
+		} else {
+			d *= resistance + (1-resistance)*BlameBreakability // blame resisted less
+		}
+		sum += d
+	}
+	return math.Max(-CreditCap, math.Min(CreditCap, sum))
+}
+
+func clampf(v, lo, hi float64) float64 { return math.Max(lo, math.Min(hi, v)) }
 
 // componentKeyPrefix marks the keys credit assignment writes into a claim's
 // confidence_components map. Each key additionally encodes the decision and the

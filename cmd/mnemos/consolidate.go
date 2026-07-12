@@ -15,7 +15,10 @@ import (
 //
 //	mnemos consolidate [--dry-run] [--forget-below-trust <f>] [--forget-refuted]
 //	                   [--reinforce-validated] [--reinforce-playbooks] [--credit]
-//	                   [--salience] [--synthesize] [--replay-top-k <n>]
+//	                   [--salience] [--plastic] [--synthesize] [--replay-top-k <n>]
+//
+// --plastic engages the ADR-0015 adaptive learning-rate controls on the credit stage
+// (metaplasticity + neuromodulation); MNEMOS_PLASTICITY_SENSITIVITY tunes the latter.
 func handleConsolidate(args []string, f Flags) {
 	// The promotion pass (ADR 0011 Phase B) is a distinct, read-only sub-mode of
 	// consolidate: tenant→global promotion rather than in-store maintenance.
@@ -79,6 +82,8 @@ func parseConsolidateOpts(args []string, f Flags) (mnemos.ConsolidateOptions, er
 			opts.AssignCredit = true
 		case "--salience":
 			opts.AssignSalience = true
+		case "--plastic":
+			opts.Plastic = true
 		case "--reinforce-playbooks":
 			opts.ReinforcePlaybooks = true
 		case "--synthesize":

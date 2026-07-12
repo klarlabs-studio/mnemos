@@ -84,6 +84,13 @@ floatback:
   # capture path is unchanged when unset/false.
   on_capture:          # MNEMOS_FLOATBACK_ON_CAPTURE (true/false; default off)
 
+plasticity:
+  # Neuromodulation sensitivity for `consolidate --plastic` (ADR 0015 §2): how
+  # strongly recent surprise-volatility scales the global credit learning-rate.
+  # Default 1.0 (active under --plastic); 0 disables neuromodulation only, leaving
+  # per-belief metaplasticity (crystallization) on. Only consulted with --plastic.
+  sensitivity:         # MNEMOS_PLASTICITY_SENSITIVITY (float >= 0, default 1.0)
+
 # Read-time precedence when a federated read (global brain + tenant/repo brain)
 # surfaces the same topic from both tiers (ADR 0011 Phase C). One of:
 #   tenant-wins         the tenant/repo tier wins on conflict (default; local dev)
