@@ -50,7 +50,7 @@ type mcpTimelineEvent struct {
 }
 
 type mcpTimelineQueryOutput struct {
-	Events []mcpTimelineEvent `json:"events"`
+	Events []mcpTimelineEvent `json:"episodes"`
 }
 
 // mcpRecallAtTimeInput pins the answer to a historical instant. Same

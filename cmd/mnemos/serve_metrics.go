@@ -58,7 +58,7 @@ func init() {
 // Route labels are extracted from the *registered* mux pattern via
 // http.ServeMux.Handler — that's the canonical mnemos label and avoids
 // the cardinality explosion of using the raw URL (which would create
-// one series per /v1/claims/<id> call).
+// one series per /v1/beliefs/<id> call).
 func metricsMiddleware(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, route := mux.Handler(r)

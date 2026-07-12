@@ -46,7 +46,7 @@ func TestClaimHistory_AppendsOnEveryUpsert(t *testing.T) {
 		t.Fatalf("v3 upsert: %v", err)
 	}
 
-	resp, err := http.Get(srv.URL + "/v1/claims/cl_hist/history")
+	resp, err := http.Get(srv.URL + "/v1/beliefs/cl_hist/history")
 	if err != nil {
 		t.Fatalf("GET history: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestClaimHistory_UnknownClaimEmpty(t *testing.T) {
 	_, conn := openTestStore(t)
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
-	resp, err := http.Get(srv.URL + "/v1/claims/cl_nope/history")
+	resp, err := http.Get(srv.URL + "/v1/beliefs/cl_nope/history")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestClaimHistory_RejectsNonGET(t *testing.T) {
 	_, conn := openTestStore(t)
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
-	resp, err := http.Post(srv.URL+"/v1/claims/cl_x/history", "application/json", nil)
+	resp, err := http.Post(srv.URL+"/v1/beliefs/cl_x/history", "application/json", nil)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}

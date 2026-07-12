@@ -15,7 +15,7 @@ import (
 // GET /v1/claims/{id}.
 func (c *Client) GetClaim(ctx context.Context, claimID string) (*ClaimDetail, error) {
 	var out ClaimDetail
-	if err := c.do(ctx, http.MethodGet, "/v1/claims/"+url.PathEscape(claimID), nil, &out); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/v1/beliefs/"+url.PathEscape(claimID), nil, &out); err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
 			return nil, nil
@@ -29,7 +29,7 @@ func (c *Client) GetClaim(ctx context.Context, claimID string) (*ClaimDetail, er
 // superseded). POST /v1/claims/{id}/lifecycle.
 func (c *Client) SetClaimLifecycle(ctx context.Context, claimID, lifecycle string) error {
 	body := map[string]string{"lifecycle": lifecycle}
-	return c.do(ctx, http.MethodPost, "/v1/claims/"+url.PathEscape(claimID)+"/lifecycle", body, nil)
+	return c.do(ctx, http.MethodPost, "/v1/beliefs/"+url.PathEscape(claimID)+"/lifecycle", body, nil)
 }
 
 // Classify reports whether a candidate statement fits established knowledge or

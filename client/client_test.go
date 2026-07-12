@@ -37,7 +37,7 @@ func (f *fakeRegistry) handler() http.Handler {
 	mux.HandleFunc("/v1/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, client.MetricsResponse{Events: int64(len(f.events)), Claims: int64(len(f.claims))})
 	})
-	mux.HandleFunc("/v1/events", f.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/episodes", f.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			if r.URL.Query().Get("run_id") != "" {
@@ -46,7 +46,7 @@ func (f *fakeRegistry) handler() http.Handler {
 			writeJSON(w, http.StatusOK, client.ListEventsResponse{Events: f.events, Total: len(f.events), Limit: 50, Offset: 0})
 		case http.MethodPost:
 			var body struct {
-				Events []client.Event `json:"events"`
+				Events []client.Event `json:"episodes"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				http.Error(w, `{"error":"bad body"}`, http.StatusBadRequest)
@@ -56,7 +56,7 @@ func (f *fakeRegistry) handler() http.Handler {
 			writeJSON(w, http.StatusCreated, client.AppendResponse{Accepted: len(body.Events)})
 		}
 	}))
-	mux.HandleFunc("/v1/claims", f.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/beliefs", f.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			// Echo back the type/status filter so tests can verify chaining wired through.
@@ -81,7 +81,7 @@ func (f *fakeRegistry) handler() http.Handler {
 			writeJSON(w, http.StatusCreated, client.AppendResponse{Accepted: len(body.Claims)})
 		}
 	}))
-	mux.HandleFunc("/v1/relationships", f.requireAuth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/associations", f.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			if r.URL.Query().Get("type") != "" {
@@ -90,7 +90,7 @@ func (f *fakeRegistry) handler() http.Handler {
 			writeJSON(w, http.StatusOK, client.ListRelationshipsResponse{Relationships: f.rels, Total: len(f.rels), Limit: 50, Offset: 0})
 		case http.MethodPost:
 			var body struct {
-				Relationships []client.Relationship `json:"relationships"`
+				Relationships []client.Relationship `json:"associations"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				http.Error(w, `{"error":"bad body"}`, http.StatusBadRequest)
@@ -259,7 +259,7 @@ func TestClaims_FilterChainPropagatesQueryParams(t *testing.T) {
 
 	c := client.New(srv.URL)
 	// Chain three filters; verify they all reach the server.
-	resp := captureHeaders(t, srv.URL+"/v1/claims?type=decision&status=active&limit=25", srv.Client(), nil)
+	resp := captureHeaders(t, srv.URL+"/v1/beliefs?type=decision&status=active&limit=25", srv.Client(), nil)
 	if resp.Header.Get("X-Test-Type") != "decision" || resp.Header.Get("X-Test-Status") != "active" {
 		t.Fatalf("filter pass-through broken: type=%q status=%q", resp.Header.Get("X-Test-Type"), resp.Header.Get("X-Test-Status"))
 	}
@@ -278,10 +278,10 @@ func TestEventsAndClaims_RunIDFilterReachesServer(t *testing.T) {
 	var gotEventsRunID, gotClaimsRunID string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v1/events":
+		case "/v1/episodes":
 			gotEventsRunID = r.URL.Query().Get("run_id")
 			writeJSON(w, http.StatusOK, client.ListEventsResponse{Events: []client.Event{}, Limit: 50})
-		case "/v1/claims":
+		case "/v1/beliefs":
 			gotClaimsRunID = r.URL.Query().Get("run_id")
 			writeJSON(w, http.StatusOK, client.ListClaimsResponse{Claims: []client.Claim{}, Limit: 50})
 		default:
@@ -372,10 +372,10 @@ func TestForRun_ScopesRunIDOnEventsAndClaims(t *testing.T) {
 	var gotEventsRunID, gotClaimsRunID string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/v1/events":
+		case "/v1/episodes":
 			gotEventsRunID = r.URL.Query().Get("run_id")
 			writeJSON(w, http.StatusOK, client.ListEventsResponse{Events: []client.Event{}, Limit: 50})
-		case "/v1/claims":
+		case "/v1/beliefs":
 			gotClaimsRunID = r.URL.Query().Get("run_id")
 			writeJSON(w, http.StatusOK, client.ListClaimsResponse{Claims: []client.Claim{}, Limit: 50})
 		default:

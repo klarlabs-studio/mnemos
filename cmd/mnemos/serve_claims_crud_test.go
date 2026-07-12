@@ -25,7 +25,7 @@ func crudFacadeServer(t *testing.T) *httptest.Server {
 
 func TestServe_GetClaimNotFound(t *testing.T) {
 	srv := crudFacadeServer(t)
-	resp, err := http.Get(srv.URL + "/v1/claims/does-not-exist")
+	resp, err := http.Get(srv.URL + "/v1/beliefs/does-not-exist")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}

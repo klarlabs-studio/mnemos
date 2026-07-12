@@ -73,8 +73,8 @@ func TestGRPC_CognitiveDelegates(t *testing.T) {
 	if _, err := client.Recombinations(ctx, &mnemosv1.RecombinationsRequest{Limit: 10}); err != nil {
 		t.Errorf("Recombinations: %v", err)
 	}
-	if _, err := client.AnalogousClaims(ctx, &mnemosv1.AnalogousClaimsRequest{ClaimId: "cl1", Limit: 5}); err != nil {
-		t.Errorf("AnalogousClaims: %v", err)
+	if _, err := client.AnalogousBeliefs(ctx, &mnemosv1.AnalogousBeliefsRequest{BeliefId: "cl1", Limit: 5}); err != nil {
+		t.Errorf("AnalogousBeliefs: %v", err)
 	}
 }
 

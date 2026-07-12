@@ -33,7 +33,7 @@ func (s *Server) WhoKnows(ctx context.Context, req *mnemosv1.WhoKnowsRequest) (*
 	out := &mnemosv1.WhoKnowsResponse{Query: req.GetQuery()}
 	for _, e := range experts {
 		out.Experts = append(out.Experts, &mnemosv1.Expert{
-			Worker: e.Worker, Affinity: e.Affinity, Reliability: e.Reliability, ClaimCount: int32(e.ClaimCount),
+			Worker: e.Worker, Affinity: e.Affinity, Reliability: e.Reliability, BeliefCount: int32(e.ClaimCount),
 		})
 	}
 	return out, nil
@@ -54,7 +54,7 @@ func (s *Server) KnowledgeGaps(ctx context.Context, req *mnemosv1.KnowledgeGapsR
 	}
 	out := &mnemosv1.KnowledgeGapsResponse{}
 	for _, g := range gaps {
-		out.Gaps = append(out.Gaps, &mnemosv1.Gap{ClaimId: g.ClaimID, Text: g.Text, Kind: g.Kind, Score: g.Score})
+		out.Gaps = append(out.Gaps, &mnemosv1.Gap{BeliefId: g.ClaimID, Text: g.Text, Kind: g.Kind, Score: g.Score})
 	}
 	return out, nil
 }
@@ -82,7 +82,7 @@ func (s *Server) Calibration(ctx context.Context, _ *mnemosv1.CalibrationRequest
 	return out, nil
 }
 
-// Hypercorrections lists established beliefs a newer claim now contradicts.
+// Hypercorrections lists established beliefs a newer belief now contradicts.
 func (s *Server) Hypercorrections(ctx context.Context, _ *mnemosv1.HypercorrectionsRequest) (*mnemosv1.HypercorrectionsResponse, error) {
 	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
@@ -94,11 +94,11 @@ func (s *Server) Hypercorrections(ctx context.Context, _ *mnemosv1.Hypercorrecti
 	out := &mnemosv1.HypercorrectionsResponse{}
 	for _, h := range hcs {
 		hc := &mnemosv1.Hypercorrection{
-			ContradictedClaimId:  h.ContradictedClaimID,
+			ContradictedBeliefId: h.ContradictedClaimID,
 			ContradictedText:     h.ContradictedText,
 			ContradictedTrust:    h.ContradictedTrust,
 			ContradictedPromoted: h.ContradictedPromoted,
-			ChallengingClaimId:   h.ChallengingClaimID,
+			ChallengingBeliefId:  h.ChallengingClaimID,
 			ChallengingText:      h.ChallengingText,
 		}
 		if !h.DetectedAt.IsZero() {
@@ -109,7 +109,7 @@ func (s *Server) Hypercorrections(ctx context.Context, _ *mnemosv1.Hypercorrecti
 	return out, nil
 }
 
-// Recombinations lists topically-similar-but-unlinked claim pairs.
+// Recombinations lists topically-similar-but-unlinked belief pairs.
 func (s *Server) Recombinations(ctx context.Context, req *mnemosv1.RecombinationsRequest) (*mnemosv1.RecombinationsResponse, error) {
 	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
@@ -125,14 +125,14 @@ func (s *Server) Recombinations(ctx context.Context, req *mnemosv1.Recombination
 	out := &mnemosv1.RecombinationsResponse{}
 	for _, r := range recs {
 		out.Recombinations = append(out.Recombinations, &mnemosv1.Recombination{
-			ClaimA: r.ClaimA, TextA: r.TextA, ClaimB: r.ClaimB, TextB: r.TextB, Similarity: r.Similarity,
+			BeliefA: r.ClaimA, TextA: r.TextA, BeliefB: r.ClaimB, TextB: r.TextB, Similarity: r.Similarity,
 		})
 	}
 	return out, nil
 }
 
-// AnalogousClaims returns the claims most structurally analogous to a given one.
-func (s *Server) AnalogousClaims(ctx context.Context, req *mnemosv1.AnalogousClaimsRequest) (*mnemosv1.AnalogousClaimsResponse, error) {
+// AnalogousBeliefs returns the beliefs most structurally analogous to a given one.
+func (s *Server) AnalogousBeliefs(ctx context.Context, req *mnemosv1.AnalogousBeliefsRequest) (*mnemosv1.AnalogousBeliefsResponse, error) {
 	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
@@ -140,13 +140,13 @@ func (s *Server) AnalogousClaims(ctx context.Context, req *mnemosv1.AnalogousCla
 	if limit <= 0 {
 		limit = 10
 	}
-	analogies, err := s.memFor(ctx).AnalogousClaims(ctx, req.GetClaimId(), limit)
+	analogies, err := s.memFor(ctx).AnalogousClaims(ctx, req.GetBeliefId(), limit)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	out := &mnemosv1.AnalogousClaimsResponse{ClaimId: req.GetClaimId()}
+	out := &mnemosv1.AnalogousBeliefsResponse{BeliefId: req.GetBeliefId()}
 	for _, a := range analogies {
-		out.Analogous = append(out.Analogous, &mnemosv1.Analogy{ClaimId: a.ClaimID, Text: a.Text, Similarity: a.Similarity})
+		out.Analogous = append(out.Analogous, &mnemosv1.Analogy{BeliefId: a.ClaimID, Text: a.Text, Similarity: a.Similarity})
 	}
 	return out, nil
 }

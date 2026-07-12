@@ -18,7 +18,7 @@ type mcpExpert struct {
 	Worker      string  `json:"worker"`
 	Affinity    float64 `json:"affinity"`
 	Reliability float64 `json:"reliability"`
-	ClaimCount  int     `json:"claim_count"`
+	ClaimCount  int     `json:"belief_count"`
 }
 type mcpWhoKnowsOutput struct {
 	Query   string      `json:"query"`
@@ -45,7 +45,7 @@ type mcpKnowledgeGapsInput struct {
 	Limit int `json:"limit,omitempty" jsonschema:"description=Max gaps to return (default 20)"`
 }
 type mcpGap struct {
-	ClaimID string  `json:"claim_id"`
+	ClaimID string  `json:"belief_id"`
 	Text    string  `json:"text"`
 	Kind    string  `json:"kind"`
 	Score   float64 `json:"score"`
@@ -109,11 +109,11 @@ func mcpCalibration(ctx context.Context, mem mnemos.Memory, _ struct{}) (mcpCali
 }
 
 type mcpHypercorrection struct {
-	ContradictedClaimID  string  `json:"contradicted_claim_id"`
+	ContradictedClaimID  string  `json:"contradicted_belief_id"`
 	ContradictedText     string  `json:"contradicted_text"`
 	ContradictedTrust    float64 `json:"contradicted_trust"`
 	ContradictedPromoted bool    `json:"contradicted_promoted"`
-	ChallengingClaimID   string  `json:"challenging_claim_id"`
+	ChallengingClaimID   string  `json:"challenging_belief_id"`
 	ChallengingText      string  `json:"challenging_text"`
 }
 type mcpHypercorrectionsOutput struct {
@@ -139,9 +139,9 @@ type mcpRecombinationsInput struct {
 	Limit int `json:"limit,omitempty" jsonschema:"description=Max pairs to return (default 20)"`
 }
 type mcpRecombination struct {
-	ClaimA     string  `json:"claim_a"`
+	ClaimA     string  `json:"belief_a"`
 	TextA      string  `json:"text_a"`
-	ClaimB     string  `json:"claim_b"`
+	ClaimB     string  `json:"belief_b"`
 	TextB      string  `json:"text_b"`
 	Similarity float64 `json:"similarity"`
 }
@@ -166,16 +166,16 @@ func mcpRecombinations(ctx context.Context, mem mnemos.Memory, in mcpRecombinati
 }
 
 type mcpAnalogousInput struct {
-	ClaimID string `json:"claim_id" jsonschema:"required,description=The claim to find analogues for"`
+	ClaimID string `json:"belief_id" jsonschema:"required,description=The claim to find analogues for"`
 	Limit   int    `json:"limit,omitempty" jsonschema:"description=Max analogues (default 10)"`
 }
 type mcpAnalogy struct {
-	ClaimID    string  `json:"claim_id"`
+	ClaimID    string  `json:"belief_id"`
 	Text       string  `json:"text"`
 	Similarity float64 `json:"similarity"`
 }
 type mcpAnalogousOutput struct {
-	ClaimID   string       `json:"claim_id"`
+	ClaimID   string       `json:"belief_id"`
 	Analogous []mcpAnalogy `json:"analogous"`
 }
 

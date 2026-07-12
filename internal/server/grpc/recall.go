@@ -14,7 +14,7 @@ func grpcRecallResults(rs []mnemos.Result) []*mnemosv1.RecallResult {
 	out := make([]*mnemosv1.RecallResult, 0, len(rs))
 	for _, r := range rs {
 		out = append(out, &mnemosv1.RecallResult{
-			ClaimId: r.ClaimID, Text: r.Text, Type: r.Type, Confidence: r.Confidence,
+			BeliefId: r.ClaimID, Text: r.Text, Type: r.Type, Confidence: r.Confidence,
 			TrustScore: r.TrustScore, HopDistance: int32(r.HopDistance), Provenance: r.Provenance,
 		})
 	}
@@ -23,7 +23,7 @@ func grpcRecallResults(rs []mnemos.Result) []*mnemosv1.RecallResult {
 
 func grpcSufficiency(s mnemos.Sufficiency) *mnemosv1.RecallSufficiency {
 	return &mnemosv1.RecallSufficiency{
-		Confidence: s.Confidence, ClaimCount: int32(s.ClaimCount), Sufficient: s.Sufficient, Floor: s.Floor,
+		Confidence: s.Confidence, BeliefCount: int32(s.ClaimCount), Sufficient: s.Sufficient, Floor: s.Floor,
 	}
 }
 
@@ -72,7 +72,7 @@ func (s *Server) Recall(ctx context.Context, req *mnemosv1.RecallRequest) (*mnem
 		resp.Results = grpcRecallResults(res)
 		for _, c := range conflicts {
 			resp.Conflicts = append(resp.Conflicts, &mnemosv1.RecallConflict{
-				ClaimId: c.ClaimID, ClaimText: c.ClaimText, ContradictingId: c.ContradictingID,
+				BeliefId: c.ClaimID, BeliefText: c.ClaimText, ContradictingId: c.ContradictingID,
 				ContradictingText: c.ContradictingText, ContradictingTrust: c.ContradictingTrust,
 			})
 		}

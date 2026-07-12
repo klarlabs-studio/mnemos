@@ -131,7 +131,7 @@ func TestServe_AppendEvents_PersistsAndCanBeListed(t *testing.T) {
 
 	ts := time.Now().UTC().Format(time.RFC3339)
 	body := map[string]any{
-		"events": []map[string]any{
+		"episodes": []map[string]any{
 			{
 				"id":              "ev_post_1",
 				"run_id":          "r-post",
@@ -144,7 +144,7 @@ func TestServe_AppendEvents_PersistsAndCanBeListed(t *testing.T) {
 		},
 	}
 
-	resp := postJSON(t, st.Srv.URL+"/v1/events", body, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/episodes", body, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		var msg errorResponse
@@ -160,7 +160,7 @@ func TestServe_AppendEvents_PersistsAndCanBeListed(t *testing.T) {
 	}
 
 	// Verify by listing.
-	getResp, err := http.Get(st.Srv.URL + "/v1/events")
+	getResp, err := http.Get(st.Srv.URL + "/v1/episodes")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestServe_AppendEvents_PersistsAndCanBeListed(t *testing.T) {
 
 func TestServe_AppendEvents_RejectsEmptyArray(t *testing.T) {
 	st := newServeJWTTest(t)
-	resp := postJSON(t, st.Srv.URL+"/v1/events", map[string]any{"events": []any{}}, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/episodes", map[string]any{"episodes": []any{}}, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -210,7 +210,7 @@ func TestServe_AppendEvents_RejectsOversizedBatch(t *testing.T) {
 			"timestamp":       ts,
 		}
 	}
-	resp := postJSON(t, st.Srv.URL+"/v1/events", map[string]any{"events": events}, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/episodes", map[string]any{"episodes": events}, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (batch cap)", resp.StatusCode)
@@ -220,9 +220,9 @@ func TestServe_AppendEvents_RejectsOversizedBatch(t *testing.T) {
 func TestServe_AppendEvents_RejectsBadTimestamp(t *testing.T) {
 	st := newServeJWTTest(t)
 	body := map[string]any{
-		"events": []map[string]any{{"id": "ev_x", "content": "x", "timestamp": "yesterday"}},
+		"episodes": []map[string]any{{"id": "ev_x", "content": "x", "timestamp": "yesterday"}},
 	}
-	resp := postJSON(t, st.Srv.URL+"/v1/events", body, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/episodes", body, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -237,7 +237,7 @@ func TestServe_AppendClaims_PersistsAndCanBeListed(t *testing.T) {
 	seedEventConn(t, st.Conn, "ev_for_claim", "r1", "context", "in_e", `{}`, now)
 
 	body := map[string]any{
-		"claims": []map[string]any{
+		"beliefs": []map[string]any{
 			{
 				"id":         "cl_post_1",
 				"text":       "Authentication uses OAuth2.",
@@ -248,10 +248,10 @@ func TestServe_AppendClaims_PersistsAndCanBeListed(t *testing.T) {
 			},
 		},
 		"evidence": []map[string]string{
-			{"claim_id": "cl_post_1", "event_id": "ev_for_claim"},
+			{"belief_id": "cl_post_1", "episode_id": "ev_for_claim"},
 		},
 	}
-	resp := postJSON(t, st.Srv.URL+"/v1/claims", body, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/beliefs", body, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		var msg errorResponse
@@ -281,11 +281,11 @@ func TestServe_AppendClaims_PersistsAndCanBeListed(t *testing.T) {
 func TestServe_AppendClaims_RejectsInvalidType(t *testing.T) {
 	st := newServeJWTTest(t)
 	body := map[string]any{
-		"claims": []map[string]any{
+		"beliefs": []map[string]any{
 			{"id": "cl_x", "text": "x", "type": "guess", "confidence": 0.5, "status": "active"},
 		},
 	}
-	resp := postJSON(t, st.Srv.URL+"/v1/claims", body, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/beliefs", body, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -300,16 +300,16 @@ func TestServe_AppendRelationships_PersistsCorrectly(t *testing.T) {
 	seedClaimConn(t, st.Conn, "c-to", "b", "fact", "active", 0.8, now)
 
 	body := map[string]any{
-		"relationships": []map[string]any{
+		"associations": []map[string]any{
 			{
-				"id":            "r_post_1",
-				"type":          "supports",
-				"from_claim_id": "c-from",
-				"to_claim_id":   "c-to",
+				"id":             "r_post_1",
+				"type":           "supports",
+				"from_belief_id": "c-from",
+				"to_belief_id":   "c-to",
 			},
 		},
 	}
-	resp := postJSON(t, st.Srv.URL+"/v1/relationships", body, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/associations", body, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		var msg errorResponse
@@ -321,11 +321,11 @@ func TestServe_AppendRelationships_PersistsCorrectly(t *testing.T) {
 func TestServe_AppendRelationships_RejectsBadType(t *testing.T) {
 	st := newServeJWTTest(t)
 	body := map[string]any{
-		"relationships": []map[string]any{
-			{"id": "r-x", "type": "neutralizes", "from_claim_id": "c1", "to_claim_id": "c2"},
+		"associations": []map[string]any{
+			{"id": "r-x", "type": "neutralizes", "from_belief_id": "c1", "to_belief_id": "c2"},
 		},
 	}
-	resp := postJSON(t, st.Srv.URL+"/v1/relationships", body, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/associations", body, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -334,8 +334,8 @@ func TestServe_AppendRelationships_RejectsBadType(t *testing.T) {
 
 func TestServe_Auth_RejectsMissingHeader(t *testing.T) {
 	st := newServeJWTTest(t)
-	resp := postJSON(t, st.Srv.URL+"/v1/events",
-		map[string]any{"events": []map[string]any{{"id": "e1", "content": "x"}}}, nil)
+	resp := postJSON(t, st.Srv.URL+"/v1/episodes",
+		map[string]any{"episodes": []map[string]any{{"id": "e1", "content": "x"}}}, nil)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
@@ -355,8 +355,8 @@ func TestServe_Auth_RejectsBadSignature(t *testing.T) {
 		t.Fatalf("issue bad token: %v", err)
 	}
 
-	resp := postJSON(t, st.Srv.URL+"/v1/events",
-		map[string]any{"events": []map[string]any{{"id": "e1", "content": "x"}}},
+	resp := postJSON(t, st.Srv.URL+"/v1/episodes",
+		map[string]any{"episodes": []map[string]any{{"id": "e1", "content": "x"}}},
 		map[string]string{"Authorization": "Bearer " + bad})
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -384,8 +384,8 @@ func TestServe_Auth_RejectsRevokedJTI(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
 
-	resp := postJSON(t, srv.URL+"/v1/events",
-		map[string]any{"events": []map[string]any{{"id": "e1", "content": "x"}}},
+	resp := postJSON(t, srv.URL+"/v1/episodes",
+		map[string]any{"episodes": []map[string]any{{"id": "e1", "content": "x"}}},
 		map[string]string{"Authorization": "Bearer " + tok})
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -396,7 +396,7 @@ func TestServe_Auth_RejectsRevokedJTI(t *testing.T) {
 func TestServe_Auth_ReadsAlwaysAllowed(t *testing.T) {
 	st := newServeJWTTest(t)
 	// No Authorization header — reads still return 200.
-	resp, err := http.Get(st.Srv.URL + "/v1/events")
+	resp, err := http.Get(st.Srv.URL + "/v1/episodes")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -426,12 +426,12 @@ func TestServe_Auth_AgentScopeEnforcement(t *testing.T) {
 	// Allowed: events.
 	ts := time.Now().UTC().Format(time.RFC3339)
 	body := map[string]any{
-		"events": []map[string]any{{
+		"episodes": []map[string]any{{
 			"id": "ev_agent", "run_id": "r", "schema_version": "v1",
 			"content": "x", "source_input_id": "in", "timestamp": ts,
 		}},
 	}
-	resp := postJSON(t, srv.URL+"/v1/events", body, hdrs)
+	resp := postJSON(t, srv.URL+"/v1/episodes", body, hdrs)
 	if resp.StatusCode != http.StatusCreated {
 		var msg errorResponse
 		_ = json.NewDecoder(resp.Body).Decode(&msg)
@@ -445,8 +445,8 @@ func TestServe_Auth_AgentScopeEnforcement(t *testing.T) {
 		path string
 		body map[string]any
 	}{
-		{"/v1/claims", map[string]any{"claims": []map[string]any{{"id": "c1", "text": "x", "type": "fact", "confidence": 0.5, "status": "active"}}}},
-		{"/v1/relationships", map[string]any{"relationships": []map[string]any{{"id": "r1", "type": "supports", "from_claim_id": "a", "to_claim_id": "b"}}}},
+		{"/v1/beliefs", map[string]any{"beliefs": []map[string]any{{"id": "c1", "text": "x", "type": "fact", "confidence": 0.5, "status": "active"}}}},
+		{"/v1/associations", map[string]any{"associations": []map[string]any{{"id": "r1", "type": "supports", "from_belief_id": "a", "to_belief_id": "b"}}}},
 		{"/v1/embeddings", map[string]any{"embeddings": []map[string]any{{"entity_id": "e1", "entity_type": "event", "vector": []float32{1, 2}, "model": "m"}}}},
 	} {
 		r := postJSON(t, srv.URL+c.path, c.body, hdrs)
@@ -478,11 +478,11 @@ func TestServe_Auth_AgentRunWhitelist(t *testing.T) {
 	scopedHdrs := map[string]string{"Authorization": "Bearer " + scopedTok}
 
 	ts := time.Now().UTC().Format(time.RFC3339)
-	allowedBody := map[string]any{"events": []map[string]any{{
+	allowedBody := map[string]any{"episodes": []map[string]any{{
 		"id": "ev_ok", "run_id": "run-allowed", "schema_version": "v1",
 		"content": "x", "source_input_id": "in1", "timestamp": ts,
 	}}}
-	r := postJSON(t, srv.URL+"/v1/events", allowedBody, scopedHdrs)
+	r := postJSON(t, srv.URL+"/v1/episodes", allowedBody, scopedHdrs)
 	if r.StatusCode != http.StatusCreated {
 		var msg errorResponse
 		_ = json.NewDecoder(r.Body).Decode(&msg)
@@ -491,11 +491,11 @@ func TestServe_Auth_AgentRunWhitelist(t *testing.T) {
 	}
 	_ = r.Body.Close()
 
-	forbiddenBody := map[string]any{"events": []map[string]any{{
+	forbiddenBody := map[string]any{"episodes": []map[string]any{{
 		"id": "ev_no", "run_id": "run-forbidden", "schema_version": "v1",
 		"content": "x", "source_input_id": "in2", "timestamp": ts,
 	}}}
-	r = postJSON(t, srv.URL+"/v1/events", forbiddenBody, scopedHdrs)
+	r = postJSON(t, srv.URL+"/v1/episodes", forbiddenBody, scopedHdrs)
 	if r.StatusCode != http.StatusForbidden {
 		t.Errorf("forbidden run status = %d, want 403", r.StatusCode)
 	}
@@ -508,11 +508,11 @@ func TestServe_Auth_AgentRunWhitelist(t *testing.T) {
 	}
 	openHdrs := map[string]string{"Authorization": "Bearer " + openTok}
 
-	openBody := map[string]any{"events": []map[string]any{{
+	openBody := map[string]any{"episodes": []map[string]any{{
 		"id": "ev_open", "run_id": "run-anything", "schema_version": "v1",
 		"content": "x", "source_input_id": "in3", "timestamp": ts,
 	}}}
-	r = postJSON(t, srv.URL+"/v1/events", openBody, openHdrs)
+	r = postJSON(t, srv.URL+"/v1/episodes", openBody, openHdrs)
 	if r.StatusCode != http.StatusCreated {
 		var msg errorResponse
 		_ = json.NewDecoder(r.Body).Decode(&msg)
@@ -540,11 +540,11 @@ func TestServe_Auth_AgentRunWhitelist_BatchAllOrNothing(t *testing.T) {
 	hdrs := map[string]string{"Authorization": "Bearer " + tok}
 
 	ts := time.Now().UTC().Format(time.RFC3339)
-	body := map[string]any{"events": []map[string]any{
+	body := map[string]any{"episodes": []map[string]any{
 		{"id": "ev_a", "run_id": "run-yes", "schema_version": "v1", "content": "x", "source_input_id": "i1", "timestamp": ts},
 		{"id": "ev_b", "run_id": "run-no", "schema_version": "v1", "content": "x", "source_input_id": "i2", "timestamp": ts},
 	}}
-	r := postJSON(t, srv.URL+"/v1/events", body, hdrs)
+	r := postJSON(t, srv.URL+"/v1/episodes", body, hdrs)
 	if r.StatusCode != http.StatusForbidden {
 		t.Errorf("mixed batch status = %d, want 403", r.StatusCode)
 	}
@@ -587,14 +587,14 @@ func TestServe_Auth_AgentRunWhitelist_BlocksClaimsWithCrossRunEvidence(t *testin
 	hdrs := map[string]string{"Authorization": "Bearer " + tok}
 
 	body := map[string]any{
-		"claims": []map[string]any{{
+		"beliefs": []map[string]any{{
 			"id": "cl_sneaky", "text": "x", "type": "fact",
 			"confidence": 0.5, "status": "active",
 			"created_at": now.Format(time.RFC3339),
 		}},
-		"evidence": []map[string]string{{"claim_id": "cl_sneaky", "event_id": "ev_other"}},
+		"evidence": []map[string]string{{"belief_id": "cl_sneaky", "episode_id": "ev_other"}},
 	}
-	r := postJSON(t, srv.URL+"/v1/claims", body, hdrs)
+	r := postJSON(t, srv.URL+"/v1/beliefs", body, hdrs)
 	if r.StatusCode != http.StatusForbidden {
 		t.Errorf("status = %d, want 403", r.StatusCode)
 	}
@@ -638,12 +638,12 @@ func TestServe_Auth_AgentRunWhitelist_BlocksRelationshipWithCrossRunClaim(t *tes
 	hdrs := map[string]string{"Authorization": "Bearer " + tok}
 
 	body := map[string]any{
-		"relationships": []map[string]any{{
+		"associations": []map[string]any{{
 			"id": "r_cross", "type": "supports",
-			"from_claim_id": "cl_mine", "to_claim_id": "cl_other",
+			"from_belief_id": "cl_mine", "to_belief_id": "cl_other",
 		}},
 	}
-	r := postJSON(t, srv.URL+"/v1/relationships", body, hdrs)
+	r := postJSON(t, srv.URL+"/v1/associations", body, hdrs)
 	if r.StatusCode != http.StatusForbidden {
 		t.Errorf("status = %d, want 403", r.StatusCode)
 	}
@@ -703,14 +703,14 @@ func TestServe_Auth_AgentRunWhitelist_AllowsClaimsInOwnRun(t *testing.T) {
 	hdrs := map[string]string{"Authorization": "Bearer " + tok}
 
 	body := map[string]any{
-		"claims": []map[string]any{{
+		"beliefs": []map[string]any{{
 			"id": "cl_ok", "text": "x", "type": "fact",
 			"confidence": 0.5, "status": "active",
 			"created_at": now.Format(time.RFC3339),
 		}},
-		"evidence": []map[string]string{{"claim_id": "cl_ok", "event_id": "ev_mine"}},
+		"evidence": []map[string]string{{"belief_id": "cl_ok", "episode_id": "ev_mine"}},
 	}
-	r := postJSON(t, srv.URL+"/v1/claims", body, hdrs)
+	r := postJSON(t, srv.URL+"/v1/beliefs", body, hdrs)
 	if r.StatusCode != http.StatusCreated {
 		var msg errorResponse
 		_ = json.NewDecoder(r.Body).Decode(&msg)
@@ -723,7 +723,7 @@ func TestServe_Auth_AgentRunWhitelist_AllowsClaimsInOwnRun(t *testing.T) {
 
 // TestServe_Auth_NarrowUserScopeRejectsOtherEndpoints proves the
 // F.3 contract end-to-end: a user with `events:write` only is
-// allowed at /v1/events but forbidden everywhere else.
+// allowed at /v1/episodes but forbidden everywhere else.
 func TestServe_Auth_NarrowUserScopeRejectsOtherEndpoints(t *testing.T) {
 	secret, _ := setupJWTTestEnv(t)
 	_, conn := openTestStore(t)
@@ -747,8 +747,8 @@ func TestServe_Auth_NarrowUserScopeRejectsOtherEndpoints(t *testing.T) {
 	defer srv.Close()
 
 	// Allowed: events.
-	resp := postJSON(t, srv.URL+"/v1/events",
-		map[string]any{"events": []map[string]any{{
+	resp := postJSON(t, srv.URL+"/v1/episodes",
+		map[string]any{"episodes": []map[string]any{{
 			"id": "ev_n", "run_id": "r", "schema_version": "v1",
 			"content": "x", "source_input_id": "in",
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
@@ -766,8 +766,8 @@ func TestServe_Auth_NarrowUserScopeRejectsOtherEndpoints(t *testing.T) {
 		path string
 		body map[string]any
 	}{
-		{"/v1/claims", map[string]any{"claims": []map[string]any{{"id": "c1", "text": "x", "type": "fact", "confidence": 0.5, "status": "active"}}}},
-		{"/v1/relationships", map[string]any{"relationships": []map[string]any{{"id": "r1", "type": "supports", "from_claim_id": "a", "to_claim_id": "b"}}}},
+		{"/v1/beliefs", map[string]any{"beliefs": []map[string]any{{"id": "c1", "text": "x", "type": "fact", "confidence": 0.5, "status": "active"}}}},
+		{"/v1/associations", map[string]any{"associations": []map[string]any{{"id": "r1", "type": "supports", "from_belief_id": "a", "to_belief_id": "b"}}}},
 		{"/v1/embeddings", map[string]any{"embeddings": []map[string]any{{"entity_id": "e1", "entity_type": "event", "vector": []float32{1, 2}, "model": "m"}}}},
 	} {
 		r := postJSON(t, srv.URL+c.path, c.body, hdrs)
@@ -799,9 +799,9 @@ func TestServe_Auth_UserTokenGetsAllScopes(t *testing.T) {
 		path string
 		body map[string]any
 	}{
-		{"events", "/v1/events", map[string]any{"events": []map[string]any{{"id": "ev_full_1", "content": "x", "source_input_id": "in_full_1", "timestamp": now.Format(time.RFC3339)}}}},
-		{"claims", "/v1/claims", map[string]any{"claims": []map[string]any{{"id": "cl_full_1", "text": "x", "type": "fact", "confidence": 0.7, "status": "active", "created_at": now.Format(time.RFC3339)}}}},
-		{"relationships", "/v1/relationships", map[string]any{"relationships": []map[string]any{{"id": "r_full_1", "type": "supports", "from_claim_id": "cl_a", "to_claim_id": "cl_b"}}}},
+		{"episodes", "/v1/episodes", map[string]any{"episodes": []map[string]any{{"id": "ev_full_1", "content": "x", "source_input_id": "in_full_1", "timestamp": now.Format(time.RFC3339)}}}},
+		{"beliefs", "/v1/beliefs", map[string]any{"beliefs": []map[string]any{{"id": "cl_full_1", "text": "x", "type": "fact", "confidence": 0.7, "status": "active", "created_at": now.Format(time.RFC3339)}}}},
+		{"associations", "/v1/associations", map[string]any{"associations": []map[string]any{{"id": "r_full_1", "type": "supports", "from_belief_id": "cl_a", "to_belief_id": "cl_b"}}}},
 		{"embeddings", "/v1/embeddings", map[string]any{"embeddings": []map[string]any{{"entity_id": "ev_for_full", "entity_type": "event", "vector": []float32{0.1, 0.2}, "model": "m"}}}},
 	} {
 		r := postJSON(t, srv.URL+c.path, c.body, hdrs)
@@ -817,7 +817,7 @@ func TestServe_Auth_UserTokenGetsAllScopes(t *testing.T) {
 }
 
 // TestServe_AppendClaims_VisibilityRoundTrip verifies that an explicit
-// visibility value is persisted and returned by GET /v1/claims.
+// visibility value is persisted and returned by GET /v1/beliefs.
 func TestServe_AppendClaims_VisibilityRoundTrip(t *testing.T) {
 	for _, vis := range []string{"personal", "team", "org"} {
 		t.Run(vis, func(t *testing.T) {
@@ -825,7 +825,7 @@ func TestServe_AppendClaims_VisibilityRoundTrip(t *testing.T) {
 			now := time.Now().UTC()
 
 			body := map[string]any{
-				"claims": []map[string]any{
+				"beliefs": []map[string]any{
 					{
 						"id":         "cl_vis_" + vis,
 						"text":       "visibility test " + vis,
@@ -837,7 +837,7 @@ func TestServe_AppendClaims_VisibilityRoundTrip(t *testing.T) {
 					},
 				},
 			}
-			resp := postJSON(t, st.Srv.URL+"/v1/claims", body, st.Auth)
+			resp := postJSON(t, st.Srv.URL+"/v1/beliefs", body, st.Auth)
 			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusCreated {
 				var msg errorResponse
@@ -846,7 +846,7 @@ func TestServe_AppendClaims_VisibilityRoundTrip(t *testing.T) {
 			}
 
 			// Read back and confirm visibility is present.
-			getResp := getJSON(t, st.Srv.URL+"/v1/claims", st.Auth)
+			getResp := getJSON(t, st.Srv.URL+"/v1/beliefs", st.Auth)
 			defer func() { _ = getResp.Body.Close() }()
 			if getResp.StatusCode != http.StatusOK {
 				t.Fatalf("GET status = %d, want 200", getResp.StatusCode)
@@ -855,7 +855,7 @@ func TestServe_AppendClaims_VisibilityRoundTrip(t *testing.T) {
 				Claims []struct {
 					ID         string `json:"id"`
 					Visibility string `json:"visibility"`
-				} `json:"claims"`
+				} `json:"beliefs"`
 			}
 			if err := json.NewDecoder(getResp.Body).Decode(&result); err != nil {
 				t.Fatalf("decode GET response: %v", err)
@@ -875,11 +875,11 @@ func TestServe_AppendClaims_VisibilityRoundTrip(t *testing.T) {
 func TestServe_AppendClaims_RejectsInvalidVisibility(t *testing.T) {
 	st := newServeJWTTest(t)
 	body := map[string]any{
-		"claims": []map[string]any{
+		"beliefs": []map[string]any{
 			{"id": "cl_vis_bad", "text": "x", "type": "fact", "confidence": 0.5, "status": "active", "visibility": "public"},
 		},
 	}
-	resp := postJSON(t, st.Srv.URL+"/v1/claims", body, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/beliefs", body, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
@@ -893,11 +893,11 @@ func TestServe_AppendClaims_VisibilityDefaultsToTeam(t *testing.T) {
 	now := time.Now().UTC()
 
 	body := map[string]any{
-		"claims": []map[string]any{
+		"beliefs": []map[string]any{
 			{"id": "cl_vis_nofield", "text": "no vis field", "type": "fact", "confidence": 0.7, "status": "active", "created_at": now.Format(time.RFC3339)},
 		},
 	}
-	resp := postJSON(t, st.Srv.URL+"/v1/claims", body, st.Auth)
+	resp := postJSON(t, st.Srv.URL+"/v1/beliefs", body, st.Auth)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("POST status = %d, want 201", resp.StatusCode)

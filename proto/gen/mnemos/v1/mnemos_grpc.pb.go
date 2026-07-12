@@ -19,44 +19,44 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MnemosService_Health_FullMethodName                    = "/mnemos.v1.MnemosService/Health"
-	MnemosService_ListEvents_FullMethodName                = "/mnemos.v1.MnemosService/ListEvents"
-	MnemosService_AppendEvents_FullMethodName              = "/mnemos.v1.MnemosService/AppendEvents"
-	MnemosService_ListClaims_FullMethodName                = "/mnemos.v1.MnemosService/ListClaims"
-	MnemosService_AppendClaims_FullMethodName              = "/mnemos.v1.MnemosService/AppendClaims"
-	MnemosService_ListRelationships_FullMethodName         = "/mnemos.v1.MnemosService/ListRelationships"
-	MnemosService_AppendRelationships_FullMethodName       = "/mnemos.v1.MnemosService/AppendRelationships"
-	MnemosService_ListEmbeddings_FullMethodName            = "/mnemos.v1.MnemosService/ListEmbeddings"
-	MnemosService_AppendEmbeddings_FullMethodName          = "/mnemos.v1.MnemosService/AppendEmbeddings"
-	MnemosService_Metrics_FullMethodName                   = "/mnemos.v1.MnemosService/Metrics"
-	MnemosService_ListActions_FullMethodName               = "/mnemos.v1.MnemosService/ListActions"
-	MnemosService_AppendActions_FullMethodName             = "/mnemos.v1.MnemosService/AppendActions"
-	MnemosService_ListOutcomes_FullMethodName              = "/mnemos.v1.MnemosService/ListOutcomes"
-	MnemosService_AppendOutcomes_FullMethodName            = "/mnemos.v1.MnemosService/AppendOutcomes"
-	MnemosService_ListLessons_FullMethodName               = "/mnemos.v1.MnemosService/ListLessons"
-	MnemosService_AppendLessons_FullMethodName             = "/mnemos.v1.MnemosService/AppendLessons"
-	MnemosService_ListDecisions_FullMethodName             = "/mnemos.v1.MnemosService/ListDecisions"
-	MnemosService_AppendDecisions_FullMethodName           = "/mnemos.v1.MnemosService/AppendDecisions"
-	MnemosService_ListPlaybooks_FullMethodName             = "/mnemos.v1.MnemosService/ListPlaybooks"
-	MnemosService_AppendPlaybooks_FullMethodName           = "/mnemos.v1.MnemosService/AppendPlaybooks"
-	MnemosService_ListEntityRelationships_FullMethodName   = "/mnemos.v1.MnemosService/ListEntityRelationships"
-	MnemosService_AppendEntityRelationships_FullMethodName = "/mnemos.v1.MnemosService/AppendEntityRelationships"
-	MnemosService_WhoKnows_FullMethodName                  = "/mnemos.v1.MnemosService/WhoKnows"
-	MnemosService_KnowledgeGaps_FullMethodName             = "/mnemos.v1.MnemosService/KnowledgeGaps"
-	MnemosService_Calibration_FullMethodName               = "/mnemos.v1.MnemosService/Calibration"
-	MnemosService_Hypercorrections_FullMethodName          = "/mnemos.v1.MnemosService/Hypercorrections"
-	MnemosService_Recombinations_FullMethodName            = "/mnemos.v1.MnemosService/Recombinations"
-	MnemosService_AnalogousClaims_FullMethodName           = "/mnemos.v1.MnemosService/AnalogousClaims"
-	MnemosService_GetClaim_FullMethodName                  = "/mnemos.v1.MnemosService/GetClaim"
-	MnemosService_SetClaimLifecycle_FullMethodName         = "/mnemos.v1.MnemosService/SetClaimLifecycle"
-	MnemosService_Classify_FullMethodName                  = "/mnemos.v1.MnemosService/Classify"
-	MnemosService_GetDecision_FullMethodName               = "/mnemos.v1.MnemosService/GetDecision"
-	MnemosService_Recall_FullMethodName                    = "/mnemos.v1.MnemosService/Recall"
-	MnemosService_GetBlocks_FullMethodName                 = "/mnemos.v1.MnemosService/GetBlocks"
-	MnemosService_SetBlock_FullMethodName                  = "/mnemos.v1.MnemosService/SetBlock"
-	MnemosService_Synthesize_FullMethodName                = "/mnemos.v1.MnemosService/Synthesize"
-	MnemosService_Timeline_FullMethodName                  = "/mnemos.v1.MnemosService/Timeline"
-	MnemosService_Signals_FullMethodName                   = "/mnemos.v1.MnemosService/Signals"
+	MnemosService_Health_FullMethodName                   = "/mnemos.v1.MnemosService/Health"
+	MnemosService_ListEpisodes_FullMethodName             = "/mnemos.v1.MnemosService/ListEpisodes"
+	MnemosService_AppendEpisodes_FullMethodName           = "/mnemos.v1.MnemosService/AppendEpisodes"
+	MnemosService_ListBeliefs_FullMethodName              = "/mnemos.v1.MnemosService/ListBeliefs"
+	MnemosService_AppendBeliefs_FullMethodName            = "/mnemos.v1.MnemosService/AppendBeliefs"
+	MnemosService_ListAssociations_FullMethodName         = "/mnemos.v1.MnemosService/ListAssociations"
+	MnemosService_AppendAssociations_FullMethodName       = "/mnemos.v1.MnemosService/AppendAssociations"
+	MnemosService_ListEmbeddings_FullMethodName           = "/mnemos.v1.MnemosService/ListEmbeddings"
+	MnemosService_AppendEmbeddings_FullMethodName         = "/mnemos.v1.MnemosService/AppendEmbeddings"
+	MnemosService_Metrics_FullMethodName                  = "/mnemos.v1.MnemosService/Metrics"
+	MnemosService_ListActions_FullMethodName              = "/mnemos.v1.MnemosService/ListActions"
+	MnemosService_AppendActions_FullMethodName            = "/mnemos.v1.MnemosService/AppendActions"
+	MnemosService_ListOutcomes_FullMethodName             = "/mnemos.v1.MnemosService/ListOutcomes"
+	MnemosService_AppendOutcomes_FullMethodName           = "/mnemos.v1.MnemosService/AppendOutcomes"
+	MnemosService_ListSchemas_FullMethodName              = "/mnemos.v1.MnemosService/ListSchemas"
+	MnemosService_AppendSchemas_FullMethodName            = "/mnemos.v1.MnemosService/AppendSchemas"
+	MnemosService_ListDecisions_FullMethodName            = "/mnemos.v1.MnemosService/ListDecisions"
+	MnemosService_AppendDecisions_FullMethodName          = "/mnemos.v1.MnemosService/AppendDecisions"
+	MnemosService_ListReflexes_FullMethodName             = "/mnemos.v1.MnemosService/ListReflexes"
+	MnemosService_AppendReflexes_FullMethodName           = "/mnemos.v1.MnemosService/AppendReflexes"
+	MnemosService_ListEntityAssociations_FullMethodName   = "/mnemos.v1.MnemosService/ListEntityAssociations"
+	MnemosService_AppendEntityAssociations_FullMethodName = "/mnemos.v1.MnemosService/AppendEntityAssociations"
+	MnemosService_WhoKnows_FullMethodName                 = "/mnemos.v1.MnemosService/WhoKnows"
+	MnemosService_KnowledgeGaps_FullMethodName            = "/mnemos.v1.MnemosService/KnowledgeGaps"
+	MnemosService_Calibration_FullMethodName              = "/mnemos.v1.MnemosService/Calibration"
+	MnemosService_Hypercorrections_FullMethodName         = "/mnemos.v1.MnemosService/Hypercorrections"
+	MnemosService_Recombinations_FullMethodName           = "/mnemos.v1.MnemosService/Recombinations"
+	MnemosService_AnalogousBeliefs_FullMethodName         = "/mnemos.v1.MnemosService/AnalogousBeliefs"
+	MnemosService_GetBelief_FullMethodName                = "/mnemos.v1.MnemosService/GetBelief"
+	MnemosService_SetBeliefLifecycle_FullMethodName       = "/mnemos.v1.MnemosService/SetBeliefLifecycle"
+	MnemosService_Classify_FullMethodName                 = "/mnemos.v1.MnemosService/Classify"
+	MnemosService_GetDecision_FullMethodName              = "/mnemos.v1.MnemosService/GetDecision"
+	MnemosService_Recall_FullMethodName                   = "/mnemos.v1.MnemosService/Recall"
+	MnemosService_GetBlocks_FullMethodName                = "/mnemos.v1.MnemosService/GetBlocks"
+	MnemosService_SetBlock_FullMethodName                 = "/mnemos.v1.MnemosService/SetBlock"
+	MnemosService_Synthesize_FullMethodName               = "/mnemos.v1.MnemosService/Synthesize"
+	MnemosService_Timeline_FullMethodName                 = "/mnemos.v1.MnemosService/Timeline"
+	MnemosService_Signals_FullMethodName                  = "/mnemos.v1.MnemosService/Signals"
 )
 
 // MnemosServiceClient is the client API for MnemosService service.
@@ -65,26 +65,26 @@ const (
 //
 // MnemosService provides the gRPC API surface for the Mnemos knowledge
 // registry. It mirrors the HTTP REST API at /v1/* with equivalent
-// operations for events, claims, relationships, embeddings, and metrics.
+// operations for episodes, beliefs, associations, embeddings, and metrics.
 type MnemosServiceClient interface {
 	// Health returns the service health status. Deep probes are available
 	// via the detailed field.
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
-	// ListEvents returns a paginated list of all events, most recent first.
-	ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error)
-	// AppendEvents writes one or more events to the store. Idempotent on
-	// duplicate event IDs.
-	AppendEvents(ctx context.Context, in *AppendEventsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
-	// ListClaims returns a paginated list of claims with optional type/status
+	// ListEpisodes returns a paginated list of all episodes, most recent first.
+	ListEpisodes(ctx context.Context, in *ListEpisodesRequest, opts ...grpc.CallOption) (*ListEpisodesResponse, error)
+	// AppendEpisodes writes one or more episodes to the store. Idempotent on
+	// duplicate episode IDs.
+	AppendEpisodes(ctx context.Context, in *AppendEpisodesRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	// ListBeliefs returns a paginated list of beliefs with optional type/status
 	// filtering. Evidence links are included when include_evidence is true.
-	ListClaims(ctx context.Context, in *ListClaimsRequest, opts ...grpc.CallOption) (*ListClaimsResponse, error)
-	// AppendClaims writes claims and optionally their evidence links.
-	AppendClaims(ctx context.Context, in *AppendClaimsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
-	// ListRelationships returns a paginated list of relationships with
+	ListBeliefs(ctx context.Context, in *ListBeliefsRequest, opts ...grpc.CallOption) (*ListBeliefsResponse, error)
+	// AppendBeliefs writes beliefs and optionally their evidence links.
+	AppendBeliefs(ctx context.Context, in *AppendBeliefsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	// ListAssociations returns a paginated list of associations with
 	// optional type filtering.
-	ListRelationships(ctx context.Context, in *ListRelationshipsRequest, opts ...grpc.CallOption) (*ListRelationshipsResponse, error)
-	// AppendRelationships writes one or more relationship edges.
-	AppendRelationships(ctx context.Context, in *AppendRelationshipsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	ListAssociations(ctx context.Context, in *ListAssociationsRequest, opts ...grpc.CallOption) (*ListAssociationsResponse, error)
+	// AppendAssociations writes one or more association edges.
+	AppendAssociations(ctx context.Context, in *AppendAssociationsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
 	// ListEmbeddings returns a paginated list of embeddings with optional
 	// entity_type filtering.
 	ListEmbeddings(ctx context.Context, in *ListEmbeddingsRequest, opts ...grpc.CallOption) (*ListEmbeddingsResponse, error)
@@ -103,23 +103,23 @@ type MnemosServiceClient interface {
 	// done by the higher-level CLI/MCP surface and stays out of the
 	// raw write path.
 	AppendOutcomes(ctx context.Context, in *AppendOutcomesRequest, opts ...grpc.CallOption) (*AppendResponse, error)
-	// ListLessons returns synthesised lessons.
-	ListLessons(ctx context.Context, in *ListLessonsRequest, opts ...grpc.CallOption) (*ListLessonsResponse, error)
-	// AppendLessons writes lessons idempotently (UPSERT on id refreshes
-	// confidence/last_verified, snapshots prior to lesson_versions).
-	AppendLessons(ctx context.Context, in *AppendLessonsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	// ListSchemas returns synthesised schemas.
+	ListSchemas(ctx context.Context, in *ListSchemasRequest, opts ...grpc.CallOption) (*ListSchemasResponse, error)
+	// AppendSchemas writes schemas idempotently (UPSERT on id refreshes
+	// confidence/last_verified, snapshots prior to schema_versions).
+	AppendSchemas(ctx context.Context, in *AppendSchemasRequest, opts ...grpc.CallOption) (*AppendResponse, error)
 	// ListDecisions returns recorded decisions.
 	ListDecisions(ctx context.Context, in *ListDecisionsRequest, opts ...grpc.CallOption) (*ListDecisionsResponse, error)
 	// AppendDecisions writes decisions idempotently.
 	AppendDecisions(ctx context.Context, in *AppendDecisionsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
-	// ListPlaybooks returns synthesised or hand-authored playbooks.
-	ListPlaybooks(ctx context.Context, in *ListPlaybooksRequest, opts ...grpc.CallOption) (*ListPlaybooksResponse, error)
-	// AppendPlaybooks writes playbooks idempotently.
-	AppendPlaybooks(ctx context.Context, in *AppendPlaybooksRequest, opts ...grpc.CallOption) (*AppendResponse, error)
-	// ListEntityRelationships returns polymorphic cross-entity edges.
-	ListEntityRelationships(ctx context.Context, in *ListEntityRelationshipsRequest, opts ...grpc.CallOption) (*ListEntityRelationshipsResponse, error)
-	// AppendEntityRelationships writes polymorphic edges idempotently.
-	AppendEntityRelationships(ctx context.Context, in *AppendEntityRelationshipsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	// ListReflexes returns synthesised or hand-authored reflexes.
+	ListReflexes(ctx context.Context, in *ListReflexesRequest, opts ...grpc.CallOption) (*ListReflexesResponse, error)
+	// AppendReflexes writes reflexes idempotently.
+	AppendReflexes(ctx context.Context, in *AppendReflexesRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	// ListEntityAssociations returns polymorphic cross-entity edges.
+	ListEntityAssociations(ctx context.Context, in *ListEntityAssociationsRequest, opts ...grpc.CallOption) (*ListEntityAssociationsResponse, error)
+	// AppendEntityAssociations writes polymorphic edges idempotently.
+	AppendEntityAssociations(ctx context.Context, in *AppendEntityAssociationsRequest, opts ...grpc.CallOption) (*AppendResponse, error)
 	// --- Connected brain (cognitive layer; parity with HTTP /v1/who-knows etc.) ---
 	// WhoKnows ranks the workers whose memory best matches a query.
 	WhoKnows(ctx context.Context, in *WhoKnowsRequest, opts ...grpc.CallOption) (*WhoKnowsResponse, error)
@@ -127,17 +127,17 @@ type MnemosServiceClient interface {
 	KnowledgeGaps(ctx context.Context, in *KnowledgeGapsRequest, opts ...grpc.CallOption) (*KnowledgeGapsResponse, error)
 	// Calibration reports how well stated confidence tracks reality.
 	Calibration(ctx context.Context, in *CalibrationRequest, opts ...grpc.CallOption) (*CalibrationResponse, error)
-	// Hypercorrections lists established beliefs a newer claim contradicts.
+	// Hypercorrections lists established beliefs a newer belief contradicts.
 	Hypercorrections(ctx context.Context, in *HypercorrectionsRequest, opts ...grpc.CallOption) (*HypercorrectionsResponse, error)
-	// Recombinations lists topically-similar-but-unlinked claim pairs.
+	// Recombinations lists topically-similar-but-unlinked belief pairs.
 	Recombinations(ctx context.Context, in *RecombinationsRequest, opts ...grpc.CallOption) (*RecombinationsResponse, error)
-	// AnalogousClaims returns the claims most structurally analogous to one.
-	AnalogousClaims(ctx context.Context, in *AnalogousClaimsRequest, opts ...grpc.CallOption) (*AnalogousClaimsResponse, error)
-	// --- Claim CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
-	// GetClaim returns a single claim's full detail.
-	GetClaim(ctx context.Context, in *GetClaimRequest, opts ...grpc.CallOption) (*ClaimDetail, error)
-	// SetClaimLifecycle transitions a claim (candidate | promoted | superseded).
-	SetClaimLifecycle(ctx context.Context, in *SetClaimLifecycleRequest, opts ...grpc.CallOption) (*SetClaimLifecycleResponse, error)
+	// AnalogousBeliefs returns the beliefs most structurally analogous to one.
+	AnalogousBeliefs(ctx context.Context, in *AnalogousBeliefsRequest, opts ...grpc.CallOption) (*AnalogousBeliefsResponse, error)
+	// --- Belief CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
+	// GetBelief returns a single belief's full detail.
+	GetBelief(ctx context.Context, in *GetBeliefRequest, opts ...grpc.CallOption) (*BeliefDetail, error)
+	// SetBeliefLifecycle transitions a belief (candidate | promoted | superseded).
+	SetBeliefLifecycle(ctx context.Context, in *SetBeliefLifecycleRequest, opts ...grpc.CallOption) (*SetBeliefLifecycleResponse, error)
 	// Classify reports whether a candidate statement fits established knowledge or is novel.
 	Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error)
 	// GetDecision returns a single recorded decision by id.
@@ -151,9 +151,9 @@ type MnemosServiceClient interface {
 	GetBlocks(ctx context.Context, in *GetBlocksRequest, opts ...grpc.CallOption) (*GetBlocksResponse, error)
 	// SetBlock sets or appends a working-memory block.
 	SetBlock(ctx context.Context, in *SetBlockRequest, opts ...grpc.CallOption) (*SetBlockResponse, error)
-	// Synthesize runs a synthesis pass (actions -> lessons + playbooks).
+	// Synthesize runs a synthesis pass (actions -> schemas + reflexes).
 	Synthesize(ctx context.Context, in *SynthesizeRequest, opts ...grpc.CallOption) (*SynthesizeResponse, error)
-	// Timeline returns events on the temporal timeline.
+	// Timeline returns episodes on the temporal timeline.
 	Timeline(ctx context.Context, in *TimelineRequest, opts ...grpc.CallOption) (*TimelineResponse, error)
 	// Signals returns detected temporal patterns.
 	Signals(ctx context.Context, in *SignalsRequest, opts ...grpc.CallOption) (*SignalsResponse, error)
@@ -177,60 +177,60 @@ func (c *mnemosServiceClient) Health(ctx context.Context, in *HealthRequest, opt
 	return out, nil
 }
 
-func (c *mnemosServiceClient) ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error) {
+func (c *mnemosServiceClient) ListEpisodes(ctx context.Context, in *ListEpisodesRequest, opts ...grpc.CallOption) (*ListEpisodesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListEventsResponse)
-	err := c.cc.Invoke(ctx, MnemosService_ListEvents_FullMethodName, in, out, cOpts...)
+	out := new(ListEpisodesResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListEpisodes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) AppendEvents(ctx context.Context, in *AppendEventsRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
+func (c *mnemosServiceClient) AppendEpisodes(ctx context.Context, in *AppendEpisodesRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AppendResponse)
-	err := c.cc.Invoke(ctx, MnemosService_AppendEvents_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, MnemosService_AppendEpisodes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) ListClaims(ctx context.Context, in *ListClaimsRequest, opts ...grpc.CallOption) (*ListClaimsResponse, error) {
+func (c *mnemosServiceClient) ListBeliefs(ctx context.Context, in *ListBeliefsRequest, opts ...grpc.CallOption) (*ListBeliefsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListClaimsResponse)
-	err := c.cc.Invoke(ctx, MnemosService_ListClaims_FullMethodName, in, out, cOpts...)
+	out := new(ListBeliefsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListBeliefs_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) AppendClaims(ctx context.Context, in *AppendClaimsRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AppendResponse)
-	err := c.cc.Invoke(ctx, MnemosService_AppendClaims_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *mnemosServiceClient) ListRelationships(ctx context.Context, in *ListRelationshipsRequest, opts ...grpc.CallOption) (*ListRelationshipsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListRelationshipsResponse)
-	err := c.cc.Invoke(ctx, MnemosService_ListRelationships_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *mnemosServiceClient) AppendRelationships(ctx context.Context, in *AppendRelationshipsRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
+func (c *mnemosServiceClient) AppendBeliefs(ctx context.Context, in *AppendBeliefsRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AppendResponse)
-	err := c.cc.Invoke(ctx, MnemosService_AppendRelationships_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, MnemosService_AppendBeliefs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) ListAssociations(ctx context.Context, in *ListAssociationsRequest, opts ...grpc.CallOption) (*ListAssociationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAssociationsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListAssociations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) AppendAssociations(ctx context.Context, in *AppendAssociationsRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AppendResponse)
+	err := c.cc.Invoke(ctx, MnemosService_AppendAssociations_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -307,20 +307,20 @@ func (c *mnemosServiceClient) AppendOutcomes(ctx context.Context, in *AppendOutc
 	return out, nil
 }
 
-func (c *mnemosServiceClient) ListLessons(ctx context.Context, in *ListLessonsRequest, opts ...grpc.CallOption) (*ListLessonsResponse, error) {
+func (c *mnemosServiceClient) ListSchemas(ctx context.Context, in *ListSchemasRequest, opts ...grpc.CallOption) (*ListSchemasResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListLessonsResponse)
-	err := c.cc.Invoke(ctx, MnemosService_ListLessons_FullMethodName, in, out, cOpts...)
+	out := new(ListSchemasResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListSchemas_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) AppendLessons(ctx context.Context, in *AppendLessonsRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
+func (c *mnemosServiceClient) AppendSchemas(ctx context.Context, in *AppendSchemasRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AppendResponse)
-	err := c.cc.Invoke(ctx, MnemosService_AppendLessons_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, MnemosService_AppendSchemas_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -347,40 +347,40 @@ func (c *mnemosServiceClient) AppendDecisions(ctx context.Context, in *AppendDec
 	return out, nil
 }
 
-func (c *mnemosServiceClient) ListPlaybooks(ctx context.Context, in *ListPlaybooksRequest, opts ...grpc.CallOption) (*ListPlaybooksResponse, error) {
+func (c *mnemosServiceClient) ListReflexes(ctx context.Context, in *ListReflexesRequest, opts ...grpc.CallOption) (*ListReflexesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListPlaybooksResponse)
-	err := c.cc.Invoke(ctx, MnemosService_ListPlaybooks_FullMethodName, in, out, cOpts...)
+	out := new(ListReflexesResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListReflexes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) AppendPlaybooks(ctx context.Context, in *AppendPlaybooksRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
+func (c *mnemosServiceClient) AppendReflexes(ctx context.Context, in *AppendReflexesRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AppendResponse)
-	err := c.cc.Invoke(ctx, MnemosService_AppendPlaybooks_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, MnemosService_AppendReflexes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) ListEntityRelationships(ctx context.Context, in *ListEntityRelationshipsRequest, opts ...grpc.CallOption) (*ListEntityRelationshipsResponse, error) {
+func (c *mnemosServiceClient) ListEntityAssociations(ctx context.Context, in *ListEntityAssociationsRequest, opts ...grpc.CallOption) (*ListEntityAssociationsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListEntityRelationshipsResponse)
-	err := c.cc.Invoke(ctx, MnemosService_ListEntityRelationships_FullMethodName, in, out, cOpts...)
+	out := new(ListEntityAssociationsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListEntityAssociations_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) AppendEntityRelationships(ctx context.Context, in *AppendEntityRelationshipsRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
+func (c *mnemosServiceClient) AppendEntityAssociations(ctx context.Context, in *AppendEntityAssociationsRequest, opts ...grpc.CallOption) (*AppendResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AppendResponse)
-	err := c.cc.Invoke(ctx, MnemosService_AppendEntityRelationships_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, MnemosService_AppendEntityAssociations_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -437,30 +437,30 @@ func (c *mnemosServiceClient) Recombinations(ctx context.Context, in *Recombinat
 	return out, nil
 }
 
-func (c *mnemosServiceClient) AnalogousClaims(ctx context.Context, in *AnalogousClaimsRequest, opts ...grpc.CallOption) (*AnalogousClaimsResponse, error) {
+func (c *mnemosServiceClient) AnalogousBeliefs(ctx context.Context, in *AnalogousBeliefsRequest, opts ...grpc.CallOption) (*AnalogousBeliefsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AnalogousClaimsResponse)
-	err := c.cc.Invoke(ctx, MnemosService_AnalogousClaims_FullMethodName, in, out, cOpts...)
+	out := new(AnalogousBeliefsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_AnalogousBeliefs_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) GetClaim(ctx context.Context, in *GetClaimRequest, opts ...grpc.CallOption) (*ClaimDetail, error) {
+func (c *mnemosServiceClient) GetBelief(ctx context.Context, in *GetBeliefRequest, opts ...grpc.CallOption) (*BeliefDetail, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ClaimDetail)
-	err := c.cc.Invoke(ctx, MnemosService_GetClaim_FullMethodName, in, out, cOpts...)
+	out := new(BeliefDetail)
+	err := c.cc.Invoke(ctx, MnemosService_GetBelief_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *mnemosServiceClient) SetClaimLifecycle(ctx context.Context, in *SetClaimLifecycleRequest, opts ...grpc.CallOption) (*SetClaimLifecycleResponse, error) {
+func (c *mnemosServiceClient) SetBeliefLifecycle(ctx context.Context, in *SetBeliefLifecycleRequest, opts ...grpc.CallOption) (*SetBeliefLifecycleResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SetClaimLifecycleResponse)
-	err := c.cc.Invoke(ctx, MnemosService_SetClaimLifecycle_FullMethodName, in, out, cOpts...)
+	out := new(SetBeliefLifecycleResponse)
+	err := c.cc.Invoke(ctx, MnemosService_SetBeliefLifecycle_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -553,26 +553,26 @@ func (c *mnemosServiceClient) Signals(ctx context.Context, in *SignalsRequest, o
 //
 // MnemosService provides the gRPC API surface for the Mnemos knowledge
 // registry. It mirrors the HTTP REST API at /v1/* with equivalent
-// operations for events, claims, relationships, embeddings, and metrics.
+// operations for episodes, beliefs, associations, embeddings, and metrics.
 type MnemosServiceServer interface {
 	// Health returns the service health status. Deep probes are available
 	// via the detailed field.
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
-	// ListEvents returns a paginated list of all events, most recent first.
-	ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error)
-	// AppendEvents writes one or more events to the store. Idempotent on
-	// duplicate event IDs.
-	AppendEvents(context.Context, *AppendEventsRequest) (*AppendResponse, error)
-	// ListClaims returns a paginated list of claims with optional type/status
+	// ListEpisodes returns a paginated list of all episodes, most recent first.
+	ListEpisodes(context.Context, *ListEpisodesRequest) (*ListEpisodesResponse, error)
+	// AppendEpisodes writes one or more episodes to the store. Idempotent on
+	// duplicate episode IDs.
+	AppendEpisodes(context.Context, *AppendEpisodesRequest) (*AppendResponse, error)
+	// ListBeliefs returns a paginated list of beliefs with optional type/status
 	// filtering. Evidence links are included when include_evidence is true.
-	ListClaims(context.Context, *ListClaimsRequest) (*ListClaimsResponse, error)
-	// AppendClaims writes claims and optionally their evidence links.
-	AppendClaims(context.Context, *AppendClaimsRequest) (*AppendResponse, error)
-	// ListRelationships returns a paginated list of relationships with
+	ListBeliefs(context.Context, *ListBeliefsRequest) (*ListBeliefsResponse, error)
+	// AppendBeliefs writes beliefs and optionally their evidence links.
+	AppendBeliefs(context.Context, *AppendBeliefsRequest) (*AppendResponse, error)
+	// ListAssociations returns a paginated list of associations with
 	// optional type filtering.
-	ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
-	// AppendRelationships writes one or more relationship edges.
-	AppendRelationships(context.Context, *AppendRelationshipsRequest) (*AppendResponse, error)
+	ListAssociations(context.Context, *ListAssociationsRequest) (*ListAssociationsResponse, error)
+	// AppendAssociations writes one or more association edges.
+	AppendAssociations(context.Context, *AppendAssociationsRequest) (*AppendResponse, error)
 	// ListEmbeddings returns a paginated list of embeddings with optional
 	// entity_type filtering.
 	ListEmbeddings(context.Context, *ListEmbeddingsRequest) (*ListEmbeddingsResponse, error)
@@ -591,23 +591,23 @@ type MnemosServiceServer interface {
 	// done by the higher-level CLI/MCP surface and stays out of the
 	// raw write path.
 	AppendOutcomes(context.Context, *AppendOutcomesRequest) (*AppendResponse, error)
-	// ListLessons returns synthesised lessons.
-	ListLessons(context.Context, *ListLessonsRequest) (*ListLessonsResponse, error)
-	// AppendLessons writes lessons idempotently (UPSERT on id refreshes
-	// confidence/last_verified, snapshots prior to lesson_versions).
-	AppendLessons(context.Context, *AppendLessonsRequest) (*AppendResponse, error)
+	// ListSchemas returns synthesised schemas.
+	ListSchemas(context.Context, *ListSchemasRequest) (*ListSchemasResponse, error)
+	// AppendSchemas writes schemas idempotently (UPSERT on id refreshes
+	// confidence/last_verified, snapshots prior to schema_versions).
+	AppendSchemas(context.Context, *AppendSchemasRequest) (*AppendResponse, error)
 	// ListDecisions returns recorded decisions.
 	ListDecisions(context.Context, *ListDecisionsRequest) (*ListDecisionsResponse, error)
 	// AppendDecisions writes decisions idempotently.
 	AppendDecisions(context.Context, *AppendDecisionsRequest) (*AppendResponse, error)
-	// ListPlaybooks returns synthesised or hand-authored playbooks.
-	ListPlaybooks(context.Context, *ListPlaybooksRequest) (*ListPlaybooksResponse, error)
-	// AppendPlaybooks writes playbooks idempotently.
-	AppendPlaybooks(context.Context, *AppendPlaybooksRequest) (*AppendResponse, error)
-	// ListEntityRelationships returns polymorphic cross-entity edges.
-	ListEntityRelationships(context.Context, *ListEntityRelationshipsRequest) (*ListEntityRelationshipsResponse, error)
-	// AppendEntityRelationships writes polymorphic edges idempotently.
-	AppendEntityRelationships(context.Context, *AppendEntityRelationshipsRequest) (*AppendResponse, error)
+	// ListReflexes returns synthesised or hand-authored reflexes.
+	ListReflexes(context.Context, *ListReflexesRequest) (*ListReflexesResponse, error)
+	// AppendReflexes writes reflexes idempotently.
+	AppendReflexes(context.Context, *AppendReflexesRequest) (*AppendResponse, error)
+	// ListEntityAssociations returns polymorphic cross-entity edges.
+	ListEntityAssociations(context.Context, *ListEntityAssociationsRequest) (*ListEntityAssociationsResponse, error)
+	// AppendEntityAssociations writes polymorphic edges idempotently.
+	AppendEntityAssociations(context.Context, *AppendEntityAssociationsRequest) (*AppendResponse, error)
 	// --- Connected brain (cognitive layer; parity with HTTP /v1/who-knows etc.) ---
 	// WhoKnows ranks the workers whose memory best matches a query.
 	WhoKnows(context.Context, *WhoKnowsRequest) (*WhoKnowsResponse, error)
@@ -615,17 +615,17 @@ type MnemosServiceServer interface {
 	KnowledgeGaps(context.Context, *KnowledgeGapsRequest) (*KnowledgeGapsResponse, error)
 	// Calibration reports how well stated confidence tracks reality.
 	Calibration(context.Context, *CalibrationRequest) (*CalibrationResponse, error)
-	// Hypercorrections lists established beliefs a newer claim contradicts.
+	// Hypercorrections lists established beliefs a newer belief contradicts.
 	Hypercorrections(context.Context, *HypercorrectionsRequest) (*HypercorrectionsResponse, error)
-	// Recombinations lists topically-similar-but-unlinked claim pairs.
+	// Recombinations lists topically-similar-but-unlinked belief pairs.
 	Recombinations(context.Context, *RecombinationsRequest) (*RecombinationsResponse, error)
-	// AnalogousClaims returns the claims most structurally analogous to one.
-	AnalogousClaims(context.Context, *AnalogousClaimsRequest) (*AnalogousClaimsResponse, error)
-	// --- Claim CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
-	// GetClaim returns a single claim's full detail.
-	GetClaim(context.Context, *GetClaimRequest) (*ClaimDetail, error)
-	// SetClaimLifecycle transitions a claim (candidate | promoted | superseded).
-	SetClaimLifecycle(context.Context, *SetClaimLifecycleRequest) (*SetClaimLifecycleResponse, error)
+	// AnalogousBeliefs returns the beliefs most structurally analogous to one.
+	AnalogousBeliefs(context.Context, *AnalogousBeliefsRequest) (*AnalogousBeliefsResponse, error)
+	// --- Belief CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
+	// GetBelief returns a single belief's full detail.
+	GetBelief(context.Context, *GetBeliefRequest) (*BeliefDetail, error)
+	// SetBeliefLifecycle transitions a belief (candidate | promoted | superseded).
+	SetBeliefLifecycle(context.Context, *SetBeliefLifecycleRequest) (*SetBeliefLifecycleResponse, error)
 	// Classify reports whether a candidate statement fits established knowledge or is novel.
 	Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error)
 	// GetDecision returns a single recorded decision by id.
@@ -639,9 +639,9 @@ type MnemosServiceServer interface {
 	GetBlocks(context.Context, *GetBlocksRequest) (*GetBlocksResponse, error)
 	// SetBlock sets or appends a working-memory block.
 	SetBlock(context.Context, *SetBlockRequest) (*SetBlockResponse, error)
-	// Synthesize runs a synthesis pass (actions -> lessons + playbooks).
+	// Synthesize runs a synthesis pass (actions -> schemas + reflexes).
 	Synthesize(context.Context, *SynthesizeRequest) (*SynthesizeResponse, error)
-	// Timeline returns events on the temporal timeline.
+	// Timeline returns episodes on the temporal timeline.
 	Timeline(context.Context, *TimelineRequest) (*TimelineResponse, error)
 	// Signals returns detected temporal patterns.
 	Signals(context.Context, *SignalsRequest) (*SignalsResponse, error)
@@ -658,23 +658,23 @@ type UnimplementedMnemosServiceServer struct{}
 func (UnimplementedMnemosServiceServer) Health(context.Context, *HealthRequest) (*HealthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Health not implemented")
 }
-func (UnimplementedMnemosServiceServer) ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListEvents not implemented")
+func (UnimplementedMnemosServiceServer) ListEpisodes(context.Context, *ListEpisodesRequest) (*ListEpisodesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListEpisodes not implemented")
 }
-func (UnimplementedMnemosServiceServer) AppendEvents(context.Context, *AppendEventsRequest) (*AppendResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AppendEvents not implemented")
+func (UnimplementedMnemosServiceServer) AppendEpisodes(context.Context, *AppendEpisodesRequest) (*AppendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendEpisodes not implemented")
 }
-func (UnimplementedMnemosServiceServer) ListClaims(context.Context, *ListClaimsRequest) (*ListClaimsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListClaims not implemented")
+func (UnimplementedMnemosServiceServer) ListBeliefs(context.Context, *ListBeliefsRequest) (*ListBeliefsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListBeliefs not implemented")
 }
-func (UnimplementedMnemosServiceServer) AppendClaims(context.Context, *AppendClaimsRequest) (*AppendResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AppendClaims not implemented")
+func (UnimplementedMnemosServiceServer) AppendBeliefs(context.Context, *AppendBeliefsRequest) (*AppendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendBeliefs not implemented")
 }
-func (UnimplementedMnemosServiceServer) ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListRelationships not implemented")
+func (UnimplementedMnemosServiceServer) ListAssociations(context.Context, *ListAssociationsRequest) (*ListAssociationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAssociations not implemented")
 }
-func (UnimplementedMnemosServiceServer) AppendRelationships(context.Context, *AppendRelationshipsRequest) (*AppendResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AppendRelationships not implemented")
+func (UnimplementedMnemosServiceServer) AppendAssociations(context.Context, *AppendAssociationsRequest) (*AppendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendAssociations not implemented")
 }
 func (UnimplementedMnemosServiceServer) ListEmbeddings(context.Context, *ListEmbeddingsRequest) (*ListEmbeddingsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListEmbeddings not implemented")
@@ -697,11 +697,11 @@ func (UnimplementedMnemosServiceServer) ListOutcomes(context.Context, *ListOutco
 func (UnimplementedMnemosServiceServer) AppendOutcomes(context.Context, *AppendOutcomesRequest) (*AppendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AppendOutcomes not implemented")
 }
-func (UnimplementedMnemosServiceServer) ListLessons(context.Context, *ListLessonsRequest) (*ListLessonsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListLessons not implemented")
+func (UnimplementedMnemosServiceServer) ListSchemas(context.Context, *ListSchemasRequest) (*ListSchemasResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSchemas not implemented")
 }
-func (UnimplementedMnemosServiceServer) AppendLessons(context.Context, *AppendLessonsRequest) (*AppendResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AppendLessons not implemented")
+func (UnimplementedMnemosServiceServer) AppendSchemas(context.Context, *AppendSchemasRequest) (*AppendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendSchemas not implemented")
 }
 func (UnimplementedMnemosServiceServer) ListDecisions(context.Context, *ListDecisionsRequest) (*ListDecisionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListDecisions not implemented")
@@ -709,17 +709,17 @@ func (UnimplementedMnemosServiceServer) ListDecisions(context.Context, *ListDeci
 func (UnimplementedMnemosServiceServer) AppendDecisions(context.Context, *AppendDecisionsRequest) (*AppendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AppendDecisions not implemented")
 }
-func (UnimplementedMnemosServiceServer) ListPlaybooks(context.Context, *ListPlaybooksRequest) (*ListPlaybooksResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListPlaybooks not implemented")
+func (UnimplementedMnemosServiceServer) ListReflexes(context.Context, *ListReflexesRequest) (*ListReflexesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListReflexes not implemented")
 }
-func (UnimplementedMnemosServiceServer) AppendPlaybooks(context.Context, *AppendPlaybooksRequest) (*AppendResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AppendPlaybooks not implemented")
+func (UnimplementedMnemosServiceServer) AppendReflexes(context.Context, *AppendReflexesRequest) (*AppendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendReflexes not implemented")
 }
-func (UnimplementedMnemosServiceServer) ListEntityRelationships(context.Context, *ListEntityRelationshipsRequest) (*ListEntityRelationshipsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListEntityRelationships not implemented")
+func (UnimplementedMnemosServiceServer) ListEntityAssociations(context.Context, *ListEntityAssociationsRequest) (*ListEntityAssociationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListEntityAssociations not implemented")
 }
-func (UnimplementedMnemosServiceServer) AppendEntityRelationships(context.Context, *AppendEntityRelationshipsRequest) (*AppendResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AppendEntityRelationships not implemented")
+func (UnimplementedMnemosServiceServer) AppendEntityAssociations(context.Context, *AppendEntityAssociationsRequest) (*AppendResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendEntityAssociations not implemented")
 }
 func (UnimplementedMnemosServiceServer) WhoKnows(context.Context, *WhoKnowsRequest) (*WhoKnowsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WhoKnows not implemented")
@@ -736,14 +736,14 @@ func (UnimplementedMnemosServiceServer) Hypercorrections(context.Context, *Hyper
 func (UnimplementedMnemosServiceServer) Recombinations(context.Context, *RecombinationsRequest) (*RecombinationsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Recombinations not implemented")
 }
-func (UnimplementedMnemosServiceServer) AnalogousClaims(context.Context, *AnalogousClaimsRequest) (*AnalogousClaimsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method AnalogousClaims not implemented")
+func (UnimplementedMnemosServiceServer) AnalogousBeliefs(context.Context, *AnalogousBeliefsRequest) (*AnalogousBeliefsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AnalogousBeliefs not implemented")
 }
-func (UnimplementedMnemosServiceServer) GetClaim(context.Context, *GetClaimRequest) (*ClaimDetail, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetClaim not implemented")
+func (UnimplementedMnemosServiceServer) GetBelief(context.Context, *GetBeliefRequest) (*BeliefDetail, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBelief not implemented")
 }
-func (UnimplementedMnemosServiceServer) SetClaimLifecycle(context.Context, *SetClaimLifecycleRequest) (*SetClaimLifecycleResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetClaimLifecycle not implemented")
+func (UnimplementedMnemosServiceServer) SetBeliefLifecycle(context.Context, *SetBeliefLifecycleRequest) (*SetBeliefLifecycleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetBeliefLifecycle not implemented")
 }
 func (UnimplementedMnemosServiceServer) Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Classify not implemented")
@@ -808,110 +808,110 @@ func _MnemosService_Health_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_ListEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListEventsRequest)
+func _MnemosService_ListEpisodes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListEpisodesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).ListEvents(ctx, in)
+		return srv.(MnemosServiceServer).ListEpisodes(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_ListEvents_FullMethodName,
+		FullMethod: MnemosService_ListEpisodes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).ListEvents(ctx, req.(*ListEventsRequest))
+		return srv.(MnemosServiceServer).ListEpisodes(ctx, req.(*ListEpisodesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_AppendEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppendEventsRequest)
+func _MnemosService_AppendEpisodes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendEpisodesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).AppendEvents(ctx, in)
+		return srv.(MnemosServiceServer).AppendEpisodes(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_AppendEvents_FullMethodName,
+		FullMethod: MnemosService_AppendEpisodes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).AppendEvents(ctx, req.(*AppendEventsRequest))
+		return srv.(MnemosServiceServer).AppendEpisodes(ctx, req.(*AppendEpisodesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_ListClaims_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListClaimsRequest)
+func _MnemosService_ListBeliefs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListBeliefsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).ListClaims(ctx, in)
+		return srv.(MnemosServiceServer).ListBeliefs(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_ListClaims_FullMethodName,
+		FullMethod: MnemosService_ListBeliefs_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).ListClaims(ctx, req.(*ListClaimsRequest))
+		return srv.(MnemosServiceServer).ListBeliefs(ctx, req.(*ListBeliefsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_AppendClaims_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppendClaimsRequest)
+func _MnemosService_AppendBeliefs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendBeliefsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).AppendClaims(ctx, in)
+		return srv.(MnemosServiceServer).AppendBeliefs(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_AppendClaims_FullMethodName,
+		FullMethod: MnemosService_AppendBeliefs_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).AppendClaims(ctx, req.(*AppendClaimsRequest))
+		return srv.(MnemosServiceServer).AppendBeliefs(ctx, req.(*AppendBeliefsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_ListRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListRelationshipsRequest)
+func _MnemosService_ListAssociations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAssociationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).ListRelationships(ctx, in)
+		return srv.(MnemosServiceServer).ListAssociations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_ListRelationships_FullMethodName,
+		FullMethod: MnemosService_ListAssociations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).ListRelationships(ctx, req.(*ListRelationshipsRequest))
+		return srv.(MnemosServiceServer).ListAssociations(ctx, req.(*ListAssociationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_AppendRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppendRelationshipsRequest)
+func _MnemosService_AppendAssociations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendAssociationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).AppendRelationships(ctx, in)
+		return srv.(MnemosServiceServer).AppendAssociations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_AppendRelationships_FullMethodName,
+		FullMethod: MnemosService_AppendAssociations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).AppendRelationships(ctx, req.(*AppendRelationshipsRequest))
+		return srv.(MnemosServiceServer).AppendAssociations(ctx, req.(*AppendAssociationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1042,38 +1042,38 @@ func _MnemosService_AppendOutcomes_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_ListLessons_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListLessonsRequest)
+func _MnemosService_ListSchemas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSchemasRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).ListLessons(ctx, in)
+		return srv.(MnemosServiceServer).ListSchemas(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_ListLessons_FullMethodName,
+		FullMethod: MnemosService_ListSchemas_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).ListLessons(ctx, req.(*ListLessonsRequest))
+		return srv.(MnemosServiceServer).ListSchemas(ctx, req.(*ListSchemasRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_AppendLessons_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppendLessonsRequest)
+func _MnemosService_AppendSchemas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendSchemasRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).AppendLessons(ctx, in)
+		return srv.(MnemosServiceServer).AppendSchemas(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_AppendLessons_FullMethodName,
+		FullMethod: MnemosService_AppendSchemas_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).AppendLessons(ctx, req.(*AppendLessonsRequest))
+		return srv.(MnemosServiceServer).AppendSchemas(ctx, req.(*AppendSchemasRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1114,74 +1114,74 @@ func _MnemosService_AppendDecisions_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_ListPlaybooks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListPlaybooksRequest)
+func _MnemosService_ListReflexes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListReflexesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).ListPlaybooks(ctx, in)
+		return srv.(MnemosServiceServer).ListReflexes(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_ListPlaybooks_FullMethodName,
+		FullMethod: MnemosService_ListReflexes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).ListPlaybooks(ctx, req.(*ListPlaybooksRequest))
+		return srv.(MnemosServiceServer).ListReflexes(ctx, req.(*ListReflexesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_AppendPlaybooks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppendPlaybooksRequest)
+func _MnemosService_AppendReflexes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendReflexesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).AppendPlaybooks(ctx, in)
+		return srv.(MnemosServiceServer).AppendReflexes(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_AppendPlaybooks_FullMethodName,
+		FullMethod: MnemosService_AppendReflexes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).AppendPlaybooks(ctx, req.(*AppendPlaybooksRequest))
+		return srv.(MnemosServiceServer).AppendReflexes(ctx, req.(*AppendReflexesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_ListEntityRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListEntityRelationshipsRequest)
+func _MnemosService_ListEntityAssociations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListEntityAssociationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).ListEntityRelationships(ctx, in)
+		return srv.(MnemosServiceServer).ListEntityAssociations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_ListEntityRelationships_FullMethodName,
+		FullMethod: MnemosService_ListEntityAssociations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).ListEntityRelationships(ctx, req.(*ListEntityRelationshipsRequest))
+		return srv.(MnemosServiceServer).ListEntityAssociations(ctx, req.(*ListEntityAssociationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_AppendEntityRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AppendEntityRelationshipsRequest)
+func _MnemosService_AppendEntityAssociations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendEntityAssociationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).AppendEntityRelationships(ctx, in)
+		return srv.(MnemosServiceServer).AppendEntityAssociations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_AppendEntityRelationships_FullMethodName,
+		FullMethod: MnemosService_AppendEntityAssociations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).AppendEntityRelationships(ctx, req.(*AppendEntityRelationshipsRequest))
+		return srv.(MnemosServiceServer).AppendEntityAssociations(ctx, req.(*AppendEntityAssociationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1276,56 +1276,56 @@ func _MnemosService_Recombinations_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_AnalogousClaims_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AnalogousClaimsRequest)
+func _MnemosService_AnalogousBeliefs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnalogousBeliefsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).AnalogousClaims(ctx, in)
+		return srv.(MnemosServiceServer).AnalogousBeliefs(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_AnalogousClaims_FullMethodName,
+		FullMethod: MnemosService_AnalogousBeliefs_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).AnalogousClaims(ctx, req.(*AnalogousClaimsRequest))
+		return srv.(MnemosServiceServer).AnalogousBeliefs(ctx, req.(*AnalogousBeliefsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_GetClaim_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetClaimRequest)
+func _MnemosService_GetBelief_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBeliefRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).GetClaim(ctx, in)
+		return srv.(MnemosServiceServer).GetBelief(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_GetClaim_FullMethodName,
+		FullMethod: MnemosService_GetBelief_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).GetClaim(ctx, req.(*GetClaimRequest))
+		return srv.(MnemosServiceServer).GetBelief(ctx, req.(*GetBeliefRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MnemosService_SetClaimLifecycle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetClaimLifecycleRequest)
+func _MnemosService_SetBeliefLifecycle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetBeliefLifecycleRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MnemosServiceServer).SetClaimLifecycle(ctx, in)
+		return srv.(MnemosServiceServer).SetBeliefLifecycle(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: MnemosService_SetClaimLifecycle_FullMethodName,
+		FullMethod: MnemosService_SetBeliefLifecycle_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MnemosServiceServer).SetClaimLifecycle(ctx, req.(*SetClaimLifecycleRequest))
+		return srv.(MnemosServiceServer).SetBeliefLifecycle(ctx, req.(*SetBeliefLifecycleRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1486,28 +1486,28 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MnemosService_Health_Handler,
 		},
 		{
-			MethodName: "ListEvents",
-			Handler:    _MnemosService_ListEvents_Handler,
+			MethodName: "ListEpisodes",
+			Handler:    _MnemosService_ListEpisodes_Handler,
 		},
 		{
-			MethodName: "AppendEvents",
-			Handler:    _MnemosService_AppendEvents_Handler,
+			MethodName: "AppendEpisodes",
+			Handler:    _MnemosService_AppendEpisodes_Handler,
 		},
 		{
-			MethodName: "ListClaims",
-			Handler:    _MnemosService_ListClaims_Handler,
+			MethodName: "ListBeliefs",
+			Handler:    _MnemosService_ListBeliefs_Handler,
 		},
 		{
-			MethodName: "AppendClaims",
-			Handler:    _MnemosService_AppendClaims_Handler,
+			MethodName: "AppendBeliefs",
+			Handler:    _MnemosService_AppendBeliefs_Handler,
 		},
 		{
-			MethodName: "ListRelationships",
-			Handler:    _MnemosService_ListRelationships_Handler,
+			MethodName: "ListAssociations",
+			Handler:    _MnemosService_ListAssociations_Handler,
 		},
 		{
-			MethodName: "AppendRelationships",
-			Handler:    _MnemosService_AppendRelationships_Handler,
+			MethodName: "AppendAssociations",
+			Handler:    _MnemosService_AppendAssociations_Handler,
 		},
 		{
 			MethodName: "ListEmbeddings",
@@ -1538,12 +1538,12 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MnemosService_AppendOutcomes_Handler,
 		},
 		{
-			MethodName: "ListLessons",
-			Handler:    _MnemosService_ListLessons_Handler,
+			MethodName: "ListSchemas",
+			Handler:    _MnemosService_ListSchemas_Handler,
 		},
 		{
-			MethodName: "AppendLessons",
-			Handler:    _MnemosService_AppendLessons_Handler,
+			MethodName: "AppendSchemas",
+			Handler:    _MnemosService_AppendSchemas_Handler,
 		},
 		{
 			MethodName: "ListDecisions",
@@ -1554,20 +1554,20 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MnemosService_AppendDecisions_Handler,
 		},
 		{
-			MethodName: "ListPlaybooks",
-			Handler:    _MnemosService_ListPlaybooks_Handler,
+			MethodName: "ListReflexes",
+			Handler:    _MnemosService_ListReflexes_Handler,
 		},
 		{
-			MethodName: "AppendPlaybooks",
-			Handler:    _MnemosService_AppendPlaybooks_Handler,
+			MethodName: "AppendReflexes",
+			Handler:    _MnemosService_AppendReflexes_Handler,
 		},
 		{
-			MethodName: "ListEntityRelationships",
-			Handler:    _MnemosService_ListEntityRelationships_Handler,
+			MethodName: "ListEntityAssociations",
+			Handler:    _MnemosService_ListEntityAssociations_Handler,
 		},
 		{
-			MethodName: "AppendEntityRelationships",
-			Handler:    _MnemosService_AppendEntityRelationships_Handler,
+			MethodName: "AppendEntityAssociations",
+			Handler:    _MnemosService_AppendEntityAssociations_Handler,
 		},
 		{
 			MethodName: "WhoKnows",
@@ -1590,16 +1590,16 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MnemosService_Recombinations_Handler,
 		},
 		{
-			MethodName: "AnalogousClaims",
-			Handler:    _MnemosService_AnalogousClaims_Handler,
+			MethodName: "AnalogousBeliefs",
+			Handler:    _MnemosService_AnalogousBeliefs_Handler,
 		},
 		{
-			MethodName: "GetClaim",
-			Handler:    _MnemosService_GetClaim_Handler,
+			MethodName: "GetBelief",
+			Handler:    _MnemosService_GetBelief_Handler,
 		},
 		{
-			MethodName: "SetClaimLifecycle",
-			Handler:    _MnemosService_SetClaimLifecycle_Handler,
+			MethodName: "SetBeliefLifecycle",
+			Handler:    _MnemosService_SetBeliefLifecycle_Handler,
 		},
 		{
 			MethodName: "Classify",

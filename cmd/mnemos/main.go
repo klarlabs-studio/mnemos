@@ -570,11 +570,11 @@ func handleQuery(args []string, f Flags) {
 			printHumanReadableAnswer(question, answer)
 		} else {
 			response := map[string]any{
-				"answer":         answer.AnswerText,
-				"claims":         answer.Claims,
-				"contradictions": answer.Contradictions,
-				"timeline":       answer.TimelineEventIDs,
-				"confidence":     answer.Confidence,
+				"answer":      answer.AnswerText,
+				"beliefs":     answer.Claims,
+				"dissonances": answer.Contradictions,
+				"timeline":    answer.TimelineEventIDs,
+				"confidence":  answer.Confidence,
 			}
 			encoded, err := json.MarshalIndent(response, "", "  ")
 			if err != nil {

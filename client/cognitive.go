@@ -93,7 +93,7 @@ func (c *Client) AnalogousClaims(ctx context.Context, claimID string, limit int)
 	var out struct {
 		Analogous []Analogy `json:"analogous"`
 	}
-	path := "/v1/claims/" + url.PathEscape(claimID) + "/analogous"
+	path := "/v1/beliefs/" + url.PathEscape(claimID) + "/analogous"
 	if err := c.do(ctx, http.MethodGet, withQuery(path, q), nil, &out); err != nil {
 		return nil, err
 	}

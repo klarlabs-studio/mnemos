@@ -21,17 +21,17 @@ type auditWhoExport struct {
 	Principal     string                 `json:"principal"`
 	Since         string                 `json:"since,omitempty"`
 	Counts        auditWhoCounts         `json:"counts"`
-	Events        []auditWhoEvent        `json:"events"`
-	Claims        []auditWhoClaim        `json:"claims"`
-	Relationships []auditWhoRelationship `json:"relationships"`
+	Events        []auditWhoEvent        `json:"episodes"`
+	Claims        []auditWhoClaim        `json:"beliefs"`
+	Relationships []auditWhoRelationship `json:"associations"`
 	Embeddings    []auditWhoEmbedding    `json:"embeddings"`
 	Transitions   []auditWhoTransition   `json:"status_transitions"`
 }
 
 type auditWhoCounts struct {
-	Events        int `json:"events"`
-	Claims        int `json:"claims"`
-	Relationships int `json:"relationships"`
+	Events        int `json:"episodes"`
+	Claims        int `json:"beliefs"`
+	Relationships int `json:"associations"`
 	Embeddings    int `json:"embeddings"`
 	Transitions   int `json:"status_transitions"`
 }
@@ -55,8 +55,8 @@ type auditWhoClaim struct {
 type auditWhoRelationship struct {
 	ID          string `json:"id"`
 	Type        string `json:"type"`
-	FromClaimID string `json:"from_claim_id"`
-	ToClaimID   string `json:"to_claim_id"`
+	FromClaimID string `json:"from_belief_id"`
+	ToClaimID   string `json:"to_belief_id"`
 	CreatedAt   string `json:"created_at"`
 }
 
@@ -69,14 +69,14 @@ type auditWhoEmbedding struct {
 }
 
 type auditWhoTransition struct {
-	ClaimID    string `json:"claim_id"`
+	ClaimID    string `json:"belief_id"`
 	FromStatus string `json:"from_status"`
 	ToStatus   string `json:"to_status"`
 	ChangedAt  string `json:"changed_at"`
 	Reason     string `json:"reason"`
 }
 
-const auditWhoSchemaVersion = "audit_who.v1"
+const auditWhoSchemaVersion = "audit_who.v2"
 
 // handleAuditWho implements `mnemos audit who <principal-id>
 // [--since <duration>] [--human]`. The principal can be any string

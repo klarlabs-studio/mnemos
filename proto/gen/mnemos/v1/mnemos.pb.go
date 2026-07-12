@@ -178,7 +178,7 @@ func (x *HealthResponse) GetHealthy() bool {
 	return false
 }
 
-type Event struct {
+type Episode struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -192,20 +192,20 @@ type Event struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Event) Reset() {
-	*x = Event{}
+func (x *Episode) Reset() {
+	*x = Episode{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Event) String() string {
+func (x *Episode) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Event) ProtoMessage() {}
+func (*Episode) ProtoMessage() {}
 
-func (x *Event) ProtoReflect() protoreflect.Message {
+func (x *Episode) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -217,88 +217,88 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Event.ProtoReflect.Descriptor instead.
-func (*Event) Descriptor() ([]byte, []int) {
+// Deprecated: Use Episode.ProtoReflect.Descriptor instead.
+func (*Episode) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *Event) GetId() string {
+func (x *Episode) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Event) GetRunId() string {
+func (x *Episode) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *Event) GetSchemaVersion() string {
+func (x *Episode) GetSchemaVersion() string {
 	if x != nil {
 		return x.SchemaVersion
 	}
 	return ""
 }
 
-func (x *Event) GetContent() string {
+func (x *Episode) GetContent() string {
 	if x != nil {
 		return x.Content
 	}
 	return ""
 }
 
-func (x *Event) GetSourceInputId() string {
+func (x *Episode) GetSourceInputId() string {
 	if x != nil {
 		return x.SourceInputId
 	}
 	return ""
 }
 
-func (x *Event) GetTimestamp() *timestamppb.Timestamp {
+func (x *Episode) GetTimestamp() *timestamppb.Timestamp {
 	if x != nil {
 		return x.Timestamp
 	}
 	return nil
 }
 
-func (x *Event) GetMetadata() map[string]string {
+func (x *Episode) GetMetadata() map[string]string {
 	if x != nil {
 		return x.Metadata
 	}
 	return nil
 }
 
-func (x *Event) GetIngestedAt() *timestamppb.Timestamp {
+func (x *Episode) GetIngestedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.IngestedAt
 	}
 	return nil
 }
 
-type ListEventsRequest struct {
+type ListEpisodesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pagination    *Pagination            `protobuf:"bytes,1,opt,name=pagination,proto3" json:"pagination,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListEventsRequest) Reset() {
-	*x = ListEventsRequest{}
+func (x *ListEpisodesRequest) Reset() {
+	*x = ListEpisodesRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListEventsRequest) String() string {
+func (x *ListEpisodesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListEventsRequest) ProtoMessage() {}
+func (*ListEpisodesRequest) ProtoMessage() {}
 
-func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
+func (x *ListEpisodesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -310,21 +310,21 @@ func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListEventsRequest.ProtoReflect.Descriptor instead.
-func (*ListEventsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListEpisodesRequest.ProtoReflect.Descriptor instead.
+func (*ListEpisodesRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *ListEventsRequest) GetPagination() *Pagination {
+func (x *ListEpisodesRequest) GetPagination() *Pagination {
 	if x != nil {
 		return x.Pagination
 	}
 	return nil
 }
 
-type ListEventsResponse struct {
+type ListEpisodesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*Event               `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	Episodes      []*Episode             `protobuf:"bytes,1,rep,name=episodes,proto3" json:"episodes,omitempty"`
 	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
@@ -332,20 +332,20 @@ type ListEventsResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListEventsResponse) Reset() {
-	*x = ListEventsResponse{}
+func (x *ListEpisodesResponse) Reset() {
+	*x = ListEpisodesResponse{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListEventsResponse) String() string {
+func (x *ListEpisodesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListEventsResponse) ProtoMessage() {}
+func (*ListEpisodesResponse) ProtoMessage() {}
 
-func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
+func (x *ListEpisodesResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -357,60 +357,60 @@ func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListEventsResponse.ProtoReflect.Descriptor instead.
-func (*ListEventsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListEpisodesResponse.ProtoReflect.Descriptor instead.
+func (*ListEpisodesResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *ListEventsResponse) GetEvents() []*Event {
+func (x *ListEpisodesResponse) GetEpisodes() []*Episode {
 	if x != nil {
-		return x.Events
+		return x.Episodes
 	}
 	return nil
 }
 
-func (x *ListEventsResponse) GetTotal() int32 {
+func (x *ListEpisodesResponse) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ListEventsResponse) GetLimit() int32 {
+func (x *ListEpisodesResponse) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *ListEventsResponse) GetOffset() int32 {
+func (x *ListEpisodesResponse) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-type AppendEventsRequest struct {
+type AppendEpisodesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*Event               `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	Episodes      []*Episode             `protobuf:"bytes,1,rep,name=episodes,proto3" json:"episodes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AppendEventsRequest) Reset() {
-	*x = AppendEventsRequest{}
+func (x *AppendEpisodesRequest) Reset() {
+	*x = AppendEpisodesRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AppendEventsRequest) String() string {
+func (x *AppendEpisodesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AppendEventsRequest) ProtoMessage() {}
+func (*AppendEpisodesRequest) ProtoMessage() {}
 
-func (x *AppendEventsRequest) ProtoReflect() protoreflect.Message {
+func (x *AppendEpisodesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -422,19 +422,19 @@ func (x *AppendEventsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AppendEventsRequest.ProtoReflect.Descriptor instead.
-func (*AppendEventsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AppendEpisodesRequest.ProtoReflect.Descriptor instead.
+func (*AppendEpisodesRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *AppendEventsRequest) GetEvents() []*Event {
+func (x *AppendEpisodesRequest) GetEpisodes() []*Episode {
 	if x != nil {
-		return x.Events
+		return x.Episodes
 	}
 	return nil
 }
 
-type Claim struct {
+type Belief struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Text       string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
@@ -449,20 +449,20 @@ type Claim struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Claim) Reset() {
-	*x = Claim{}
+func (x *Belief) Reset() {
+	*x = Belief{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Claim) String() string {
+func (x *Belief) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Claim) ProtoMessage() {}
+func (*Belief) ProtoMessage() {}
 
-func (x *Claim) ProtoReflect() protoreflect.Message {
+func (x *Belief) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -474,82 +474,82 @@ func (x *Claim) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Claim.ProtoReflect.Descriptor instead.
-func (*Claim) Descriptor() ([]byte, []int) {
+// Deprecated: Use Belief.ProtoReflect.Descriptor instead.
+func (*Belief) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *Claim) GetId() string {
+func (x *Belief) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Claim) GetText() string {
+func (x *Belief) GetText() string {
 	if x != nil {
 		return x.Text
 	}
 	return ""
 }
 
-func (x *Claim) GetType() string {
+func (x *Belief) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *Claim) GetConfidence() float64 {
+func (x *Belief) GetConfidence() float64 {
 	if x != nil {
 		return x.Confidence
 	}
 	return 0
 }
 
-func (x *Claim) GetStatus() string {
+func (x *Belief) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
 	return ""
 }
 
-func (x *Claim) GetCreatedAt() *timestamppb.Timestamp {
+func (x *Belief) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *Claim) GetVisibility() string {
+func (x *Belief) GetVisibility() string {
 	if x != nil {
 		return x.Visibility
 	}
 	return ""
 }
 
-type ClaimEvidence struct {
+type BeliefEvidence struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
-	EventId       string                 `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
+	EpisodeId     string                 `protobuf:"bytes,2,opt,name=episode_id,json=episodeId,proto3" json:"episode_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ClaimEvidence) Reset() {
-	*x = ClaimEvidence{}
+func (x *BeliefEvidence) Reset() {
+	*x = BeliefEvidence{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ClaimEvidence) String() string {
+func (x *BeliefEvidence) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ClaimEvidence) ProtoMessage() {}
+func (*BeliefEvidence) ProtoMessage() {}
 
-func (x *ClaimEvidence) ProtoReflect() protoreflect.Message {
+func (x *BeliefEvidence) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -561,42 +561,42 @@ func (x *ClaimEvidence) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ClaimEvidence.ProtoReflect.Descriptor instead.
-func (*ClaimEvidence) Descriptor() ([]byte, []int) {
+// Deprecated: Use BeliefEvidence.ProtoReflect.Descriptor instead.
+func (*BeliefEvidence) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *ClaimEvidence) GetClaimId() string {
+func (x *BeliefEvidence) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
 
-func (x *ClaimEvidence) GetEventId() string {
+func (x *BeliefEvidence) GetEpisodeId() string {
 	if x != nil {
-		return x.EventId
+		return x.EpisodeId
 	}
 	return ""
 }
 
-type ListClaimsRequest struct {
+type ListBeliefsRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Pagination      *Pagination            `protobuf:"bytes,1,opt,name=pagination,proto3" json:"pagination,omitempty"`
 	TypeFilter      string                 `protobuf:"bytes,2,opt,name=type_filter,json=typeFilter,proto3" json:"type_filter,omitempty"`
 	StatusFilter    string                 `protobuf:"bytes,3,opt,name=status_filter,json=statusFilter,proto3" json:"status_filter,omitempty"`
 	IncludeEvidence bool                   `protobuf:"varint,4,opt,name=include_evidence,json=includeEvidence,proto3" json:"include_evidence,omitempty"`
-	// run_id: when set, only returns claims with ≥1 evidence link to an
-	// event whose RunID equals this value. Foundational tenant filter for
+	// run_id: when set, only returns beliefs with ≥1 evidence link to an
+	// episode whose RunID equals this value. Foundational tenant filter for
 	// integrators that scope memory by run_id prefix (e.g. animal:<uuid>).
-	// Claims with no evidence are excluded — fail closed.
+	// Beliefs with no evidence are excluded — fail closed.
 	RunId string `protobuf:"bytes,5,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// as_of: validity-time filter. When set, only returns claims that
+	// as_of: validity-time filter. When set, only returns beliefs that
 	// were valid at this timestamp (valid_from <= as_of AND (valid_to is
 	// zero OR as_of < valid_to)). Mirrors the HTTP ?as_of= query param —
 	// gRPC parity for Zep-style time-travel reads.
 	AsOf *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
-	// recorded_as_of: ingestion-time filter. When set, drops claims
+	// recorded_as_of: ingestion-time filter. When set, drops beliefs
 	// recorded after this timestamp so the response is reproducible
 	// from the snapshot of the store as it stood then.
 	RecordedAsOf  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=recorded_as_of,json=recordedAsOf,proto3" json:"recorded_as_of,omitempty"`
@@ -604,20 +604,20 @@ type ListClaimsRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListClaimsRequest) Reset() {
-	*x = ListClaimsRequest{}
+func (x *ListBeliefsRequest) Reset() {
+	*x = ListBeliefsRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListClaimsRequest) String() string {
+func (x *ListBeliefsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListClaimsRequest) ProtoMessage() {}
+func (*ListBeliefsRequest) ProtoMessage() {}
 
-func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
+func (x *ListBeliefsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -629,64 +629,64 @@ func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListClaimsRequest.ProtoReflect.Descriptor instead.
-func (*ListClaimsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListBeliefsRequest.ProtoReflect.Descriptor instead.
+func (*ListBeliefsRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *ListClaimsRequest) GetPagination() *Pagination {
+func (x *ListBeliefsRequest) GetPagination() *Pagination {
 	if x != nil {
 		return x.Pagination
 	}
 	return nil
 }
 
-func (x *ListClaimsRequest) GetTypeFilter() string {
+func (x *ListBeliefsRequest) GetTypeFilter() string {
 	if x != nil {
 		return x.TypeFilter
 	}
 	return ""
 }
 
-func (x *ListClaimsRequest) GetStatusFilter() string {
+func (x *ListBeliefsRequest) GetStatusFilter() string {
 	if x != nil {
 		return x.StatusFilter
 	}
 	return ""
 }
 
-func (x *ListClaimsRequest) GetIncludeEvidence() bool {
+func (x *ListBeliefsRequest) GetIncludeEvidence() bool {
 	if x != nil {
 		return x.IncludeEvidence
 	}
 	return false
 }
 
-func (x *ListClaimsRequest) GetRunId() string {
+func (x *ListBeliefsRequest) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *ListClaimsRequest) GetAsOf() *timestamppb.Timestamp {
+func (x *ListBeliefsRequest) GetAsOf() *timestamppb.Timestamp {
 	if x != nil {
 		return x.AsOf
 	}
 	return nil
 }
 
-func (x *ListClaimsRequest) GetRecordedAsOf() *timestamppb.Timestamp {
+func (x *ListBeliefsRequest) GetRecordedAsOf() *timestamppb.Timestamp {
 	if x != nil {
 		return x.RecordedAsOf
 	}
 	return nil
 }
 
-type ListClaimsResponse struct {
+type ListBeliefsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Claims        []*Claim               `protobuf:"bytes,1,rep,name=claims,proto3" json:"claims,omitempty"`
-	Evidence      []*ClaimEvidence       `protobuf:"bytes,2,rep,name=evidence,proto3" json:"evidence,omitempty"`
+	Beliefs       []*Belief              `protobuf:"bytes,1,rep,name=beliefs,proto3" json:"beliefs,omitempty"`
+	Evidence      []*BeliefEvidence      `protobuf:"bytes,2,rep,name=evidence,proto3" json:"evidence,omitempty"`
 	Total         int32                  `protobuf:"varint,3,opt,name=total,proto3" json:"total,omitempty"`
 	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32                  `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
@@ -694,20 +694,20 @@ type ListClaimsResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListClaimsResponse) Reset() {
-	*x = ListClaimsResponse{}
+func (x *ListBeliefsResponse) Reset() {
+	*x = ListBeliefsResponse{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListClaimsResponse) String() string {
+func (x *ListBeliefsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListClaimsResponse) ProtoMessage() {}
+func (*ListBeliefsResponse) ProtoMessage() {}
 
-func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
+func (x *ListBeliefsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -719,68 +719,68 @@ func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListClaimsResponse.ProtoReflect.Descriptor instead.
-func (*ListClaimsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListBeliefsResponse.ProtoReflect.Descriptor instead.
+func (*ListBeliefsResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *ListClaimsResponse) GetClaims() []*Claim {
+func (x *ListBeliefsResponse) GetBeliefs() []*Belief {
 	if x != nil {
-		return x.Claims
+		return x.Beliefs
 	}
 	return nil
 }
 
-func (x *ListClaimsResponse) GetEvidence() []*ClaimEvidence {
+func (x *ListBeliefsResponse) GetEvidence() []*BeliefEvidence {
 	if x != nil {
 		return x.Evidence
 	}
 	return nil
 }
 
-func (x *ListClaimsResponse) GetTotal() int32 {
+func (x *ListBeliefsResponse) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ListClaimsResponse) GetLimit() int32 {
+func (x *ListBeliefsResponse) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *ListClaimsResponse) GetOffset() int32 {
+func (x *ListBeliefsResponse) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-type AppendClaimsRequest struct {
+type AppendBeliefsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Claims        []*Claim               `protobuf:"bytes,1,rep,name=claims,proto3" json:"claims,omitempty"`
-	Evidence      []*ClaimEvidence       `protobuf:"bytes,2,rep,name=evidence,proto3" json:"evidence,omitempty"`
+	Beliefs       []*Belief              `protobuf:"bytes,1,rep,name=beliefs,proto3" json:"beliefs,omitempty"`
+	Evidence      []*BeliefEvidence      `protobuf:"bytes,2,rep,name=evidence,proto3" json:"evidence,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AppendClaimsRequest) Reset() {
-	*x = AppendClaimsRequest{}
+func (x *AppendBeliefsRequest) Reset() {
+	*x = AppendBeliefsRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AppendClaimsRequest) String() string {
+func (x *AppendBeliefsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AppendClaimsRequest) ProtoMessage() {}
+func (*AppendBeliefsRequest) ProtoMessage() {}
 
-func (x *AppendClaimsRequest) ProtoReflect() protoreflect.Message {
+func (x *AppendBeliefsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -792,50 +792,50 @@ func (x *AppendClaimsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AppendClaimsRequest.ProtoReflect.Descriptor instead.
-func (*AppendClaimsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AppendBeliefsRequest.ProtoReflect.Descriptor instead.
+func (*AppendBeliefsRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *AppendClaimsRequest) GetClaims() []*Claim {
+func (x *AppendBeliefsRequest) GetBeliefs() []*Belief {
 	if x != nil {
-		return x.Claims
+		return x.Beliefs
 	}
 	return nil
 }
 
-func (x *AppendClaimsRequest) GetEvidence() []*ClaimEvidence {
+func (x *AppendBeliefsRequest) GetEvidence() []*BeliefEvidence {
 	if x != nil {
 		return x.Evidence
 	}
 	return nil
 }
 
-type Relationship struct {
+type Association struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	FromClaimId   string                 `protobuf:"bytes,3,opt,name=from_claim_id,json=fromClaimId,proto3" json:"from_claim_id,omitempty"`
-	ToClaimId     string                 `protobuf:"bytes,4,opt,name=to_claim_id,json=toClaimId,proto3" json:"to_claim_id,omitempty"`
+	FromBeliefId  string                 `protobuf:"bytes,3,opt,name=from_belief_id,json=fromBeliefId,proto3" json:"from_belief_id,omitempty"`
+	ToBeliefId    string                 `protobuf:"bytes,4,opt,name=to_belief_id,json=toBeliefId,proto3" json:"to_belief_id,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Relationship) Reset() {
-	*x = Relationship{}
+func (x *Association) Reset() {
+	*x = Association{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Relationship) String() string {
+func (x *Association) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Relationship) ProtoMessage() {}
+func (*Association) ProtoMessage() {}
 
-func (x *Relationship) ProtoReflect() protoreflect.Message {
+func (x *Association) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -847,47 +847,47 @@ func (x *Relationship) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Relationship.ProtoReflect.Descriptor instead.
-func (*Relationship) Descriptor() ([]byte, []int) {
+// Deprecated: Use Association.ProtoReflect.Descriptor instead.
+func (*Association) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *Relationship) GetId() string {
+func (x *Association) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Relationship) GetType() string {
+func (x *Association) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *Relationship) GetFromClaimId() string {
+func (x *Association) GetFromBeliefId() string {
 	if x != nil {
-		return x.FromClaimId
+		return x.FromBeliefId
 	}
 	return ""
 }
 
-func (x *Relationship) GetToClaimId() string {
+func (x *Association) GetToBeliefId() string {
 	if x != nil {
-		return x.ToClaimId
+		return x.ToBeliefId
 	}
 	return ""
 }
 
-func (x *Relationship) GetCreatedAt() *timestamppb.Timestamp {
+func (x *Association) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-type ListRelationshipsRequest struct {
+type ListAssociationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pagination    *Pagination            `protobuf:"bytes,1,opt,name=pagination,proto3" json:"pagination,omitempty"`
 	TypeFilter    string                 `protobuf:"bytes,2,opt,name=type_filter,json=typeFilter,proto3" json:"type_filter,omitempty"`
@@ -895,20 +895,20 @@ type ListRelationshipsRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListRelationshipsRequest) Reset() {
-	*x = ListRelationshipsRequest{}
+func (x *ListAssociationsRequest) Reset() {
+	*x = ListAssociationsRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListRelationshipsRequest) String() string {
+func (x *ListAssociationsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListRelationshipsRequest) ProtoMessage() {}
+func (*ListAssociationsRequest) ProtoMessage() {}
 
-func (x *ListRelationshipsRequest) ProtoReflect() protoreflect.Message {
+func (x *ListAssociationsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -920,28 +920,28 @@ func (x *ListRelationshipsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListRelationshipsRequest.ProtoReflect.Descriptor instead.
-func (*ListRelationshipsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListAssociationsRequest.ProtoReflect.Descriptor instead.
+func (*ListAssociationsRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{13}
 }
 
-func (x *ListRelationshipsRequest) GetPagination() *Pagination {
+func (x *ListAssociationsRequest) GetPagination() *Pagination {
 	if x != nil {
 		return x.Pagination
 	}
 	return nil
 }
 
-func (x *ListRelationshipsRequest) GetTypeFilter() string {
+func (x *ListAssociationsRequest) GetTypeFilter() string {
 	if x != nil {
 		return x.TypeFilter
 	}
 	return ""
 }
 
-type ListRelationshipsResponse struct {
+type ListAssociationsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Relationships []*Relationship        `protobuf:"bytes,1,rep,name=relationships,proto3" json:"relationships,omitempty"`
+	Associations  []*Association         `protobuf:"bytes,1,rep,name=associations,proto3" json:"associations,omitempty"`
 	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
@@ -949,20 +949,20 @@ type ListRelationshipsResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListRelationshipsResponse) Reset() {
-	*x = ListRelationshipsResponse{}
+func (x *ListAssociationsResponse) Reset() {
+	*x = ListAssociationsResponse{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListRelationshipsResponse) String() string {
+func (x *ListAssociationsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListRelationshipsResponse) ProtoMessage() {}
+func (*ListAssociationsResponse) ProtoMessage() {}
 
-func (x *ListRelationshipsResponse) ProtoReflect() protoreflect.Message {
+func (x *ListAssociationsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -974,60 +974,60 @@ func (x *ListRelationshipsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListRelationshipsResponse.ProtoReflect.Descriptor instead.
-func (*ListRelationshipsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListAssociationsResponse.ProtoReflect.Descriptor instead.
+func (*ListAssociationsResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *ListRelationshipsResponse) GetRelationships() []*Relationship {
+func (x *ListAssociationsResponse) GetAssociations() []*Association {
 	if x != nil {
-		return x.Relationships
+		return x.Associations
 	}
 	return nil
 }
 
-func (x *ListRelationshipsResponse) GetTotal() int32 {
+func (x *ListAssociationsResponse) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ListRelationshipsResponse) GetLimit() int32 {
+func (x *ListAssociationsResponse) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *ListRelationshipsResponse) GetOffset() int32 {
+func (x *ListAssociationsResponse) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-type AppendRelationshipsRequest struct {
+type AppendAssociationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Relationships []*Relationship        `protobuf:"bytes,1,rep,name=relationships,proto3" json:"relationships,omitempty"`
+	Associations  []*Association         `protobuf:"bytes,1,rep,name=associations,proto3" json:"associations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AppendRelationshipsRequest) Reset() {
-	*x = AppendRelationshipsRequest{}
+func (x *AppendAssociationsRequest) Reset() {
+	*x = AppendAssociationsRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AppendRelationshipsRequest) String() string {
+func (x *AppendAssociationsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AppendRelationshipsRequest) ProtoMessage() {}
+func (*AppendAssociationsRequest) ProtoMessage() {}
 
-func (x *AppendRelationshipsRequest) ProtoReflect() protoreflect.Message {
+func (x *AppendAssociationsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1039,14 +1039,14 @@ func (x *AppendRelationshipsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AppendRelationshipsRequest.ProtoReflect.Descriptor instead.
-func (*AppendRelationshipsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AppendAssociationsRequest.ProtoReflect.Descriptor instead.
+func (*AppendAssociationsRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *AppendRelationshipsRequest) GetRelationships() []*Relationship {
+func (x *AppendAssociationsRequest) GetAssociations() []*Association {
 	if x != nil {
-		return x.Relationships
+		return x.Associations
 	}
 	return nil
 }
@@ -1130,7 +1130,7 @@ func (x *Embedding) GetDimensions() int32 {
 type ListEmbeddingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pagination    *Pagination            `protobuf:"bytes,1,opt,name=pagination,proto3" json:"pagination,omitempty"`
-	EntityType    string                 `protobuf:"bytes,2,opt,name=entity_type,json=entityType,proto3" json:"entity_type,omitempty"` // "event" or "claim"; empty = all
+	EntityType    string                 `protobuf:"bytes,2,opt,name=entity_type,json=entityType,proto3" json:"entity_type,omitempty"` // "episode" or "belief"; empty = all
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1380,16 +1380,16 @@ func (*MetricsRequest) Descriptor() ([]byte, []int) {
 }
 
 type MetricsResponse struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Runs            int64                  `protobuf:"varint,1,opt,name=runs,proto3" json:"runs,omitempty"`
-	Events          int64                  `protobuf:"varint,2,opt,name=events,proto3" json:"events,omitempty"`
-	Claims          int64                  `protobuf:"varint,3,opt,name=claims,proto3" json:"claims,omitempty"`
-	ContestedClaims int64                  `protobuf:"varint,4,opt,name=contested_claims,json=contestedClaims,proto3" json:"contested_claims,omitempty"`
-	Relationships   int64                  `protobuf:"varint,5,opt,name=relationships,proto3" json:"relationships,omitempty"`
-	Contradictions  int64                  `protobuf:"varint,6,opt,name=contradictions,proto3" json:"contradictions,omitempty"`
-	Embeddings      int64                  `protobuf:"varint,7,opt,name=embeddings,proto3" json:"embeddings,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Runs             int64                  `protobuf:"varint,1,opt,name=runs,proto3" json:"runs,omitempty"`
+	Episodes         int64                  `protobuf:"varint,2,opt,name=episodes,proto3" json:"episodes,omitempty"`
+	Beliefs          int64                  `protobuf:"varint,3,opt,name=beliefs,proto3" json:"beliefs,omitempty"`
+	ContestedBeliefs int64                  `protobuf:"varint,4,opt,name=contested_beliefs,json=contestedBeliefs,proto3" json:"contested_beliefs,omitempty"`
+	Associations     int64                  `protobuf:"varint,5,opt,name=associations,proto3" json:"associations,omitempty"`
+	Dissonances      int64                  `protobuf:"varint,6,opt,name=dissonances,proto3" json:"dissonances,omitempty"`
+	Embeddings       int64                  `protobuf:"varint,7,opt,name=embeddings,proto3" json:"embeddings,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *MetricsResponse) Reset() {
@@ -1429,37 +1429,37 @@ func (x *MetricsResponse) GetRuns() int64 {
 	return 0
 }
 
-func (x *MetricsResponse) GetEvents() int64 {
+func (x *MetricsResponse) GetEpisodes() int64 {
 	if x != nil {
-		return x.Events
+		return x.Episodes
 	}
 	return 0
 }
 
-func (x *MetricsResponse) GetClaims() int64 {
+func (x *MetricsResponse) GetBeliefs() int64 {
 	if x != nil {
-		return x.Claims
+		return x.Beliefs
 	}
 	return 0
 }
 
-func (x *MetricsResponse) GetContestedClaims() int64 {
+func (x *MetricsResponse) GetContestedBeliefs() int64 {
 	if x != nil {
-		return x.ContestedClaims
+		return x.ContestedBeliefs
 	}
 	return 0
 }
 
-func (x *MetricsResponse) GetRelationships() int64 {
+func (x *MetricsResponse) GetAssociations() int64 {
 	if x != nil {
-		return x.Relationships
+		return x.Associations
 	}
 	return 0
 }
 
-func (x *MetricsResponse) GetContradictions() int64 {
+func (x *MetricsResponse) GetDissonances() int64 {
 	if x != nil {
-		return x.Contradictions
+		return x.Dissonances
 	}
 	return 0
 }
@@ -2023,7 +2023,7 @@ func (x *AppendOutcomesRequest) GetOutcomes() []*Outcome {
 	return nil
 }
 
-type Scope struct {
+type Context struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Service       string                 `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
 	Env           string                 `protobuf:"bytes,2,opt,name=env,proto3" json:"env,omitempty"`
@@ -2032,20 +2032,20 @@ type Scope struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Scope) Reset() {
-	*x = Scope{}
+func (x *Context) Reset() {
+	*x = Context{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Scope) String() string {
+func (x *Context) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Scope) ProtoMessage() {}
+func (*Context) ProtoMessage() {}
 
-func (x *Scope) ProtoReflect() protoreflect.Message {
+func (x *Context) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2057,37 +2057,37 @@ func (x *Scope) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Scope.ProtoReflect.Descriptor instead.
-func (*Scope) Descriptor() ([]byte, []int) {
+// Deprecated: Use Context.ProtoReflect.Descriptor instead.
+func (*Context) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{31}
 }
 
-func (x *Scope) GetService() string {
+func (x *Context) GetService() string {
 	if x != nil {
 		return x.Service
 	}
 	return ""
 }
 
-func (x *Scope) GetEnv() string {
+func (x *Context) GetEnv() string {
 	if x != nil {
 		return x.Env
 	}
 	return ""
 }
 
-func (x *Scope) GetTeam() string {
+func (x *Context) GetTeam() string {
 	if x != nil {
 		return x.Team
 	}
 	return ""
 }
 
-type Lesson struct {
+type Schema struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Statement     string                 `protobuf:"bytes,2,opt,name=statement,proto3" json:"statement,omitempty"`
-	Scope         *Scope                 `protobuf:"bytes,3,opt,name=scope,proto3" json:"scope,omitempty"`
+	Context       *Context               `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
 	Trigger       string                 `protobuf:"bytes,4,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	Kind          string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
 	Evidence      []string               `protobuf:"bytes,6,rep,name=evidence,proto3" json:"evidence,omitempty"`
@@ -2100,20 +2100,20 @@ type Lesson struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Lesson) Reset() {
-	*x = Lesson{}
+func (x *Schema) Reset() {
+	*x = Schema{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Lesson) String() string {
+func (x *Schema) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Lesson) ProtoMessage() {}
+func (*Schema) ProtoMessage() {}
 
-func (x *Lesson) ProtoReflect() protoreflect.Message {
+func (x *Schema) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2125,111 +2125,111 @@ func (x *Lesson) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Lesson.ProtoReflect.Descriptor instead.
-func (*Lesson) Descriptor() ([]byte, []int) {
+// Deprecated: Use Schema.ProtoReflect.Descriptor instead.
+func (*Schema) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{32}
 }
 
-func (x *Lesson) GetId() string {
+func (x *Schema) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Lesson) GetStatement() string {
+func (x *Schema) GetStatement() string {
 	if x != nil {
 		return x.Statement
 	}
 	return ""
 }
 
-func (x *Lesson) GetScope() *Scope {
+func (x *Schema) GetContext() *Context {
 	if x != nil {
-		return x.Scope
+		return x.Context
 	}
 	return nil
 }
 
-func (x *Lesson) GetTrigger() string {
+func (x *Schema) GetTrigger() string {
 	if x != nil {
 		return x.Trigger
 	}
 	return ""
 }
 
-func (x *Lesson) GetKind() string {
+func (x *Schema) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *Lesson) GetEvidence() []string {
+func (x *Schema) GetEvidence() []string {
 	if x != nil {
 		return x.Evidence
 	}
 	return nil
 }
 
-func (x *Lesson) GetConfidence() float64 {
+func (x *Schema) GetConfidence() float64 {
 	if x != nil {
 		return x.Confidence
 	}
 	return 0
 }
 
-func (x *Lesson) GetDerivedAt() *timestamppb.Timestamp {
+func (x *Schema) GetDerivedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.DerivedAt
 	}
 	return nil
 }
 
-func (x *Lesson) GetLastVerified() *timestamppb.Timestamp {
+func (x *Schema) GetLastVerified() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastVerified
 	}
 	return nil
 }
 
-func (x *Lesson) GetSource() string {
+func (x *Schema) GetSource() string {
 	if x != nil {
 		return x.Source
 	}
 	return ""
 }
 
-func (x *Lesson) GetCreatedBy() string {
+func (x *Schema) GetCreatedBy() string {
 	if x != nil {
 		return x.CreatedBy
 	}
 	return ""
 }
 
-type ListLessonsRequest struct {
+type ListSchemasRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pagination    *Pagination            `protobuf:"bytes,1,opt,name=pagination,proto3" json:"pagination,omitempty"`
-	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"` // optional scope filter
+	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"` // optional context filter
 	Trigger       string                 `protobuf:"bytes,3,opt,name=trigger,proto3" json:"trigger,omitempty"` // optional trigger filter
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListLessonsRequest) Reset() {
-	*x = ListLessonsRequest{}
+func (x *ListSchemasRequest) Reset() {
+	*x = ListSchemasRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListLessonsRequest) String() string {
+func (x *ListSchemasRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListLessonsRequest) ProtoMessage() {}
+func (*ListSchemasRequest) ProtoMessage() {}
 
-func (x *ListLessonsRequest) ProtoReflect() protoreflect.Message {
+func (x *ListSchemasRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2241,35 +2241,35 @@ func (x *ListLessonsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListLessonsRequest.ProtoReflect.Descriptor instead.
-func (*ListLessonsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListSchemasRequest.ProtoReflect.Descriptor instead.
+func (*ListSchemasRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{33}
 }
 
-func (x *ListLessonsRequest) GetPagination() *Pagination {
+func (x *ListSchemasRequest) GetPagination() *Pagination {
 	if x != nil {
 		return x.Pagination
 	}
 	return nil
 }
 
-func (x *ListLessonsRequest) GetService() string {
+func (x *ListSchemasRequest) GetService() string {
 	if x != nil {
 		return x.Service
 	}
 	return ""
 }
 
-func (x *ListLessonsRequest) GetTrigger() string {
+func (x *ListSchemasRequest) GetTrigger() string {
 	if x != nil {
 		return x.Trigger
 	}
 	return ""
 }
 
-type ListLessonsResponse struct {
+type ListSchemasResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Lessons       []*Lesson              `protobuf:"bytes,1,rep,name=lessons,proto3" json:"lessons,omitempty"`
+	Schemas       []*Schema              `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
 	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
@@ -2277,20 +2277,20 @@ type ListLessonsResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListLessonsResponse) Reset() {
-	*x = ListLessonsResponse{}
+func (x *ListSchemasResponse) Reset() {
+	*x = ListSchemasResponse{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListLessonsResponse) String() string {
+func (x *ListSchemasResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListLessonsResponse) ProtoMessage() {}
+func (*ListSchemasResponse) ProtoMessage() {}
 
-func (x *ListLessonsResponse) ProtoReflect() protoreflect.Message {
+func (x *ListSchemasResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2302,60 +2302,60 @@ func (x *ListLessonsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListLessonsResponse.ProtoReflect.Descriptor instead.
-func (*ListLessonsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListSchemasResponse.ProtoReflect.Descriptor instead.
+func (*ListSchemasResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{34}
 }
 
-func (x *ListLessonsResponse) GetLessons() []*Lesson {
+func (x *ListSchemasResponse) GetSchemas() []*Schema {
 	if x != nil {
-		return x.Lessons
+		return x.Schemas
 	}
 	return nil
 }
 
-func (x *ListLessonsResponse) GetTotal() int32 {
+func (x *ListSchemasResponse) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ListLessonsResponse) GetLimit() int32 {
+func (x *ListSchemasResponse) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *ListLessonsResponse) GetOffset() int32 {
+func (x *ListSchemasResponse) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-type AppendLessonsRequest struct {
+type AppendSchemasRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Lessons       []*Lesson              `protobuf:"bytes,1,rep,name=lessons,proto3" json:"lessons,omitempty"`
+	Schemas       []*Schema              `protobuf:"bytes,1,rep,name=schemas,proto3" json:"schemas,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AppendLessonsRequest) Reset() {
-	*x = AppendLessonsRequest{}
+func (x *AppendSchemasRequest) Reset() {
+	*x = AppendSchemasRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AppendLessonsRequest) String() string {
+func (x *AppendSchemasRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AppendLessonsRequest) ProtoMessage() {}
+func (*AppendSchemasRequest) ProtoMessage() {}
 
-func (x *AppendLessonsRequest) ProtoReflect() protoreflect.Message {
+func (x *AppendSchemasRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2367,14 +2367,14 @@ func (x *AppendLessonsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AppendLessonsRequest.ProtoReflect.Descriptor instead.
-func (*AppendLessonsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AppendSchemasRequest.ProtoReflect.Descriptor instead.
+func (*AppendSchemasRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{35}
 }
 
-func (x *AppendLessonsRequest) GetLessons() []*Lesson {
+func (x *AppendSchemasRequest) GetSchemas() []*Schema {
 	if x != nil {
-		return x.Lessons
+		return x.Schemas
 	}
 	return nil
 }
@@ -2389,7 +2389,7 @@ type Decision struct {
 	Beliefs       []string               `protobuf:"bytes,6,rep,name=beliefs,proto3" json:"beliefs,omitempty"`
 	Alternatives  []string               `protobuf:"bytes,7,rep,name=alternatives,proto3" json:"alternatives,omitempty"`
 	OutcomeId     string                 `protobuf:"bytes,8,opt,name=outcome_id,json=outcomeId,proto3" json:"outcome_id,omitempty"`
-	Scope         *Scope                 `protobuf:"bytes,9,opt,name=scope,proto3" json:"scope,omitempty"`
+	Context       *Context               `protobuf:"bytes,9,opt,name=context,proto3" json:"context,omitempty"`
 	ChosenAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=chosen_at,json=chosenAt,proto3" json:"chosen_at,omitempty"`
 	CreatedBy     string                 `protobuf:"bytes,11,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -2483,9 +2483,9 @@ func (x *Decision) GetOutcomeId() string {
 	return ""
 }
 
-func (x *Decision) GetScope() *Scope {
+func (x *Decision) GetContext() *Context {
 	if x != nil {
-		return x.Scope
+		return x.Context
 	}
 	return nil
 }
@@ -2675,7 +2675,7 @@ func (x *AppendDecisionsRequest) GetDecisions() []*Decision {
 	return nil
 }
 
-type PlaybookStep struct {
+type ReflexStep struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Order         int32                  `protobuf:"varint,1,opt,name=order,proto3" json:"order,omitempty"`
 	Action        string                 `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"`
@@ -2685,20 +2685,20 @@ type PlaybookStep struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PlaybookStep) Reset() {
-	*x = PlaybookStep{}
+func (x *ReflexStep) Reset() {
+	*x = ReflexStep{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PlaybookStep) String() string {
+func (x *ReflexStep) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PlaybookStep) ProtoMessage() {}
+func (*ReflexStep) ProtoMessage() {}
 
-func (x *PlaybookStep) ProtoReflect() protoreflect.Message {
+func (x *ReflexStep) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2710,47 +2710,47 @@ func (x *PlaybookStep) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PlaybookStep.ProtoReflect.Descriptor instead.
-func (*PlaybookStep) Descriptor() ([]byte, []int) {
+// Deprecated: Use ReflexStep.ProtoReflect.Descriptor instead.
+func (*ReflexStep) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{40}
 }
 
-func (x *PlaybookStep) GetOrder() int32 {
+func (x *ReflexStep) GetOrder() int32 {
 	if x != nil {
 		return x.Order
 	}
 	return 0
 }
 
-func (x *PlaybookStep) GetAction() string {
+func (x *ReflexStep) GetAction() string {
 	if x != nil {
 		return x.Action
 	}
 	return ""
 }
 
-func (x *PlaybookStep) GetDescription() string {
+func (x *ReflexStep) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
 	return ""
 }
 
-func (x *PlaybookStep) GetCondition() string {
+func (x *ReflexStep) GetCondition() string {
 	if x != nil {
 		return x.Condition
 	}
 	return ""
 }
 
-type Playbook struct {
+type Reflex struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Trigger            string                 `protobuf:"bytes,2,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	Statement          string                 `protobuf:"bytes,3,opt,name=statement,proto3" json:"statement,omitempty"`
-	Scope              *Scope                 `protobuf:"bytes,4,opt,name=scope,proto3" json:"scope,omitempty"`
-	Steps              []*PlaybookStep        `protobuf:"bytes,5,rep,name=steps,proto3" json:"steps,omitempty"`
-	DerivedFromLessons []string               `protobuf:"bytes,6,rep,name=derived_from_lessons,json=derivedFromLessons,proto3" json:"derived_from_lessons,omitempty"`
+	Context            *Context               `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
+	Steps              []*ReflexStep          `protobuf:"bytes,5,rep,name=steps,proto3" json:"steps,omitempty"`
+	DerivedFromSchemas []string               `protobuf:"bytes,6,rep,name=derived_from_schemas,json=derivedFromSchemas,proto3" json:"derived_from_schemas,omitempty"`
 	Confidence         float64                `protobuf:"fixed64,7,opt,name=confidence,proto3" json:"confidence,omitempty"`
 	DerivedAt          *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=derived_at,json=derivedAt,proto3" json:"derived_at,omitempty"`
 	LastVerified       *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_verified,json=lastVerified,proto3" json:"last_verified,omitempty"`
@@ -2760,20 +2760,20 @@ type Playbook struct {
 	sizeCache          protoimpl.SizeCache
 }
 
-func (x *Playbook) Reset() {
-	*x = Playbook{}
+func (x *Reflex) Reset() {
+	*x = Reflex{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Playbook) String() string {
+func (x *Reflex) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Playbook) ProtoMessage() {}
+func (*Reflex) ProtoMessage() {}
 
-func (x *Playbook) ProtoReflect() protoreflect.Message {
+func (x *Reflex) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2785,111 +2785,111 @@ func (x *Playbook) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Playbook.ProtoReflect.Descriptor instead.
-func (*Playbook) Descriptor() ([]byte, []int) {
+// Deprecated: Use Reflex.ProtoReflect.Descriptor instead.
+func (*Reflex) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{41}
 }
 
-func (x *Playbook) GetId() string {
+func (x *Reflex) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Playbook) GetTrigger() string {
+func (x *Reflex) GetTrigger() string {
 	if x != nil {
 		return x.Trigger
 	}
 	return ""
 }
 
-func (x *Playbook) GetStatement() string {
+func (x *Reflex) GetStatement() string {
 	if x != nil {
 		return x.Statement
 	}
 	return ""
 }
 
-func (x *Playbook) GetScope() *Scope {
+func (x *Reflex) GetContext() *Context {
 	if x != nil {
-		return x.Scope
+		return x.Context
 	}
 	return nil
 }
 
-func (x *Playbook) GetSteps() []*PlaybookStep {
+func (x *Reflex) GetSteps() []*ReflexStep {
 	if x != nil {
 		return x.Steps
 	}
 	return nil
 }
 
-func (x *Playbook) GetDerivedFromLessons() []string {
+func (x *Reflex) GetDerivedFromSchemas() []string {
 	if x != nil {
-		return x.DerivedFromLessons
+		return x.DerivedFromSchemas
 	}
 	return nil
 }
 
-func (x *Playbook) GetConfidence() float64 {
+func (x *Reflex) GetConfidence() float64 {
 	if x != nil {
 		return x.Confidence
 	}
 	return 0
 }
 
-func (x *Playbook) GetDerivedAt() *timestamppb.Timestamp {
+func (x *Reflex) GetDerivedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.DerivedAt
 	}
 	return nil
 }
 
-func (x *Playbook) GetLastVerified() *timestamppb.Timestamp {
+func (x *Reflex) GetLastVerified() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastVerified
 	}
 	return nil
 }
 
-func (x *Playbook) GetSource() string {
+func (x *Reflex) GetSource() string {
 	if x != nil {
 		return x.Source
 	}
 	return ""
 }
 
-func (x *Playbook) GetCreatedBy() string {
+func (x *Reflex) GetCreatedBy() string {
 	if x != nil {
 		return x.CreatedBy
 	}
 	return ""
 }
 
-type ListPlaybooksRequest struct {
+type ListReflexesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pagination    *Pagination            `protobuf:"bytes,1,opt,name=pagination,proto3" json:"pagination,omitempty"`
 	Trigger       string                 `protobuf:"bytes,2,opt,name=trigger,proto3" json:"trigger,omitempty"` // optional filter
-	Service       string                 `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"` // optional scope filter
+	Service       string                 `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"` // optional context filter
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListPlaybooksRequest) Reset() {
-	*x = ListPlaybooksRequest{}
+func (x *ListReflexesRequest) Reset() {
+	*x = ListReflexesRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListPlaybooksRequest) String() string {
+func (x *ListReflexesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListPlaybooksRequest) ProtoMessage() {}
+func (*ListReflexesRequest) ProtoMessage() {}
 
-func (x *ListPlaybooksRequest) ProtoReflect() protoreflect.Message {
+func (x *ListReflexesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2901,35 +2901,35 @@ func (x *ListPlaybooksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListPlaybooksRequest.ProtoReflect.Descriptor instead.
-func (*ListPlaybooksRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListReflexesRequest.ProtoReflect.Descriptor instead.
+func (*ListReflexesRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{42}
 }
 
-func (x *ListPlaybooksRequest) GetPagination() *Pagination {
+func (x *ListReflexesRequest) GetPagination() *Pagination {
 	if x != nil {
 		return x.Pagination
 	}
 	return nil
 }
 
-func (x *ListPlaybooksRequest) GetTrigger() string {
+func (x *ListReflexesRequest) GetTrigger() string {
 	if x != nil {
 		return x.Trigger
 	}
 	return ""
 }
 
-func (x *ListPlaybooksRequest) GetService() string {
+func (x *ListReflexesRequest) GetService() string {
 	if x != nil {
 		return x.Service
 	}
 	return ""
 }
 
-type ListPlaybooksResponse struct {
+type ListReflexesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Playbooks     []*Playbook            `protobuf:"bytes,1,rep,name=playbooks,proto3" json:"playbooks,omitempty"`
+	Reflexes      []*Reflex              `protobuf:"bytes,1,rep,name=reflexes,proto3" json:"reflexes,omitempty"`
 	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
@@ -2937,20 +2937,20 @@ type ListPlaybooksResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListPlaybooksResponse) Reset() {
-	*x = ListPlaybooksResponse{}
+func (x *ListReflexesResponse) Reset() {
+	*x = ListReflexesResponse{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListPlaybooksResponse) String() string {
+func (x *ListReflexesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListPlaybooksResponse) ProtoMessage() {}
+func (*ListReflexesResponse) ProtoMessage() {}
 
-func (x *ListPlaybooksResponse) ProtoReflect() protoreflect.Message {
+func (x *ListReflexesResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2962,60 +2962,60 @@ func (x *ListPlaybooksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListPlaybooksResponse.ProtoReflect.Descriptor instead.
-func (*ListPlaybooksResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListReflexesResponse.ProtoReflect.Descriptor instead.
+func (*ListReflexesResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{43}
 }
 
-func (x *ListPlaybooksResponse) GetPlaybooks() []*Playbook {
+func (x *ListReflexesResponse) GetReflexes() []*Reflex {
 	if x != nil {
-		return x.Playbooks
+		return x.Reflexes
 	}
 	return nil
 }
 
-func (x *ListPlaybooksResponse) GetTotal() int32 {
+func (x *ListReflexesResponse) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ListPlaybooksResponse) GetLimit() int32 {
+func (x *ListReflexesResponse) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *ListPlaybooksResponse) GetOffset() int32 {
+func (x *ListReflexesResponse) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-type AppendPlaybooksRequest struct {
+type AppendReflexesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Playbooks     []*Playbook            `protobuf:"bytes,1,rep,name=playbooks,proto3" json:"playbooks,omitempty"`
+	Reflexes      []*Reflex              `protobuf:"bytes,1,rep,name=reflexes,proto3" json:"reflexes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AppendPlaybooksRequest) Reset() {
-	*x = AppendPlaybooksRequest{}
+func (x *AppendReflexesRequest) Reset() {
+	*x = AppendReflexesRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AppendPlaybooksRequest) String() string {
+func (x *AppendReflexesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AppendPlaybooksRequest) ProtoMessage() {}
+func (*AppendReflexesRequest) ProtoMessage() {}
 
-func (x *AppendPlaybooksRequest) ProtoReflect() protoreflect.Message {
+func (x *AppendReflexesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3027,19 +3027,19 @@ func (x *AppendPlaybooksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AppendPlaybooksRequest.ProtoReflect.Descriptor instead.
-func (*AppendPlaybooksRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AppendReflexesRequest.ProtoReflect.Descriptor instead.
+func (*AppendReflexesRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{44}
 }
 
-func (x *AppendPlaybooksRequest) GetPlaybooks() []*Playbook {
+func (x *AppendReflexesRequest) GetReflexes() []*Reflex {
 	if x != nil {
-		return x.Playbooks
+		return x.Reflexes
 	}
 	return nil
 }
 
-type EntityRelationship struct {
+type EntityAssociation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -3053,20 +3053,20 @@ type EntityRelationship struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *EntityRelationship) Reset() {
-	*x = EntityRelationship{}
+func (x *EntityAssociation) Reset() {
+	*x = EntityAssociation{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *EntityRelationship) String() string {
+func (x *EntityAssociation) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*EntityRelationship) ProtoMessage() {}
+func (*EntityAssociation) ProtoMessage() {}
 
-func (x *EntityRelationship) ProtoReflect() protoreflect.Message {
+func (x *EntityAssociation) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3078,68 +3078,68 @@ func (x *EntityRelationship) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EntityRelationship.ProtoReflect.Descriptor instead.
-func (*EntityRelationship) Descriptor() ([]byte, []int) {
+// Deprecated: Use EntityAssociation.ProtoReflect.Descriptor instead.
+func (*EntityAssociation) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{45}
 }
 
-func (x *EntityRelationship) GetId() string {
+func (x *EntityAssociation) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *EntityRelationship) GetKind() string {
+func (x *EntityAssociation) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *EntityRelationship) GetFromId() string {
+func (x *EntityAssociation) GetFromId() string {
 	if x != nil {
 		return x.FromId
 	}
 	return ""
 }
 
-func (x *EntityRelationship) GetFromType() string {
+func (x *EntityAssociation) GetFromType() string {
 	if x != nil {
 		return x.FromType
 	}
 	return ""
 }
 
-func (x *EntityRelationship) GetToId() string {
+func (x *EntityAssociation) GetToId() string {
 	if x != nil {
 		return x.ToId
 	}
 	return ""
 }
 
-func (x *EntityRelationship) GetToType() string {
+func (x *EntityAssociation) GetToType() string {
 	if x != nil {
 		return x.ToType
 	}
 	return ""
 }
 
-func (x *EntityRelationship) GetCreatedAt() *timestamppb.Timestamp {
+func (x *EntityAssociation) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *EntityRelationship) GetCreatedBy() string {
+func (x *EntityAssociation) GetCreatedBy() string {
 	if x != nil {
 		return x.CreatedBy
 	}
 	return ""
 }
 
-type ListEntityRelationshipsRequest struct {
+type ListEntityAssociationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Pagination    *Pagination            `protobuf:"bytes,1,opt,name=pagination,proto3" json:"pagination,omitempty"`
 	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                               // optional filter
@@ -3149,20 +3149,20 @@ type ListEntityRelationshipsRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListEntityRelationshipsRequest) Reset() {
-	*x = ListEntityRelationshipsRequest{}
+func (x *ListEntityAssociationsRequest) Reset() {
+	*x = ListEntityAssociationsRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListEntityRelationshipsRequest) String() string {
+func (x *ListEntityAssociationsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListEntityRelationshipsRequest) ProtoMessage() {}
+func (*ListEntityAssociationsRequest) ProtoMessage() {}
 
-func (x *ListEntityRelationshipsRequest) ProtoReflect() protoreflect.Message {
+func (x *ListEntityAssociationsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3174,42 +3174,42 @@ func (x *ListEntityRelationshipsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListEntityRelationshipsRequest.ProtoReflect.Descriptor instead.
-func (*ListEntityRelationshipsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListEntityAssociationsRequest.ProtoReflect.Descriptor instead.
+func (*ListEntityAssociationsRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{46}
 }
 
-func (x *ListEntityRelationshipsRequest) GetPagination() *Pagination {
+func (x *ListEntityAssociationsRequest) GetPagination() *Pagination {
 	if x != nil {
 		return x.Pagination
 	}
 	return nil
 }
 
-func (x *ListEntityRelationshipsRequest) GetKind() string {
+func (x *ListEntityAssociationsRequest) GetKind() string {
 	if x != nil {
 		return x.Kind
 	}
 	return ""
 }
 
-func (x *ListEntityRelationshipsRequest) GetEntityId() string {
+func (x *ListEntityAssociationsRequest) GetEntityId() string {
 	if x != nil {
 		return x.EntityId
 	}
 	return ""
 }
 
-func (x *ListEntityRelationshipsRequest) GetEntityType() string {
+func (x *ListEntityAssociationsRequest) GetEntityType() string {
 	if x != nil {
 		return x.EntityType
 	}
 	return ""
 }
 
-type ListEntityRelationshipsResponse struct {
+type ListEntityAssociationsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Edges         []*EntityRelationship  `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
+	Edges         []*EntityAssociation   `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
 	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
@@ -3217,20 +3217,20 @@ type ListEntityRelationshipsResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListEntityRelationshipsResponse) Reset() {
-	*x = ListEntityRelationshipsResponse{}
+func (x *ListEntityAssociationsResponse) Reset() {
+	*x = ListEntityAssociationsResponse{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListEntityRelationshipsResponse) String() string {
+func (x *ListEntityAssociationsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListEntityRelationshipsResponse) ProtoMessage() {}
+func (*ListEntityAssociationsResponse) ProtoMessage() {}
 
-func (x *ListEntityRelationshipsResponse) ProtoReflect() protoreflect.Message {
+func (x *ListEntityAssociationsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3242,60 +3242,60 @@ func (x *ListEntityRelationshipsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListEntityRelationshipsResponse.ProtoReflect.Descriptor instead.
-func (*ListEntityRelationshipsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListEntityAssociationsResponse.ProtoReflect.Descriptor instead.
+func (*ListEntityAssociationsResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{47}
 }
 
-func (x *ListEntityRelationshipsResponse) GetEdges() []*EntityRelationship {
+func (x *ListEntityAssociationsResponse) GetEdges() []*EntityAssociation {
 	if x != nil {
 		return x.Edges
 	}
 	return nil
 }
 
-func (x *ListEntityRelationshipsResponse) GetTotal() int32 {
+func (x *ListEntityAssociationsResponse) GetTotal() int32 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
 
-func (x *ListEntityRelationshipsResponse) GetLimit() int32 {
+func (x *ListEntityAssociationsResponse) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *ListEntityRelationshipsResponse) GetOffset() int32 {
+func (x *ListEntityAssociationsResponse) GetOffset() int32 {
 	if x != nil {
 		return x.Offset
 	}
 	return 0
 }
 
-type AppendEntityRelationshipsRequest struct {
+type AppendEntityAssociationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Edges         []*EntityRelationship  `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
+	Edges         []*EntityAssociation   `protobuf:"bytes,1,rep,name=edges,proto3" json:"edges,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AppendEntityRelationshipsRequest) Reset() {
-	*x = AppendEntityRelationshipsRequest{}
+func (x *AppendEntityAssociationsRequest) Reset() {
+	*x = AppendEntityAssociationsRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AppendEntityRelationshipsRequest) String() string {
+func (x *AppendEntityAssociationsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AppendEntityRelationshipsRequest) ProtoMessage() {}
+func (*AppendEntityAssociationsRequest) ProtoMessage() {}
 
-func (x *AppendEntityRelationshipsRequest) ProtoReflect() protoreflect.Message {
+func (x *AppendEntityAssociationsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3307,12 +3307,12 @@ func (x *AppendEntityRelationshipsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AppendEntityRelationshipsRequest.ProtoReflect.Descriptor instead.
-func (*AppendEntityRelationshipsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AppendEntityAssociationsRequest.ProtoReflect.Descriptor instead.
+func (*AppendEntityAssociationsRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{48}
 }
 
-func (x *AppendEntityRelationshipsRequest) GetEdges() []*EntityRelationship {
+func (x *AppendEntityAssociationsRequest) GetEdges() []*EntityAssociation {
 	if x != nil {
 		return x.Edges
 	}
@@ -3376,7 +3376,7 @@ type Expert struct {
 	Worker        string                 `protobuf:"bytes,1,opt,name=worker,proto3" json:"worker,omitempty"`
 	Affinity      float64                `protobuf:"fixed64,2,opt,name=affinity,proto3" json:"affinity,omitempty"`
 	Reliability   float64                `protobuf:"fixed64,3,opt,name=reliability,proto3" json:"reliability,omitempty"`
-	ClaimCount    int32                  `protobuf:"varint,4,opt,name=claim_count,json=claimCount,proto3" json:"claim_count,omitempty"`
+	BeliefCount   int32                  `protobuf:"varint,4,opt,name=belief_count,json=beliefCount,proto3" json:"belief_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3432,9 +3432,9 @@ func (x *Expert) GetReliability() float64 {
 	return 0
 }
 
-func (x *Expert) GetClaimCount() int32 {
+func (x *Expert) GetBeliefCount() int32 {
 	if x != nil {
-		return x.ClaimCount
+		return x.BeliefCount
 	}
 	return 0
 }
@@ -3537,7 +3537,7 @@ func (x *KnowledgeGapsRequest) GetLimit() int32 {
 
 type Gap struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
 	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
 	Score         float64                `protobuf:"fixed64,4,opt,name=score,proto3" json:"score,omitempty"`
@@ -3575,9 +3575,9 @@ func (*Gap) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{53}
 }
 
-func (x *Gap) GetClaimId() string {
+func (x *Gap) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
@@ -3957,11 +3957,11 @@ func (*HypercorrectionsRequest) Descriptor() ([]byte, []int) {
 
 type Hypercorrection struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
-	ContradictedClaimId  string                 `protobuf:"bytes,1,opt,name=contradicted_claim_id,json=contradictedClaimId,proto3" json:"contradicted_claim_id,omitempty"`
+	ContradictedBeliefId string                 `protobuf:"bytes,1,opt,name=contradicted_belief_id,json=contradictedBeliefId,proto3" json:"contradicted_belief_id,omitempty"`
 	ContradictedText     string                 `protobuf:"bytes,2,opt,name=contradicted_text,json=contradictedText,proto3" json:"contradicted_text,omitempty"`
 	ContradictedTrust    float64                `protobuf:"fixed64,3,opt,name=contradicted_trust,json=contradictedTrust,proto3" json:"contradicted_trust,omitempty"`
 	ContradictedPromoted bool                   `protobuf:"varint,4,opt,name=contradicted_promoted,json=contradictedPromoted,proto3" json:"contradicted_promoted,omitempty"`
-	ChallengingClaimId   string                 `protobuf:"bytes,5,opt,name=challenging_claim_id,json=challengingClaimId,proto3" json:"challenging_claim_id,omitempty"`
+	ChallengingBeliefId  string                 `protobuf:"bytes,5,opt,name=challenging_belief_id,json=challengingBeliefId,proto3" json:"challenging_belief_id,omitempty"`
 	ChallengingText      string                 `protobuf:"bytes,6,opt,name=challenging_text,json=challengingText,proto3" json:"challenging_text,omitempty"`
 	DetectedAt           *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=detected_at,json=detectedAt,proto3" json:"detected_at,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -3998,9 +3998,9 @@ func (*Hypercorrection) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{60}
 }
 
-func (x *Hypercorrection) GetContradictedClaimId() string {
+func (x *Hypercorrection) GetContradictedBeliefId() string {
 	if x != nil {
-		return x.ContradictedClaimId
+		return x.ContradictedBeliefId
 	}
 	return ""
 }
@@ -4026,9 +4026,9 @@ func (x *Hypercorrection) GetContradictedPromoted() bool {
 	return false
 }
 
-func (x *Hypercorrection) GetChallengingClaimId() string {
+func (x *Hypercorrection) GetChallengingBeliefId() string {
 	if x != nil {
-		return x.ChallengingClaimId
+		return x.ChallengingBeliefId
 	}
 	return ""
 }
@@ -4137,9 +4137,9 @@ func (x *RecombinationsRequest) GetLimit() int32 {
 
 type Recombination struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimA        string                 `protobuf:"bytes,1,opt,name=claim_a,json=claimA,proto3" json:"claim_a,omitempty"`
+	BeliefA       string                 `protobuf:"bytes,1,opt,name=belief_a,json=beliefA,proto3" json:"belief_a,omitempty"`
 	TextA         string                 `protobuf:"bytes,2,opt,name=text_a,json=textA,proto3" json:"text_a,omitempty"`
-	ClaimB        string                 `protobuf:"bytes,3,opt,name=claim_b,json=claimB,proto3" json:"claim_b,omitempty"`
+	BeliefB       string                 `protobuf:"bytes,3,opt,name=belief_b,json=beliefB,proto3" json:"belief_b,omitempty"`
 	TextB         string                 `protobuf:"bytes,4,opt,name=text_b,json=textB,proto3" json:"text_b,omitempty"`
 	Similarity    float64                `protobuf:"fixed64,5,opt,name=similarity,proto3" json:"similarity,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -4176,9 +4176,9 @@ func (*Recombination) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{63}
 }
 
-func (x *Recombination) GetClaimA() string {
+func (x *Recombination) GetBeliefA() string {
 	if x != nil {
-		return x.ClaimA
+		return x.BeliefA
 	}
 	return ""
 }
@@ -4190,9 +4190,9 @@ func (x *Recombination) GetTextA() string {
 	return ""
 }
 
-func (x *Recombination) GetClaimB() string {
+func (x *Recombination) GetBeliefB() string {
 	if x != nil {
-		return x.ClaimB
+		return x.BeliefB
 	}
 	return ""
 }
@@ -4255,28 +4255,28 @@ func (x *RecombinationsResponse) GetRecombinations() []*Recombination {
 	return nil
 }
 
-type AnalogousClaimsRequest struct {
+type AnalogousBeliefsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AnalogousClaimsRequest) Reset() {
-	*x = AnalogousClaimsRequest{}
+func (x *AnalogousBeliefsRequest) Reset() {
+	*x = AnalogousBeliefsRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AnalogousClaimsRequest) String() string {
+func (x *AnalogousBeliefsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AnalogousClaimsRequest) ProtoMessage() {}
+func (*AnalogousBeliefsRequest) ProtoMessage() {}
 
-func (x *AnalogousClaimsRequest) ProtoReflect() protoreflect.Message {
+func (x *AnalogousBeliefsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4288,19 +4288,19 @@ func (x *AnalogousClaimsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AnalogousClaimsRequest.ProtoReflect.Descriptor instead.
-func (*AnalogousClaimsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use AnalogousBeliefsRequest.ProtoReflect.Descriptor instead.
+func (*AnalogousBeliefsRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{65}
 }
 
-func (x *AnalogousClaimsRequest) GetClaimId() string {
+func (x *AnalogousBeliefsRequest) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
 
-func (x *AnalogousClaimsRequest) GetLimit() int32 {
+func (x *AnalogousBeliefsRequest) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
@@ -4309,7 +4309,7 @@ func (x *AnalogousClaimsRequest) GetLimit() int32 {
 
 type Analogy struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
 	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	Similarity    float64                `protobuf:"fixed64,3,opt,name=similarity,proto3" json:"similarity,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -4346,9 +4346,9 @@ func (*Analogy) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{66}
 }
 
-func (x *Analogy) GetClaimId() string {
+func (x *Analogy) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
@@ -4367,28 +4367,28 @@ func (x *Analogy) GetSimilarity() float64 {
 	return 0
 }
 
-type AnalogousClaimsResponse struct {
+type AnalogousBeliefsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
 	Analogous     []*Analogy             `protobuf:"bytes,2,rep,name=analogous,proto3" json:"analogous,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *AnalogousClaimsResponse) Reset() {
-	*x = AnalogousClaimsResponse{}
+func (x *AnalogousBeliefsResponse) Reset() {
+	*x = AnalogousBeliefsResponse{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *AnalogousClaimsResponse) String() string {
+func (x *AnalogousBeliefsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*AnalogousClaimsResponse) ProtoMessage() {}
+func (*AnalogousBeliefsResponse) ProtoMessage() {}
 
-func (x *AnalogousClaimsResponse) ProtoReflect() protoreflect.Message {
+func (x *AnalogousBeliefsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4400,46 +4400,46 @@ func (x *AnalogousClaimsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use AnalogousClaimsResponse.ProtoReflect.Descriptor instead.
-func (*AnalogousClaimsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use AnalogousBeliefsResponse.ProtoReflect.Descriptor instead.
+func (*AnalogousBeliefsResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{67}
 }
 
-func (x *AnalogousClaimsResponse) GetClaimId() string {
+func (x *AnalogousBeliefsResponse) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
 
-func (x *AnalogousClaimsResponse) GetAnalogous() []*Analogy {
+func (x *AnalogousBeliefsResponse) GetAnalogous() []*Analogy {
 	if x != nil {
 		return x.Analogous
 	}
 	return nil
 }
 
-type GetClaimRequest struct {
+type GetBeliefRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetClaimRequest) Reset() {
-	*x = GetClaimRequest{}
+func (x *GetBeliefRequest) Reset() {
+	*x = GetBeliefRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetClaimRequest) String() string {
+func (x *GetBeliefRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetClaimRequest) ProtoMessage() {}
+func (*GetBeliefRequest) ProtoMessage() {}
 
-func (x *GetClaimRequest) ProtoReflect() protoreflect.Message {
+func (x *GetBeliefRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4451,19 +4451,19 @@ func (x *GetClaimRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetClaimRequest.ProtoReflect.Descriptor instead.
-func (*GetClaimRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetBeliefRequest.ProtoReflect.Descriptor instead.
+func (*GetBeliefRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{68}
 }
 
-func (x *GetClaimRequest) GetClaimId() string {
+func (x *GetBeliefRequest) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
 
-type ClaimDetail struct {
+type BeliefDetail struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Statement     string                 `protobuf:"bytes,2,opt,name=statement,proto3" json:"statement,omitempty"`
@@ -4478,20 +4478,20 @@ type ClaimDetail struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ClaimDetail) Reset() {
-	*x = ClaimDetail{}
+func (x *BeliefDetail) Reset() {
+	*x = BeliefDetail{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ClaimDetail) String() string {
+func (x *BeliefDetail) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ClaimDetail) ProtoMessage() {}
+func (*BeliefDetail) ProtoMessage() {}
 
-func (x *ClaimDetail) ProtoReflect() protoreflect.Message {
+func (x *BeliefDetail) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4503,96 +4503,96 @@ func (x *ClaimDetail) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ClaimDetail.ProtoReflect.Descriptor instead.
-func (*ClaimDetail) Descriptor() ([]byte, []int) {
+// Deprecated: Use BeliefDetail.ProtoReflect.Descriptor instead.
+func (*BeliefDetail) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{69}
 }
 
-func (x *ClaimDetail) GetId() string {
+func (x *BeliefDetail) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *ClaimDetail) GetStatement() string {
+func (x *BeliefDetail) GetStatement() string {
 	if x != nil {
 		return x.Statement
 	}
 	return ""
 }
 
-func (x *ClaimDetail) GetType() string {
+func (x *BeliefDetail) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *ClaimDetail) GetConfidence() float64 {
+func (x *BeliefDetail) GetConfidence() float64 {
 	if x != nil {
 		return x.Confidence
 	}
 	return 0
 }
 
-func (x *ClaimDetail) GetTrustScore() float64 {
+func (x *BeliefDetail) GetTrustScore() float64 {
 	if x != nil {
 		return x.TrustScore
 	}
 	return 0
 }
 
-func (x *ClaimDetail) GetLifecycle() string {
+func (x *BeliefDetail) GetLifecycle() string {
 	if x != nil {
 		return x.Lifecycle
 	}
 	return ""
 }
 
-func (x *ClaimDetail) GetValidFrom() *timestamppb.Timestamp {
+func (x *BeliefDetail) GetValidFrom() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ValidFrom
 	}
 	return nil
 }
 
-func (x *ClaimDetail) GetValidUntil() *timestamppb.Timestamp {
+func (x *BeliefDetail) GetValidUntil() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ValidUntil
 	}
 	return nil
 }
 
-func (x *ClaimDetail) GetRecordedAt() *timestamppb.Timestamp {
+func (x *BeliefDetail) GetRecordedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.RecordedAt
 	}
 	return nil
 }
 
-type SetClaimLifecycleRequest struct {
+type SetBeliefLifecycleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
 	Lifecycle     string                 `protobuf:"bytes,2,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"` // candidate | promoted | superseded
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetClaimLifecycleRequest) Reset() {
-	*x = SetClaimLifecycleRequest{}
+func (x *SetBeliefLifecycleRequest) Reset() {
+	*x = SetBeliefLifecycleRequest{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetClaimLifecycleRequest) String() string {
+func (x *SetBeliefLifecycleRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetClaimLifecycleRequest) ProtoMessage() {}
+func (*SetBeliefLifecycleRequest) ProtoMessage() {}
 
-func (x *SetClaimLifecycleRequest) ProtoReflect() protoreflect.Message {
+func (x *SetBeliefLifecycleRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4604,47 +4604,47 @@ func (x *SetClaimLifecycleRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetClaimLifecycleRequest.ProtoReflect.Descriptor instead.
-func (*SetClaimLifecycleRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetBeliefLifecycleRequest.ProtoReflect.Descriptor instead.
+func (*SetBeliefLifecycleRequest) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{70}
 }
 
-func (x *SetClaimLifecycleRequest) GetClaimId() string {
+func (x *SetBeliefLifecycleRequest) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
 
-func (x *SetClaimLifecycleRequest) GetLifecycle() string {
+func (x *SetBeliefLifecycleRequest) GetLifecycle() string {
 	if x != nil {
 		return x.Lifecycle
 	}
 	return ""
 }
 
-type SetClaimLifecycleResponse struct {
+type SetBeliefLifecycleResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
 	Lifecycle     string                 `protobuf:"bytes,2,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetClaimLifecycleResponse) Reset() {
-	*x = SetClaimLifecycleResponse{}
+func (x *SetBeliefLifecycleResponse) Reset() {
+	*x = SetBeliefLifecycleResponse{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetClaimLifecycleResponse) String() string {
+func (x *SetBeliefLifecycleResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetClaimLifecycleResponse) ProtoMessage() {}
+func (*SetBeliefLifecycleResponse) ProtoMessage() {}
 
-func (x *SetClaimLifecycleResponse) ProtoReflect() protoreflect.Message {
+func (x *SetBeliefLifecycleResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4656,19 +4656,19 @@ func (x *SetClaimLifecycleResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetClaimLifecycleResponse.ProtoReflect.Descriptor instead.
-func (*SetClaimLifecycleResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetBeliefLifecycleResponse.ProtoReflect.Descriptor instead.
+func (*SetBeliefLifecycleResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{71}
 }
 
-func (x *SetClaimLifecycleResponse) GetClaimId() string {
+func (x *SetBeliefLifecycleResponse) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
 
-func (x *SetClaimLifecycleResponse) GetLifecycle() string {
+func (x *SetBeliefLifecycleResponse) GetLifecycle() string {
 	if x != nil {
 		return x.Lifecycle
 	}
@@ -4933,7 +4933,7 @@ func (x *RecallRequest) GetMaxRounds() int32 {
 
 type RecallResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId       string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
 	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	Confidence    float64                `protobuf:"fixed64,4,opt,name=confidence,proto3" json:"confidence,omitempty"`
@@ -4974,9 +4974,9 @@ func (*RecallResult) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{76}
 }
 
-func (x *RecallResult) GetClaimId() string {
+func (x *RecallResult) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
@@ -5026,7 +5026,7 @@ func (x *RecallResult) GetProvenance() string {
 type RecallSufficiency struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Confidence    float64                `protobuf:"fixed64,1,opt,name=confidence,proto3" json:"confidence,omitempty"`
-	ClaimCount    int32                  `protobuf:"varint,2,opt,name=claim_count,json=claimCount,proto3" json:"claim_count,omitempty"`
+	BeliefCount   int32                  `protobuf:"varint,2,opt,name=belief_count,json=beliefCount,proto3" json:"belief_count,omitempty"`
 	Sufficient    bool                   `protobuf:"varint,3,opt,name=sufficient,proto3" json:"sufficient,omitempty"`
 	Floor         float64                `protobuf:"fixed64,4,opt,name=floor,proto3" json:"floor,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -5070,9 +5070,9 @@ func (x *RecallSufficiency) GetConfidence() float64 {
 	return 0
 }
 
-func (x *RecallSufficiency) GetClaimCount() int32 {
+func (x *RecallSufficiency) GetBeliefCount() int32 {
 	if x != nil {
-		return x.ClaimCount
+		return x.BeliefCount
 	}
 	return 0
 }
@@ -5161,8 +5161,8 @@ func (x *RecallEffort) GetBreadth() int32 {
 
 type RecallConflict struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
-	ClaimId            string                 `protobuf:"bytes,1,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
-	ClaimText          string                 `protobuf:"bytes,2,opt,name=claim_text,json=claimText,proto3" json:"claim_text,omitempty"`
+	BeliefId           string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
+	BeliefText         string                 `protobuf:"bytes,2,opt,name=belief_text,json=beliefText,proto3" json:"belief_text,omitempty"`
 	ContradictingId    string                 `protobuf:"bytes,3,opt,name=contradicting_id,json=contradictingId,proto3" json:"contradicting_id,omitempty"`
 	ContradictingText  string                 `protobuf:"bytes,4,opt,name=contradicting_text,json=contradictingText,proto3" json:"contradicting_text,omitempty"`
 	ContradictingTrust float64                `protobuf:"fixed64,5,opt,name=contradicting_trust,json=contradictingTrust,proto3" json:"contradicting_trust,omitempty"`
@@ -5200,16 +5200,16 @@ func (*RecallConflict) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{79}
 }
 
-func (x *RecallConflict) GetClaimId() string {
+func (x *RecallConflict) GetBeliefId() string {
 	if x != nil {
-		return x.ClaimId
+		return x.BeliefId
 	}
 	return ""
 }
 
-func (x *RecallConflict) GetClaimText() string {
+func (x *RecallConflict) GetBeliefText() string {
 	if x != nil {
-		return x.ClaimText
+		return x.BeliefText
 	}
 	return ""
 }
@@ -5640,11 +5640,11 @@ func (*SynthesizeRequest) Descriptor() ([]byte, []int) {
 }
 
 type SynthesizeResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	LessonsDerived   int32                  `protobuf:"varint,1,opt,name=lessons_derived,json=lessonsDerived,proto3" json:"lessons_derived,omitempty"`
-	PlaybooksDerived int32                  `protobuf:"varint,2,opt,name=playbooks_derived,json=playbooksDerived,proto3" json:"playbooks_derived,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	SchemasDerived  int32                  `protobuf:"varint,1,opt,name=schemas_derived,json=schemasDerived,proto3" json:"schemas_derived,omitempty"`
+	ReflexesDerived int32                  `protobuf:"varint,2,opt,name=reflexes_derived,json=reflexesDerived,proto3" json:"reflexes_derived,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SynthesizeResponse) Reset() {
@@ -5677,21 +5677,21 @@ func (*SynthesizeResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{87}
 }
 
-func (x *SynthesizeResponse) GetLessonsDerived() int32 {
+func (x *SynthesizeResponse) GetSchemasDerived() int32 {
 	if x != nil {
-		return x.LessonsDerived
+		return x.SchemasDerived
 	}
 	return 0
 }
 
-func (x *SynthesizeResponse) GetPlaybooksDerived() int32 {
+func (x *SynthesizeResponse) GetReflexesDerived() int32 {
 	if x != nil {
-		return x.PlaybooksDerived
+		return x.ReflexesDerived
 	}
 	return 0
 }
 
-type TimelineEvent struct {
+type TimelineEpisode struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	At            *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=at,proto3" json:"at,omitempty"`
@@ -5703,20 +5703,20 @@ type TimelineEvent struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TimelineEvent) Reset() {
-	*x = TimelineEvent{}
+func (x *TimelineEpisode) Reset() {
+	*x = TimelineEpisode{}
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TimelineEvent) String() string {
+func (x *TimelineEpisode) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TimelineEvent) ProtoMessage() {}
+func (*TimelineEpisode) ProtoMessage() {}
 
-func (x *TimelineEvent) ProtoReflect() protoreflect.Message {
+func (x *TimelineEpisode) ProtoReflect() protoreflect.Message {
 	mi := &file_mnemos_v1_mnemos_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -5728,47 +5728,47 @@ func (x *TimelineEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TimelineEvent.ProtoReflect.Descriptor instead.
-func (*TimelineEvent) Descriptor() ([]byte, []int) {
+// Deprecated: Use TimelineEpisode.ProtoReflect.Descriptor instead.
+func (*TimelineEpisode) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{88}
 }
 
-func (x *TimelineEvent) GetId() string {
+func (x *TimelineEpisode) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *TimelineEvent) GetAt() *timestamppb.Timestamp {
+func (x *TimelineEpisode) GetAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.At
 	}
 	return nil
 }
 
-func (x *TimelineEvent) GetType() string {
+func (x *TimelineEpisode) GetType() string {
 	if x != nil {
 		return x.Type
 	}
 	return ""
 }
 
-func (x *TimelineEvent) GetContent() string {
+func (x *TimelineEpisode) GetContent() string {
 	if x != nil {
 		return x.Content
 	}
 	return ""
 }
 
-func (x *TimelineEvent) GetRunId() string {
+func (x *TimelineEpisode) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *TimelineEvent) GetMetadata() map[string]string {
+func (x *TimelineEpisode) GetMetadata() map[string]string {
 	if x != nil {
 		return x.Metadata
 	}
@@ -5853,7 +5853,7 @@ func (x *TimelineRequest) GetLimit() int32 {
 
 type TimelineResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*TimelineEvent       `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	Episodes      []*TimelineEpisode     `protobuf:"bytes,1,rep,name=episodes,proto3" json:"episodes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5888,9 +5888,9 @@ func (*TimelineResponse) Descriptor() ([]byte, []int) {
 	return file_mnemos_v1_mnemos_proto_rawDescGZIP(), []int{90}
 }
 
-func (x *TimelineResponse) GetEvents() []*TimelineEvent {
+func (x *TimelineResponse) GetEpisodes() []*TimelineEpisode {
 	if x != nil {
-		return x.Events
+		return x.Episodes
 	}
 	return nil
 }
@@ -6113,32 +6113,32 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x0eHealthResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x18\n" +
-	"\ahealthy\x18\x03 \x01(\bR\ahealthy\"\x87\x03\n" +
-	"\x05Event\x12\x0e\n" +
+	"\ahealthy\x18\x03 \x01(\bR\ahealthy\"\x8b\x03\n" +
+	"\aEpisode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12%\n" +
 	"\x0eschema_version\x18\x03 \x01(\tR\rschemaVersion\x12\x18\n" +
 	"\acontent\x18\x04 \x01(\tR\acontent\x12&\n" +
 	"\x0fsource_input_id\x18\x05 \x01(\tR\rsourceInputId\x128\n" +
-	"\ttimestamp\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12:\n" +
-	"\bmetadata\x18\a \x03(\v2\x1e.mnemos.v1.Event.MetadataEntryR\bmetadata\x12;\n" +
+	"\ttimestamp\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12<\n" +
+	"\bmetadata\x18\a \x03(\v2 .mnemos.v1.Episode.MetadataEntryR\bmetadata\x12;\n" +
 	"\vingested_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"ingestedAt\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"J\n" +
-	"\x11ListEventsRequest\x125\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"L\n" +
+	"\x13ListEpisodesRequest\x125\n" +
 	"\n" +
 	"pagination\x18\x01 \x01(\v2\x15.mnemos.v1.PaginationR\n" +
-	"pagination\"\x82\x01\n" +
-	"\x12ListEventsResponse\x12(\n" +
-	"\x06events\x18\x01 \x03(\v2\x10.mnemos.v1.EventR\x06events\x12\x14\n" +
+	"pagination\"\x8a\x01\n" +
+	"\x14ListEpisodesResponse\x12.\n" +
+	"\bepisodes\x18\x01 \x03(\v2\x12.mnemos.v1.EpisodeR\bepisodes\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x04 \x01(\x05R\x06offset\"?\n" +
-	"\x13AppendEventsRequest\x12(\n" +
-	"\x06events\x18\x01 \x03(\v2\x10.mnemos.v1.EventR\x06events\"\xd2\x01\n" +
-	"\x05Claim\x12\x0e\n" +
+	"\x06offset\x18\x04 \x01(\x05R\x06offset\"G\n" +
+	"\x15AppendEpisodesRequest\x12.\n" +
+	"\bepisodes\x18\x01 \x03(\v2\x12.mnemos.v1.EpisodeR\bepisodes\"\xd3\x01\n" +
+	"\x06Belief\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1e\n" +
@@ -6150,11 +6150,12 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1e\n" +
 	"\n" +
 	"visibility\x18\a \x01(\tR\n" +
-	"visibility\"E\n" +
-	"\rClaimEvidence\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x19\n" +
-	"\bevent_id\x18\x02 \x01(\tR\aeventId\"\xc5\x02\n" +
-	"\x11ListClaimsRequest\x125\n" +
+	"visibility\"L\n" +
+	"\x0eBeliefEvidence\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x1d\n" +
+	"\n" +
+	"episode_id\x18\x02 \x01(\tR\tepisodeId\"\xc6\x02\n" +
+	"\x12ListBeliefsRequest\x125\n" +
 	"\n" +
 	"pagination\x18\x01 \x01(\v2\x15.mnemos.v1.PaginationR\n" +
 	"pagination\x12\x1f\n" +
@@ -6164,36 +6165,37 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x10include_evidence\x18\x04 \x01(\bR\x0fincludeEvidence\x12\x15\n" +
 	"\x06run_id\x18\x05 \x01(\tR\x05runId\x12/\n" +
 	"\x05as_of\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x12@\n" +
-	"\x0erecorded_as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\frecordedAsOf\"\xb8\x01\n" +
-	"\x12ListClaimsResponse\x12(\n" +
-	"\x06claims\x18\x01 \x03(\v2\x10.mnemos.v1.ClaimR\x06claims\x124\n" +
-	"\bevidence\x18\x02 \x03(\v2\x18.mnemos.v1.ClaimEvidenceR\bevidence\x12\x14\n" +
+	"\x0erecorded_as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\frecordedAsOf\"\xbd\x01\n" +
+	"\x13ListBeliefsResponse\x12+\n" +
+	"\abeliefs\x18\x01 \x03(\v2\x11.mnemos.v1.BeliefR\abeliefs\x125\n" +
+	"\bevidence\x18\x02 \x03(\v2\x19.mnemos.v1.BeliefEvidenceR\bevidence\x12\x14\n" +
 	"\x05total\x18\x03 \x01(\x05R\x05total\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x05 \x01(\x05R\x06offset\"u\n" +
-	"\x13AppendClaimsRequest\x12(\n" +
-	"\x06claims\x18\x01 \x03(\v2\x10.mnemos.v1.ClaimR\x06claims\x124\n" +
-	"\bevidence\x18\x02 \x03(\v2\x18.mnemos.v1.ClaimEvidenceR\bevidence\"\xb1\x01\n" +
-	"\fRelationship\x12\x0e\n" +
+	"\x06offset\x18\x05 \x01(\x05R\x06offset\"z\n" +
+	"\x14AppendBeliefsRequest\x12+\n" +
+	"\abeliefs\x18\x01 \x03(\v2\x11.mnemos.v1.BeliefR\abeliefs\x125\n" +
+	"\bevidence\x18\x02 \x03(\v2\x19.mnemos.v1.BeliefEvidenceR\bevidence\"\xb4\x01\n" +
+	"\vAssociation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\"\n" +
-	"\rfrom_claim_id\x18\x03 \x01(\tR\vfromClaimId\x12\x1e\n" +
-	"\vto_claim_id\x18\x04 \x01(\tR\ttoClaimId\x129\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12$\n" +
+	"\x0efrom_belief_id\x18\x03 \x01(\tR\ffromBeliefId\x12 \n" +
+	"\fto_belief_id\x18\x04 \x01(\tR\n" +
+	"toBeliefId\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"r\n" +
-	"\x18ListRelationshipsRequest\x125\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"q\n" +
+	"\x17ListAssociationsRequest\x125\n" +
 	"\n" +
 	"pagination\x18\x01 \x01(\v2\x15.mnemos.v1.PaginationR\n" +
 	"pagination\x12\x1f\n" +
 	"\vtype_filter\x18\x02 \x01(\tR\n" +
-	"typeFilter\"\x9e\x01\n" +
-	"\x19ListRelationshipsResponse\x12=\n" +
-	"\rrelationships\x18\x01 \x03(\v2\x17.mnemos.v1.RelationshipR\rrelationships\x12\x14\n" +
+	"typeFilter\"\x9a\x01\n" +
+	"\x18ListAssociationsResponse\x12:\n" +
+	"\fassociations\x18\x01 \x03(\v2\x16.mnemos.v1.AssociationR\fassociations\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x04 \x01(\x05R\x06offset\"[\n" +
-	"\x1aAppendRelationshipsRequest\x12=\n" +
-	"\rrelationships\x18\x01 \x03(\v2\x17.mnemos.v1.RelationshipR\rrelationships\"\x97\x01\n" +
+	"\x06offset\x18\x04 \x01(\x05R\x06offset\"W\n" +
+	"\x19AppendAssociationsRequest\x12:\n" +
+	"\fassociations\x18\x01 \x03(\v2\x16.mnemos.v1.AssociationR\fassociations\"\x97\x01\n" +
 	"\tEmbedding\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\tR\bentityId\x12\x1f\n" +
 	"\ventity_type\x18\x02 \x01(\tR\n" +
@@ -6225,12 +6227,12 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\askipped\x18\x02 \x01(\x05R\askipped\"\x10\n" +
 	"\x0eMetricsRequest\"\xee\x01\n" +
 	"\x0fMetricsResponse\x12\x12\n" +
-	"\x04runs\x18\x01 \x01(\x03R\x04runs\x12\x16\n" +
-	"\x06events\x18\x02 \x01(\x03R\x06events\x12\x16\n" +
-	"\x06claims\x18\x03 \x01(\x03R\x06claims\x12)\n" +
-	"\x10contested_claims\x18\x04 \x01(\x03R\x0fcontestedClaims\x12$\n" +
-	"\rrelationships\x18\x05 \x01(\x03R\rrelationships\x12&\n" +
-	"\x0econtradictions\x18\x06 \x01(\x03R\x0econtradictions\x12\x1e\n" +
+	"\x04runs\x18\x01 \x01(\x03R\x04runs\x12\x1a\n" +
+	"\bepisodes\x18\x02 \x01(\x03R\bepisodes\x12\x18\n" +
+	"\abeliefs\x18\x03 \x01(\x03R\abeliefs\x12+\n" +
+	"\x11contested_beliefs\x18\x04 \x01(\x03R\x10contestedBeliefs\x12\"\n" +
+	"\fassociations\x18\x05 \x01(\x03R\fassociations\x12 \n" +
+	"\vdissonances\x18\x06 \x01(\x03R\vdissonances\x12\x1e\n" +
 	"\n" +
 	"embeddings\x18\a \x01(\x03R\n" +
 	"embeddings\"\xf3\x02\n" +
@@ -6289,15 +6291,15 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\x04 \x01(\x05R\x06offset\"G\n" +
 	"\x15AppendOutcomesRequest\x12.\n" +
-	"\boutcomes\x18\x01 \x03(\v2\x12.mnemos.v1.OutcomeR\boutcomes\"G\n" +
-	"\x05Scope\x12\x18\n" +
+	"\boutcomes\x18\x01 \x03(\v2\x12.mnemos.v1.OutcomeR\boutcomes\"I\n" +
+	"\aContext\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12\x12\n" +
-	"\x04team\x18\x03 \x01(\tR\x04team\"\xfb\x02\n" +
-	"\x06Lesson\x12\x0e\n" +
+	"\x04team\x18\x03 \x01(\tR\x04team\"\x81\x03\n" +
+	"\x06Schema\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
-	"\tstatement\x18\x02 \x01(\tR\tstatement\x12&\n" +
-	"\x05scope\x18\x03 \x01(\v2\x10.mnemos.v1.ScopeR\x05scope\x12\x18\n" +
+	"\tstatement\x18\x02 \x01(\tR\tstatement\x12,\n" +
+	"\acontext\x18\x03 \x01(\v2\x12.mnemos.v1.ContextR\acontext\x12\x18\n" +
 	"\atrigger\x18\x04 \x01(\tR\atrigger\x12\x12\n" +
 	"\x04kind\x18\x05 \x01(\tR\x04kind\x12\x1a\n" +
 	"\bevidence\x18\x06 \x03(\tR\bevidence\x12\x1e\n" +
@@ -6311,19 +6313,19 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	" \x01(\tR\x06source\x12\x1d\n" +
 	"\n" +
 	"created_by\x18\v \x01(\tR\tcreatedBy\"\x7f\n" +
-	"\x12ListLessonsRequest\x125\n" +
+	"\x12ListSchemasRequest\x125\n" +
 	"\n" +
 	"pagination\x18\x01 \x01(\v2\x15.mnemos.v1.PaginationR\n" +
 	"pagination\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x18\n" +
 	"\atrigger\x18\x03 \x01(\tR\atrigger\"\x86\x01\n" +
-	"\x13ListLessonsResponse\x12+\n" +
-	"\alessons\x18\x01 \x03(\v2\x11.mnemos.v1.LessonR\alessons\x12\x14\n" +
+	"\x13ListSchemasResponse\x12+\n" +
+	"\aschemas\x18\x01 \x03(\v2\x11.mnemos.v1.SchemaR\aschemas\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\x04 \x01(\x05R\x06offset\"C\n" +
-	"\x14AppendLessonsRequest\x12+\n" +
-	"\alessons\x18\x01 \x03(\v2\x11.mnemos.v1.LessonR\alessons\"\xa1\x03\n" +
+	"\x14AppendSchemasRequest\x12+\n" +
+	"\aschemas\x18\x01 \x03(\v2\x11.mnemos.v1.SchemaR\aschemas\"\xa7\x03\n" +
 	"\bDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
 	"\tstatement\x18\x02 \x01(\tR\tstatement\x12\x12\n" +
@@ -6334,8 +6336,8 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\abeliefs\x18\x06 \x03(\tR\abeliefs\x12\"\n" +
 	"\falternatives\x18\a \x03(\tR\falternatives\x12\x1d\n" +
 	"\n" +
-	"outcome_id\x18\b \x01(\tR\toutcomeId\x12&\n" +
-	"\x05scope\x18\t \x01(\v2\x10.mnemos.v1.ScopeR\x05scope\x127\n" +
+	"outcome_id\x18\b \x01(\tR\toutcomeId\x12,\n" +
+	"\acontext\x18\t \x01(\v2\x12.mnemos.v1.ContextR\acontext\x127\n" +
 	"\tchosen_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\bchosenAt\x12\x1d\n" +
 	"\n" +
@@ -6354,19 +6356,20 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\x04 \x01(\x05R\x06offset\"K\n" +
 	"\x16AppendDecisionsRequest\x121\n" +
-	"\tdecisions\x18\x01 \x03(\v2\x13.mnemos.v1.DecisionR\tdecisions\"|\n" +
-	"\fPlaybookStep\x12\x14\n" +
+	"\tdecisions\x18\x01 \x03(\v2\x13.mnemos.v1.DecisionR\tdecisions\"z\n" +
+	"\n" +
+	"ReflexStep\x12\x14\n" +
 	"\x05order\x18\x01 \x01(\x05R\x05order\x12\x16\n" +
 	"\x06action\x18\x02 \x01(\tR\x06action\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1c\n" +
-	"\tcondition\x18\x04 \x01(\tR\tcondition\"\xae\x03\n" +
-	"\bPlaybook\x12\x0e\n" +
+	"\tcondition\x18\x04 \x01(\tR\tcondition\"\xb0\x03\n" +
+	"\x06Reflex\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\atrigger\x18\x02 \x01(\tR\atrigger\x12\x1c\n" +
-	"\tstatement\x18\x03 \x01(\tR\tstatement\x12&\n" +
-	"\x05scope\x18\x04 \x01(\v2\x10.mnemos.v1.ScopeR\x05scope\x12-\n" +
-	"\x05steps\x18\x05 \x03(\v2\x17.mnemos.v1.PlaybookStepR\x05steps\x120\n" +
-	"\x14derived_from_lessons\x18\x06 \x03(\tR\x12derivedFromLessons\x12\x1e\n" +
+	"\tstatement\x18\x03 \x01(\tR\tstatement\x12,\n" +
+	"\acontext\x18\x04 \x01(\v2\x12.mnemos.v1.ContextR\acontext\x12+\n" +
+	"\x05steps\x18\x05 \x03(\v2\x15.mnemos.v1.ReflexStepR\x05steps\x120\n" +
+	"\x14derived_from_schemas\x18\x06 \x03(\tR\x12derivedFromSchemas\x12\x1e\n" +
 	"\n" +
 	"confidence\x18\a \x01(\x01R\n" +
 	"confidence\x129\n" +
@@ -6376,21 +6379,21 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x06source\x18\n" +
 	" \x01(\tR\x06source\x12\x1d\n" +
 	"\n" +
-	"created_by\x18\v \x01(\tR\tcreatedBy\"\x81\x01\n" +
-	"\x14ListPlaybooksRequest\x125\n" +
+	"created_by\x18\v \x01(\tR\tcreatedBy\"\x80\x01\n" +
+	"\x13ListReflexesRequest\x125\n" +
 	"\n" +
 	"pagination\x18\x01 \x01(\v2\x15.mnemos.v1.PaginationR\n" +
 	"pagination\x12\x18\n" +
 	"\atrigger\x18\x02 \x01(\tR\atrigger\x12\x18\n" +
-	"\aservice\x18\x03 \x01(\tR\aservice\"\x8e\x01\n" +
-	"\x15ListPlaybooksResponse\x121\n" +
-	"\tplaybooks\x18\x01 \x03(\v2\x13.mnemos.v1.PlaybookR\tplaybooks\x12\x14\n" +
+	"\aservice\x18\x03 \x01(\tR\aservice\"\x89\x01\n" +
+	"\x14ListReflexesResponse\x12-\n" +
+	"\breflexes\x18\x01 \x03(\v2\x11.mnemos.v1.ReflexR\breflexes\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x04 \x01(\x05R\x06offset\"K\n" +
-	"\x16AppendPlaybooksRequest\x121\n" +
-	"\tplaybooks\x18\x01 \x03(\v2\x13.mnemos.v1.PlaybookR\tplaybooks\"\xf6\x01\n" +
-	"\x12EntityRelationship\x12\x0e\n" +
+	"\x06offset\x18\x04 \x01(\x05R\x06offset\"F\n" +
+	"\x15AppendReflexesRequest\x12-\n" +
+	"\breflexes\x18\x01 \x03(\v2\x11.mnemos.v1.ReflexR\breflexes\"\xf5\x01\n" +
+	"\x11EntityAssociation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x17\n" +
 	"\afrom_id\x18\x03 \x01(\tR\x06fromId\x12\x1b\n" +
@@ -6400,38 +6403,37 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"created_by\x18\b \x01(\tR\tcreatedBy\"\xa9\x01\n" +
-	"\x1eListEntityRelationshipsRequest\x125\n" +
+	"created_by\x18\b \x01(\tR\tcreatedBy\"\xa8\x01\n" +
+	"\x1dListEntityAssociationsRequest\x125\n" +
 	"\n" +
 	"pagination\x18\x01 \x01(\v2\x15.mnemos.v1.PaginationR\n" +
 	"pagination\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1b\n" +
 	"\tentity_id\x18\x03 \x01(\tR\bentityId\x12\x1f\n" +
 	"\ventity_type\x18\x04 \x01(\tR\n" +
-	"entityType\"\x9a\x01\n" +
-	"\x1fListEntityRelationshipsResponse\x123\n" +
-	"\x05edges\x18\x01 \x03(\v2\x1d.mnemos.v1.EntityRelationshipR\x05edges\x12\x14\n" +
+	"entityType\"\x98\x01\n" +
+	"\x1eListEntityAssociationsResponse\x122\n" +
+	"\x05edges\x18\x01 \x03(\v2\x1c.mnemos.v1.EntityAssociationR\x05edges\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\x04 \x01(\x05R\x06offset\"W\n" +
-	" AppendEntityRelationshipsRequest\x123\n" +
-	"\x05edges\x18\x01 \x03(\v2\x1d.mnemos.v1.EntityRelationshipR\x05edges\"=\n" +
+	"\x06offset\x18\x04 \x01(\x05R\x06offset\"U\n" +
+	"\x1fAppendEntityAssociationsRequest\x122\n" +
+	"\x05edges\x18\x01 \x03(\v2\x1c.mnemos.v1.EntityAssociationR\x05edges\"=\n" +
 	"\x0fWhoKnowsRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"\x7f\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"\x81\x01\n" +
 	"\x06Expert\x12\x16\n" +
 	"\x06worker\x18\x01 \x01(\tR\x06worker\x12\x1a\n" +
 	"\baffinity\x18\x02 \x01(\x01R\baffinity\x12 \n" +
-	"\vreliability\x18\x03 \x01(\x01R\vreliability\x12\x1f\n" +
-	"\vclaim_count\x18\x04 \x01(\x05R\n" +
-	"claimCount\"U\n" +
+	"\vreliability\x18\x03 \x01(\x01R\vreliability\x12!\n" +
+	"\fbelief_count\x18\x04 \x01(\x05R\vbeliefCount\"U\n" +
 	"\x10WhoKnowsResponse\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12+\n" +
 	"\aexperts\x18\x02 \x03(\v2\x11.mnemos.v1.ExpertR\aexperts\",\n" +
 	"\x14KnowledgeGapsRequest\x12\x14\n" +
-	"\x05limit\x18\x01 \x01(\x05R\x05limit\"^\n" +
-	"\x03Gap\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x12\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\"`\n" +
+	"\x03Gap\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x12\n" +
 	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05score\x18\x04 \x01(\x01R\x05score\";\n" +
@@ -6457,45 +6459,45 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x05brier\x18\x03 \x01(\x01R\x05brier\x126\n" +
 	"\abuckets\x18\x04 \x03(\v2\x1c.mnemos.v1.CalibrationBucketR\abuckets\x126\n" +
 	"\asources\x18\x05 \x03(\v2\x1c.mnemos.v1.CalibrationSourceR\asources\"\x19\n" +
-	"\x17HypercorrectionsRequest\"\xf0\x02\n" +
-	"\x0fHypercorrection\x122\n" +
-	"\x15contradicted_claim_id\x18\x01 \x01(\tR\x13contradictedClaimId\x12+\n" +
+	"\x17HypercorrectionsRequest\"\xf4\x02\n" +
+	"\x0fHypercorrection\x124\n" +
+	"\x16contradicted_belief_id\x18\x01 \x01(\tR\x14contradictedBeliefId\x12+\n" +
 	"\x11contradicted_text\x18\x02 \x01(\tR\x10contradictedText\x12-\n" +
 	"\x12contradicted_trust\x18\x03 \x01(\x01R\x11contradictedTrust\x123\n" +
-	"\x15contradicted_promoted\x18\x04 \x01(\bR\x14contradictedPromoted\x120\n" +
-	"\x14challenging_claim_id\x18\x05 \x01(\tR\x12challengingClaimId\x12)\n" +
+	"\x15contradicted_promoted\x18\x04 \x01(\bR\x14contradictedPromoted\x122\n" +
+	"\x15challenging_belief_id\x18\x05 \x01(\tR\x13challengingBeliefId\x12)\n" +
 	"\x10challenging_text\x18\x06 \x01(\tR\x0fchallengingText\x12;\n" +
 	"\vdetected_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"detectedAt\"b\n" +
 	"\x18HypercorrectionsResponse\x12F\n" +
 	"\x10hypercorrections\x18\x01 \x03(\v2\x1a.mnemos.v1.HypercorrectionR\x10hypercorrections\"-\n" +
 	"\x15RecombinationsRequest\x12\x14\n" +
-	"\x05limit\x18\x01 \x01(\x05R\x05limit\"\x8f\x01\n" +
-	"\rRecombination\x12\x17\n" +
-	"\aclaim_a\x18\x01 \x01(\tR\x06claimA\x12\x15\n" +
-	"\x06text_a\x18\x02 \x01(\tR\x05textA\x12\x17\n" +
-	"\aclaim_b\x18\x03 \x01(\tR\x06claimB\x12\x15\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\"\x93\x01\n" +
+	"\rRecombination\x12\x19\n" +
+	"\bbelief_a\x18\x01 \x01(\tR\abeliefA\x12\x15\n" +
+	"\x06text_a\x18\x02 \x01(\tR\x05textA\x12\x19\n" +
+	"\bbelief_b\x18\x03 \x01(\tR\abeliefB\x12\x15\n" +
 	"\x06text_b\x18\x04 \x01(\tR\x05textB\x12\x1e\n" +
 	"\n" +
 	"similarity\x18\x05 \x01(\x01R\n" +
 	"similarity\"Z\n" +
 	"\x16RecombinationsResponse\x12@\n" +
-	"\x0erecombinations\x18\x01 \x03(\v2\x18.mnemos.v1.RecombinationR\x0erecombinations\"I\n" +
-	"\x16AnalogousClaimsRequest\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"X\n" +
-	"\aAnalogy\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x12\n" +
+	"\x0erecombinations\x18\x01 \x03(\v2\x18.mnemos.v1.RecombinationR\x0erecombinations\"L\n" +
+	"\x17AnalogousBeliefsRequest\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"Z\n" +
+	"\aAnalogy\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x1e\n" +
 	"\n" +
 	"similarity\x18\x03 \x01(\x01R\n" +
-	"similarity\"f\n" +
-	"\x17AnalogousClaimsResponse\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x120\n" +
-	"\tanalogous\x18\x02 \x03(\v2\x12.mnemos.v1.AnalogyR\tanalogous\",\n" +
-	"\x0fGetClaimRequest\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\"\xe3\x02\n" +
-	"\vClaimDetail\x12\x0e\n" +
+	"similarity\"i\n" +
+	"\x18AnalogousBeliefsResponse\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x120\n" +
+	"\tanalogous\x18\x02 \x03(\v2\x12.mnemos.v1.AnalogyR\tanalogous\"/\n" +
+	"\x10GetBeliefRequest\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\"\xe4\x02\n" +
+	"\fBeliefDetail\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1c\n" +
 	"\tstatement\x18\x02 \x01(\tR\tstatement\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1e\n" +
@@ -6510,12 +6512,12 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\vvalid_until\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"validUntil\x12;\n" +
 	"\vrecorded_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"recordedAt\"S\n" +
-	"\x18SetClaimLifecycleRequest\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x1c\n" +
-	"\tlifecycle\x18\x02 \x01(\tR\tlifecycle\"T\n" +
-	"\x19SetClaimLifecycleResponse\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x1c\n" +
+	"recordedAt\"V\n" +
+	"\x19SetBeliefLifecycleRequest\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x1c\n" +
+	"\tlifecycle\x18\x02 \x01(\tR\tlifecycle\"W\n" +
+	"\x1aSetBeliefLifecycleResponse\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x1c\n" +
 	"\tlifecycle\x18\x02 \x01(\tR\tlifecycle\"%\n" +
 	"\x0fClassifyRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\"\x84\x01\n" +
@@ -6538,9 +6540,9 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x06stakes\x18\x06 \x01(\x01R\x06stakes\x12\x18\n" +
 	"\acontext\x18\a \x01(\tR\acontext\x12\x1d\n" +
 	"\n" +
-	"max_rounds\x18\b \x01(\x05R\tmaxRounds\"\xd5\x01\n" +
-	"\fRecallResult\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x12\n" +
+	"max_rounds\x18\b \x01(\x05R\tmaxRounds\"\xd7\x01\n" +
+	"\fRecallResult\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1e\n" +
 	"\n" +
@@ -6551,13 +6553,12 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\fhop_distance\x18\x06 \x01(\x05R\vhopDistance\x12\x1e\n" +
 	"\n" +
 	"provenance\x18\a \x01(\tR\n" +
-	"provenance\"\x8a\x01\n" +
+	"provenance\"\x8c\x01\n" +
 	"\x11RecallSufficiency\x12\x1e\n" +
 	"\n" +
 	"confidence\x18\x01 \x01(\x01R\n" +
-	"confidence\x12\x1f\n" +
-	"\vclaim_count\x18\x02 \x01(\x05R\n" +
-	"claimCount\x12\x1e\n" +
+	"confidence\x12!\n" +
+	"\fbelief_count\x18\x02 \x01(\x05R\vbeliefCount\x12\x1e\n" +
 	"\n" +
 	"sufficient\x18\x03 \x01(\bR\n" +
 	"sufficient\x12\x14\n" +
@@ -6566,11 +6567,11 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x06budget\x18\x01 \x01(\x01R\x06budget\x12\x16\n" +
 	"\x06passes\x18\x02 \x01(\x05R\x06passes\x12\x12\n" +
 	"\x04hops\x18\x03 \x01(\x05R\x04hops\x12\x18\n" +
-	"\abreadth\x18\x04 \x01(\x05R\abreadth\"\xd5\x01\n" +
-	"\x0eRecallConflict\x12\x19\n" +
-	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12\x1d\n" +
-	"\n" +
-	"claim_text\x18\x02 \x01(\tR\tclaimText\x12)\n" +
+	"\abreadth\x18\x04 \x01(\x05R\abreadth\"\xd9\x01\n" +
+	"\x0eRecallConflict\x12\x1b\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x1f\n" +
+	"\vbelief_text\x18\x02 \x01(\tR\n" +
+	"beliefText\x12)\n" +
 	"\x10contradicting_id\x18\x03 \x01(\tR\x0fcontradictingId\x12-\n" +
 	"\x12contradicting_text\x18\x04 \x01(\tR\x11contradictingText\x12/\n" +
 	"\x13contradicting_trust\x18\x05 \x01(\x01R\x12contradictingTrust\"\x99\x02\n" +
@@ -6600,17 +6601,17 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x10SetBlockResponse\x12\x14\n" +
 	"\x05owner\x18\x01 \x01(\tR\x05owner\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\"\x13\n" +
-	"\x11SynthesizeRequest\"j\n" +
+	"\x11SynthesizeRequest\"h\n" +
 	"\x12SynthesizeResponse\x12'\n" +
-	"\x0flessons_derived\x18\x01 \x01(\x05R\x0elessonsDerived\x12+\n" +
-	"\x11playbooks_derived\x18\x02 \x01(\x05R\x10playbooksDerived\"\x91\x02\n" +
-	"\rTimelineEvent\x12\x0e\n" +
+	"\x0fschemas_derived\x18\x01 \x01(\x05R\x0eschemasDerived\x12)\n" +
+	"\x10reflexes_derived\x18\x02 \x01(\x05R\x0freflexesDerived\"\x95\x02\n" +
+	"\x0fTimelineEpisode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
 	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
 	"\acontent\x18\x04 \x01(\tR\acontent\x12\x15\n" +
-	"\x06run_id\x18\x05 \x01(\tR\x05runId\x12B\n" +
-	"\bmetadata\x18\x06 \x03(\v2&.mnemos.v1.TimelineEvent.MetadataEntryR\bmetadata\x1a;\n" +
+	"\x06run_id\x18\x05 \x01(\tR\x05runId\x12D\n" +
+	"\bmetadata\x18\x06 \x03(\v2(.mnemos.v1.TimelineEpisode.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb0\x01\n" +
@@ -6619,9 +6620,9 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x04from\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
 	"\x02to\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x14\n" +
 	"\x05types\x18\x04 \x03(\tR\x05types\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\x05R\x05limit\"D\n" +
-	"\x10TimelineResponse\x120\n" +
-	"\x06events\x18\x01 \x03(\v2\x18.mnemos.v1.TimelineEventR\x06events\"\xd5\x02\n" +
+	"\x05limit\x18\x05 \x01(\x05R\x05limit\"J\n" +
+	"\x10TimelineResponse\x126\n" +
+	"\bepisodes\x18\x01 \x03(\v2\x1a.mnemos.v1.TimelineEpisodeR\bepisodes\"\xd5\x02\n" +
 	"\fMemorySignal\x12\x18\n" +
 	"\apattern\x18\x01 \x01(\tR\apattern\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x1a\n" +
@@ -6640,17 +6641,15 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x0emin_confidence\x18\x02 \x01(\x01R\rminConfidence\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\"D\n" +
 	"\x0fSignalsResponse\x121\n" +
-	"\asignals\x18\x01 \x03(\v2\x17.mnemos.v1.MemorySignalR\asignals2\xd1\x17\n" +
+	"\asignals\x18\x01 \x03(\v2\x17.mnemos.v1.MemorySignalR\asignals2\xda\x17\n" +
 	"\rMnemosService\x12=\n" +
-	"\x06Health\x12\x18.mnemos.v1.HealthRequest\x1a\x19.mnemos.v1.HealthResponse\x12I\n" +
-	"\n" +
-	"ListEvents\x12\x1c.mnemos.v1.ListEventsRequest\x1a\x1d.mnemos.v1.ListEventsResponse\x12I\n" +
-	"\fAppendEvents\x12\x1e.mnemos.v1.AppendEventsRequest\x1a\x19.mnemos.v1.AppendResponse\x12I\n" +
-	"\n" +
-	"ListClaims\x12\x1c.mnemos.v1.ListClaimsRequest\x1a\x1d.mnemos.v1.ListClaimsResponse\x12I\n" +
-	"\fAppendClaims\x12\x1e.mnemos.v1.AppendClaimsRequest\x1a\x19.mnemos.v1.AppendResponse\x12^\n" +
-	"\x11ListRelationships\x12#.mnemos.v1.ListRelationshipsRequest\x1a$.mnemos.v1.ListRelationshipsResponse\x12W\n" +
-	"\x13AppendRelationships\x12%.mnemos.v1.AppendRelationshipsRequest\x1a\x19.mnemos.v1.AppendResponse\x12U\n" +
+	"\x06Health\x12\x18.mnemos.v1.HealthRequest\x1a\x19.mnemos.v1.HealthResponse\x12O\n" +
+	"\fListEpisodes\x12\x1e.mnemos.v1.ListEpisodesRequest\x1a\x1f.mnemos.v1.ListEpisodesResponse\x12M\n" +
+	"\x0eAppendEpisodes\x12 .mnemos.v1.AppendEpisodesRequest\x1a\x19.mnemos.v1.AppendResponse\x12L\n" +
+	"\vListBeliefs\x12\x1d.mnemos.v1.ListBeliefsRequest\x1a\x1e.mnemos.v1.ListBeliefsResponse\x12K\n" +
+	"\rAppendBeliefs\x12\x1f.mnemos.v1.AppendBeliefsRequest\x1a\x19.mnemos.v1.AppendResponse\x12[\n" +
+	"\x10ListAssociations\x12\".mnemos.v1.ListAssociationsRequest\x1a#.mnemos.v1.ListAssociationsResponse\x12U\n" +
+	"\x12AppendAssociations\x12$.mnemos.v1.AppendAssociationsRequest\x1a\x19.mnemos.v1.AppendResponse\x12U\n" +
 	"\x0eListEmbeddings\x12 .mnemos.v1.ListEmbeddingsRequest\x1a!.mnemos.v1.ListEmbeddingsResponse\x12Q\n" +
 	"\x10AppendEmbeddings\x12\".mnemos.v1.AppendEmbeddingsRequest\x1a\x19.mnemos.v1.AppendResponse\x12@\n" +
 	"\aMetrics\x12\x19.mnemos.v1.MetricsRequest\x1a\x1a.mnemos.v1.MetricsResponse\x12L\n" +
@@ -6658,22 +6657,22 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\rAppendActions\x12\x1f.mnemos.v1.AppendActionsRequest\x1a\x19.mnemos.v1.AppendResponse\x12O\n" +
 	"\fListOutcomes\x12\x1e.mnemos.v1.ListOutcomesRequest\x1a\x1f.mnemos.v1.ListOutcomesResponse\x12M\n" +
 	"\x0eAppendOutcomes\x12 .mnemos.v1.AppendOutcomesRequest\x1a\x19.mnemos.v1.AppendResponse\x12L\n" +
-	"\vListLessons\x12\x1d.mnemos.v1.ListLessonsRequest\x1a\x1e.mnemos.v1.ListLessonsResponse\x12K\n" +
-	"\rAppendLessons\x12\x1f.mnemos.v1.AppendLessonsRequest\x1a\x19.mnemos.v1.AppendResponse\x12R\n" +
+	"\vListSchemas\x12\x1d.mnemos.v1.ListSchemasRequest\x1a\x1e.mnemos.v1.ListSchemasResponse\x12K\n" +
+	"\rAppendSchemas\x12\x1f.mnemos.v1.AppendSchemasRequest\x1a\x19.mnemos.v1.AppendResponse\x12R\n" +
 	"\rListDecisions\x12\x1f.mnemos.v1.ListDecisionsRequest\x1a .mnemos.v1.ListDecisionsResponse\x12O\n" +
-	"\x0fAppendDecisions\x12!.mnemos.v1.AppendDecisionsRequest\x1a\x19.mnemos.v1.AppendResponse\x12R\n" +
-	"\rListPlaybooks\x12\x1f.mnemos.v1.ListPlaybooksRequest\x1a .mnemos.v1.ListPlaybooksResponse\x12O\n" +
-	"\x0fAppendPlaybooks\x12!.mnemos.v1.AppendPlaybooksRequest\x1a\x19.mnemos.v1.AppendResponse\x12p\n" +
-	"\x17ListEntityRelationships\x12).mnemos.v1.ListEntityRelationshipsRequest\x1a*.mnemos.v1.ListEntityRelationshipsResponse\x12c\n" +
-	"\x19AppendEntityRelationships\x12+.mnemos.v1.AppendEntityRelationshipsRequest\x1a\x19.mnemos.v1.AppendResponse\x12C\n" +
+	"\x0fAppendDecisions\x12!.mnemos.v1.AppendDecisionsRequest\x1a\x19.mnemos.v1.AppendResponse\x12O\n" +
+	"\fListReflexes\x12\x1e.mnemos.v1.ListReflexesRequest\x1a\x1f.mnemos.v1.ListReflexesResponse\x12M\n" +
+	"\x0eAppendReflexes\x12 .mnemos.v1.AppendReflexesRequest\x1a\x19.mnemos.v1.AppendResponse\x12m\n" +
+	"\x16ListEntityAssociations\x12(.mnemos.v1.ListEntityAssociationsRequest\x1a).mnemos.v1.ListEntityAssociationsResponse\x12a\n" +
+	"\x18AppendEntityAssociations\x12*.mnemos.v1.AppendEntityAssociationsRequest\x1a\x19.mnemos.v1.AppendResponse\x12C\n" +
 	"\bWhoKnows\x12\x1a.mnemos.v1.WhoKnowsRequest\x1a\x1b.mnemos.v1.WhoKnowsResponse\x12R\n" +
 	"\rKnowledgeGaps\x12\x1f.mnemos.v1.KnowledgeGapsRequest\x1a .mnemos.v1.KnowledgeGapsResponse\x12L\n" +
 	"\vCalibration\x12\x1d.mnemos.v1.CalibrationRequest\x1a\x1e.mnemos.v1.CalibrationResponse\x12[\n" +
 	"\x10Hypercorrections\x12\".mnemos.v1.HypercorrectionsRequest\x1a#.mnemos.v1.HypercorrectionsResponse\x12U\n" +
-	"\x0eRecombinations\x12 .mnemos.v1.RecombinationsRequest\x1a!.mnemos.v1.RecombinationsResponse\x12X\n" +
-	"\x0fAnalogousClaims\x12!.mnemos.v1.AnalogousClaimsRequest\x1a\".mnemos.v1.AnalogousClaimsResponse\x12>\n" +
-	"\bGetClaim\x12\x1a.mnemos.v1.GetClaimRequest\x1a\x16.mnemos.v1.ClaimDetail\x12^\n" +
-	"\x11SetClaimLifecycle\x12#.mnemos.v1.SetClaimLifecycleRequest\x1a$.mnemos.v1.SetClaimLifecycleResponse\x12C\n" +
+	"\x0eRecombinations\x12 .mnemos.v1.RecombinationsRequest\x1a!.mnemos.v1.RecombinationsResponse\x12[\n" +
+	"\x10AnalogousBeliefs\x12\".mnemos.v1.AnalogousBeliefsRequest\x1a#.mnemos.v1.AnalogousBeliefsResponse\x12A\n" +
+	"\tGetBelief\x12\x1b.mnemos.v1.GetBeliefRequest\x1a\x17.mnemos.v1.BeliefDetail\x12a\n" +
+	"\x12SetBeliefLifecycle\x12$.mnemos.v1.SetBeliefLifecycleRequest\x1a%.mnemos.v1.SetBeliefLifecycleResponse\x12C\n" +
 	"\bClassify\x12\x1a.mnemos.v1.ClassifyRequest\x1a\x1b.mnemos.v1.ClassifyResponse\x12A\n" +
 	"\vGetDecision\x12\x1d.mnemos.v1.GetDecisionRequest\x1a\x13.mnemos.v1.Decision\x12=\n" +
 	"\x06Recall\x12\x18.mnemos.v1.RecallRequest\x1a\x19.mnemos.v1.RecallResponse\x12F\n" +
@@ -6698,125 +6697,125 @@ func file_mnemos_v1_mnemos_proto_rawDescGZIP() []byte {
 
 var file_mnemos_v1_mnemos_proto_msgTypes = make([]protoimpl.MessageInfo, 98)
 var file_mnemos_v1_mnemos_proto_goTypes = []any{
-	(*Pagination)(nil),                       // 0: mnemos.v1.Pagination
-	(*HealthRequest)(nil),                    // 1: mnemos.v1.HealthRequest
-	(*HealthResponse)(nil),                   // 2: mnemos.v1.HealthResponse
-	(*Event)(nil),                            // 3: mnemos.v1.Event
-	(*ListEventsRequest)(nil),                // 4: mnemos.v1.ListEventsRequest
-	(*ListEventsResponse)(nil),               // 5: mnemos.v1.ListEventsResponse
-	(*AppendEventsRequest)(nil),              // 6: mnemos.v1.AppendEventsRequest
-	(*Claim)(nil),                            // 7: mnemos.v1.Claim
-	(*ClaimEvidence)(nil),                    // 8: mnemos.v1.ClaimEvidence
-	(*ListClaimsRequest)(nil),                // 9: mnemos.v1.ListClaimsRequest
-	(*ListClaimsResponse)(nil),               // 10: mnemos.v1.ListClaimsResponse
-	(*AppendClaimsRequest)(nil),              // 11: mnemos.v1.AppendClaimsRequest
-	(*Relationship)(nil),                     // 12: mnemos.v1.Relationship
-	(*ListRelationshipsRequest)(nil),         // 13: mnemos.v1.ListRelationshipsRequest
-	(*ListRelationshipsResponse)(nil),        // 14: mnemos.v1.ListRelationshipsResponse
-	(*AppendRelationshipsRequest)(nil),       // 15: mnemos.v1.AppendRelationshipsRequest
-	(*Embedding)(nil),                        // 16: mnemos.v1.Embedding
-	(*ListEmbeddingsRequest)(nil),            // 17: mnemos.v1.ListEmbeddingsRequest
-	(*ListEmbeddingsResponse)(nil),           // 18: mnemos.v1.ListEmbeddingsResponse
-	(*AppendEmbeddingsRequest)(nil),          // 19: mnemos.v1.AppendEmbeddingsRequest
-	(*AppendResponse)(nil),                   // 20: mnemos.v1.AppendResponse
-	(*MetricsRequest)(nil),                   // 21: mnemos.v1.MetricsRequest
-	(*MetricsResponse)(nil),                  // 22: mnemos.v1.MetricsResponse
-	(*Action)(nil),                           // 23: mnemos.v1.Action
-	(*ListActionsRequest)(nil),               // 24: mnemos.v1.ListActionsRequest
-	(*ListActionsResponse)(nil),              // 25: mnemos.v1.ListActionsResponse
-	(*AppendActionsRequest)(nil),             // 26: mnemos.v1.AppendActionsRequest
-	(*Outcome)(nil),                          // 27: mnemos.v1.Outcome
-	(*ListOutcomesRequest)(nil),              // 28: mnemos.v1.ListOutcomesRequest
-	(*ListOutcomesResponse)(nil),             // 29: mnemos.v1.ListOutcomesResponse
-	(*AppendOutcomesRequest)(nil),            // 30: mnemos.v1.AppendOutcomesRequest
-	(*Scope)(nil),                            // 31: mnemos.v1.Scope
-	(*Lesson)(nil),                           // 32: mnemos.v1.Lesson
-	(*ListLessonsRequest)(nil),               // 33: mnemos.v1.ListLessonsRequest
-	(*ListLessonsResponse)(nil),              // 34: mnemos.v1.ListLessonsResponse
-	(*AppendLessonsRequest)(nil),             // 35: mnemos.v1.AppendLessonsRequest
-	(*Decision)(nil),                         // 36: mnemos.v1.Decision
-	(*ListDecisionsRequest)(nil),             // 37: mnemos.v1.ListDecisionsRequest
-	(*ListDecisionsResponse)(nil),            // 38: mnemos.v1.ListDecisionsResponse
-	(*AppendDecisionsRequest)(nil),           // 39: mnemos.v1.AppendDecisionsRequest
-	(*PlaybookStep)(nil),                     // 40: mnemos.v1.PlaybookStep
-	(*Playbook)(nil),                         // 41: mnemos.v1.Playbook
-	(*ListPlaybooksRequest)(nil),             // 42: mnemos.v1.ListPlaybooksRequest
-	(*ListPlaybooksResponse)(nil),            // 43: mnemos.v1.ListPlaybooksResponse
-	(*AppendPlaybooksRequest)(nil),           // 44: mnemos.v1.AppendPlaybooksRequest
-	(*EntityRelationship)(nil),               // 45: mnemos.v1.EntityRelationship
-	(*ListEntityRelationshipsRequest)(nil),   // 46: mnemos.v1.ListEntityRelationshipsRequest
-	(*ListEntityRelationshipsResponse)(nil),  // 47: mnemos.v1.ListEntityRelationshipsResponse
-	(*AppendEntityRelationshipsRequest)(nil), // 48: mnemos.v1.AppendEntityRelationshipsRequest
-	(*WhoKnowsRequest)(nil),                  // 49: mnemos.v1.WhoKnowsRequest
-	(*Expert)(nil),                           // 50: mnemos.v1.Expert
-	(*WhoKnowsResponse)(nil),                 // 51: mnemos.v1.WhoKnowsResponse
-	(*KnowledgeGapsRequest)(nil),             // 52: mnemos.v1.KnowledgeGapsRequest
-	(*Gap)(nil),                              // 53: mnemos.v1.Gap
-	(*KnowledgeGapsResponse)(nil),            // 54: mnemos.v1.KnowledgeGapsResponse
-	(*CalibrationRequest)(nil),               // 55: mnemos.v1.CalibrationRequest
-	(*CalibrationBucket)(nil),                // 56: mnemos.v1.CalibrationBucket
-	(*CalibrationSource)(nil),                // 57: mnemos.v1.CalibrationSource
-	(*CalibrationResponse)(nil),              // 58: mnemos.v1.CalibrationResponse
-	(*HypercorrectionsRequest)(nil),          // 59: mnemos.v1.HypercorrectionsRequest
-	(*Hypercorrection)(nil),                  // 60: mnemos.v1.Hypercorrection
-	(*HypercorrectionsResponse)(nil),         // 61: mnemos.v1.HypercorrectionsResponse
-	(*RecombinationsRequest)(nil),            // 62: mnemos.v1.RecombinationsRequest
-	(*Recombination)(nil),                    // 63: mnemos.v1.Recombination
-	(*RecombinationsResponse)(nil),           // 64: mnemos.v1.RecombinationsResponse
-	(*AnalogousClaimsRequest)(nil),           // 65: mnemos.v1.AnalogousClaimsRequest
-	(*Analogy)(nil),                          // 66: mnemos.v1.Analogy
-	(*AnalogousClaimsResponse)(nil),          // 67: mnemos.v1.AnalogousClaimsResponse
-	(*GetClaimRequest)(nil),                  // 68: mnemos.v1.GetClaimRequest
-	(*ClaimDetail)(nil),                      // 69: mnemos.v1.ClaimDetail
-	(*SetClaimLifecycleRequest)(nil),         // 70: mnemos.v1.SetClaimLifecycleRequest
-	(*SetClaimLifecycleResponse)(nil),        // 71: mnemos.v1.SetClaimLifecycleResponse
-	(*ClassifyRequest)(nil),                  // 72: mnemos.v1.ClassifyRequest
-	(*ClassifyResponse)(nil),                 // 73: mnemos.v1.ClassifyResponse
-	(*GetDecisionRequest)(nil),               // 74: mnemos.v1.GetDecisionRequest
-	(*RecallRequest)(nil),                    // 75: mnemos.v1.RecallRequest
-	(*RecallResult)(nil),                     // 76: mnemos.v1.RecallResult
-	(*RecallSufficiency)(nil),                // 77: mnemos.v1.RecallSufficiency
-	(*RecallEffort)(nil),                     // 78: mnemos.v1.RecallEffort
-	(*RecallConflict)(nil),                   // 79: mnemos.v1.RecallConflict
-	(*RecallResponse)(nil),                   // 80: mnemos.v1.RecallResponse
-	(*MemoryBlock)(nil),                      // 81: mnemos.v1.MemoryBlock
-	(*GetBlocksRequest)(nil),                 // 82: mnemos.v1.GetBlocksRequest
-	(*GetBlocksResponse)(nil),                // 83: mnemos.v1.GetBlocksResponse
-	(*SetBlockRequest)(nil),                  // 84: mnemos.v1.SetBlockRequest
-	(*SetBlockResponse)(nil),                 // 85: mnemos.v1.SetBlockResponse
-	(*SynthesizeRequest)(nil),                // 86: mnemos.v1.SynthesizeRequest
-	(*SynthesizeResponse)(nil),               // 87: mnemos.v1.SynthesizeResponse
-	(*TimelineEvent)(nil),                    // 88: mnemos.v1.TimelineEvent
-	(*TimelineRequest)(nil),                  // 89: mnemos.v1.TimelineRequest
-	(*TimelineResponse)(nil),                 // 90: mnemos.v1.TimelineResponse
-	(*MemorySignal)(nil),                     // 91: mnemos.v1.MemorySignal
-	(*SignalsRequest)(nil),                   // 92: mnemos.v1.SignalsRequest
-	(*SignalsResponse)(nil),                  // 93: mnemos.v1.SignalsResponse
-	nil,                                      // 94: mnemos.v1.Event.MetadataEntry
-	nil,                                      // 95: mnemos.v1.Action.MetadataEntry
-	nil,                                      // 96: mnemos.v1.Outcome.MetricsEntry
-	nil,                                      // 97: mnemos.v1.TimelineEvent.MetadataEntry
-	(*timestamppb.Timestamp)(nil),            // 98: google.protobuf.Timestamp
+	(*Pagination)(nil),                      // 0: mnemos.v1.Pagination
+	(*HealthRequest)(nil),                   // 1: mnemos.v1.HealthRequest
+	(*HealthResponse)(nil),                  // 2: mnemos.v1.HealthResponse
+	(*Episode)(nil),                         // 3: mnemos.v1.Episode
+	(*ListEpisodesRequest)(nil),             // 4: mnemos.v1.ListEpisodesRequest
+	(*ListEpisodesResponse)(nil),            // 5: mnemos.v1.ListEpisodesResponse
+	(*AppendEpisodesRequest)(nil),           // 6: mnemos.v1.AppendEpisodesRequest
+	(*Belief)(nil),                          // 7: mnemos.v1.Belief
+	(*BeliefEvidence)(nil),                  // 8: mnemos.v1.BeliefEvidence
+	(*ListBeliefsRequest)(nil),              // 9: mnemos.v1.ListBeliefsRequest
+	(*ListBeliefsResponse)(nil),             // 10: mnemos.v1.ListBeliefsResponse
+	(*AppendBeliefsRequest)(nil),            // 11: mnemos.v1.AppendBeliefsRequest
+	(*Association)(nil),                     // 12: mnemos.v1.Association
+	(*ListAssociationsRequest)(nil),         // 13: mnemos.v1.ListAssociationsRequest
+	(*ListAssociationsResponse)(nil),        // 14: mnemos.v1.ListAssociationsResponse
+	(*AppendAssociationsRequest)(nil),       // 15: mnemos.v1.AppendAssociationsRequest
+	(*Embedding)(nil),                       // 16: mnemos.v1.Embedding
+	(*ListEmbeddingsRequest)(nil),           // 17: mnemos.v1.ListEmbeddingsRequest
+	(*ListEmbeddingsResponse)(nil),          // 18: mnemos.v1.ListEmbeddingsResponse
+	(*AppendEmbeddingsRequest)(nil),         // 19: mnemos.v1.AppendEmbeddingsRequest
+	(*AppendResponse)(nil),                  // 20: mnemos.v1.AppendResponse
+	(*MetricsRequest)(nil),                  // 21: mnemos.v1.MetricsRequest
+	(*MetricsResponse)(nil),                 // 22: mnemos.v1.MetricsResponse
+	(*Action)(nil),                          // 23: mnemos.v1.Action
+	(*ListActionsRequest)(nil),              // 24: mnemos.v1.ListActionsRequest
+	(*ListActionsResponse)(nil),             // 25: mnemos.v1.ListActionsResponse
+	(*AppendActionsRequest)(nil),            // 26: mnemos.v1.AppendActionsRequest
+	(*Outcome)(nil),                         // 27: mnemos.v1.Outcome
+	(*ListOutcomesRequest)(nil),             // 28: mnemos.v1.ListOutcomesRequest
+	(*ListOutcomesResponse)(nil),            // 29: mnemos.v1.ListOutcomesResponse
+	(*AppendOutcomesRequest)(nil),           // 30: mnemos.v1.AppendOutcomesRequest
+	(*Context)(nil),                         // 31: mnemos.v1.Context
+	(*Schema)(nil),                          // 32: mnemos.v1.Schema
+	(*ListSchemasRequest)(nil),              // 33: mnemos.v1.ListSchemasRequest
+	(*ListSchemasResponse)(nil),             // 34: mnemos.v1.ListSchemasResponse
+	(*AppendSchemasRequest)(nil),            // 35: mnemos.v1.AppendSchemasRequest
+	(*Decision)(nil),                        // 36: mnemos.v1.Decision
+	(*ListDecisionsRequest)(nil),            // 37: mnemos.v1.ListDecisionsRequest
+	(*ListDecisionsResponse)(nil),           // 38: mnemos.v1.ListDecisionsResponse
+	(*AppendDecisionsRequest)(nil),          // 39: mnemos.v1.AppendDecisionsRequest
+	(*ReflexStep)(nil),                      // 40: mnemos.v1.ReflexStep
+	(*Reflex)(nil),                          // 41: mnemos.v1.Reflex
+	(*ListReflexesRequest)(nil),             // 42: mnemos.v1.ListReflexesRequest
+	(*ListReflexesResponse)(nil),            // 43: mnemos.v1.ListReflexesResponse
+	(*AppendReflexesRequest)(nil),           // 44: mnemos.v1.AppendReflexesRequest
+	(*EntityAssociation)(nil),               // 45: mnemos.v1.EntityAssociation
+	(*ListEntityAssociationsRequest)(nil),   // 46: mnemos.v1.ListEntityAssociationsRequest
+	(*ListEntityAssociationsResponse)(nil),  // 47: mnemos.v1.ListEntityAssociationsResponse
+	(*AppendEntityAssociationsRequest)(nil), // 48: mnemos.v1.AppendEntityAssociationsRequest
+	(*WhoKnowsRequest)(nil),                 // 49: mnemos.v1.WhoKnowsRequest
+	(*Expert)(nil),                          // 50: mnemos.v1.Expert
+	(*WhoKnowsResponse)(nil),                // 51: mnemos.v1.WhoKnowsResponse
+	(*KnowledgeGapsRequest)(nil),            // 52: mnemos.v1.KnowledgeGapsRequest
+	(*Gap)(nil),                             // 53: mnemos.v1.Gap
+	(*KnowledgeGapsResponse)(nil),           // 54: mnemos.v1.KnowledgeGapsResponse
+	(*CalibrationRequest)(nil),              // 55: mnemos.v1.CalibrationRequest
+	(*CalibrationBucket)(nil),               // 56: mnemos.v1.CalibrationBucket
+	(*CalibrationSource)(nil),               // 57: mnemos.v1.CalibrationSource
+	(*CalibrationResponse)(nil),             // 58: mnemos.v1.CalibrationResponse
+	(*HypercorrectionsRequest)(nil),         // 59: mnemos.v1.HypercorrectionsRequest
+	(*Hypercorrection)(nil),                 // 60: mnemos.v1.Hypercorrection
+	(*HypercorrectionsResponse)(nil),        // 61: mnemos.v1.HypercorrectionsResponse
+	(*RecombinationsRequest)(nil),           // 62: mnemos.v1.RecombinationsRequest
+	(*Recombination)(nil),                   // 63: mnemos.v1.Recombination
+	(*RecombinationsResponse)(nil),          // 64: mnemos.v1.RecombinationsResponse
+	(*AnalogousBeliefsRequest)(nil),         // 65: mnemos.v1.AnalogousBeliefsRequest
+	(*Analogy)(nil),                         // 66: mnemos.v1.Analogy
+	(*AnalogousBeliefsResponse)(nil),        // 67: mnemos.v1.AnalogousBeliefsResponse
+	(*GetBeliefRequest)(nil),                // 68: mnemos.v1.GetBeliefRequest
+	(*BeliefDetail)(nil),                    // 69: mnemos.v1.BeliefDetail
+	(*SetBeliefLifecycleRequest)(nil),       // 70: mnemos.v1.SetBeliefLifecycleRequest
+	(*SetBeliefLifecycleResponse)(nil),      // 71: mnemos.v1.SetBeliefLifecycleResponse
+	(*ClassifyRequest)(nil),                 // 72: mnemos.v1.ClassifyRequest
+	(*ClassifyResponse)(nil),                // 73: mnemos.v1.ClassifyResponse
+	(*GetDecisionRequest)(nil),              // 74: mnemos.v1.GetDecisionRequest
+	(*RecallRequest)(nil),                   // 75: mnemos.v1.RecallRequest
+	(*RecallResult)(nil),                    // 76: mnemos.v1.RecallResult
+	(*RecallSufficiency)(nil),               // 77: mnemos.v1.RecallSufficiency
+	(*RecallEffort)(nil),                    // 78: mnemos.v1.RecallEffort
+	(*RecallConflict)(nil),                  // 79: mnemos.v1.RecallConflict
+	(*RecallResponse)(nil),                  // 80: mnemos.v1.RecallResponse
+	(*MemoryBlock)(nil),                     // 81: mnemos.v1.MemoryBlock
+	(*GetBlocksRequest)(nil),                // 82: mnemos.v1.GetBlocksRequest
+	(*GetBlocksResponse)(nil),               // 83: mnemos.v1.GetBlocksResponse
+	(*SetBlockRequest)(nil),                 // 84: mnemos.v1.SetBlockRequest
+	(*SetBlockResponse)(nil),                // 85: mnemos.v1.SetBlockResponse
+	(*SynthesizeRequest)(nil),               // 86: mnemos.v1.SynthesizeRequest
+	(*SynthesizeResponse)(nil),              // 87: mnemos.v1.SynthesizeResponse
+	(*TimelineEpisode)(nil),                 // 88: mnemos.v1.TimelineEpisode
+	(*TimelineRequest)(nil),                 // 89: mnemos.v1.TimelineRequest
+	(*TimelineResponse)(nil),                // 90: mnemos.v1.TimelineResponse
+	(*MemorySignal)(nil),                    // 91: mnemos.v1.MemorySignal
+	(*SignalsRequest)(nil),                  // 92: mnemos.v1.SignalsRequest
+	(*SignalsResponse)(nil),                 // 93: mnemos.v1.SignalsResponse
+	nil,                                     // 94: mnemos.v1.Episode.MetadataEntry
+	nil,                                     // 95: mnemos.v1.Action.MetadataEntry
+	nil,                                     // 96: mnemos.v1.Outcome.MetricsEntry
+	nil,                                     // 97: mnemos.v1.TimelineEpisode.MetadataEntry
+	(*timestamppb.Timestamp)(nil),           // 98: google.protobuf.Timestamp
 }
 var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
-	98,  // 0: mnemos.v1.Event.timestamp:type_name -> google.protobuf.Timestamp
-	94,  // 1: mnemos.v1.Event.metadata:type_name -> mnemos.v1.Event.MetadataEntry
-	98,  // 2: mnemos.v1.Event.ingested_at:type_name -> google.protobuf.Timestamp
-	0,   // 3: mnemos.v1.ListEventsRequest.pagination:type_name -> mnemos.v1.Pagination
-	3,   // 4: mnemos.v1.ListEventsResponse.events:type_name -> mnemos.v1.Event
-	3,   // 5: mnemos.v1.AppendEventsRequest.events:type_name -> mnemos.v1.Event
-	98,  // 6: mnemos.v1.Claim.created_at:type_name -> google.protobuf.Timestamp
-	0,   // 7: mnemos.v1.ListClaimsRequest.pagination:type_name -> mnemos.v1.Pagination
-	98,  // 8: mnemos.v1.ListClaimsRequest.as_of:type_name -> google.protobuf.Timestamp
-	98,  // 9: mnemos.v1.ListClaimsRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
-	7,   // 10: mnemos.v1.ListClaimsResponse.claims:type_name -> mnemos.v1.Claim
-	8,   // 11: mnemos.v1.ListClaimsResponse.evidence:type_name -> mnemos.v1.ClaimEvidence
-	7,   // 12: mnemos.v1.AppendClaimsRequest.claims:type_name -> mnemos.v1.Claim
-	8,   // 13: mnemos.v1.AppendClaimsRequest.evidence:type_name -> mnemos.v1.ClaimEvidence
-	98,  // 14: mnemos.v1.Relationship.created_at:type_name -> google.protobuf.Timestamp
-	0,   // 15: mnemos.v1.ListRelationshipsRequest.pagination:type_name -> mnemos.v1.Pagination
-	12,  // 16: mnemos.v1.ListRelationshipsResponse.relationships:type_name -> mnemos.v1.Relationship
-	12,  // 17: mnemos.v1.AppendRelationshipsRequest.relationships:type_name -> mnemos.v1.Relationship
+	98,  // 0: mnemos.v1.Episode.timestamp:type_name -> google.protobuf.Timestamp
+	94,  // 1: mnemos.v1.Episode.metadata:type_name -> mnemos.v1.Episode.MetadataEntry
+	98,  // 2: mnemos.v1.Episode.ingested_at:type_name -> google.protobuf.Timestamp
+	0,   // 3: mnemos.v1.ListEpisodesRequest.pagination:type_name -> mnemos.v1.Pagination
+	3,   // 4: mnemos.v1.ListEpisodesResponse.episodes:type_name -> mnemos.v1.Episode
+	3,   // 5: mnemos.v1.AppendEpisodesRequest.episodes:type_name -> mnemos.v1.Episode
+	98,  // 6: mnemos.v1.Belief.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 7: mnemos.v1.ListBeliefsRequest.pagination:type_name -> mnemos.v1.Pagination
+	98,  // 8: mnemos.v1.ListBeliefsRequest.as_of:type_name -> google.protobuf.Timestamp
+	98,  // 9: mnemos.v1.ListBeliefsRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
+	7,   // 10: mnemos.v1.ListBeliefsResponse.beliefs:type_name -> mnemos.v1.Belief
+	8,   // 11: mnemos.v1.ListBeliefsResponse.evidence:type_name -> mnemos.v1.BeliefEvidence
+	7,   // 12: mnemos.v1.AppendBeliefsRequest.beliefs:type_name -> mnemos.v1.Belief
+	8,   // 13: mnemos.v1.AppendBeliefsRequest.evidence:type_name -> mnemos.v1.BeliefEvidence
+	98,  // 14: mnemos.v1.Association.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 15: mnemos.v1.ListAssociationsRequest.pagination:type_name -> mnemos.v1.Pagination
+	12,  // 16: mnemos.v1.ListAssociationsResponse.associations:type_name -> mnemos.v1.Association
+	12,  // 17: mnemos.v1.AppendAssociationsRequest.associations:type_name -> mnemos.v1.Association
 	0,   // 18: mnemos.v1.ListEmbeddingsRequest.pagination:type_name -> mnemos.v1.Pagination
 	16,  // 19: mnemos.v1.ListEmbeddingsResponse.embeddings:type_name -> mnemos.v1.Embedding
 	16,  // 20: mnemos.v1.AppendEmbeddingsRequest.embeddings:type_name -> mnemos.v1.Embedding
@@ -6832,29 +6831,29 @@ var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
 	0,   // 30: mnemos.v1.ListOutcomesRequest.pagination:type_name -> mnemos.v1.Pagination
 	27,  // 31: mnemos.v1.ListOutcomesResponse.outcomes:type_name -> mnemos.v1.Outcome
 	27,  // 32: mnemos.v1.AppendOutcomesRequest.outcomes:type_name -> mnemos.v1.Outcome
-	31,  // 33: mnemos.v1.Lesson.scope:type_name -> mnemos.v1.Scope
-	98,  // 34: mnemos.v1.Lesson.derived_at:type_name -> google.protobuf.Timestamp
-	98,  // 35: mnemos.v1.Lesson.last_verified:type_name -> google.protobuf.Timestamp
-	0,   // 36: mnemos.v1.ListLessonsRequest.pagination:type_name -> mnemos.v1.Pagination
-	32,  // 37: mnemos.v1.ListLessonsResponse.lessons:type_name -> mnemos.v1.Lesson
-	32,  // 38: mnemos.v1.AppendLessonsRequest.lessons:type_name -> mnemos.v1.Lesson
-	31,  // 39: mnemos.v1.Decision.scope:type_name -> mnemos.v1.Scope
+	31,  // 33: mnemos.v1.Schema.context:type_name -> mnemos.v1.Context
+	98,  // 34: mnemos.v1.Schema.derived_at:type_name -> google.protobuf.Timestamp
+	98,  // 35: mnemos.v1.Schema.last_verified:type_name -> google.protobuf.Timestamp
+	0,   // 36: mnemos.v1.ListSchemasRequest.pagination:type_name -> mnemos.v1.Pagination
+	32,  // 37: mnemos.v1.ListSchemasResponse.schemas:type_name -> mnemos.v1.Schema
+	32,  // 38: mnemos.v1.AppendSchemasRequest.schemas:type_name -> mnemos.v1.Schema
+	31,  // 39: mnemos.v1.Decision.context:type_name -> mnemos.v1.Context
 	98,  // 40: mnemos.v1.Decision.chosen_at:type_name -> google.protobuf.Timestamp
 	98,  // 41: mnemos.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
 	0,   // 42: mnemos.v1.ListDecisionsRequest.pagination:type_name -> mnemos.v1.Pagination
 	36,  // 43: mnemos.v1.ListDecisionsResponse.decisions:type_name -> mnemos.v1.Decision
 	36,  // 44: mnemos.v1.AppendDecisionsRequest.decisions:type_name -> mnemos.v1.Decision
-	31,  // 45: mnemos.v1.Playbook.scope:type_name -> mnemos.v1.Scope
-	40,  // 46: mnemos.v1.Playbook.steps:type_name -> mnemos.v1.PlaybookStep
-	98,  // 47: mnemos.v1.Playbook.derived_at:type_name -> google.protobuf.Timestamp
-	98,  // 48: mnemos.v1.Playbook.last_verified:type_name -> google.protobuf.Timestamp
-	0,   // 49: mnemos.v1.ListPlaybooksRequest.pagination:type_name -> mnemos.v1.Pagination
-	41,  // 50: mnemos.v1.ListPlaybooksResponse.playbooks:type_name -> mnemos.v1.Playbook
-	41,  // 51: mnemos.v1.AppendPlaybooksRequest.playbooks:type_name -> mnemos.v1.Playbook
-	98,  // 52: mnemos.v1.EntityRelationship.created_at:type_name -> google.protobuf.Timestamp
-	0,   // 53: mnemos.v1.ListEntityRelationshipsRequest.pagination:type_name -> mnemos.v1.Pagination
-	45,  // 54: mnemos.v1.ListEntityRelationshipsResponse.edges:type_name -> mnemos.v1.EntityRelationship
-	45,  // 55: mnemos.v1.AppendEntityRelationshipsRequest.edges:type_name -> mnemos.v1.EntityRelationship
+	31,  // 45: mnemos.v1.Reflex.context:type_name -> mnemos.v1.Context
+	40,  // 46: mnemos.v1.Reflex.steps:type_name -> mnemos.v1.ReflexStep
+	98,  // 47: mnemos.v1.Reflex.derived_at:type_name -> google.protobuf.Timestamp
+	98,  // 48: mnemos.v1.Reflex.last_verified:type_name -> google.protobuf.Timestamp
+	0,   // 49: mnemos.v1.ListReflexesRequest.pagination:type_name -> mnemos.v1.Pagination
+	41,  // 50: mnemos.v1.ListReflexesResponse.reflexes:type_name -> mnemos.v1.Reflex
+	41,  // 51: mnemos.v1.AppendReflexesRequest.reflexes:type_name -> mnemos.v1.Reflex
+	98,  // 52: mnemos.v1.EntityAssociation.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 53: mnemos.v1.ListEntityAssociationsRequest.pagination:type_name -> mnemos.v1.Pagination
+	45,  // 54: mnemos.v1.ListEntityAssociationsResponse.edges:type_name -> mnemos.v1.EntityAssociation
+	45,  // 55: mnemos.v1.AppendEntityAssociationsRequest.edges:type_name -> mnemos.v1.EntityAssociation
 	50,  // 56: mnemos.v1.WhoKnowsResponse.experts:type_name -> mnemos.v1.Expert
 	53,  // 57: mnemos.v1.KnowledgeGapsResponse.gaps:type_name -> mnemos.v1.Gap
 	56,  // 58: mnemos.v1.CalibrationResponse.buckets:type_name -> mnemos.v1.CalibrationBucket
@@ -6862,32 +6861,32 @@ var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
 	98,  // 60: mnemos.v1.Hypercorrection.detected_at:type_name -> google.protobuf.Timestamp
 	60,  // 61: mnemos.v1.HypercorrectionsResponse.hypercorrections:type_name -> mnemos.v1.Hypercorrection
 	63,  // 62: mnemos.v1.RecombinationsResponse.recombinations:type_name -> mnemos.v1.Recombination
-	66,  // 63: mnemos.v1.AnalogousClaimsResponse.analogous:type_name -> mnemos.v1.Analogy
-	98,  // 64: mnemos.v1.ClaimDetail.valid_from:type_name -> google.protobuf.Timestamp
-	98,  // 65: mnemos.v1.ClaimDetail.valid_until:type_name -> google.protobuf.Timestamp
-	98,  // 66: mnemos.v1.ClaimDetail.recorded_at:type_name -> google.protobuf.Timestamp
+	66,  // 63: mnemos.v1.AnalogousBeliefsResponse.analogous:type_name -> mnemos.v1.Analogy
+	98,  // 64: mnemos.v1.BeliefDetail.valid_from:type_name -> google.protobuf.Timestamp
+	98,  // 65: mnemos.v1.BeliefDetail.valid_until:type_name -> google.protobuf.Timestamp
+	98,  // 66: mnemos.v1.BeliefDetail.recorded_at:type_name -> google.protobuf.Timestamp
 	76,  // 67: mnemos.v1.RecallResponse.results:type_name -> mnemos.v1.RecallResult
 	77,  // 68: mnemos.v1.RecallResponse.sufficiency:type_name -> mnemos.v1.RecallSufficiency
 	78,  // 69: mnemos.v1.RecallResponse.effort:type_name -> mnemos.v1.RecallEffort
 	79,  // 70: mnemos.v1.RecallResponse.conflicts:type_name -> mnemos.v1.RecallConflict
 	98,  // 71: mnemos.v1.MemoryBlock.updated_at:type_name -> google.protobuf.Timestamp
 	81,  // 72: mnemos.v1.GetBlocksResponse.blocks:type_name -> mnemos.v1.MemoryBlock
-	98,  // 73: mnemos.v1.TimelineEvent.at:type_name -> google.protobuf.Timestamp
-	97,  // 74: mnemos.v1.TimelineEvent.metadata:type_name -> mnemos.v1.TimelineEvent.MetadataEntry
+	98,  // 73: mnemos.v1.TimelineEpisode.at:type_name -> google.protobuf.Timestamp
+	97,  // 74: mnemos.v1.TimelineEpisode.metadata:type_name -> mnemos.v1.TimelineEpisode.MetadataEntry
 	98,  // 75: mnemos.v1.TimelineRequest.from:type_name -> google.protobuf.Timestamp
 	98,  // 76: mnemos.v1.TimelineRequest.to:type_name -> google.protobuf.Timestamp
-	88,  // 77: mnemos.v1.TimelineResponse.events:type_name -> mnemos.v1.TimelineEvent
+	88,  // 77: mnemos.v1.TimelineResponse.episodes:type_name -> mnemos.v1.TimelineEpisode
 	98,  // 78: mnemos.v1.MemorySignal.detected_at:type_name -> google.protobuf.Timestamp
 	98,  // 79: mnemos.v1.MemorySignal.window_start:type_name -> google.protobuf.Timestamp
 	98,  // 80: mnemos.v1.MemorySignal.window_end:type_name -> google.protobuf.Timestamp
 	91,  // 81: mnemos.v1.SignalsResponse.signals:type_name -> mnemos.v1.MemorySignal
 	1,   // 82: mnemos.v1.MnemosService.Health:input_type -> mnemos.v1.HealthRequest
-	4,   // 83: mnemos.v1.MnemosService.ListEvents:input_type -> mnemos.v1.ListEventsRequest
-	6,   // 84: mnemos.v1.MnemosService.AppendEvents:input_type -> mnemos.v1.AppendEventsRequest
-	9,   // 85: mnemos.v1.MnemosService.ListClaims:input_type -> mnemos.v1.ListClaimsRequest
-	11,  // 86: mnemos.v1.MnemosService.AppendClaims:input_type -> mnemos.v1.AppendClaimsRequest
-	13,  // 87: mnemos.v1.MnemosService.ListRelationships:input_type -> mnemos.v1.ListRelationshipsRequest
-	15,  // 88: mnemos.v1.MnemosService.AppendRelationships:input_type -> mnemos.v1.AppendRelationshipsRequest
+	4,   // 83: mnemos.v1.MnemosService.ListEpisodes:input_type -> mnemos.v1.ListEpisodesRequest
+	6,   // 84: mnemos.v1.MnemosService.AppendEpisodes:input_type -> mnemos.v1.AppendEpisodesRequest
+	9,   // 85: mnemos.v1.MnemosService.ListBeliefs:input_type -> mnemos.v1.ListBeliefsRequest
+	11,  // 86: mnemos.v1.MnemosService.AppendBeliefs:input_type -> mnemos.v1.AppendBeliefsRequest
+	13,  // 87: mnemos.v1.MnemosService.ListAssociations:input_type -> mnemos.v1.ListAssociationsRequest
+	15,  // 88: mnemos.v1.MnemosService.AppendAssociations:input_type -> mnemos.v1.AppendAssociationsRequest
 	17,  // 89: mnemos.v1.MnemosService.ListEmbeddings:input_type -> mnemos.v1.ListEmbeddingsRequest
 	19,  // 90: mnemos.v1.MnemosService.AppendEmbeddings:input_type -> mnemos.v1.AppendEmbeddingsRequest
 	21,  // 91: mnemos.v1.MnemosService.Metrics:input_type -> mnemos.v1.MetricsRequest
@@ -6895,22 +6894,22 @@ var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
 	26,  // 93: mnemos.v1.MnemosService.AppendActions:input_type -> mnemos.v1.AppendActionsRequest
 	28,  // 94: mnemos.v1.MnemosService.ListOutcomes:input_type -> mnemos.v1.ListOutcomesRequest
 	30,  // 95: mnemos.v1.MnemosService.AppendOutcomes:input_type -> mnemos.v1.AppendOutcomesRequest
-	33,  // 96: mnemos.v1.MnemosService.ListLessons:input_type -> mnemos.v1.ListLessonsRequest
-	35,  // 97: mnemos.v1.MnemosService.AppendLessons:input_type -> mnemos.v1.AppendLessonsRequest
+	33,  // 96: mnemos.v1.MnemosService.ListSchemas:input_type -> mnemos.v1.ListSchemasRequest
+	35,  // 97: mnemos.v1.MnemosService.AppendSchemas:input_type -> mnemos.v1.AppendSchemasRequest
 	37,  // 98: mnemos.v1.MnemosService.ListDecisions:input_type -> mnemos.v1.ListDecisionsRequest
 	39,  // 99: mnemos.v1.MnemosService.AppendDecisions:input_type -> mnemos.v1.AppendDecisionsRequest
-	42,  // 100: mnemos.v1.MnemosService.ListPlaybooks:input_type -> mnemos.v1.ListPlaybooksRequest
-	44,  // 101: mnemos.v1.MnemosService.AppendPlaybooks:input_type -> mnemos.v1.AppendPlaybooksRequest
-	46,  // 102: mnemos.v1.MnemosService.ListEntityRelationships:input_type -> mnemos.v1.ListEntityRelationshipsRequest
-	48,  // 103: mnemos.v1.MnemosService.AppendEntityRelationships:input_type -> mnemos.v1.AppendEntityRelationshipsRequest
+	42,  // 100: mnemos.v1.MnemosService.ListReflexes:input_type -> mnemos.v1.ListReflexesRequest
+	44,  // 101: mnemos.v1.MnemosService.AppendReflexes:input_type -> mnemos.v1.AppendReflexesRequest
+	46,  // 102: mnemos.v1.MnemosService.ListEntityAssociations:input_type -> mnemos.v1.ListEntityAssociationsRequest
+	48,  // 103: mnemos.v1.MnemosService.AppendEntityAssociations:input_type -> mnemos.v1.AppendEntityAssociationsRequest
 	49,  // 104: mnemos.v1.MnemosService.WhoKnows:input_type -> mnemos.v1.WhoKnowsRequest
 	52,  // 105: mnemos.v1.MnemosService.KnowledgeGaps:input_type -> mnemos.v1.KnowledgeGapsRequest
 	55,  // 106: mnemos.v1.MnemosService.Calibration:input_type -> mnemos.v1.CalibrationRequest
 	59,  // 107: mnemos.v1.MnemosService.Hypercorrections:input_type -> mnemos.v1.HypercorrectionsRequest
 	62,  // 108: mnemos.v1.MnemosService.Recombinations:input_type -> mnemos.v1.RecombinationsRequest
-	65,  // 109: mnemos.v1.MnemosService.AnalogousClaims:input_type -> mnemos.v1.AnalogousClaimsRequest
-	68,  // 110: mnemos.v1.MnemosService.GetClaim:input_type -> mnemos.v1.GetClaimRequest
-	70,  // 111: mnemos.v1.MnemosService.SetClaimLifecycle:input_type -> mnemos.v1.SetClaimLifecycleRequest
+	65,  // 109: mnemos.v1.MnemosService.AnalogousBeliefs:input_type -> mnemos.v1.AnalogousBeliefsRequest
+	68,  // 110: mnemos.v1.MnemosService.GetBelief:input_type -> mnemos.v1.GetBeliefRequest
+	70,  // 111: mnemos.v1.MnemosService.SetBeliefLifecycle:input_type -> mnemos.v1.SetBeliefLifecycleRequest
 	72,  // 112: mnemos.v1.MnemosService.Classify:input_type -> mnemos.v1.ClassifyRequest
 	74,  // 113: mnemos.v1.MnemosService.GetDecision:input_type -> mnemos.v1.GetDecisionRequest
 	75,  // 114: mnemos.v1.MnemosService.Recall:input_type -> mnemos.v1.RecallRequest
@@ -6920,12 +6919,12 @@ var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
 	89,  // 118: mnemos.v1.MnemosService.Timeline:input_type -> mnemos.v1.TimelineRequest
 	92,  // 119: mnemos.v1.MnemosService.Signals:input_type -> mnemos.v1.SignalsRequest
 	2,   // 120: mnemos.v1.MnemosService.Health:output_type -> mnemos.v1.HealthResponse
-	5,   // 121: mnemos.v1.MnemosService.ListEvents:output_type -> mnemos.v1.ListEventsResponse
-	20,  // 122: mnemos.v1.MnemosService.AppendEvents:output_type -> mnemos.v1.AppendResponse
-	10,  // 123: mnemos.v1.MnemosService.ListClaims:output_type -> mnemos.v1.ListClaimsResponse
-	20,  // 124: mnemos.v1.MnemosService.AppendClaims:output_type -> mnemos.v1.AppendResponse
-	14,  // 125: mnemos.v1.MnemosService.ListRelationships:output_type -> mnemos.v1.ListRelationshipsResponse
-	20,  // 126: mnemos.v1.MnemosService.AppendRelationships:output_type -> mnemos.v1.AppendResponse
+	5,   // 121: mnemos.v1.MnemosService.ListEpisodes:output_type -> mnemos.v1.ListEpisodesResponse
+	20,  // 122: mnemos.v1.MnemosService.AppendEpisodes:output_type -> mnemos.v1.AppendResponse
+	10,  // 123: mnemos.v1.MnemosService.ListBeliefs:output_type -> mnemos.v1.ListBeliefsResponse
+	20,  // 124: mnemos.v1.MnemosService.AppendBeliefs:output_type -> mnemos.v1.AppendResponse
+	14,  // 125: mnemos.v1.MnemosService.ListAssociations:output_type -> mnemos.v1.ListAssociationsResponse
+	20,  // 126: mnemos.v1.MnemosService.AppendAssociations:output_type -> mnemos.v1.AppendResponse
 	18,  // 127: mnemos.v1.MnemosService.ListEmbeddings:output_type -> mnemos.v1.ListEmbeddingsResponse
 	20,  // 128: mnemos.v1.MnemosService.AppendEmbeddings:output_type -> mnemos.v1.AppendResponse
 	22,  // 129: mnemos.v1.MnemosService.Metrics:output_type -> mnemos.v1.MetricsResponse
@@ -6933,22 +6932,22 @@ var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
 	20,  // 131: mnemos.v1.MnemosService.AppendActions:output_type -> mnemos.v1.AppendResponse
 	29,  // 132: mnemos.v1.MnemosService.ListOutcomes:output_type -> mnemos.v1.ListOutcomesResponse
 	20,  // 133: mnemos.v1.MnemosService.AppendOutcomes:output_type -> mnemos.v1.AppendResponse
-	34,  // 134: mnemos.v1.MnemosService.ListLessons:output_type -> mnemos.v1.ListLessonsResponse
-	20,  // 135: mnemos.v1.MnemosService.AppendLessons:output_type -> mnemos.v1.AppendResponse
+	34,  // 134: mnemos.v1.MnemosService.ListSchemas:output_type -> mnemos.v1.ListSchemasResponse
+	20,  // 135: mnemos.v1.MnemosService.AppendSchemas:output_type -> mnemos.v1.AppendResponse
 	38,  // 136: mnemos.v1.MnemosService.ListDecisions:output_type -> mnemos.v1.ListDecisionsResponse
 	20,  // 137: mnemos.v1.MnemosService.AppendDecisions:output_type -> mnemos.v1.AppendResponse
-	43,  // 138: mnemos.v1.MnemosService.ListPlaybooks:output_type -> mnemos.v1.ListPlaybooksResponse
-	20,  // 139: mnemos.v1.MnemosService.AppendPlaybooks:output_type -> mnemos.v1.AppendResponse
-	47,  // 140: mnemos.v1.MnemosService.ListEntityRelationships:output_type -> mnemos.v1.ListEntityRelationshipsResponse
-	20,  // 141: mnemos.v1.MnemosService.AppendEntityRelationships:output_type -> mnemos.v1.AppendResponse
+	43,  // 138: mnemos.v1.MnemosService.ListReflexes:output_type -> mnemos.v1.ListReflexesResponse
+	20,  // 139: mnemos.v1.MnemosService.AppendReflexes:output_type -> mnemos.v1.AppendResponse
+	47,  // 140: mnemos.v1.MnemosService.ListEntityAssociations:output_type -> mnemos.v1.ListEntityAssociationsResponse
+	20,  // 141: mnemos.v1.MnemosService.AppendEntityAssociations:output_type -> mnemos.v1.AppendResponse
 	51,  // 142: mnemos.v1.MnemosService.WhoKnows:output_type -> mnemos.v1.WhoKnowsResponse
 	54,  // 143: mnemos.v1.MnemosService.KnowledgeGaps:output_type -> mnemos.v1.KnowledgeGapsResponse
 	58,  // 144: mnemos.v1.MnemosService.Calibration:output_type -> mnemos.v1.CalibrationResponse
 	61,  // 145: mnemos.v1.MnemosService.Hypercorrections:output_type -> mnemos.v1.HypercorrectionsResponse
 	64,  // 146: mnemos.v1.MnemosService.Recombinations:output_type -> mnemos.v1.RecombinationsResponse
-	67,  // 147: mnemos.v1.MnemosService.AnalogousClaims:output_type -> mnemos.v1.AnalogousClaimsResponse
-	69,  // 148: mnemos.v1.MnemosService.GetClaim:output_type -> mnemos.v1.ClaimDetail
-	71,  // 149: mnemos.v1.MnemosService.SetClaimLifecycle:output_type -> mnemos.v1.SetClaimLifecycleResponse
+	67,  // 147: mnemos.v1.MnemosService.AnalogousBeliefs:output_type -> mnemos.v1.AnalogousBeliefsResponse
+	69,  // 148: mnemos.v1.MnemosService.GetBelief:output_type -> mnemos.v1.BeliefDetail
+	71,  // 149: mnemos.v1.MnemosService.SetBeliefLifecycle:output_type -> mnemos.v1.SetBeliefLifecycleResponse
 	73,  // 150: mnemos.v1.MnemosService.Classify:output_type -> mnemos.v1.ClassifyResponse
 	36,  // 151: mnemos.v1.MnemosService.GetDecision:output_type -> mnemos.v1.Decision
 	80,  // 152: mnemos.v1.MnemosService.Recall:output_type -> mnemos.v1.RecallResponse

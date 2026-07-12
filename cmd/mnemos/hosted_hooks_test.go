@@ -98,9 +98,9 @@ func TestHostedHookRouting(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/search":
-			_, _ = w.Write([]byte(`{"query":"q","claims":[{"id":"c1","text":"chose Redis","type":"decision","trust_score":0.9}],"contradictions":[]}`))
+			_, _ = w.Write([]byte(`{"query":"q","beliefs":[{"id":"c1","text":"chose Redis","type":"decision","trust_score":0.9}],"dissonances":[]}`))
 		case "/v1/metrics":
-			_, _ = w.Write([]byte(`{"runs":2,"events":5,"claims":7,"contradictions":1}`))
+			_, _ = w.Write([]byte(`{"runs":2,"episodes":5,"beliefs":7,"dissonances":1}`))
 		case "/v1/process":
 			_, _ = w.Write([]byte(`{"run_id":"r1","events":1,"claims":2,"relationships":0}`))
 		default:

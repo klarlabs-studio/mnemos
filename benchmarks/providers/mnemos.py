@@ -156,17 +156,20 @@ class MnemosProvider:
         if rc2 == 0:
             try:
                 audit = json.loads(stdout2)
-                claims_list = audit.get("claims", [])
+                # ADR-0011 brain-native wire: `mnemos audit` emits
+                # beliefs/associations with brain-native edge fields
+                # (from_belief_id/to_belief_id).
+                claims_list = audit.get("beliefs", [])
                 rels = [
-                    r for r in audit.get("relationships", [])
+                    r for r in audit.get("associations", [])
                     if r.get("type") == "contradicts"
                 ]
                 claim_text_map = {c.get("id"): c.get("text", "") for c in claims_list}
                 contradictions = [
                     {
-                        "between": [r["from_claim_id"], r["to_claim_id"]],
-                        "text_a": claim_text_map.get(r["from_claim_id"], ""),
-                        "text_b": claim_text_map.get(r["to_claim_id"], ""),
+                        "between": [r["from_belief_id"], r["to_belief_id"]],
+                        "text_a": claim_text_map.get(r["from_belief_id"], ""),
+                        "text_b": claim_text_map.get(r["to_belief_id"], ""),
                     }
                     for r in rels
                 ]
@@ -191,9 +194,9 @@ class MnemosProvider:
                     q_data = json.loads(stdout)
                     answer = q_data.get("answer", "")
                     confidence = q_data.get("confidence", 0.0)
-                    # If the JSON claims list is richer than audit, merge.
+                    # If the JSON beliefs list is richer than audit, merge.
                     if not memories:
-                        for c in q_data.get("claims", []):
+                        for c in q_data.get("beliefs", []):
                             memories.append({
                                 "id": c.get("ID", c.get("id", "")),
                                 "content": c.get("Text", c.get("text", "")),

@@ -20,9 +20,9 @@ func TestGRPC_ClaimCRUD(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	// GetClaim on a missing id → NotFound.
-	if _, err := client.GetClaim(ctx, &mnemosv1.GetClaimRequest{ClaimId: "nope"}); status.Code(err) != codes.NotFound {
-		t.Errorf("GetClaim missing: want NotFound, got %v", err)
+	// GetBelief on a missing id → NotFound.
+	if _, err := client.GetBelief(ctx, &mnemosv1.GetBeliefRequest{BeliefId: "nope"}); status.Code(err) != codes.NotFound {
+		t.Errorf("GetBelief missing: want NotFound, got %v", err)
 	}
 
 	// Classify a statement → OK; empty text → InvalidArgument.
@@ -33,9 +33,9 @@ func TestGRPC_ClaimCRUD(t *testing.T) {
 		t.Errorf("Classify empty: want InvalidArgument, got %v", err)
 	}
 
-	// SetClaimLifecycle with a bad value → InvalidArgument.
-	if _, err := client.SetClaimLifecycle(ctx, &mnemosv1.SetClaimLifecycleRequest{ClaimId: "x", Lifecycle: "bogus"}); status.Code(err) != codes.InvalidArgument {
-		t.Errorf("SetClaimLifecycle bad: want InvalidArgument, got %v", err)
+	// SetBeliefLifecycle with a bad value → InvalidArgument.
+	if _, err := client.SetBeliefLifecycle(ctx, &mnemosv1.SetBeliefLifecycleRequest{BeliefId: "x", Lifecycle: "bogus"}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("SetBeliefLifecycle bad: want InvalidArgument, got %v", err)
 	}
 
 	// GetDecision on a missing id → NotFound.
@@ -47,7 +47,7 @@ func TestGRPC_ClaimCRUD(t *testing.T) {
 func TestGRPC_ClaimCRUDUnavailableWithoutFacade(t *testing.T) {
 	client, cleanup := startBrainServer(t, nil)
 	defer cleanup()
-	_, err := client.GetClaim(context.Background(), &mnemosv1.GetClaimRequest{ClaimId: "x"})
+	_, err := client.GetBelief(context.Background(), &mnemosv1.GetBeliefRequest{BeliefId: "x"})
 	if status.Code(err) != codes.Unavailable {
 		t.Fatalf("want codes.Unavailable, got %v", err)
 	}

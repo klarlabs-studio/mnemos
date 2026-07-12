@@ -315,9 +315,9 @@ func (s *Server) validateToken(ctx context.Context, raw string) (context.Context
 func isReadMethod(method string) bool {
 	switch method {
 	case "/mnemos.v1.MnemosService/Health",
-		"/mnemos.v1.MnemosService/ListEvents",
-		"/mnemos.v1.MnemosService/ListClaims",
-		"/mnemos.v1.MnemosService/ListRelationships",
+		"/mnemos.v1.MnemosService/ListEpisodes",
+		"/mnemos.v1.MnemosService/ListBeliefs",
+		"/mnemos.v1.MnemosService/ListAssociations",
 		"/mnemos.v1.MnemosService/ListEmbeddings",
 		"/mnemos.v1.MnemosService/Metrics":
 		return true
@@ -396,16 +396,16 @@ func (s *Server) Health(ctx context.Context, req *mnemosv1.HealthRequest) (*mnem
 }
 
 // ---------------------------------------------------------------------------
-// Events
+// Episodes
 // ---------------------------------------------------------------------------
 
-// ListEvents returns events ordered by timestamp ascending. Pagination via Limit/PageToken (cursor = last event id).
-func (s *Server) ListEvents(ctx context.Context, req *mnemosv1.ListEventsRequest) (*mnemosv1.ListEventsResponse, error) {
+// ListEpisodes returns episodes ordered by timestamp ascending. Pagination via Limit/PageToken (cursor = last episode id).
+func (s *Server) ListEpisodes(ctx context.Context, req *mnemosv1.ListEpisodesRequest) (*mnemosv1.ListEpisodesResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
 
 	all, err := s.connFor(ctx).Events.ListAll(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list events: %v", err)
+		return nil, status.Errorf(codes.Internal, "list episodes: %v", err)
 	}
 
 	reversed := make([]domain.Event, len(all))
@@ -415,31 +415,31 @@ func (s *Server) ListEvents(ctx context.Context, req *mnemosv1.ListEventsRequest
 	total := len(reversed)
 	page := paginate(reversed, limit, offset)
 
-	events := make([]*mnemosv1.Event, 0, len(page))
+	episodes := make([]*mnemosv1.Episode, 0, len(page))
 	for _, e := range page {
-		events = append(events, eventToProto(e))
+		episodes = append(episodes, episodeToProto(e))
 	}
-	return &mnemosv1.ListEventsResponse{Events: events, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
+	return &mnemosv1.ListEpisodesResponse{Episodes: episodes, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
 }
 
-// AppendEvents writes events idempotently. Re-appending the same id is a no-op (mirrors REST semantics).
-func (s *Server) AppendEvents(ctx context.Context, req *mnemosv1.AppendEventsRequest) (*mnemosv1.AppendResponse, error) {
+// AppendEpisodes writes episodes idempotently. Re-appending the same id is a no-op (mirrors REST semantics).
+func (s *Server) AppendEpisodes(ctx context.Context, req *mnemosv1.AppendEpisodesRequest) (*mnemosv1.AppendResponse, error) {
 	if err := s.requireScope(ctx, domain.ScopeEventsWrite); err != nil {
 		return nil, err
 	}
-	if len(req.Events) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "events array is empty")
+	if len(req.Episodes) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "episodes array is empty")
 	}
-	if len(req.Events) > maxBatchRecords {
-		return nil, status.Errorf(codes.InvalidArgument, "events batch size %d exceeds max %d", len(req.Events), maxBatchRecords)
+	if len(req.Episodes) > maxBatchRecords {
+		return nil, status.Errorf(codes.InvalidArgument, "episodes batch size %d exceeds max %d", len(req.Episodes), maxBatchRecords)
 	}
 
-	events := make([]domain.Event, 0, len(req.Events))
+	events := make([]domain.Event, 0, len(req.Episodes))
 	now := time.Now().UTC()
 	actor := actorFromContext(ctx)
-	for i, e := range req.Events {
+	for i, e := range req.Episodes {
 		if e.Id == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "events[%d].id is required", i)
+			return nil, status.Errorf(codes.InvalidArgument, "episodes[%d].id is required", i)
 		}
 		ts := now
 		if e.Timestamp != nil {
@@ -464,20 +464,20 @@ func (s *Server) AppendEvents(ctx context.Context, req *mnemosv1.AppendEventsReq
 
 	accepted, err := s.writerFor(ctx).Events(ctx, events)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "append events: %v", err)
+		return nil, status.Errorf(codes.Internal, "append episodes: %v", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(accepted)}, nil
 }
 
 // ---------------------------------------------------------------------------
-// Claims
+// Beliefs
 // ---------------------------------------------------------------------------
 
-// ListClaims returns claims with optional type/status/run_id filters and
+// ListBeliefs returns beliefs with optional type/status/run_id filters and
 // cursor-based pagination. The run_id filter is the load-bearing tenant
-// boundary for integrators: claims whose evidence cannot be traced to an
-// event with the matching RunID are dropped (fail-closed).
-func (s *Server) ListClaims(ctx context.Context, req *mnemosv1.ListClaimsRequest) (*mnemosv1.ListClaimsResponse, error) {
+// boundary for integrators: beliefs whose evidence cannot be traced to an
+// episode with the matching RunID are dropped (fail-closed).
+func (s *Server) ListBeliefs(ctx context.Context, req *mnemosv1.ListBeliefsRequest) (*mnemosv1.ListBeliefsResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
 	typeFilter := req.TypeFilter
 	statusFilter := req.StatusFilter
@@ -497,20 +497,20 @@ func (s *Server) ListClaims(ctx context.Context, req *mnemosv1.ListClaimsRequest
 	if runIDFilter != "" {
 		events, err := s.connFor(ctx).Events.ListByRunID(ctx, runIDFilter)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "list events by run id: %v", err)
+			return nil, status.Errorf(codes.Internal, "list episodes by run id: %v", err)
 		}
 		allowedEventIDs = make(map[string]struct{}, len(events))
 		for _, e := range events {
 			allowedEventIDs[e.ID] = struct{}{}
 		}
 		if len(allowedEventIDs) == 0 {
-			return &mnemosv1.ListClaimsResponse{Limit: int32(limit), Offset: int32(offset)}, nil
+			return &mnemosv1.ListBeliefsResponse{Limit: int32(limit), Offset: int32(offset)}, nil
 		}
 	}
 
 	all, err := s.connFor(ctx).Claims.ListAll(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list claims: %v", err)
+		return nil, status.Errorf(codes.Internal, "list beliefs: %v", err)
 	}
 	var asOf, recordedAsOf time.Time
 	if req.AsOf != nil {
@@ -579,54 +579,54 @@ func (s *Server) ListClaims(ctx context.Context, req *mnemosv1.ListClaimsRequest
 	total := len(reversed)
 	page := paginate(reversed, limit, offset)
 
-	claims := make([]*mnemosv1.Claim, 0, len(page))
+	beliefs := make([]*mnemosv1.Belief, 0, len(page))
 	ids := make([]string, 0, len(page))
 	for _, c := range page {
-		claims = append(claims, claimToProto(c))
+		beliefs = append(beliefs, beliefToProto(c))
 		ids = append(ids, c.ID)
 	}
 
-	var evidence []*mnemosv1.ClaimEvidence
+	var evidence []*mnemosv1.BeliefEvidence
 	if req.IncludeEvidence && len(ids) > 0 {
 		links, err := s.connFor(ctx).Claims.ListEvidenceByClaimIDs(ctx, ids)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "load evidence: %v", err)
 		}
 		for _, l := range links {
-			evidence = append(evidence, &mnemosv1.ClaimEvidence{ClaimId: l.ClaimID, EventId: l.EventID})
+			evidence = append(evidence, &mnemosv1.BeliefEvidence{BeliefId: l.ClaimID, EpisodeId: l.EventID})
 		}
 	}
 
-	return &mnemosv1.ListClaimsResponse{Claims: claims, Evidence: evidence, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
+	return &mnemosv1.ListBeliefsResponse{Beliefs: beliefs, Evidence: evidence, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
 }
 
-// AppendClaims upserts claims and their evidence links in a single batched call.
-func (s *Server) AppendClaims(ctx context.Context, req *mnemosv1.AppendClaimsRequest) (*mnemosv1.AppendResponse, error) {
+// AppendBeliefs upserts beliefs and their evidence links in a single batched call.
+func (s *Server) AppendBeliefs(ctx context.Context, req *mnemosv1.AppendBeliefsRequest) (*mnemosv1.AppendResponse, error) {
 	if err := s.requireScope(ctx, domain.ScopeClaimsWrite); err != nil {
 		return nil, err
 	}
-	if len(req.Claims) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "claims array is empty")
+	if len(req.Beliefs) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "beliefs array is empty")
 	}
-	if len(req.Claims) > maxBatchRecords {
-		return nil, status.Errorf(codes.InvalidArgument, "claims batch size %d exceeds max %d", len(req.Claims), maxBatchRecords)
+	if len(req.Beliefs) > maxBatchRecords {
+		return nil, status.Errorf(codes.InvalidArgument, "beliefs batch size %d exceeds max %d", len(req.Beliefs), maxBatchRecords)
 	}
 	if len(req.Evidence) > maxBatchRecords {
 		return nil, status.Errorf(codes.InvalidArgument, "evidence batch size %d exceeds max %d", len(req.Evidence), maxBatchRecords)
 	}
 
-	claims := make([]domain.Claim, 0, len(req.Claims))
+	claims := make([]domain.Claim, 0, len(req.Beliefs))
 	now := time.Now().UTC()
 	actor := actorFromContext(ctx)
-	for i, c := range req.Claims {
+	for i, c := range req.Beliefs {
 		if c.Type != "" && !validClaimType(c.Type) {
-			return nil, status.Errorf(codes.InvalidArgument, "claims[%d].type %q invalid", i, c.Type)
+			return nil, status.Errorf(codes.InvalidArgument, "beliefs[%d].type %q invalid", i, c.Type)
 		}
 		if c.Status != "" && !validClaimStatus(c.Status) {
-			return nil, status.Errorf(codes.InvalidArgument, "claims[%d].status %q invalid", i, c.Status)
+			return nil, status.Errorf(codes.InvalidArgument, "beliefs[%d].status %q invalid", i, c.Status)
 		}
 		if c.Visibility != "" && !validClaimVisibility(c.Visibility) {
-			return nil, status.Errorf(codes.InvalidArgument, "claims[%d].visibility %q invalid; must be personal, team, or org", i, c.Visibility)
+			return nil, status.Errorf(codes.InvalidArgument, "beliefs[%d].visibility %q invalid; must be personal, team, or org", i, c.Visibility)
 		}
 		created := now
 		if c.CreatedAt != nil {
@@ -649,13 +649,13 @@ func (s *Server) AppendClaims(ctx context.Context, req *mnemosv1.AppendClaimsReq
 	}
 
 	if _, err := s.writerFor(ctx).Claims(ctx, claims, govwrite.ClaimReason{}); err != nil {
-		return nil, status.Errorf(codes.Internal, "upsert claims: %v", err)
+		return nil, status.Errorf(codes.Internal, "upsert beliefs: %v", err)
 	}
 
 	if len(req.Evidence) > 0 {
 		links := make([]domain.ClaimEvidence, 0, len(req.Evidence))
 		for _, e := range req.Evidence {
-			links = append(links, domain.ClaimEvidence{ClaimID: e.ClaimId, EventID: e.EventId})
+			links = append(links, domain.ClaimEvidence{ClaimID: e.BeliefId, EventID: e.EpisodeId})
 		}
 		if _, err := s.writerFor(ctx).EvidenceLinks(ctx, links); err != nil {
 			return nil, status.Errorf(codes.Internal, "upsert evidence: %v", err)
@@ -665,11 +665,11 @@ func (s *Server) AppendClaims(ctx context.Context, req *mnemosv1.AppendClaimsReq
 }
 
 // ---------------------------------------------------------------------------
-// Relationships
+// Associations
 // ---------------------------------------------------------------------------
 
-// ListRelationships returns relationships filtered by type/from/to with cursor pagination.
-func (s *Server) ListRelationships(ctx context.Context, req *mnemosv1.ListRelationshipsRequest) (*mnemosv1.ListRelationshipsResponse, error) {
+// ListAssociations returns associations filtered by type/from/to with cursor pagination.
+func (s *Server) ListAssociations(ctx context.Context, req *mnemosv1.ListAssociationsRequest) (*mnemosv1.ListAssociationsResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
 	typeFilter := req.TypeFilter
 	if typeFilter != "" && typeFilter != "supports" && typeFilter != "contradicts" {
@@ -678,7 +678,7 @@ func (s *Server) ListRelationships(ctx context.Context, req *mnemosv1.ListRelati
 
 	allClaims, err := s.connFor(ctx).Claims.ListAll(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list claims for relationships: %v", err)
+		return nil, status.Errorf(codes.Internal, "list beliefs for associations: %v", err)
 	}
 	claimIDs := make([]string, 0, len(allClaims))
 	for _, c := range allClaims {
@@ -686,7 +686,7 @@ func (s *Server) ListRelationships(ctx context.Context, req *mnemosv1.ListRelati
 	}
 	rels, err := s.connFor(ctx).Relationships.ListByClaimIDs(ctx, claimIDs)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list relationships: %v", err)
+		return nil, status.Errorf(codes.Internal, "list associations: %v", err)
 	}
 	filtered := rels[:0]
 	for _, rel := range rels {
@@ -702,31 +702,31 @@ func (s *Server) ListRelationships(ctx context.Context, req *mnemosv1.ListRelati
 	total := len(reversed)
 	page := paginate(reversed, limit, offset)
 
-	out := make([]*mnemosv1.Relationship, 0, len(page))
+	out := make([]*mnemosv1.Association, 0, len(page))
 	for _, rel := range page {
-		out = append(out, relationshipToProto(rel))
+		out = append(out, associationToProto(rel))
 	}
-	return &mnemosv1.ListRelationshipsResponse{Relationships: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
+	return &mnemosv1.ListAssociationsResponse{Associations: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
 }
 
-// AppendRelationships upserts relationship rows. Idempotent on the (type, from, to) unique edge.
-func (s *Server) AppendRelationships(ctx context.Context, req *mnemosv1.AppendRelationshipsRequest) (*mnemosv1.AppendResponse, error) {
+// AppendAssociations upserts association rows. Idempotent on the (type, from, to) unique edge.
+func (s *Server) AppendAssociations(ctx context.Context, req *mnemosv1.AppendAssociationsRequest) (*mnemosv1.AppendResponse, error) {
 	if err := s.requireScope(ctx, domain.ScopeRelationshipsWrite); err != nil {
 		return nil, err
 	}
-	if len(req.Relationships) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "relationships array is empty")
+	if len(req.Associations) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "associations array is empty")
 	}
-	if len(req.Relationships) > maxBatchRecords {
-		return nil, status.Errorf(codes.InvalidArgument, "relationships batch size %d exceeds max %d", len(req.Relationships), maxBatchRecords)
+	if len(req.Associations) > maxBatchRecords {
+		return nil, status.Errorf(codes.InvalidArgument, "associations batch size %d exceeds max %d", len(req.Associations), maxBatchRecords)
 	}
 
-	rels := make([]domain.Relationship, 0, len(req.Relationships))
+	rels := make([]domain.Relationship, 0, len(req.Associations))
 	now := time.Now().UTC()
 	actor := actorFromContext(ctx)
-	for i, rel := range req.Relationships {
+	for i, rel := range req.Associations {
 		if rel.Type != "supports" && rel.Type != "contradicts" {
-			return nil, status.Errorf(codes.InvalidArgument, "relationships[%d].type %q invalid", i, rel.Type)
+			return nil, status.Errorf(codes.InvalidArgument, "associations[%d].type %q invalid", i, rel.Type)
 		}
 		created := now
 		if rel.CreatedAt != nil {
@@ -735,15 +735,15 @@ func (s *Server) AppendRelationships(ctx context.Context, req *mnemosv1.AppendRe
 		rels = append(rels, domain.Relationship{
 			ID:          rel.Id,
 			Type:        domain.RelationshipType(rel.Type),
-			FromClaimID: rel.FromClaimId,
-			ToClaimID:   rel.ToClaimId,
+			FromClaimID: rel.FromBeliefId,
+			ToClaimID:   rel.ToBeliefId,
 			CreatedAt:   created,
 			CreatedBy:   actor,
 		})
 	}
 
 	if _, err := s.writerFor(ctx).Relationships(ctx, rels); err != nil {
-		return nil, status.Errorf(codes.Internal, "upsert relationships: %v", err)
+		return nil, status.Errorf(codes.Internal, "upsert associations: %v", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(len(rels))}, nil
 }
@@ -853,13 +853,13 @@ func (s *Server) Metrics(ctx context.Context, _ *mnemosv1.MetricsRequest) (*mnem
 	}
 
 	return &mnemosv1.MetricsResponse{
-		Runs:            int64(len(runs)),
-		Events:          int64(len(events)),
-		Claims:          int64(len(claims)),
-		ContestedClaims: contestedClaims,
-		Relationships:   int64(len(rels)),
-		Contradictions:  contradictions,
-		Embeddings:      int64(len(eventEmbs) + len(claimEmbs)),
+		Runs:             int64(len(runs)),
+		Episodes:         int64(len(events)),
+		Beliefs:          int64(len(claims)),
+		ContestedBeliefs: contestedClaims,
+		Associations:     int64(len(rels)),
+		Dissonances:      contradictions,
+		Embeddings:       int64(len(eventEmbs) + len(claimEmbs)),
 	}, nil
 }
 
@@ -914,8 +914,8 @@ func validClaimVisibility(s string) bool {
 	return s == string(domain.VisibilityPersonal) || s == string(domain.VisibilityTeam) || s == string(domain.VisibilityOrg)
 }
 
-func eventToProto(e domain.Event) *mnemosv1.Event {
-	return &mnemosv1.Event{
+func episodeToProto(e domain.Event) *mnemosv1.Episode {
+	return &mnemosv1.Episode{
 		Id:            e.ID,
 		RunId:         e.RunID,
 		SchemaVersion: e.SchemaVersion,
@@ -927,8 +927,8 @@ func eventToProto(e domain.Event) *mnemosv1.Event {
 	}
 }
 
-func claimToProto(c domain.Claim) *mnemosv1.Claim {
-	return &mnemosv1.Claim{
+func beliefToProto(c domain.Claim) *mnemosv1.Belief {
+	return &mnemosv1.Belief{
 		Id:         c.ID,
 		Text:       c.Text,
 		Type:       string(c.Type),
@@ -939,13 +939,13 @@ func claimToProto(c domain.Claim) *mnemosv1.Claim {
 	}
 }
 
-func relationshipToProto(r domain.Relationship) *mnemosv1.Relationship {
-	return &mnemosv1.Relationship{
-		Id:          r.ID,
-		Type:        string(r.Type),
-		FromClaimId: r.FromClaimID,
-		ToClaimId:   r.ToClaimID,
-		CreatedAt:   timestamppb.New(r.CreatedAt.UTC()),
+func associationToProto(r domain.Relationship) *mnemosv1.Association {
+	return &mnemosv1.Association{
+		Id:           r.ID,
+		Type:         string(r.Type),
+		FromBeliefId: r.FromClaimID,
+		ToBeliefId:   r.ToClaimID,
+		CreatedAt:    timestamppb.New(r.CreatedAt.UTC()),
 	}
 }
 

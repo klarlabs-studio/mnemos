@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Claim CRUD RPCs (gRPC parity with the HTTP GET /v1/claims/{id}, lifecycle,
+// Belief CRUD RPCs (gRPC parity with the HTTP GET /v1/beliefs/{id}, lifecycle,
 // classify, and decision reads). Delegate to the Memory facade; a missing id
 // maps to codes.NotFound.
 
@@ -19,19 +19,19 @@ func isNotFound(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "not found")
 }
 
-// GetClaim returns a single claim's full detail.
-func (s *Server) GetClaim(ctx context.Context, req *mnemosv1.GetClaimRequest) (*mnemosv1.ClaimDetail, error) {
+// GetBelief returns a single belief's full detail.
+func (s *Server) GetBelief(ctx context.Context, req *mnemosv1.GetBeliefRequest) (*mnemosv1.BeliefDetail, error) {
 	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
-	c, err := s.memFor(ctx).Get(ctx, req.GetClaimId())
+	c, err := s.memFor(ctx).Get(ctx, req.GetBeliefId())
 	if err != nil {
 		if isNotFound(err) {
-			return nil, status.Error(codes.NotFound, "claim not found")
+			return nil, status.Error(codes.NotFound, "belief not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	out := &mnemosv1.ClaimDetail{
+	out := &mnemosv1.BeliefDetail{
 		Id: c.ID, Statement: c.Statement, Type: c.Type,
 		Confidence: c.Confidence, TrustScore: c.TrustScore, Lifecycle: string(c.Lifecycle),
 	}
@@ -47,8 +47,8 @@ func (s *Server) GetClaim(ctx context.Context, req *mnemosv1.GetClaimRequest) (*
 	return out, nil
 }
 
-// SetClaimLifecycle transitions a claim's lifecycle.
-func (s *Server) SetClaimLifecycle(ctx context.Context, req *mnemosv1.SetClaimLifecycleRequest) (*mnemosv1.SetClaimLifecycleResponse, error) {
+// SetBeliefLifecycle transitions a belief's lifecycle.
+func (s *Server) SetBeliefLifecycle(ctx context.Context, req *mnemosv1.SetBeliefLifecycleRequest) (*mnemosv1.SetBeliefLifecycleResponse, error) {
 	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
 	}
@@ -58,13 +58,13 @@ func (s *Server) SetClaimLifecycle(ctx context.Context, req *mnemosv1.SetClaimLi
 	default:
 		return nil, status.Error(codes.InvalidArgument, "lifecycle must be candidate, promoted, or superseded")
 	}
-	if err := s.memFor(ctx).SetClaimLifecycle(ctx, req.GetClaimId(), lc); err != nil {
+	if err := s.memFor(ctx).SetClaimLifecycle(ctx, req.GetBeliefId(), lc); err != nil {
 		if isNotFound(err) {
-			return nil, status.Error(codes.NotFound, "claim not found")
+			return nil, status.Error(codes.NotFound, "belief not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return &mnemosv1.SetClaimLifecycleResponse{ClaimId: req.GetClaimId(), Lifecycle: req.GetLifecycle()}, nil
+	return &mnemosv1.SetBeliefLifecycleResponse{BeliefId: req.GetBeliefId(), Lifecycle: req.GetLifecycle()}, nil
 }
 
 // Classify reports whether a candidate statement fits established knowledge or is novel.

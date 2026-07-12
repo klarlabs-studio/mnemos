@@ -68,11 +68,11 @@ func TestEventsToBatches_SplitsAtBoundary(t *testing.T) {
 	if len(batches) != 2 {
 		t.Fatalf("got %d batches, want 2", len(batches))
 	}
-	first, _ := batches[0]["events"].([]eventDTO)
+	first, _ := batches[0]["episodes"].([]eventDTO)
 	if len(first) != pushBatchSize {
 		t.Errorf("first batch len = %d, want %d", len(first), pushBatchSize)
 	}
-	second, _ := batches[1]["events"].([]eventDTO)
+	second, _ := batches[1]["episodes"].([]eventDTO)
 	if len(second) != 5 {
 		t.Errorf("second batch len = %d, want 5", len(second))
 	}
@@ -152,13 +152,13 @@ func TestPushPull_RoundTripsAllResources(t *testing.T) {
 	claims, evidence, _ := loadAllClaimsForPush(ctx, localConn)
 	rels, _ := loadAllRelationshipsForPush(ctx, localConn)
 
-	if n, err := pushBatched(ctx, client, regURL+"/v1/events", regToken, "events", eventsToBatches(events)); err != nil || n != 1 {
+	if n, err := pushBatched(ctx, client, regURL+"/v1/episodes", regToken, "events", eventsToBatches(events)); err != nil || n != 1 {
 		t.Fatalf("push events n=%d err=%v", n, err)
 	}
-	if n, err := pushBatched(ctx, client, regURL+"/v1/claims", regToken, "claims", claimsToBatches(claims, evidence)); err != nil || n != 2 {
+	if n, err := pushBatched(ctx, client, regURL+"/v1/beliefs", regToken, "claims", claimsToBatches(claims, evidence)); err != nil || n != 2 {
 		t.Fatalf("push claims n=%d err=%v", n, err)
 	}
-	if n, err := pushBatched(ctx, client, regURL+"/v1/relationships", regToken, "relationships", relsToBatches(rels)); err != nil || n != 1 {
+	if n, err := pushBatched(ctx, client, regURL+"/v1/associations", regToken, "relationships", relsToBatches(rels)); err != nil || n != 1 {
 		t.Fatalf("push relationships n=%d err=%v", n, err)
 	}
 
@@ -210,18 +210,18 @@ func TestPushBatched_IdempotentOnRetry(t *testing.T) {
 
 	// First push.
 	batch := []map[string]any{{
-		"events": []eventDTO{{
+		"episodes": []eventDTO{{
 			ID: "ev_idem", RunID: "r", SchemaVersion: "v1",
 			Content: "x", SourceInputID: "in", Timestamp: now,
 			Metadata: map[string]string{},
 		}},
 	}}
-	if n, err := pushBatched(ctx, client, regURL+"/v1/events", regToken, "events", batch); err != nil || n != 1 {
+	if n, err := pushBatched(ctx, client, regURL+"/v1/episodes", regToken, "events", batch); err != nil || n != 1 {
 		t.Fatalf("first push n=%d err=%v", n, err)
 	}
 
 	// Second push of the exact same batch must succeed (idempotent).
-	if n, err := pushBatched(ctx, client, regURL+"/v1/events", regToken, "events", batch); err != nil || n != 1 {
+	if n, err := pushBatched(ctx, client, regURL+"/v1/episodes", regToken, "events", batch); err != nil || n != 1 {
 		t.Fatalf("retry push n=%d err=%v (pre-fix this would fail with PK violation)", n, err)
 	}
 }
@@ -235,7 +235,7 @@ func TestPushBatched_FailsOnServerError(t *testing.T) {
 
 	client := srv.Client()
 	_, err := pushBatched(context.Background(), client, srv.URL, "", "events",
-		[]map[string]any{{"events": []eventDTO{{ID: "e"}}}})
+		[]map[string]any{{"episodes": []eventDTO{{ID: "e"}}}})
 	if err == nil {
 		t.Fatal("expected error on 500 response")
 	}
@@ -251,7 +251,7 @@ func TestPushBatched_PassesAuthHeader(t *testing.T) {
 	defer srv.Close()
 
 	if _, err := pushBatched(context.Background(), srv.Client(), srv.URL, "topsecret", "events",
-		[]map[string]any{{"events": []eventDTO{{ID: "e"}}}}); err != nil {
+		[]map[string]any{{"episodes": []eventDTO{{ID: "e"}}}}); err != nil {
 		t.Fatalf("push: %v", err)
 	}
 	if gotAuth != "Bearer topsecret" {
