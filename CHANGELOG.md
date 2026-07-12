@@ -8,6 +8,52 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.86.0] — 2026-07-12
+
+### Security
+
+- **Every exposed endpoint on a hosted server now requires auth.** `/internal/metrics`
+  is authenticated by default (opt out with `serve --metrics-public`; it is
+  excluded from the `--public-reads` bypass so a public read API can never leak
+  it), exposing only RED request metrics — no knowledge/tenant data. `/health` /
+  `/healthz` are bare liveness `200`s with no version/db/tenant data; the deeper
+  readiness probe moved behind auth to `/internal/ready`. Completes the
+  "auth on every exposed endpoint (gRPC + HTTP)" invariant.
+
+### Added
+
+- **Subject-classified promotion (ADR 0012).** Promotion to the global brain is
+  now gated first on *what a claim is about*, not just how many tenants saw it: a
+  new `domain.SubjectClass` (`individual` / `class` / `unknown`) — inferred from
+  linked entities, fail-closed — makes **individual-subject** claims (a specific
+  pet/owner) **private and never promotable**, while **class-subject** claims (a
+  breed, species, disease) are eligible. Two paths for eligible knowledge:
+  *emergent* (the existing cross-tenant corroboration, for statistical patterns)
+  and *curated* (`consolidate --promote --curate --token <jwt>`, gated by a new
+  `promote:global` curator scope) so a novel single-source class fact (e.g. a
+  newly-encountered spider's envenomation) can go global without waiting for
+  corroboration — still de-identified and contradiction-checked.
+- **Local float-back — `mnemos float-back`.** The upward flow that promotes
+  important learnings from a repo/workspace brain into your personal central
+  brain (the local twin of hosted tenant→global promotion). Single-owner, so the
+  gate is importance/generality (trust ≥ `--min-trust`, default 0.6, AND the
+  statement isn't repo-specific), OR an explicit `mnemos claim record --global`
+  tag that floats unconditionally. Dry-run by default; `--apply` writes through
+  the governed writer, strips repo-specifics, and content-addresses to stay
+  idempotent.
+- **`mnemos init --service` scaffolds a secure multi-tenant deployment (Mode D).**
+  The generated bundle defaults to `serve --require-tenant` (Postgres RLS
+  per-tenant isolation) and requires a persisted `MNEMOS_JWT_SECRET` — the
+  compose file refuses to start (`${MNEMOS_JWT_SECRET:?…}`) until it is set. The
+  README documents tenant-scoped token issuance and how to drop to single-tenant
+  (Mode C).
+
+### Docs
+
+- `docs/deployment-modes.md` — the deployment/access modes (one topology at two
+  scales: local repo/folder → personal central brain, hosted tenant → global
+  brain) and the secure-default principles.
+
 ## [0.85.1] — 2026-07-12
 
 ### Security
