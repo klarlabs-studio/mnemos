@@ -148,11 +148,34 @@ Alongside bottom-up float-back (emergent + curated), the neocortex also supports
 into the global tier, never passing through a tenant — e.g. a seed of species /
 breed / disease reference data. Born-global data is class-level by definition and
 does not go through the promotion gate at all; it is the top-down complement to
-the bottom-up paths. This ADR reserves the concept; the concrete authoring
-surface (a `mnemos neocortex seed` verb or an operator import) is a follow-up.
-Its safety story is simpler than promotion's: it never contains tenant data, so
-there is nothing to de-identify — only an operator-authored write into the shared
-tier, gated by the same `promote:global` curator capability.
+the bottom-up paths. Its safety story is simpler than promotion's: it never
+contains tenant data, so there is nothing to de-identify — only an
+operator-authored write into the shared tier, gated by the same `promote:global`
+curator capability.
+
+The concrete authoring surface is the CLI verb **`mnemos global author`**
+(`cmd/mnemos/global.go`):
+
+```
+mnemos global author --statement "<text>"
+    [--scope-service S --scope-env E --scope-team T]
+    [--polarity positive|negative] [--status active|pending]
+    [--token <jwt>] [--global-dsn <dsn>] [--dry-run | --apply]
+```
+
+It writes a `domain.GlobalSchema` directly to the neocortex store (resolved from
+`--global-dsn` or the default central DSN) via `GlobalSchemas.Upsert`. The id is
+content-addressed from statement+scope+polarity (`consolidate.GlobalSchemaID`),
+identical to the promotion write path, so re-authoring the same fact upserts the
+same row rather than churning a new one. Provenance: because `GlobalSchema` has no
+dedicated source field, born-global rows are marked by `CreatedBy` =
+`<curator:born-global>` (a single curator source, so `DistinctTenants` = 1 and
+`EvidenceCount` = 0 — the human-authorship flag lives in `CreatedBy`, not in a
+corroboration count). The write is gated by the **same** `promote:global` curator
+scope as curated promotion: the token is verified (signature + expiry + revocation
++ `CanCurate`, via the shared `verifyCuratorToken`) **before** anything is
+written, fail closed. `--dry-run` (the default) prints the `GlobalSchema` it would
+write as JSON and touches nothing; `--apply` persists it.
 
 ## Consequences
 
@@ -200,6 +223,10 @@ tier, gated by the same `promote:global` curator capability.
 - **CLI** — `consolidate --promote --curate|--contribute --token <jwt>` verifies
   the curator scope (signature + expiry + revocation + `CanCurate`) before
   reading any tenant data. **DONE.**
+- **Born-global authoring** — the top-down authoring surface `mnemos global
+  author` writes curator-authored class-level reference knowledge straight into
+  the neocortex (`GlobalSchemas.Upsert`), gated by the `promote:global` curator
+  scope (fail closed, reusing `verifyCuratorToken`); content-addressed id
+  (upsert on re-author), `--dry-run` default. **DONE.**
 - **Follow-ups** — synthesis-time classification wiring; Postgres/MySQL
-  `subject_class`; LLM-assisted subject classification; the born-global operator
-  authoring surface.
+  `subject_class`; LLM-assisted subject classification.
