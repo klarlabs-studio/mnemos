@@ -87,6 +87,28 @@ func IsStale(latestEvidence, lastVerified, now time.Time, halfLifeDays, threshol
 	return f <= threshold
 }
 
+// Staleness is IsStale's continuous companion: 1 − freshness, in [0, 1−FreshnessFloor].
+// 0 means fresh (just verified / brand-new evidence); higher means the claim's
+// freshest signal has decayed further, so it is a stronger candidate for
+// re-verification. Like IsStale, the reference timestamp is the most recent of
+// latestEvidence or lastVerified; a zero reference yields 0 (no signal ⇒ not
+// stale). It reuses the same exponential-decay math as the trust freshness
+// factor so callers rank on one consistent notion of decay.
+func Staleness(latestEvidence, lastVerified, now time.Time, halfLifeDays float64) float64 {
+	hl := halfLifeDays
+	if hl <= 0 {
+		hl = FreshnessHalfLifeDays
+	}
+	ref := latestEvidence
+	if !lastVerified.IsZero() && lastVerified.After(ref) {
+		ref = lastVerified
+	}
+	if ref.IsZero() {
+		return 0
+	}
+	return 1 - freshnessFactorWithHalfLife(ref, now, hl)
+}
+
 func freshnessFactorWithHalfLife(latest, now time.Time, halfLifeDays float64) float64 {
 	if latest.IsZero() {
 		return 1.0
