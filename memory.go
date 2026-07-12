@@ -704,6 +704,15 @@ type ConsolidateOptions struct {
 	// [go.klarlabs.de/mnemos/internal/credit.SumForModulated].
 	Plastic bool
 
+	// DecayAssociations, when true, pulls every over-base association edge's Hebbian
+	// strength (ADR 0015 §4/§5) back toward the base 1.0 during the sleep pass — the
+	// consolidation complement to the `query --hebbian` co-activation write-back. An
+	// edge co-activated but since unused drifts back to neutral, so strength tracks
+	// RECENT use rather than a lifetime tally; a base edge is untouched and none is
+	// deleted (mnemos edges are meaningful typed relationships, not prunable noise).
+	// Off by default; a no-op on backends that don't persist edge strength.
+	DecayAssociations bool
+
 	// ReinforcePlaybooks bends each playbook's confidence toward the observed
 	// success rate of the outcomes recorded against the actions its lessons were
 	// derived from — the skill-learning half of the sleep pass. Synthesize writes
@@ -764,6 +773,10 @@ type ConsolidateResult struct {
 	// (ADR 0015 §2): 1.0 is neutral, > 1 a more-plastic (volatile) regime, < 1 a more
 	// conservative one. 0 when Plastic was off (credit ran at the nominal rate).
 	PlasticityGain float64
+	// AssociationsDecayed is the number of over-base association edges pulled back
+	// toward the base 1.0 (ADR 0015 §5) — 0 unless DecayAssociations was set, 0 on a
+	// dry run, and 0 on a backend that doesn't persist edge strength.
+	AssociationsDecayed int
 	// LessonsSynthesized / PlaybooksSynthesized count the skills (re-)derived — 0
 	// unless Synthesize was set, and 0 on a dry run.
 	LessonsSynthesized   int

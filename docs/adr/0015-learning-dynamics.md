@@ -7,9 +7,10 @@
   - **Batch 2a (v0.91.0, shipped) — association-plasticity core:** the `strength`
     column on the association graph (all backends), Hebbian co-activation write-back
     (`query --hebbian`), and strength-weighted spreading activation.
-  - **Batch 2b (planned) — the remaining write-backs:** reconsolidation (retrieval as
-    a freshness touch) and active (competitive) forgetting + weak-edge pruning. Builds
-    on 2a's `strength` column.
+  - **Batch 2b (shipped) — reconsolidation + Hebbian decay:** retrieval as a freshness
+    touch (`query --reconsolidate`) and consolidation-time decay of over-base edge
+    strength toward the base (`consolidate --decay-associations`). Edge *pruning* was
+    dropped and *competitive inhibition* deferred — see the §6 note below.
 - **Date:** 2026-07-12
 - **Deciders:** Felix Geelhaar
 - **Scope:** The cognitive core's *learning dynamics* — how memory **changes over
@@ -171,12 +172,15 @@ corrective retrieval — so it fires once, on the answer actually returned.
 belief. Biological memory reconsolidation says a retrieved memory goes **labile** and
 is re-stored, possibly modified with current context.
 
-**Mechanism.** On recall, a retrieved belief's freshness/liveness is updated (a
-`MarkVerified`-style recency touch) and, where the current query context supplies
-corroborating signal, its `confidence_components` are refreshed — a bounded,
-attributed touch, never a silent trust jump. Shares the Batch-2 opt-in write-back
-seam with §4. Distinct from explicit `verify` (which ADR 0013 counted): this is
-*automatic* on retrieval, not an operator action.
+**Mechanism (as shipped in 2b).** On recall, the top co-retrieved beliefs get a
+`MarkVerified` recency touch — freshness/liveness only, **never a trust jump** — so
+retrieval keeps a memory alive against decay (the testing effect). Opt-in
+(`query --reconsolidate` / `MNEMOS_RECONSOLIDATE`), single-shot at the
+`AnswerWithOptions` seam it shares with §4's write-back, bounded to the same top-N
+focus, best-effort. Distinct from explicit `verify` (which ADR 0013 counted): this is
+*automatic* on retrieval, not an operator action. (Refreshing `confidence_components`
+from query context was considered and left out to keep the read path from ever moving
+trust implicitly.)
 
 ### 6. Active forgetting — competitive inhibition + edge pruning
 
@@ -185,17 +189,31 @@ brain mechanisms are missing: **retrieval-induced forgetting** (recalling a winn
 *suppresses* its rivals on the same topic) and **synaptic pruning** (weak, unused
 edges are dropped, not merely decayed).
 
-**Mechanism.**
+**Mechanism (as originally specified).**
 - **Competitive inhibition:** the contradiction-winner selection already computed at
   retrieval (`resolveContradictionsForAgent` picks a winner and demotes losers in the
   in-memory slice) is *persisted* as a bounded suppression of the losing claims'
   liveness/salience — recalling the winner actively weakens the rival, attributed.
 - **Edge pruning:** associations whose `strength` stays below a floor across
-  consolidation passes are pruned (the CLS complement to Hebbian strengthening),
-  bounding graph growth and removing spurious co-occurrence edges.
+  consolidation passes are pruned, bounding graph growth.
 
-**Where.** Inhibition at the Batch-2 query write-back seam; pruning in the
-consolidation forget stage, using the §4 `strength` column.
+**What actually shipped in 2b, and why it diverged.** Implementing 2a surfaced a design
+fact: mnemos's association edges are **all meaningful, evidence-derived *typed*
+relationships** (supports / contradicts / causes / …), and the 2a Hebbian design
+deliberately **never creates co-occurrence edges** — it only *strengthens existing
+typed ones*. So there are no "spurious co-occurrence edges" to prune; pruning by a
+strength floor would only ever delete real, cited knowledge. Edge pruning was therefore
+**dropped** as inappropriate for this graph. Its safe, principled substitute shipped
+instead: **Hebbian decay** — `consolidate --decay-associations` pulls each over-base
+edge's strength back *toward* the base 1.0 (keeping a retain fraction of the excess each
+pass, asymptotic, never below base, never deleted), so strength tracks **recent** use
+rather than a lifetime tally. Combined with the §4 write-back, associations now
+strengthen on use and fade on disuse — the full Hebbian loop, without losing edges.
+
+**Competitive inhibition is deferred.** Persisting a suppression of contradiction
+losers on the read path is the most invasive remaining piece (it mutates trust/liveness
+of claims the user did not act on, and threads through the agent contradiction-
+resolution path). It is left for a later ADR rather than rushed onto the read seam.
 
 ---
 
@@ -247,6 +265,12 @@ is a research-scale change, deliberately **out of scope** for this ADR's batches
    lockstep). Verified on live Postgres + MySQL. The pre-existing Postgres
    `ON CONFLICT (id)` edge-upsert quirk was left untouched: 2a strengthens via a
    dedicated UPDATE, not a re-Upsert, so it does not depend on the conflict target.
-3. **Batch 2b — reconsolidation + active forgetting/pruning** (planned). The retrieval
-   freshness touch and competitive inhibition / weak-edge pruning, on 2a's column.
+3. **Batch 2b — reconsolidation + Hebbian decay** (v0.92.0, shipped). `query
+   --reconsolidate` / `MNEMOS_RECONSOLIDATE` re-marks the top recalled beliefs
+   verified-now (liveness only, never trust) at the same `AnswerWithOptions` seam as
+   §4; `consolidate --decay-associations` pulls over-base edge strength toward the base
+   via the new `ports.RelationshipStrengthener.DecayAssociations` (all backends,
+   verified on live pg + mysql). **Edge pruning was dropped** (mnemos has no spurious
+   co-occurrence edges to prune — see §6) and **competitive inhibition deferred** to a
+   later ADR.
 4. **Predictive coding** — north star; revisit as its own ADR when the batches settle.

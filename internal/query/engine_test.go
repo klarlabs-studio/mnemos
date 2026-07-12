@@ -39,6 +39,9 @@ func (f fakeEventRepo) ListByRunID(_ context.Context, runID string) ([]domain.Ev
 type fakeClaimRepo struct {
 	claims   []domain.Claim
 	evidence []domain.ClaimEvidence
+	// verifiedRecorder, when non-nil, records each MarkVerified'd claim id so a test
+	// can assert the reconsolidation freshness touch fired on the recalled set.
+	verifiedRecorder *[]string
 }
 
 func (f fakeClaimRepo) Upsert(_ context.Context, _ []domain.Claim) error { return nil }
@@ -70,7 +73,10 @@ func (f fakeClaimRepo) SetValidity(_ context.Context, _ string, _ time.Time) err
 func (f fakeClaimRepo) SetLifecycle(_ context.Context, _ string, _ domain.ClaimLifecycle) error {
 	return nil
 }
-func (f fakeClaimRepo) MarkVerified(_ context.Context, _ string, _ time.Time, _ float64) error {
+func (f fakeClaimRepo) MarkVerified(_ context.Context, claimID string, _ time.Time, _ float64) error {
+	if f.verifiedRecorder != nil {
+		*f.verifiedRecorder = append(*f.verifiedRecorder, claimID)
+	}
 	return nil
 }
 func (f fakeClaimRepo) RepointEvidence(_ context.Context, _, _ string) error { return nil }
@@ -172,6 +178,23 @@ func (f fakeRelationshipRepo) StrengthenAssociations(_ context.Context, claimIDs
 		}
 	}
 	return len(matched), nil
+}
+func (f fakeRelationshipRepo) DecayAssociations(_ context.Context, retain float64) (int, error) {
+	if retain < 0 || retain >= 1 {
+		return 0, nil
+	}
+	n := 0
+	for key := range f.rels {
+		list := f.rels[key]
+		for i := range list {
+			if list[i].Strength <= 1 {
+				continue
+			}
+			list[i].Strength = 1 + (list[i].Strength-1)*retain
+			n++
+		}
+	}
+	return n, nil
 }
 func (f fakeRelationshipRepo) RepointEndpoint(_ context.Context, _, _ string) error { return nil }
 func (f fakeRelationshipRepo) DeleteByClaim(_ context.Context, _ string) error      { return nil }

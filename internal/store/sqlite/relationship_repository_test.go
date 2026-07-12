@@ -136,3 +136,64 @@ func TestRelationshipStrength_DefaultAndStrengthen(t *testing.T) {
 		t.Errorf("zero-delta strengthen should be a no-op, got %d", n)
 	}
 }
+
+// TestRelationshipStrength_Decay covers the ADR-0015 §5 consolidation decay: an
+// over-base edge is pulled toward the base 1.0 by keeping the retain fraction of its
+// excess, a base edge is untouched, and out-of-range retain is a no-op.
+func TestRelationshipStrength_Decay(t *testing.T) {
+	db := openTestDB(t)
+	defer closeDB(db)
+	ctx := context.Background()
+	claimRepo := NewClaimRepository(db)
+	relRepo := NewRelationshipRepository(db)
+	now := time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC)
+
+	if err := claimRepo.Upsert(ctx, []domain.Claim{
+		{ID: "a", Text: "A", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "b", Text: "B", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "c", Text: "C", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+	}); err != nil {
+		t.Fatalf("claims: %v", err)
+	}
+	if err := relRepo.Upsert(ctx, []domain.Relationship{
+		{ID: "ab", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "b", CreatedAt: now},
+		{ID: "bc", Type: domain.RelationshipTypeSupports, FromClaimID: "b", ToClaimID: "c", CreatedAt: now},
+	}); err != nil {
+		t.Fatalf("edges: %v", err)
+	}
+	strengthOf := func(id string) float64 {
+		rels, _ := relRepo.ListByClaimIDs(ctx, []string{"a", "b", "c"})
+		for _, r := range rels {
+			if r.ID == id {
+				return r.Strength
+			}
+		}
+		t.Fatalf("edge %s not found", id)
+		return 0
+	}
+	// Raise ab to 5, leave bc at base 1.
+	if _, err := relRepo.StrengthenAssociations(ctx, []string{"a", "b"}, 4, 5); err != nil {
+		t.Fatalf("strengthen: %v", err)
+	}
+	// Decay keeping 80% of the excess: 1 + (5-1)*0.8 = 4.2.
+	n, err := relRepo.DecayAssociations(ctx, 0.8)
+	if err != nil {
+		t.Fatalf("DecayAssociations: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("decayed %d edges, want 1 (only the over-base ab)", n)
+	}
+	if got := strengthOf("ab"); got < 4.199 || got > 4.201 {
+		t.Errorf("ab decayed strength = %v, want ~4.2", got)
+	}
+	if got := strengthOf("bc"); got != 1 {
+		t.Errorf("base edge bc should be untouched, got %v", got)
+	}
+	// Out-of-range retain is a no-op.
+	if n, _ := relRepo.DecayAssociations(ctx, 1.0); n != 0 {
+		t.Errorf("retain>=1 should no-op, got %d", n)
+	}
+	if got := strengthOf("ab"); got < 4.199 || got > 4.201 {
+		t.Errorf("no-op decay changed strength to %v", got)
+	}
+}

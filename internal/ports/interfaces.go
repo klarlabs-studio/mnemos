@@ -204,6 +204,15 @@ type RelationshipStrengthener interface {
 	// Returns the number of edges strengthened. delta<=0 or fewer than two ids is a
 	// no-op.
 	StrengthenAssociations(ctx context.Context, claimIDs []string, delta, maxStrength float64) (int, error)
+
+	// DecayAssociations pulls every over-base edge's strength back TOWARD the base 1.0
+	// by keeping the given fraction of its excess: strength = 1 + (strength-1)*retain.
+	// So an edge that was co-activated but has since gone unused drifts back to neutral
+	// (recency-weighted co-activation), while an edge at base 1.0 is untouched. It never
+	// deletes edges and never falls below the base — mnemos edges are meaningful typed
+	// relationships, not prunable co-occurrence noise. retain must be in [0,1); returns
+	// the number of edges moved. The consolidation complement to StrengthenAssociations.
+	DecayAssociations(ctx context.Context, retain float64) (int, error)
 }
 
 // ExtractionEngine extracts structured claims from domain events.
