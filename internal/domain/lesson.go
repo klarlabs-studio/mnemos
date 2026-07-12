@@ -132,6 +132,25 @@ type Schema struct {
 	SubjectClass SubjectClass
 }
 
+// Schema Source values. Source records HOW a schema was derived, so the
+// promotion pass and audit output can tell the operational and knowledge paths
+// apart.
+const (
+	// SchemaSourceSynthesize marks a schema derived by the operational synthesis
+	// layer from Action→Outcome chains (internal/synthesize).
+	SchemaSourceSynthesize = "synthesize"
+	// SchemaSourceHuman marks a hand-authored schema.
+	SchemaSourceHuman = "human"
+	// SchemaSourceKnowledge marks a schema synthesized directly from classified
+	// (class-level) claims via the ADR 0012 knowledge-promotion path (Path A) —
+	// domain knowledge that promotes through its own synthesis path, distinct
+	// from the operational Action→Outcome→Lesson path. Its Evidence holds the
+	// backing claim ids (for count/provenance), NOT action ids, so a
+	// knowledge schema must never be persisted into the lessons table (whose
+	// lesson_evidence FKs to actions); it is a transient input to promotion.
+	SchemaSourceKnowledge = "knowledge"
+)
+
 // Lesson is the pre-ADR-0011 name for Schema; kept as a back-compat
 // alias (remove at API v2).
 type Lesson = Schema

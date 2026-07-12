@@ -141,6 +141,74 @@ as the stages after it:
 4. **Prediction-error ranking** — order survivors by peak surprise.
 5. **Gate policy** — `operator` (Pending, default) vs `auto` (Active).
 
+### 4a. Two synthesis paths into promotion (Path A: claim-derived knowledge)
+
+Promotion consumes synthesized [`domain.Schema`](../../internal/domain/lesson.go)
+(=Lesson) values. There are now **two** independent paths that produce those
+schemas, and their union is fed per tenant into `consolidate.Promote`:
+
+- **Operational path** *(pre-existing)* — `internal/synthesize` distils
+  Action→Outcome chains into operational Lessons. Its Evidence is **action ids**.
+  This is empty for a pure knowledge domain: a pet-medical fact ("Golden
+  Retrievers are predisposed to diabetes") is a classified *claim*, not the
+  outcome of any recorded operational action, so nothing operational is
+  synthesized and nothing promotes.
+
+- **Knowledge path (Path A)** *(new)* —
+  `consolidate.SynthesizeKnowledgeSchemas([]domain.Claim) []domain.Schema` turns a
+  tenant's **class-level claims** directly into schemas. It:
+  - considers **only** class-level claims (`domain.EligibleForPromotion`);
+    individual and unknown claims are skipped **fail-closed** — the privacy
+    invariant, enforced here as well as at `Promote` gate 0;
+  - clusters the survivors by normalized-statement similarity, **reusing**
+    `relate.ContentTokens` + a Jaccard threshold (`KnowledgeEquivalenceJaccard`,
+    the same tokenization and threshold as the cross-tenant promotion
+    clustering, so the two never drift and distinct-noun facts don't merge);
+  - emits one class-level schema per cluster: Statement = the representative
+    (highest-confidence) claim's text; Confidence = the aggregate (max);
+    `SubjectClass = class`; `Source = "knowledge"` (`domain.SchemaSourceKnowledge`);
+    Evidence = the backing **claim ids** (for corroboration count / provenance).
+
+**FK trap avoided (this is why a prior attempt broke).** Knowledge schemas are
+**transient inputs to promotion only** — their Evidence holds claim ids, so they
+are **never** persisted into the `lessons` table (whose `lesson_evidence` FKs to
+`actions`). Only the de-identified `GlobalSchema`s that *clear* promotion persist,
+via the unchanged `applyPromotion` write path.
+
+Because both paths feed the same engine, knowledge promotes **emergently** (the
+same class fact corroborated across ≥ `MinTenants` tenants) or **curated** (a
+single-source class fact + a `promote:global` token), running every downstream
+ADR-0011 gate (de-identification, contradiction, ranking, gate policy) unchanged.
+
+**Wiring (`cmd/mnemos/promote.go`).** For each tenant the command unions
+`operational lessons ∪ SynthesizeKnowledgeSchemas(tenant's active class claims)`
+and passes the union in as that tenant's schemas:
+
+- **`--tenant-dsn` (explicit federation)** — reads each tenant store's lessons
+  **and** claims (`Claims.ListAll`, filtered to `active`), synthesizes, unions.
+  Fully delivered.
+- **`--all-tenants` (single multi-tenant store)** — the tenant enumerators now
+  also pre-read each tenant's claims under the **same isolation** as its lessons
+  (`store.TenantScope.Claims`): namespace-physical isolation for
+  sqlite/mysql/local libsql (through each scoped connection's own
+  `Claims.ListAll`, so SELECT/Scan parity is inherited, never hand-written), and
+  an explicit `WHERE tenant = $1` read for Postgres that **reuses
+  `ClaimRepository.ListAll`'s exact column projection + the shared
+  `collectClaimRows` scanner** — so column/scan parity cannot drift and an
+  RLS-bypassing (superuser) connection can never grant one tenant's claim false
+  cross-tenant corroboration (the same anti-leak reason `readTenantLessons` uses
+  an explicit filter). Delivered for all four backends.
+
+**Known limitation (latent until a follow-up).** The `claims` table carries **no
+`subject_class` column** on any backend today — the class is set at extraction
+time (`internal/extract`) but dropped on persist. So claims round-tripped through
+the store currently read back as `unknown` and are skipped fail-closed. The Path
+A engine and the promote-side union are therefore **complete and fully tested
+in-memory**, and the CLI read path is wired on every backend, but it stays
+**latent** at the CLI until claim `subject_class` persistence lands (already
+listed as a follow-up below). No behavior regresses in the meantime — an
+unclassified claim is simply private, which is the fail-closed default.
+
 ### 5. Born-global (documented; top-down feed)
 
 Alongside bottom-up float-back (emergent + curated), the neocortex also supports
@@ -218,6 +286,14 @@ write as JSON and touches nothing; `--apply` persists it.
 - **Engine** — `consolidate.Promote` gate 0 (eligibility, fail closed) +
   `Options.Curated` single-source path; `PromotedLesson.Curated` for audit.
   **DONE.**
+- **Knowledge path (Path A)** — `consolidate.SynthesizeKnowledgeSchemas` turns a
+  tenant's class-level claims into transient `Source="knowledge"` schemas
+  (class-only, fail-closed; clustered via `relate.ContentTokens` + Jaccard;
+  Evidence = claim ids, never persisted). `cmd/mnemos/promote.go` unions them with
+  operational lessons per tenant on **both** the `--tenant-dsn` and `--all-tenants`
+  inputs; the tenant enumerators pre-read each tenant's claims under the same
+  isolation as lessons (`store.TenantScope.Claims`, all four backends). **DONE**
+  (latent at the CLI until claim `subject_class` persistence lands — see below).
 - **Auth** — `domain.ScopePromoteGlobal` (`promote:global`) +
   `auth.Claims.CanCurate()`. **DONE.**
 - **CLI** — `consolidate --promote --curate|--contribute --token <jwt>` verifies
@@ -228,5 +304,8 @@ write as JSON and touches nothing; `--apply` persists it.
   the neocortex (`GlobalSchemas.Upsert`), gated by the `promote:global` curator
   scope (fail closed, reusing `verifyCuratorToken`); content-addressed id
   (upsert on re-author), `--dry-run` default. **DONE.**
-- **Follow-ups** — synthesis-time classification wiring; Postgres/MySQL
-  `subject_class`; LLM-assisted subject classification.
+- **Follow-ups** — **claim `subject_class` persistence** (add the column + scan on
+  the `claims` table across backends so extraction-time classification survives a
+  store round-trip; this is what activates Path A at the CLI); synthesis-time
+  classification wiring; Postgres/MySQL `subject_class` on `lessons`; LLM-assisted
+  subject classification.

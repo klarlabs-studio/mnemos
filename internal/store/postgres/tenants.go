@@ -84,13 +84,39 @@ func enumerateTenants(ctx context.Context, baseDSN string) ([]store.TenantScope,
 		if err != nil {
 			return nil, fmt.Errorf("postgres: read lessons for tenant %q: %w", tenant, err)
 		}
+		// ADR 0012 Path A: also read the tenant's claims (for knowledge-schema
+		// synthesis) with the SAME explicit `WHERE tenant = $1` filter, so a claim
+		// can never gain false cross-tenant corroboration under an RLS-bypassing
+		// (superuser) connection.
+		claims, err := readTenantClaims(ctx, db, ns, tenant)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: read claims for tenant %q: %w", tenant, err)
+		}
 		scopes = append(scopes, store.TenantScope{
 			Tenant:  tenant,
 			DSN:     store.SetDSNParam(baseDSN, "tenant", tenant),
 			Lessons: lessons,
+			Claims:  claims,
 		})
 	}
 	return scopes, nil
+}
+
+// readTenantClaims reads one tenant's claims with an explicit tenant filter, so
+// attribution is correct even under an RLS-bypassing connection (the same
+// anti-leak reason as readTenantLessons). It reuses ClaimRepository.ListAll's
+// exact column projection and the shared collectClaimRows scanner, so SELECT and
+// Scan can never drift out of column parity — only the `WHERE tenant = $1` filter
+// and the ORDER BY are added.
+func readTenantClaims(ctx context.Context, db *sql.DB, ns, tenant string) ([]domain.Claim, error) {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, lifecycle
+FROM %s WHERE tenant = $1 ORDER BY created_at ASC`, qualify(ns, "claims")), tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	return collectClaimRows(rows)
 }
 
 // readTenantLessons reads one tenant's lessons with an explicit tenant filter,
