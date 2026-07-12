@@ -16,14 +16,23 @@ import (
 // one-shot CLI command:
 //
 //	mnemos consolidate --promote [--min-tenants N] [--gate auto|operator]
-//	                   [--tenant-dsn <dsn> ...] [--global-dsn <dsn>]
-//	                   [--sensitive <token> ...] [--dry-run | --apply]
+//	                   [--tenant-dsn <dsn> ... | --all-tenants --db <dsn>]
+//	                   [--global-dsn <dsn>] [--sensitive <token> ...]
+//	                   [--dry-run | --apply]
 //
 //	mnemos consolidate --promote approve <id> --global-dsn <dsn>
 //
-// It reads the synthesized Schemas (Lessons) from each supplied tenant store,
-// runs the pure promotion engine (internal/consolidate) with its five gates, and
-// emits a structured, auditable plan as JSON.
+// It reads the synthesized Schemas (Lessons) from each tenant, runs the pure
+// promotion engine (internal/consolidate) with its five gates, and emits a
+// structured, auditable plan as JSON.
+//
+// Tenant input is one of two alternatives:
+//   - --tenant-dsn <dsn> ... : an explicit federation of separate tenant stores.
+//   - --all-tenants --db <dsn> : enumerate the tenants of ONE multi-tenant store
+//     and read each one's lessons scoped to that tenant — the hosted shape,
+//     where tenants are namespaces (sqlite/mysql/local libsql) or RLS scopes
+//     (postgres) inside a single brain (ADR 0007). Each tenant is read under its
+//     own scope only; no cross-tenant bleed at read time.
 //
 // Writing is OPT-IN. --dry-run (the default) never writes: an operator inspects
 // the plan first. --apply persists the surviving candidates to the global
@@ -33,11 +42,12 @@ import (
 // scope, polarity, corroboration/evidence counts, confidence, surprise) ever
 // cross into the global store — see consolidate.PromotedLesson.ToGlobalSchema.
 //
-// Scope note: reading live multi-tenant lessons through one server's per-request
-// tenant scoping (serve/mcp) is a larger wiring job; this command instead
-// operates over an explicit set of tenant store DSNs/namespaces, which is the
-// natural federation input for an offline consolidation ("sleep") pass and keeps
-// the privacy-critical engine fully exercised end-to-end.
+// Live multi-tenant reads: --all-tenants enumerates the tenants of a single
+// multi-tenant store (store.EnumerateTenants) and reads each tenant's lessons
+// under that tenant's scope — physical namespace isolation for sqlite/mysql/
+// local libsql, and an explicit tenant-filtered read for postgres RLS. Only the
+// READ path changed; the engine's gates and the de-identified write path are
+// unchanged, so the no-leak guarantee is preserved.
 func handlePromote(args []string, f Flags) {
 	opts, err := parsePromoteOpts(args, f)
 	if err != nil {
@@ -53,29 +63,60 @@ func handlePromote(args []string, f Flags) {
 		return
 	}
 
-	// Load per-tenant lessons. With no --tenant-dsn provided, fall back to the
-	// default store as a single tenant — which, by the corroboration gate, can
-	// never promote anything (it demonstrates the no-leak floor rather than
-	// erroring).
-	dsns := opts.tenantDSNs
-	if len(dsns) == 0 {
-		dsns = []string{resolveDSN()}
+	if opts.allTenants && len(opts.tenantDSNs) > 0 {
+		exitWithMnemosError(false, NewUserError("--all-tenants and --tenant-dsn are alternative inputs; supply one, not both"))
+		return
 	}
 
+	// Load per-tenant lessons. Two alternative inputs:
+	//
+	//   --all-tenants --db <dsn> : enumerate the tenants OF ONE multi-tenant
+	//     store (namespace-per-tenant for sqlite/mysql/local libsql, or the
+	//     tenant column under RLS for postgres) and read each tenant's lessons
+	//     scoped to that tenant. This is the hosted-deployment shape (ADR 0007 +
+	//     0011): one brain, many tenant partitions.
+	//
+	//   --tenant-dsn <dsn> ...   : an explicit federation of separate tenant
+	//     stores (the offline/local shape).
+	//
+	// With neither, fall back to the default store as a single tenant — which,
+	// by the corroboration gate, can never promote anything (it demonstrates the
+	// no-leak floor rather than erroring).
 	var tenants []consolidate.TenantLessons
-	for _, dsn := range dsns {
-		conn, err := store.Open(ctx, dsn)
+	var dsns []string
+	if opts.allTenants {
+		baseDSN := opts.db
+		if baseDSN == "" {
+			baseDSN = resolveDSN()
+		}
+		scopes, err := store.EnumerateTenants(ctx, baseDSN)
 		if err != nil {
-			exitWithMnemosError(false, NewSystemError(err, "open tenant store %q", dsn))
+			exitWithMnemosError(false, NewSystemError(err, "enumerate tenants of %q", baseDSN))
 			return
 		}
-		lessons, err := conn.Lessons.ListAll(ctx)
-		_ = conn.Close()
-		if err != nil {
-			exitWithMnemosError(false, NewSystemError(err, "list lessons for %q", dsn))
-			return
+		for _, s := range scopes {
+			tenants = append(tenants, consolidate.TenantLessons{Tenant: s.Tenant, Lessons: s.Lessons})
+			dsns = append(dsns, s.DSN)
 		}
-		tenants = append(tenants, consolidate.TenantLessons{Tenant: dsn, Lessons: lessons})
+	} else {
+		dsns = opts.tenantDSNs
+		if len(dsns) == 0 {
+			dsns = []string{resolveDSN()}
+		}
+		for _, dsn := range dsns {
+			conn, err := store.Open(ctx, dsn)
+			if err != nil {
+				exitWithMnemosError(false, NewSystemError(err, "open tenant store %q", dsn))
+				return
+			}
+			lessons, err := conn.Lessons.ListAll(ctx)
+			_ = conn.Close()
+			if err != nil {
+				exitWithMnemosError(false, NewSystemError(err, "list lessons for %q", dsn))
+				return
+			}
+			tenants = append(tenants, consolidate.TenantLessons{Tenant: dsn, Lessons: lessons})
+		}
 	}
 
 	// Optional global-knowledge source for the contradiction gate.
@@ -213,6 +254,8 @@ func handlePromoteApprove(ctx context.Context, opts promoteOpts) {
 type promoteOpts struct {
 	engine     consolidate.Options
 	tenantDSNs []string
+	allTenants bool
+	db         string
 	globalDSN  string
 	apply      bool
 	approveID  string
@@ -260,6 +303,14 @@ func parsePromoteOpts(args []string, _ Flags) (promoteOpts, error) {
 				return out, NewUserError("--tenant-dsn requires a value")
 			}
 			out.tenantDSNs = append(out.tenantDSNs, args[i+1])
+			i++
+		case "--all-tenants":
+			out.allTenants = true
+		case "--db":
+			if i+1 >= len(args) {
+				return out, NewUserError("--db requires a value")
+			}
+			out.db = args[i+1]
 			i++
 		case "--global-dsn":
 			if i+1 >= len(args) {
