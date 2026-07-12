@@ -303,6 +303,146 @@ func TestLLMEngineUsageSinkSkippedOnFallback(t *testing.T) {
 	}
 }
 
+// TestLLMEngineSubjectClassFromLLM verifies the explicit "subject_class"
+// field the v1.5+ prompt emits maps onto domain.Claim.SubjectClass, and
+// that an omitted value falls back to unknown (fail-closed, non-promotable)
+// when there are no subject entities to infer from.
+func TestLLMEngineSubjectClassFromLLM(t *testing.T) {
+	claims := []llmClaim{
+		{Text: "Bella has diabetes", Type: "fact", Confidence: 0.85, SubjectClass: "individual"},
+		{Text: "Golden Retrievers are predisposed to diabetes", Type: "fact", Confidence: 0.8, SubjectClass: "class"},
+		{Text: "Response times averaged 45ms", Type: "fact", Confidence: 0.88},                            // omitted ⇒ unknown
+		{Text: "The database was upgraded", Type: "fact", Confidence: 0.8, SubjectClass: "CLASS "},        // normalization
+		{Text: "Latency dropped after the fix", Type: "fact", Confidence: 0.8, SubjectClass: "gibberish"}, // unrecognised ⇒ unknown
+	}
+	responseJSON, _ := json.Marshal(claims)
+
+	client := &mockLLMClient{response: string(responseJSON)}
+	engine := newTestLLMEngine(client)
+
+	events := []domain.Event{{ID: "ev_1", Content: "Bella has diabetes. Golden Retrievers are predisposed to diabetes. Response times averaged 45ms. The database was upgraded. Latency dropped after the fix."}}
+	gotClaims, _, err := engine.Extract(events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(gotClaims) != 5 {
+		t.Fatalf("expected 5 claims, got %d", len(gotClaims))
+	}
+
+	want := map[string]domain.SubjectClass{
+		"Bella has diabetes":                            domain.SubjectClassIndividual,
+		"Golden Retrievers are predisposed to diabetes": domain.SubjectClassClass,
+		"Response times averaged 45ms":                  domain.SubjectClassUnknown,
+		"The database was upgraded":                     domain.SubjectClassClass,
+		"Latency dropped after the fix":                 domain.SubjectClassUnknown,
+	}
+	for _, c := range gotClaims {
+		if got, ok := want[c.Text]; ok {
+			if c.SubjectClass != got {
+				t.Errorf("claim %q: SubjectClass = %q, want %q", c.Text, c.SubjectClass, got)
+			}
+		} else {
+			t.Errorf("unexpected claim %q", c.Text)
+		}
+	}
+}
+
+// TestLLMEngineSubjectClassEntityFallback verifies that when the LLM omits
+// subject_class, the class is inferred from the claim's SUBJECT entities:
+// a concept subject ⇒ class, a person/org subject ⇒ individual, and an
+// untyped/objects-only claim ⇒ unknown (fail-closed).
+func TestLLMEngineSubjectClassEntityFallback(t *testing.T) {
+	claims := []llmClaim{
+		{Text: "Golden Retrievers get diabetes", Type: "fact", Confidence: 0.8, Entities: []llmClaimEntity{
+			{Name: "Golden Retriever", Type: "concept", Role: "subject"},
+		}},
+		{Text: "Acme missed its target", Type: "fact", Confidence: 0.8, Entities: []llmClaimEntity{
+			{Name: "Acme", Type: "org", Role: "subject"},
+		}},
+		{Text: "The migration used PostgreSQL", Type: "fact", Confidence: 0.8, Entities: []llmClaimEntity{
+			{Name: "PostgreSQL", Type: "product", Role: "object"}, // object, not subject ⇒ no inference ⇒ unknown
+		}},
+	}
+	responseJSON, _ := json.Marshal(claims)
+
+	client := &mockLLMClient{response: string(responseJSON)}
+	engine := newTestLLMEngine(client)
+
+	events := []domain.Event{{ID: "ev_1", Content: "Golden Retrievers get diabetes. Acme missed its target. The migration used PostgreSQL."}}
+	gotClaims, _, err := engine.Extract(events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := map[string]domain.SubjectClass{
+		"Golden Retrievers get diabetes": domain.SubjectClassClass,
+		"Acme missed its target":         domain.SubjectClassIndividual,
+		"The migration used PostgreSQL":  domain.SubjectClassUnknown,
+	}
+	if len(gotClaims) != len(want) {
+		t.Fatalf("expected %d claims, got %d", len(want), len(gotClaims))
+	}
+	for _, c := range gotClaims {
+		if got, ok := want[c.Text]; ok {
+			if c.SubjectClass != got {
+				t.Errorf("claim %q: SubjectClass = %q, want %q", c.Text, c.SubjectClass, got)
+			}
+		} else {
+			t.Errorf("unexpected claim %q", c.Text)
+		}
+	}
+}
+
+// TestLLMEngineSubjectClassExplicitBeatsEntities verifies the LLM's explicit
+// subject_class wins over the entity-based heuristic when both are present.
+func TestLLMEngineSubjectClassExplicitBeatsEntities(t *testing.T) {
+	// A concept subject entity would infer "class", but the explicit
+	// "individual" hint must win (e.g. "Rex, a Golden Retriever, ...").
+	claims := []llmClaim{
+		{Text: "Rex the Golden Retriever has diabetes", Type: "fact", Confidence: 0.85, SubjectClass: "individual", Entities: []llmClaimEntity{
+			{Name: "Golden Retriever", Type: "concept", Role: "subject"},
+		}},
+	}
+	responseJSON, _ := json.Marshal(claims)
+
+	client := &mockLLMClient{response: string(responseJSON)}
+	engine := newTestLLMEngine(client)
+
+	events := []domain.Event{{ID: "ev_1", Content: "Rex the Golden Retriever has diabetes."}}
+	gotClaims, _, err := engine.Extract(events)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(gotClaims) != 1 {
+		t.Fatalf("expected 1 claim, got %d", len(gotClaims))
+	}
+	if gotClaims[0].SubjectClass != domain.SubjectClassIndividual {
+		t.Errorf("SubjectClass = %q, want individual (explicit beats entity inference)", gotClaims[0].SubjectClass)
+	}
+}
+
+// TestLLMEngineRuleFallbackSubjectClassUnknown verifies the rule-based
+// fallback path (LLM errored) still yields claims, all with an unknown
+// subject class — the rule-based path is unchanged and never promotable.
+func TestLLMEngineRuleFallbackSubjectClassUnknown(t *testing.T) {
+	client := &mockLLMClient{err: fmt.Errorf("provider down")}
+	engine := newTestLLMEngine(client)
+
+	events := []domain.Event{{ID: "ev_1", Content: "We will use React for the frontend"}}
+	gotClaims, _, err := engine.Extract(events)
+	if err != nil {
+		t.Fatalf("should not error on fallback: %v", err)
+	}
+	if len(gotClaims) == 0 {
+		t.Fatal("expected at least 1 claim from rule-based fallback")
+	}
+	for _, c := range gotClaims {
+		if c.SubjectClass != domain.SubjectClassUnknown {
+			t.Errorf("rule-based claim %q: SubjectClass = %q, want unknown", c.Text, c.SubjectClass)
+		}
+	}
+}
+
 // newTestLLMEngine creates an LLMEngine with deterministic IDs and clock.
 func newTestLLMEngine(client llm.Client) LLMEngine {
 	seq := 0
