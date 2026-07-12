@@ -1450,6 +1450,7 @@ func printUsage() {
 	fmt.Println("  workspace import <file> [--folder <d>] on another machine (--folder/--db adjust local paths)")
 	fmt.Println("  float-back [--from <path|dsn>]        Float important repo/workspace learnings up into the central brain")
 	fmt.Println("    [--to <dsn>] [--min-trust X] [--apply]  (dry-run by default; --global-tagged claims float unconditionally)")
+	fmt.Println("                                       (set MNEMOS_FLOATBACK_ON_CAPTURE=true to also float up at session-end capture)")
 	fmt.Println("  global author --statement <text>     Author curated reference knowledge straight into the global brain")
 	fmt.Println("    [--scope-service S --scope-env E --scope-team T] [--polarity positive|negative] [--status active|pending]")
 	fmt.Println("    [--token <jwt>] [--global-dsn <dsn>] [--apply]  (born-global, ADR 0012; needs a promote:global curator token)")

@@ -135,6 +135,50 @@ func handleFloatBack(args []string, _ Flags) {
 	emitJSON(out)
 }
 
+// floatbackOnCaptureEnabled reports whether the opt-in session-end float-back is
+// turned on via MNEMOS_FLOATBACK_ON_CAPTURE (config key floatback.on_capture).
+// Default OFF: only "1"/"true"/"yes" (case-insensitive) enable it, so the
+// capture hook's behavior is byte-identical to before unless explicitly opted in.
+func floatbackOnCaptureEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_FLOATBACK_ON_CAPTURE"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// floatBackOnCapture runs a best-effort, apply-mode float-back from a
+// repo/workspace brain (srcDSN) up into the personal central brain at session
+// end. It reuses the exact planning/apply pipeline `mnemos float-back --apply`
+// runs (loadFloatInputs → PlanFloatBack → applyFloatBack), so the same
+// importance/generality gate, path-stripping, and content-addressed dedup apply
+// — a re-run never duplicates.
+//
+// It is FAIL-OPEN by construction: every error path returns silently so it can
+// never fail or hang the capture hook. Callers gate it behind
+// floatbackOnCaptureEnabled() and a short-timeout context. It is a no-op when
+// srcDSN resolves to the central brain (nothing to float up).
+func floatBackOnCapture(ctx context.Context, srcDSN string) {
+	centralDSN := resolveCentralDSN("")
+	if sameBrain(srcDSN, centralDSN) {
+		return
+	}
+	inputs, err := loadFloatInputs(ctx, srcDSN)
+	if err != nil {
+		return
+	}
+	existing, err := loadCentralStatements(ctx, centralDSN)
+	if err != nil {
+		return
+	}
+	plan := consolidate.PlanFloatBack(inputs, consolidate.DefaultMinTrust, existing)
+	if len(plan.Floated) == 0 {
+		return
+	}
+	_, _ = applyFloatBack(ctx, centralDSN, plan.Floated)
+}
+
 // resolveFloatSource resolves the --from argument to a source store DSN. An
 // explicit DSN (contains "://") is used verbatim; otherwise the argument is a
 // filesystem path (defaulting to CWD) whose owning workspace brain — then repo

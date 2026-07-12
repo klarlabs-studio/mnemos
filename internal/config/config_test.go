@@ -100,6 +100,28 @@ func TestPrecedenceBlockEnvOverride(t *testing.T) {
 	}
 }
 
+func TestFloatbackOnCaptureEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, "floatback:\n  on_capture: true\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if env := cfg.EnvOverrides(); env["MNEMOS_FLOATBACK_ON_CAPTURE"] != "true" {
+		t.Errorf("MNEMOS_FLOATBACK_ON_CAPTURE = %q, want true", env["MNEMOS_FLOATBACK_ON_CAPTURE"])
+	}
+	// Default: an absent floatback block leaves the key unset so it never shadows
+	// the downstream default (off).
+	empty := writeConfig(t, dir, "db:\n  url: memory://\n")
+	ecfg, err := Load(empty)
+	if err != nil {
+		t.Fatalf("Load empty: %v", err)
+	}
+	if _, ok := ecfg.EnvOverrides()["MNEMOS_FLOATBACK_ON_CAPTURE"]; ok {
+		t.Error("empty floatback.on_capture leaf should be omitted (default off)")
+	}
+}
+
 func TestLoadRejectsUnknownFields(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, "llm:\n  provdier: typo\n")
