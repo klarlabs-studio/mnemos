@@ -8,6 +8,35 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.87.0] — 2026-07-12
+
+### Added
+
+- **LLM-assisted subject classification (ADR 0012).** The LLM extractor now tags
+  each claim `individual` vs `class` (`PromptVersion` v1.5), resolving explicit
+  LLM value → entity heuristic → `unknown` (fail-closed).
+- **`subject_class` persisted on Postgres & MySQL + set at synthesis.** The
+  classification column now exists on all backends (idempotent migration), and
+  synthesis stamps a schema's class by aggregating its backing subjects
+  (fail-closed to `unknown`) — feeding the promotion eligibility gate on the
+  hosted (Postgres) backend, not just sqlite.
+- **`mnemos global author` — born-global authoring.** A curator (behind the
+  `promote:global` scope) writes reference knowledge straight into the neocortex,
+  the top-down complement to bottom-up promotion. Dry-run by default.
+- **Opt-in float-back on capture.** `MNEMOS_FLOATBACK_ON_CAPTURE` (default off,
+  fail-open) runs float-back after a session-end capture in a repo/workspace. The
+  default capture path is byte-identical when off.
+
+### Fixed
+
+- **Repaired sqlc-truncated SQL (latent runtime bug).** An em-dash in a query
+  doc comment triggered a byte-vs-rune bug in sqlc v1.30.0 that truncated the
+  string constants of every query generated after it, shipping broken SQL
+  (`DELETE FROM clai`, a `trust_score <` missing its `?` placeholder, …) that
+  would fail `reset` / `delete-claim` / trust recompute. Removing the em-dash and
+  regenerating with the newly **pinned** sqlc (`make sqlc` → `go run …sqlc@v1.30.0`)
+  repairs them and makes regen a clean no-op.
+
 ## [0.86.0] — 2026-07-12
 
 ### Security
