@@ -46,7 +46,7 @@ func (b *EventsBuilder) List(ctx context.Context) (*ListEventsResponse, error) {
 	if b.runID != "" {
 		q.Set("run_id", b.runID)
 	}
-	if err := b.c.do(ctx, http.MethodGet, withQuery("/v1/events", q), nil, &out); err != nil {
+	if err := b.c.do(ctx, http.MethodGet, withQuery("/v1/episodes", q), nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -56,10 +56,10 @@ func (b *EventsBuilder) List(ctx context.Context) (*ListEventsResponse, error) {
 // the registry are no-ops.
 func (b *EventsBuilder) Append(ctx context.Context, events []Event) (*AppendResponse, error) {
 	body := struct {
-		Events []Event `json:"events"`
+		Events []Event `json:"episodes"`
 	}{Events: events}
 	var out AppendResponse
-	if err := b.c.do(ctx, http.MethodPost, "/v1/events", body, &out); err != nil {
+	if err := b.c.do(ctx, http.MethodPost, "/v1/episodes", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -113,7 +113,7 @@ func (b *ClaimsBuilder) List(ctx context.Context) (*ListClaimsResponse, error) {
 	if b.runID != "" {
 		q.Set("run_id", b.runID)
 	}
-	if err := b.c.do(ctx, http.MethodGet, withQuery("/v1/claims", q), nil, &out); err != nil {
+	if err := b.c.do(ctx, http.MethodGet, withQuery("/v1/beliefs", q), nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -125,7 +125,7 @@ func (b *ClaimsBuilder) List(ctx context.Context) (*ListClaimsResponse, error) {
 func (b *ClaimsBuilder) Append(ctx context.Context, claims []Claim, evidence []EvidenceLink) (*AppendResponse, error) {
 	body := AppendClaimsBody{Claims: claims, Evidence: evidence}
 	var out AppendResponse
-	if err := b.c.do(ctx, http.MethodPost, "/v1/claims", body, &out); err != nil {
+	if err := b.c.do(ctx, http.MethodPost, "/v1/beliefs", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -157,7 +157,7 @@ func (b *RelationshipsBuilder) List(ctx context.Context) (*ListRelationshipsResp
 	if b.relType != "" {
 		q.Set("type", b.relType)
 	}
-	if err := b.c.do(ctx, http.MethodGet, withQuery("/v1/relationships", q), nil, &out); err != nil {
+	if err := b.c.do(ctx, http.MethodGet, withQuery("/v1/associations", q), nil, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -167,10 +167,10 @@ func (b *RelationshipsBuilder) List(ctx context.Context) (*ListRelationshipsResp
 // must already exist on the server.
 func (b *RelationshipsBuilder) Append(ctx context.Context, rels []Relationship) (*AppendResponse, error) {
 	body := struct {
-		Relationships []Relationship `json:"relationships"`
+		Relationships []Relationship `json:"associations"`
 	}{Relationships: rels}
 	var out AppendResponse
-	if err := b.c.do(ctx, http.MethodPost, "/v1/relationships", body, &out); err != nil {
+	if err := b.c.do(ctx, http.MethodPost, "/v1/associations", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

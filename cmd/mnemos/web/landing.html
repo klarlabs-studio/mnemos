@@ -311,7 +311,7 @@
           <span class="label">~ remember during a turn, recall months later</span>
         </div>
 <pre><span class="out"># 1. Agent writes during a tool call (HTTP, no SDK).</span>
-<span class="prompt">&gt;&gt;&gt;</span> <span class="cmd">httpx.post(f"{m}/v1/events", json={"events": [{</span>
+<span class="prompt">&gt;&gt;&gt;</span> <span class="cmd">httpx.post(f"{m}/v1/episodes", json={"episodes": [{</span>
 <span class="cmd">       "id": uid(), "run_id": session, "source_input_id": "chat-1",</span>
 <span class="cmd">       "content": "user prefers vegetarian, allergic to peanuts",</span>
 <span class="cmd">       "timestamp": "2026-05-09T16:00:00Z" }]})</span>

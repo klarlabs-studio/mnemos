@@ -44,7 +44,7 @@ func expectationToDTO(e domain.Expectation) expectationDTO {
 	return dto
 }
 
-// makeExpectationHandler serves /v1/claims/<id>/expectation:
+// makeExpectationHandler serves /v1/beliefs/<id>/expectation:
 //
 //	GET  → the claim's expectation (404 when none)
 //	POST → attach/replace the expectation {predicted, tolerance, horizon}
@@ -110,7 +110,7 @@ func makeExpectationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	}
 }
 
-// makeObservationHandler serves POST /v1/claims/<id>/observation: record the
+// makeObservationHandler serves POST /v1/beliefs/<id>/observation: record the
 // observed value against an existing expectation (mirrors RecordObservation).
 func makeObservationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

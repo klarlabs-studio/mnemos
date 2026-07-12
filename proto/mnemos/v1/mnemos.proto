@@ -8,32 +8,32 @@ import "google/protobuf/timestamp.proto";
 
 // MnemosService provides the gRPC API surface for the Mnemos knowledge
 // registry. It mirrors the HTTP REST API at /v1/* with equivalent
-// operations for events, claims, relationships, embeddings, and metrics.
+// operations for episodes, beliefs, associations, embeddings, and metrics.
 service MnemosService {
   // Health returns the service health status. Deep probes are available
   // via the detailed field.
   rpc Health(HealthRequest) returns (HealthResponse);
 
-  // ListEvents returns a paginated list of all events, most recent first.
-  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+  // ListEpisodes returns a paginated list of all episodes, most recent first.
+  rpc ListEpisodes(ListEpisodesRequest) returns (ListEpisodesResponse);
 
-  // AppendEvents writes one or more events to the store. Idempotent on
-  // duplicate event IDs.
-  rpc AppendEvents(AppendEventsRequest) returns (AppendResponse);
+  // AppendEpisodes writes one or more episodes to the store. Idempotent on
+  // duplicate episode IDs.
+  rpc AppendEpisodes(AppendEpisodesRequest) returns (AppendResponse);
 
-  // ListClaims returns a paginated list of claims with optional type/status
+  // ListBeliefs returns a paginated list of beliefs with optional type/status
   // filtering. Evidence links are included when include_evidence is true.
-  rpc ListClaims(ListClaimsRequest) returns (ListClaimsResponse);
+  rpc ListBeliefs(ListBeliefsRequest) returns (ListBeliefsResponse);
 
-  // AppendClaims writes claims and optionally their evidence links.
-  rpc AppendClaims(AppendClaimsRequest) returns (AppendResponse);
+  // AppendBeliefs writes beliefs and optionally their evidence links.
+  rpc AppendBeliefs(AppendBeliefsRequest) returns (AppendResponse);
 
-  // ListRelationships returns a paginated list of relationships with
+  // ListAssociations returns a paginated list of associations with
   // optional type filtering.
-  rpc ListRelationships(ListRelationshipsRequest) returns (ListRelationshipsResponse);
+  rpc ListAssociations(ListAssociationsRequest) returns (ListAssociationsResponse);
 
-  // AppendRelationships writes one or more relationship edges.
-  rpc AppendRelationships(AppendRelationshipsRequest) returns (AppendResponse);
+  // AppendAssociations writes one or more association edges.
+  rpc AppendAssociations(AppendAssociationsRequest) returns (AppendResponse);
 
   // ListEmbeddings returns a paginated list of embeddings with optional
   // entity_type filtering.
@@ -60,26 +60,26 @@ service MnemosService {
   // raw write path.
   rpc AppendOutcomes(AppendOutcomesRequest) returns (AppendResponse);
 
-  // ListLessons returns synthesised lessons.
-  rpc ListLessons(ListLessonsRequest) returns (ListLessonsResponse);
-  // AppendLessons writes lessons idempotently (UPSERT on id refreshes
-  // confidence/last_verified, snapshots prior to lesson_versions).
-  rpc AppendLessons(AppendLessonsRequest) returns (AppendResponse);
+  // ListSchemas returns synthesised schemas.
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
+  // AppendSchemas writes schemas idempotently (UPSERT on id refreshes
+  // confidence/last_verified, snapshots prior to schema_versions).
+  rpc AppendSchemas(AppendSchemasRequest) returns (AppendResponse);
 
   // ListDecisions returns recorded decisions.
   rpc ListDecisions(ListDecisionsRequest) returns (ListDecisionsResponse);
   // AppendDecisions writes decisions idempotently.
   rpc AppendDecisions(AppendDecisionsRequest) returns (AppendResponse);
 
-  // ListPlaybooks returns synthesised or hand-authored playbooks.
-  rpc ListPlaybooks(ListPlaybooksRequest) returns (ListPlaybooksResponse);
-  // AppendPlaybooks writes playbooks idempotently.
-  rpc AppendPlaybooks(AppendPlaybooksRequest) returns (AppendResponse);
+  // ListReflexes returns synthesised or hand-authored reflexes.
+  rpc ListReflexes(ListReflexesRequest) returns (ListReflexesResponse);
+  // AppendReflexes writes reflexes idempotently.
+  rpc AppendReflexes(AppendReflexesRequest) returns (AppendResponse);
 
-  // ListEntityRelationships returns polymorphic cross-entity edges.
-  rpc ListEntityRelationships(ListEntityRelationshipsRequest) returns (ListEntityRelationshipsResponse);
-  // AppendEntityRelationships writes polymorphic edges idempotently.
-  rpc AppendEntityRelationships(AppendEntityRelationshipsRequest) returns (AppendResponse);
+  // ListEntityAssociations returns polymorphic cross-entity edges.
+  rpc ListEntityAssociations(ListEntityAssociationsRequest) returns (ListEntityAssociationsResponse);
+  // AppendEntityAssociations writes polymorphic edges idempotently.
+  rpc AppendEntityAssociations(AppendEntityAssociationsRequest) returns (AppendResponse);
 
   // --- Connected brain (cognitive layer; parity with HTTP /v1/who-knows etc.) ---
   // WhoKnows ranks the workers whose memory best matches a query.
@@ -88,18 +88,18 @@ service MnemosService {
   rpc KnowledgeGaps(KnowledgeGapsRequest) returns (KnowledgeGapsResponse);
   // Calibration reports how well stated confidence tracks reality.
   rpc Calibration(CalibrationRequest) returns (CalibrationResponse);
-  // Hypercorrections lists established beliefs a newer claim contradicts.
+  // Hypercorrections lists established beliefs a newer belief contradicts.
   rpc Hypercorrections(HypercorrectionsRequest) returns (HypercorrectionsResponse);
-  // Recombinations lists topically-similar-but-unlinked claim pairs.
+  // Recombinations lists topically-similar-but-unlinked belief pairs.
   rpc Recombinations(RecombinationsRequest) returns (RecombinationsResponse);
-  // AnalogousClaims returns the claims most structurally analogous to one.
-  rpc AnalogousClaims(AnalogousClaimsRequest) returns (AnalogousClaimsResponse);
+  // AnalogousBeliefs returns the beliefs most structurally analogous to one.
+  rpc AnalogousBeliefs(AnalogousBeliefsRequest) returns (AnalogousBeliefsResponse);
 
-  // --- Claim CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
-  // GetClaim returns a single claim's full detail.
-  rpc GetClaim(GetClaimRequest) returns (ClaimDetail);
-  // SetClaimLifecycle transitions a claim (candidate | promoted | superseded).
-  rpc SetClaimLifecycle(SetClaimLifecycleRequest) returns (SetClaimLifecycleResponse);
+  // --- Belief CRUD (cognitive layer; parity with HTTP GET /v1/claims/{id} etc.) ---
+  // GetBelief returns a single belief's full detail.
+  rpc GetBelief(GetBeliefRequest) returns (BeliefDetail);
+  // SetBeliefLifecycle transitions a belief (candidate | promoted | superseded).
+  rpc SetBeliefLifecycle(SetBeliefLifecycleRequest) returns (SetBeliefLifecycleResponse);
   // Classify reports whether a candidate statement fits established knowledge or is novel.
   rpc Classify(ClassifyRequest) returns (ClassifyResponse);
   // GetDecision returns a single recorded decision by id.
@@ -115,9 +115,9 @@ service MnemosService {
   rpc GetBlocks(GetBlocksRequest) returns (GetBlocksResponse);
   // SetBlock sets or appends a working-memory block.
   rpc SetBlock(SetBlockRequest) returns (SetBlockResponse);
-  // Synthesize runs a synthesis pass (actions -> lessons + playbooks).
+  // Synthesize runs a synthesis pass (actions -> schemas + reflexes).
   rpc Synthesize(SynthesizeRequest) returns (SynthesizeResponse);
-  // Timeline returns events on the temporal timeline.
+  // Timeline returns episodes on the temporal timeline.
   rpc Timeline(TimelineRequest) returns (TimelineResponse);
   // Signals returns detected temporal patterns.
   rpc Signals(SignalsRequest) returns (SignalsResponse);
@@ -147,10 +147,10 @@ message HealthResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Events
+// Episodes
 // ---------------------------------------------------------------------------
 
-message Event {
+message Episode {
   string                 id             = 1;
   string                 run_id         = 2;
   string                 schema_version = 3;
@@ -161,26 +161,26 @@ message Event {
   google.protobuf.Timestamp ingested_at = 8;
 }
 
-message ListEventsRequest {
+message ListEpisodesRequest {
   Pagination pagination = 1;
 }
 
-message ListEventsResponse {
-  repeated Event events = 1;
-  int32          total  = 2;
-  int32          limit  = 3;
-  int32          offset = 4;
+message ListEpisodesResponse {
+  repeated Episode episodes = 1;
+  int32            total    = 2;
+  int32            limit    = 3;
+  int32            offset   = 4;
 }
 
-message AppendEventsRequest {
-  repeated Event events = 1;
+message AppendEpisodesRequest {
+  repeated Episode episodes = 1;
 }
 
 // ---------------------------------------------------------------------------
-// Claims
+// Beliefs
 // ---------------------------------------------------------------------------
 
-message Claim {
+message Belief {
   string    id         = 1;
   string    text       = 2;
   string    type       = 3;
@@ -192,71 +192,71 @@ message Claim {
   string    visibility = 7;
 }
 
-message ClaimEvidence {
-  string claim_id = 1;
-  string event_id = 2;
+message BeliefEvidence {
+  string belief_id  = 1;
+  string episode_id = 2;
 }
 
-message ListClaimsRequest {
+message ListBeliefsRequest {
   Pagination pagination        = 1;
   string     type_filter       = 2;
   string     status_filter     = 3;
   bool       include_evidence  = 4;
-  // run_id: when set, only returns claims with ≥1 evidence link to an
-  // event whose RunID equals this value. Foundational tenant filter for
+  // run_id: when set, only returns beliefs with ≥1 evidence link to an
+  // episode whose RunID equals this value. Foundational tenant filter for
   // integrators that scope memory by run_id prefix (e.g. animal:<uuid>).
-  // Claims with no evidence are excluded — fail closed.
+  // Beliefs with no evidence are excluded — fail closed.
   string     run_id            = 5;
-  // as_of: validity-time filter. When set, only returns claims that
+  // as_of: validity-time filter. When set, only returns beliefs that
   // were valid at this timestamp (valid_from <= as_of AND (valid_to is
   // zero OR as_of < valid_to)). Mirrors the HTTP ?as_of= query param —
   // gRPC parity for Zep-style time-travel reads.
   google.protobuf.Timestamp as_of = 6;
-  // recorded_as_of: ingestion-time filter. When set, drops claims
+  // recorded_as_of: ingestion-time filter. When set, drops beliefs
   // recorded after this timestamp so the response is reproducible
   // from the snapshot of the store as it stood then.
   google.protobuf.Timestamp recorded_as_of = 7;
 }
 
-message ListClaimsResponse {
-  repeated Claim         claims   = 1;
-  repeated ClaimEvidence evidence = 2;
-  int32                  total    = 3;
-  int32                  limit    = 4;
-  int32                  offset   = 5;
+message ListBeliefsResponse {
+  repeated Belief         beliefs  = 1;
+  repeated BeliefEvidence evidence = 2;
+  int32                   total    = 3;
+  int32                   limit    = 4;
+  int32                   offset   = 5;
 }
 
-message AppendClaimsRequest {
-  repeated Claim         claims   = 1;
-  repeated ClaimEvidence evidence = 2;
+message AppendBeliefsRequest {
+  repeated Belief         beliefs  = 1;
+  repeated BeliefEvidence evidence = 2;
 }
 
 // ---------------------------------------------------------------------------
-// Relationships
+// Associations
 // ---------------------------------------------------------------------------
 
-message Relationship {
-  string    id            = 1;
-  string    type          = 2;
-  string    from_claim_id = 3;
-  string    to_claim_id   = 4;
+message Association {
+  string    id             = 1;
+  string    type           = 2;
+  string    from_belief_id = 3;
+  string    to_belief_id   = 4;
   google.protobuf.Timestamp created_at = 5;
 }
 
-message ListRelationshipsRequest {
+message ListAssociationsRequest {
   Pagination pagination  = 1;
   string     type_filter = 2;
 }
 
-message ListRelationshipsResponse {
-  repeated Relationship relationships = 1;
-  int32                   total       = 2;
-  int32                   limit       = 3;
-  int32                   offset      = 4;
+message ListAssociationsResponse {
+  repeated Association associations = 1;
+  int32               total        = 2;
+  int32               limit        = 3;
+  int32               offset       = 4;
 }
 
-message AppendRelationshipsRequest {
-  repeated Relationship relationships = 1;
+message AppendAssociationsRequest {
+  repeated Association associations = 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +273,7 @@ message Embedding {
 
 message ListEmbeddingsRequest {
   Pagination pagination  = 1;
-  string     entity_type = 2; // "event" or "claim"; empty = all
+  string     entity_type = 2; // "episode" or "belief"; empty = all
 }
 
 message ListEmbeddingsResponse {
@@ -303,13 +303,13 @@ message AppendResponse {
 message MetricsRequest {}
 
 message MetricsResponse {
-  int64 runs             = 1;
-  int64 events           = 2;
-  int64 claims           = 3;
-  int64 contested_claims = 4;
-  int64 relationships    = 5;
-  int64 contradictions   = 6;
-  int64 embeddings       = 7;
+  int64 runs              = 1;
+  int64 episodes          = 2;
+  int64 beliefs           = 3;
+  int64 contested_beliefs = 4;
+  int64 associations      = 5;
+  int64 dissonances       = 6;
+  int64 embeddings        = 7;
 }
 
 // ---------------------------------------------------------------------------
@@ -374,19 +374,19 @@ message ListOutcomesResponse {
 message AppendOutcomesRequest { repeated Outcome outcomes = 1; }
 
 // ---------------------------------------------------------------------------
-// Lessons
+// Schemas
 // ---------------------------------------------------------------------------
 
-message Scope {
+message Context {
   string service = 1;
   string env     = 2;
   string team    = 3;
 }
 
-message Lesson {
+message Schema {
   string                    id             = 1;
   string                    statement      = 2;
-  Scope                     scope          = 3;
+  Context                   context        = 3;
   string                    trigger        = 4;
   string                    kind           = 5;
   repeated string           evidence       = 6;
@@ -397,20 +397,20 @@ message Lesson {
   string                    created_by     = 11;
 }
 
-message ListLessonsRequest {
+message ListSchemasRequest {
   Pagination pagination = 1;
-  string     service    = 2; // optional scope filter
+  string     service    = 2; // optional context filter
   string     trigger    = 3; // optional trigger filter
 }
 
-message ListLessonsResponse {
-  repeated Lesson lessons = 1;
+message ListSchemasResponse {
+  repeated Schema schemas = 1;
   int32           total   = 2;
   int32           limit   = 3;
   int32           offset  = 4;
 }
 
-message AppendLessonsRequest { repeated Lesson lessons = 1; }
+message AppendSchemasRequest { repeated Schema schemas = 1; }
 
 // ---------------------------------------------------------------------------
 // Decisions
@@ -425,7 +425,7 @@ message Decision {
   repeated string           beliefs      = 6;
   repeated string           alternatives = 7;
   string                    outcome_id   = 8;
-  Scope                     scope        = 9;
+  Context                   context      = 9;
   google.protobuf.Timestamp chosen_at    = 10;
   string                    created_by   = 11;
   google.protobuf.Timestamp created_at   = 12;
@@ -446,23 +446,23 @@ message ListDecisionsResponse {
 message AppendDecisionsRequest { repeated Decision decisions = 1; }
 
 // ---------------------------------------------------------------------------
-// Playbooks
+// Reflexes
 // ---------------------------------------------------------------------------
 
-message PlaybookStep {
+message ReflexStep {
   int32  order       = 1;
   string action      = 2;
   string description = 3;
   string condition   = 4;
 }
 
-message Playbook {
+message Reflex {
   string                    id                   = 1;
   string                    trigger              = 2;
   string                    statement            = 3;
-  Scope                     scope                = 4;
-  repeated PlaybookStep     steps                = 5;
-  repeated string           derived_from_lessons = 6;
+  Context                   context              = 4;
+  repeated ReflexStep       steps                = 5;
+  repeated string           derived_from_schemas = 6;
   double                    confidence           = 7;
   google.protobuf.Timestamp derived_at           = 8;
   google.protobuf.Timestamp last_verified        = 9;
@@ -470,26 +470,26 @@ message Playbook {
   string                    created_by           = 11;
 }
 
-message ListPlaybooksRequest {
+message ListReflexesRequest {
   Pagination pagination = 1;
   string     trigger    = 2; // optional filter
-  string     service    = 3; // optional scope filter
+  string     service    = 3; // optional context filter
 }
 
-message ListPlaybooksResponse {
-  repeated Playbook playbooks = 1;
-  int32             total     = 2;
-  int32             limit     = 3;
-  int32             offset    = 4;
+message ListReflexesResponse {
+  repeated Reflex reflexes = 1;
+  int32           total    = 2;
+  int32           limit    = 3;
+  int32           offset   = 4;
 }
 
-message AppendPlaybooksRequest { repeated Playbook playbooks = 1; }
+message AppendReflexesRequest { repeated Reflex reflexes = 1; }
 
 // ---------------------------------------------------------------------------
-// EntityRelationships
+// EntityAssociations
 // ---------------------------------------------------------------------------
 
-message EntityRelationship {
+message EntityAssociation {
   string                    id         = 1;
   string                    kind       = 2;
   string                    from_id    = 3;
@@ -500,21 +500,21 @@ message EntityRelationship {
   string                    created_by = 8;
 }
 
-message ListEntityRelationshipsRequest {
+message ListEntityAssociationsRequest {
   Pagination pagination  = 1;
   string     kind        = 2; // optional filter
   string     entity_id   = 3; // optional: list edges touching this entity
   string     entity_type = 4; // required when entity_id is set
 }
 
-message ListEntityRelationshipsResponse {
-  repeated EntityRelationship edges  = 1;
-  int32                       total  = 2;
-  int32                       limit  = 3;
-  int32                       offset = 4;
+message ListEntityAssociationsResponse {
+  repeated EntityAssociation edges  = 1;
+  int32                      total  = 2;
+  int32                      limit  = 3;
+  int32                      offset = 4;
 }
 
-message AppendEntityRelationshipsRequest { repeated EntityRelationship edges = 1; }
+message AppendEntityAssociationsRequest { repeated EntityAssociation edges = 1; }
 
 // ---------------------------------------------------------------------------
 // Connected brain (cognitive layer)
@@ -525,10 +525,10 @@ message WhoKnowsRequest {
   int32  limit = 2;
 }
 message Expert {
-  string worker      = 1;
-  double affinity    = 2;
-  double reliability = 3;
-  int32  claim_count = 4;
+  string worker       = 1;
+  double affinity     = 2;
+  double reliability  = 3;
+  int32  belief_count = 4;
 }
 message WhoKnowsResponse {
   string          query   = 1;
@@ -537,10 +537,10 @@ message WhoKnowsResponse {
 
 message KnowledgeGapsRequest { int32 limit = 1; }
 message Gap {
-  string claim_id = 1;
-  string text     = 2;
-  string kind     = 3;
-  double score    = 4;
+  string belief_id = 1;
+  string text      = 2;
+  string kind      = 3;
+  double score     = 4;
 }
 message KnowledgeGapsResponse { repeated Gap gaps = 1; }
 
@@ -570,46 +570,46 @@ message CalibrationResponse {
 
 message HypercorrectionsRequest {}
 message Hypercorrection {
-  string                    contradicted_claim_id = 1;
-  string                    contradicted_text     = 2;
-  double                    contradicted_trust    = 3;
-  bool                      contradicted_promoted = 4;
-  string                    challenging_claim_id  = 5;
-  string                    challenging_text      = 6;
-  google.protobuf.Timestamp detected_at           = 7;
+  string                    contradicted_belief_id = 1;
+  string                    contradicted_text      = 2;
+  double                    contradicted_trust     = 3;
+  bool                      contradicted_promoted  = 4;
+  string                    challenging_belief_id  = 5;
+  string                    challenging_text       = 6;
+  google.protobuf.Timestamp detected_at            = 7;
 }
 message HypercorrectionsResponse { repeated Hypercorrection hypercorrections = 1; }
 
 message RecombinationsRequest { int32 limit = 1; }
 message Recombination {
-  string claim_a    = 1;
+  string belief_a   = 1;
   string text_a     = 2;
-  string claim_b    = 3;
+  string belief_b   = 3;
   string text_b     = 4;
   double similarity = 5;
 }
 message RecombinationsResponse { repeated Recombination recombinations = 1; }
 
-message AnalogousClaimsRequest {
-  string claim_id = 1;
-  int32  limit    = 2;
+message AnalogousBeliefsRequest {
+  string belief_id = 1;
+  int32  limit     = 2;
 }
 message Analogy {
-  string claim_id   = 1;
+  string belief_id  = 1;
   string text       = 2;
   double similarity = 3;
 }
-message AnalogousClaimsResponse {
-  string           claim_id  = 1;
+message AnalogousBeliefsResponse {
+  string           belief_id = 1;
   repeated Analogy analogous = 2;
 }
 
 // ---------------------------------------------------------------------------
-// Claim CRUD (cognitive layer)
+// Belief CRUD (cognitive layer)
 // ---------------------------------------------------------------------------
 
-message GetClaimRequest { string claim_id = 1; }
-message ClaimDetail {
+message GetBeliefRequest { string belief_id = 1; }
+message BeliefDetail {
   string                    id          = 1;
   string                    statement   = 2;
   string                    type        = 3;
@@ -621,12 +621,12 @@ message ClaimDetail {
   google.protobuf.Timestamp recorded_at = 9;
 }
 
-message SetClaimLifecycleRequest {
-  string claim_id  = 1;
+message SetBeliefLifecycleRequest {
+  string belief_id = 1;
   string lifecycle = 2; // candidate | promoted | superseded
 }
-message SetClaimLifecycleResponse {
-  string claim_id  = 1;
+message SetBeliefLifecycleResponse {
+  string belief_id = 1;
   string lifecycle = 2;
 }
 
@@ -655,7 +655,7 @@ message RecallRequest {
   int32  max_rounds = 8; // iterative mode
 }
 message RecallResult {
-  string claim_id     = 1;
+  string belief_id    = 1;
   string text         = 2;
   string type         = 3;
   double confidence   = 4;
@@ -664,10 +664,10 @@ message RecallResult {
   string provenance   = 7;
 }
 message RecallSufficiency {
-  double confidence  = 1;
-  int32  claim_count = 2;
-  bool   sufficient  = 3;
-  double floor       = 4;
+  double confidence   = 1;
+  int32  belief_count = 2;
+  bool   sufficient   = 3;
+  double floor        = 4;
 }
 message RecallEffort {
   double budget  = 1;
@@ -676,8 +676,8 @@ message RecallEffort {
   int32  breadth = 4;
 }
 message RecallConflict {
-  string claim_id            = 1;
-  string claim_text          = 2;
+  string belief_id           = 1;
+  string belief_text         = 2;
   string contradicting_id    = 3;
   string contradicting_text  = 4;
   double contradicting_trust = 5;
@@ -719,11 +719,11 @@ message SetBlockResponse {
 
 message SynthesizeRequest {}
 message SynthesizeResponse {
-  int32 lessons_derived   = 1;
-  int32 playbooks_derived = 2;
+  int32 schemas_derived = 1;
+  int32 reflexes_derived = 2;
 }
 
-message TimelineEvent {
+message TimelineEpisode {
   string                    id       = 1;
   google.protobuf.Timestamp at       = 2;
   string                    type     = 3;
@@ -738,7 +738,7 @@ message TimelineRequest {
   repeated string           types  = 4;
   int32                     limit  = 5;
 }
-message TimelineResponse { repeated TimelineEvent events = 1; }
+message TimelineResponse { repeated TimelineEpisode episodes = 1; }
 
 message MemorySignal {
   string                    pattern      = 1;

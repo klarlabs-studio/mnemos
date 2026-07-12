@@ -62,7 +62,7 @@ func newFeedbackFixture(t *testing.T) feedbackFixture {
 func postFeedback(t *testing.T, f feedbackFixture, claimID string, body feedbackRequest) (int, feedbackResponse) {
 	t.Helper()
 	buf, _ := json.Marshal(body)
-	req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/v1/claims/"+claimID+"/feedback", bytes.NewReader(buf))
+	req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/v1/beliefs/"+claimID+"/feedback", bytes.NewReader(buf))
 	req.Header.Set("Authorization", f.header)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -166,7 +166,7 @@ func TestFeedback_PositiveResetsStreak(t *testing.T) {
 func TestFeedback_RequiresClaimsWriteScope(t *testing.T) {
 	f := newFeedbackFixture(t)
 	claimID := seedFeedbackClaim(t, f)
-	req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/v1/claims/"+claimID+"/feedback",
+	req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/v1/beliefs/"+claimID+"/feedback",
 		bytes.NewReader([]byte(`{"helpful":true}`)))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -35,7 +35,7 @@ import (
 )
 
 // embedderResolver returns the embedding client used by the semantic-
-// search branch of /v1/claims. Production reads env via
+// search branch of /v1/beliefs. Production reads env via
 // embedding.ConfigFromEnv; tests override this hook to inject a stub
 // without touching env state.
 var embedderResolver = func() (embedding.Client, error) {
@@ -347,14 +347,15 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant b
 	leadsLogger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 	mux.Handle("/v1/leads", leadsRateLimitMiddleware(makeLeadsHandler(leadsLogger)))
 	mux.HandleFunc("/v1/process", makeProcessHandler())
-	mux.HandleFunc("/v1/events", makeEventsHandler(conn, gw))
-	mux.HandleFunc("/v1/claims", makeClaimsHandler(conn, gw))
-	mux.HandleFunc("/v1/relationships", makeRelationshipsHandler(conn, gw))
+	mux.HandleFunc("/v1/episodes", makeEventsHandler(conn, gw))
+	mux.HandleFunc("/v1/beliefs", makeClaimsHandler(conn, gw))
+	mux.HandleFunc("/v1/associations", makeRelationshipsHandler(conn, gw))
 	mux.HandleFunc("/v1/embeddings", makeEmbeddingsHandler(conn, gw))
 	mux.HandleFunc("/v1/metrics", makeMetricsHandler(conn))
+	mux.HandleFunc("/v1/schemas", makeSchemasHandler(conn))
 	mux.HandleFunc("/v1/context", makeContextHandler(conn))
 	mux.HandleFunc("/v1/search", makeSearchHandler(conn))
-	mux.HandleFunc("/v1/claims/", makeClaimSubresourceHandler(conn, gw, mem))
+	mux.HandleFunc("/v1/beliefs/", makeClaimSubresourceHandler(conn, gw, mem))
 	mux.HandleFunc("/v1/incidents", makeIncidentsHandler(conn, gw))
 	mux.HandleFunc("/v1/federation/export", makeFederationExportHandler(conn))
 	mux.HandleFunc("/v1/incidents/", makeIncidentSubresourceHandler(conn, gw))
@@ -378,12 +379,6 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant b
 	mux.HandleFunc("/v1/synthesize", makeSynthesizeHandler(mem))
 	mux.HandleFunc("/v1/timeline", makeTimelineHandler(mem))
 	mux.HandleFunc("/v1/signals", makeSignalsHandler(mem))
-
-	// ADR 0011 Phase D — brain-native REST API v2, mounted alongside the
-	// untouched v1 surface. Registered in serve_v2.go (not here) so the v1
-	// TestAPISurfaceParity route scan stays unchanged; the v2 routes reuse the
-	// exact v1 handlers and inherit this mux's auth + tenant-scoping middleware.
-	registerV2Routes(mux, conn, gw)
 
 	mux.Handle("/internal/metrics", makeMnemosMetricsHandler())
 
@@ -615,7 +610,7 @@ func handleLanding(w http.ResponseWriter, r *http.Request) {
 }
 
 type eventsResponse struct {
-	Events []eventDTO `json:"events"`
+	Events []eventDTO `json:"episodes"`
 	Total  int        `json:"total"`
 	Limit  int        `json:"limit"`
 	Offset int        `json:"offset"`
@@ -803,7 +798,7 @@ func paginate[T any](xs []T, limit, offset int) []T {
 }
 
 type claimsResponse struct {
-	Claims   []claimDTO          `json:"claims"`
+	Claims   []claimDTO          `json:"beliefs"`
 	Evidence []claimEvidenceItem `json:"evidence,omitempty"`
 	Total    int                 `json:"total"`
 	Limit    int                 `json:"limit"`
@@ -1187,7 +1182,7 @@ func semanticSearchClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *htt
 // the conn.Claims.ListEvidenceByClaimIDs port method.)
 
 type relationshipsResponse struct {
-	Relationships []relationshipDTO `json:"relationships"`
+	Relationships []relationshipDTO `json:"associations"`
 	Total         int               `json:"total"`
 	Limit         int               `json:"limit"`
 	Offset        int               `json:"offset"`
@@ -1196,8 +1191,8 @@ type relationshipsResponse struct {
 type relationshipDTO struct {
 	ID          string `json:"id"`
 	Type        string `json:"type"`
-	FromClaimID string `json:"from_claim_id"`
-	ToClaimID   string `json:"to_claim_id"`
+	FromClaimID string `json:"from_belief_id"`
+	ToClaimID   string `json:"to_belief_id"`
 	CreatedAt   string `json:"created_at"`
 }
 
@@ -1287,11 +1282,11 @@ func listRelationshipsHandler(conn *store.Conn, w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, relationshipsResponse{Relationships: out, Total: total, Limit: limit, Offset: offset})
 }
 
-// appendEventsRequest is the body for POST /v1/events. Single-event submits
+// appendEventsRequest is the body for POST /v1/episodes. Single-event submits
 // are common (raw streams) but a batch shape future-proofs the endpoint and
 // keeps DTOs symmetric with claims/relationships.
 type appendEventsRequest struct {
-	Events []eventDTO `json:"events"`
+	Events []eventDTO `json:"episodes"`
 }
 
 type appendResponse struct {
@@ -1421,13 +1416,13 @@ func appendEventsHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Req
 }
 
 type appendClaimsRequest struct {
-	Claims   []claimDTO          `json:"claims"`
+	Claims   []claimDTO          `json:"beliefs"`
 	Evidence []claimEvidenceItem `json:"evidence,omitempty"`
 }
 
 type claimEvidenceItem struct {
-	ClaimID string `json:"claim_id"`
-	EventID string `json:"event_id"`
+	ClaimID string `json:"belief_id"`
+	EventID string `json:"episode_id"`
 }
 
 // deleteClaimsResponse carries the per-table delete counts plus the
@@ -1437,13 +1432,13 @@ type claimEvidenceItem struct {
 type deleteClaimsResponse struct {
 	RequestID            string `json:"request_id"`
 	RunID                string `json:"run_id"`
-	ClaimsDeleted        int    `json:"claims_deleted"`
-	EventsDeleted        int    `json:"events_deleted"`
+	ClaimsDeleted        int    `json:"beliefs_deleted"`
+	EventsDeleted        int    `json:"episodes_deleted"`
 	EmbeddingsDeleted    int    `json:"embeddings_deleted"`
-	RelationshipsDeleted int    `json:"relationships_deleted"`
+	RelationshipsDeleted int    `json:"associations_deleted"`
 }
 
-// deleteClaimsHandler implements DELETE /v1/claims?run_id=<prefix>.
+// deleteClaimsHandler implements DELETE /v1/beliefs?run_id=<prefix>.
 // It is the GDPR Art.17 right-to-be-forgotten endpoint: in one call,
 // every claim tied to events under the given run_id is removed along
 // with its dependent rows (evidence links, embeddings, status
@@ -1677,7 +1672,7 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 }
 
 type appendRelationshipsRequest struct {
-	Relationships []relationshipDTO `json:"relationships"`
+	Relationships []relationshipDTO `json:"associations"`
 }
 
 func appendRelationshipsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
@@ -1917,11 +1912,11 @@ func appendEmbeddingsHandler(conn *store.Conn, gw *govwrite.Writer, w http.Respo
 
 type metricsResponse struct {
 	Runs            int64 `json:"runs"`
-	Events          int64 `json:"events"`
-	Claims          int64 `json:"claims"`
-	ContestedClaims int64 `json:"contested_claims"`
-	Relationships   int64 `json:"relationships"`
-	Contradictions  int64 `json:"contradictions"`
+	Events          int64 `json:"episodes"`
+	Claims          int64 `json:"beliefs"`
+	ContestedClaims int64 `json:"contested_beliefs"`
+	Relationships   int64 `json:"associations"`
+	Contradictions  int64 `json:"dissonances"`
 	Embeddings      int64 `json:"embeddings"`
 }
 
@@ -2357,21 +2352,21 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 	}
 }
 
-// makeClaimSubresourceHandler routes requests under /v1/claims/<id>/<subresource>.
+// makeClaimSubresourceHandler routes requests under /v1/beliefs/<id>/<subresource>.
 // Currently supports:
 //
-//	GET /v1/claims/<id>/provenance  → trust provenance report for the claim
-//	GET /v1/claims/<id>/export.md   → human-readable markdown export with provenance annotations
+//	GET /v1/beliefs/<id>/provenance  → trust provenance report for the belief
+//	GET /v1/beliefs/<id>/export.md   → human-readable markdown export with provenance annotations
 func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
 		gw := scopedWriter(r.Context(), gw)
 		mem := scopedMem(r.Context(), mem)
-		// path: /v1/claims/<id>/<subresource>
+		// path: /v1/beliefs/<id>/<subresource>
 		// Strip the prefix so we can parse id + subresource.
-		tail := strings.TrimPrefix(r.URL.Path, "/v1/claims/")
+		tail := strings.TrimPrefix(r.URL.Path, "/v1/beliefs/")
 		parts := strings.SplitN(tail, "/", 2)
-		// Bare /v1/claims/<id> (no subresource) → single-claim Get (v0.67).
+		// Bare /v1/beliefs/<id> (no subresource) → single-belief Get (v0.67).
 		if len(parts) == 1 && parts[0] != "" {
 			makeGetClaimHandler(mem, parts[0])(w, r)
 			return
@@ -2421,7 +2416,7 @@ type claimHistoryResponse struct {
 	Versions []claimVersionDTO `json:"versions"`
 }
 
-// makeClaimHistoryHandler handles GET /v1/claims/<id>/history. Returns
+// makeClaimHistoryHandler handles GET /v1/beliefs/<id>/history. Returns
 // the full version chain newest-first, so a caller diffing can read
 // versions[0].text vs versions[1].text without re-sorting client-side.
 func makeClaimHistoryHandler(conn *store.Conn, claimID string) http.HandlerFunc {
@@ -2457,7 +2452,7 @@ func makeClaimHistoryHandler(conn *store.Conn, claimID string) http.HandlerFunc 
 }
 
 // feedbackRequest is the inbound wire shape for
-// POST /v1/claims/<id>/feedback.
+// POST /v1/beliefs/<id>/feedback.
 type feedbackRequest struct {
 	// Helpful is the binary signal: true = the claim was useful,
 	// false = the consumer pushed back.
@@ -2499,7 +2494,7 @@ func feedbackAutoContestThreshold() int {
 	return envInt("MNEMOS_FEEDBACK_CONTEST_THRESHOLD", 3)
 }
 
-// makeFeedbackHandler returns the POST /v1/claims/<id>/feedback
+// makeFeedbackHandler returns the POST /v1/beliefs/<id>/feedback
 // handler. Reads the current claim + feedback row, applies the
 // helpful/not-helpful signal (confidence decay on negative, streak
 // reset on positive), auto-transitions to "contested" when the
@@ -2617,7 +2612,7 @@ func envInt(key string, fallback int) int {
 	return n
 }
 
-// makeProvenanceHandler handles GET /v1/claims/<id>/provenance.
+// makeProvenanceHandler handles GET /v1/beliefs/<id>/provenance.
 // It builds a query.Engine and delegates to WhyTrustClaim to produce a
 // structured domain.ProvenanceReport explaining how the claim's trust
 // score was computed from its provenance signals.
@@ -2639,7 +2634,7 @@ func makeProvenanceHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	}
 }
 
-// makeClaimMarkdownExportHandler handles GET /v1/claims/<id>/export.md.
+// makeClaimMarkdownExportHandler handles GET /v1/beliefs/<id>/export.md.
 // It fetches the claim, runs a provenance report (unless ?provenance=false
 // is passed), and returns a Git-friendly markdown document with YAML
 // frontmatter carrying trust score, confidence rationale, and source links.

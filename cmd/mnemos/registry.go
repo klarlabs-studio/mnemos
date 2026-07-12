@@ -204,17 +204,17 @@ func handlePush(args []string, _ Flags) {
 		return
 	}
 
-	pushedEvents, err := pushBatched(ctx, client, regURL+"/v1/events", token, "events", batchToAny(eventsToBatches(events)))
+	pushedEvents, err := pushBatched(ctx, client, regURL+"/v1/episodes", token, "episodes", batchToAny(eventsToBatches(events)))
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "push events"))
 		return
 	}
-	pushedClaims, err := pushBatched(ctx, client, regURL+"/v1/claims", token, "claims", batchToAny(claimsToBatches(claims, evidence)))
+	pushedClaims, err := pushBatched(ctx, client, regURL+"/v1/beliefs", token, "beliefs", batchToAny(claimsToBatches(claims, evidence)))
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "push claims"))
 		return
 	}
-	pushedRels, err := pushBatched(ctx, client, regURL+"/v1/relationships", token, "relationships", batchToAny(relsToBatches(rels)))
+	pushedRels, err := pushBatched(ctx, client, regURL+"/v1/associations", token, "associations", batchToAny(relsToBatches(rels)))
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "push relationships"))
 		return
@@ -407,7 +407,7 @@ func eventsToBatches(events []eventDTO) []map[string]any {
 		if end > len(events) {
 			end = len(events)
 		}
-		out = append(out, map[string]any{"events": events[i:end]})
+		out = append(out, map[string]any{"episodes": events[i:end]})
 	}
 	return out
 }
@@ -426,7 +426,7 @@ func claimsToBatches(claims []claimDTO, evidence []claimEvidenceItem) []map[stri
 		if end > len(claims) {
 			end = len(claims)
 		}
-		body := map[string]any{"claims": claims[i:end]}
+		body := map[string]any{"beliefs": claims[i:end]}
 		if i == 0 && len(evidence) > 0 {
 			body["evidence"] = evidence
 		}
@@ -442,7 +442,7 @@ func relsToBatches(rels []relationshipDTO) []map[string]any {
 		if end > len(rels) {
 			end = len(rels)
 		}
-		out = append(out, map[string]any{"relationships": rels[i:end]})
+		out = append(out, map[string]any{"associations": rels[i:end]})
 	}
 	return out
 }
@@ -490,7 +490,7 @@ func pullEvents(ctx context.Context, client *http.Client, regURL, token string) 
 	var events []eventDTO
 	offset := 0
 	for {
-		page, err := fetchPage(ctx, client, fmt.Sprintf("%s/v1/events?limit=%d&offset=%d", regURL, pullPageSize, offset), token)
+		page, err := fetchPage(ctx, client, fmt.Sprintf("%s/v1/episodes?limit=%d&offset=%d", regURL, pullPageSize, offset), token)
 		if err != nil {
 			return nil, err
 		}
@@ -512,7 +512,7 @@ func pullClaims(ctx context.Context, client *http.Client, regURL, token string) 
 	var evidence []claimEvidenceItem
 	offset := 0
 	for {
-		page, err := fetchPage(ctx, client, fmt.Sprintf("%s/v1/claims?limit=%d&offset=%d", regURL, pullPageSize, offset), token)
+		page, err := fetchPage(ctx, client, fmt.Sprintf("%s/v1/beliefs?limit=%d&offset=%d", regURL, pullPageSize, offset), token)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -534,7 +534,7 @@ func pullRelationships(ctx context.Context, client *http.Client, regURL, token s
 	var rels []relationshipDTO
 	offset := 0
 	for {
-		page, err := fetchPage(ctx, client, fmt.Sprintf("%s/v1/relationships?limit=%d&offset=%d", regURL, pullPageSize, offset), token)
+		page, err := fetchPage(ctx, client, fmt.Sprintf("%s/v1/associations?limit=%d&offset=%d", regURL, pullPageSize, offset), token)
 		if err != nil {
 			return nil, err
 		}

@@ -59,7 +59,7 @@ func newGDPRFixture(t *testing.T) gdprFixture {
 
 func gdprDelete(t *testing.T, f gdprFixture, runID string) (int, deleteClaimsResponse) {
 	t.Helper()
-	req, _ := http.NewRequest(http.MethodDelete, f.srv.URL+"/v1/claims?run_id="+runID, nil)
+	req, _ := http.NewRequest(http.MethodDelete, f.srv.URL+"/v1/beliefs?run_id="+runID, nil)
 	req.Header.Set("Authorization", f.header)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -185,7 +185,7 @@ func TestDeleteClaims_SharedEvidencePreservesClaim(t *testing.T) {
 // store.
 func TestDeleteClaims_RequiresRunID(t *testing.T) {
 	f := newGDPRFixture(t)
-	req, _ := http.NewRequest(http.MethodDelete, f.srv.URL+"/v1/claims", nil)
+	req, _ := http.NewRequest(http.MethodDelete, f.srv.URL+"/v1/beliefs", nil)
 	req.Header.Set("Authorization", f.header)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -201,7 +201,7 @@ func TestDeleteClaims_RequiresRunID(t *testing.T) {
 // claims:write. GDPR delete is privileged.
 func TestDeleteClaims_RequiresAuthScope(t *testing.T) {
 	f := newGDPRFixture(t)
-	req, _ := http.NewRequest(http.MethodDelete, f.srv.URL+"/v1/claims?run_id=anything", nil)
+	req, _ := http.NewRequest(http.MethodDelete, f.srv.URL+"/v1/beliefs?run_id=anything", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE: %v", err)

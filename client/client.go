@@ -257,8 +257,8 @@ type SearchClaim struct {
 type SearchContradiction struct {
 	ID          string `json:"id"`
 	Type        string `json:"type"`
-	FromClaimID string `json:"from_claim_id"`
-	ToClaimID   string `json:"to_claim_id"`
+	FromClaimID string `json:"from_belief_id"`
+	ToClaimID   string `json:"to_belief_id"`
 	CreatedAt   string `json:"created_at"`
 }
 
@@ -331,7 +331,7 @@ func (c *Client) SetExpectation(ctx context.Context, claimID string, predicted, 
 		body["horizon"] = horizon.UTC().Format(time.RFC3339)
 	}
 	var out Expectation
-	if err := c.do(ctx, http.MethodPost, "/v1/claims/"+url.PathEscape(claimID)+"/expectation", body, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/beliefs/"+url.PathEscape(claimID)+"/expectation", body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -342,7 +342,7 @@ func (c *Client) SetExpectation(ctx context.Context, claimID string, predicted, 
 // POST /v1/claims/{id}/observation.
 func (c *Client) RecordObservation(ctx context.Context, claimID string, observed float64) (*Expectation, error) {
 	var out Expectation
-	if err := c.do(ctx, http.MethodPost, "/v1/claims/"+url.PathEscape(claimID)+"/observation", map[string]any{"observed": observed}, &out); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/beliefs/"+url.PathEscape(claimID)+"/observation", map[string]any{"observed": observed}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -352,7 +352,7 @@ func (c *Client) RecordObservation(ctx context.Context, claimID string, observed
 // nil when none is set. GET /v1/claims/{id}/expectation.
 func (c *Client) Expectation(ctx context.Context, claimID string) (*Expectation, error) {
 	var out Expectation
-	if err := c.do(ctx, http.MethodGet, "/v1/claims/"+url.PathEscape(claimID)+"/expectation", nil, &out); err != nil {
+	if err := c.do(ctx, http.MethodGet, "/v1/beliefs/"+url.PathEscape(claimID)+"/expectation", nil, &out); err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
 			return nil, nil

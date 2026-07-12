@@ -60,21 +60,21 @@ type mcpQueryInput struct {
 	Question string `json:"question" jsonschema:"required,description=Natural language question to ask Mnemos"`
 	RunID    string `json:"runId,omitempty" jsonschema:"description=Optional run ID to scope the query"`
 	Hops     int    `json:"hops,omitempty" jsonschema:"description=BFS hop expansion depth through supports/contradicts edges (0-5, default 0)"`
-	Scope    string `json:"scope,omitempty" jsonschema:"description=Which brain(s) to search: 'both' (default; global + this repo's brain if one exists), 'global', or 'repo'. Repo claims win on conflict and are tagged claim_provenance=repo."`
+	Scope    string `json:"context,omitempty" jsonschema:"description=Which brain(s) to search: 'both' (default; global + this repo's brain if one exists), 'global', or 'repo'. Repo claims win on conflict and are tagged claim_provenance=repo."`
 }
 
 type mcpQueryOutput struct {
 	Answer         string                `json:"answer"`
-	Claims         []domain.Claim        `json:"claims"`
-	Contradictions []domain.Relationship `json:"contradictions"`
+	Claims         []domain.Claim        `json:"beliefs"`
+	Contradictions []domain.Relationship `json:"dissonances"`
 	Timeline       []string              `json:"timeline"`
 	// ClaimProvenance maps claim ID to "local" or a registry URL so the
 	// agent can show which claims came from a federated registry.
-	ClaimProvenance map[string]string `json:"claim_provenance,omitempty"`
+	ClaimProvenance map[string]string `json:"belief_provenance,omitempty"`
 	// ClaimHopDistance maps claim ID to the BFS hop count from the
 	// directly-retrieved set (0 = direct, N>0 = expanded via N hops of
 	// supports/contradicts). Empty when hops=0.
-	ClaimHopDistance map[string]int `json:"claim_hop_distance,omitempty"`
+	ClaimHopDistance map[string]int `json:"belief_hop_distance,omitempty"`
 }
 
 type mcpProcessTextInput struct {
@@ -85,9 +85,9 @@ type mcpProcessTextInput struct {
 
 type mcpProcessTextOutput struct {
 	RunID          string `json:"runId"`
-	Events         int    `json:"events"`
-	Claims         int    `json:"claims"`
-	Relationships  int    `json:"relationships"`
+	Events         int    `json:"episodes"`
+	Claims         int    `json:"beliefs"`
+	Relationships  int    `json:"associations"`
 	Embeddings     int    `json:"embeddings"`
 	UsedLLM        bool   `json:"usedLlm"`
 	UsedEmbeddings bool   `json:"usedEmbeddings"`
@@ -102,11 +102,11 @@ type mcpProcessTextOutput struct {
 
 type mcpMetricsOutput struct {
 	Runs            int64 `json:"runs"`
-	Events          int64 `json:"events"`
-	Claims          int64 `json:"claims"`
-	ContestedClaims int64 `json:"contested_claims"`
-	Relationships   int64 `json:"relationships"`
-	Contradictions  int64 `json:"contradictions"`
+	Events          int64 `json:"episodes"`
+	Claims          int64 `json:"beliefs"`
+	ContestedClaims int64 `json:"contested_beliefs"`
+	Relationships   int64 `json:"associations"`
+	Contradictions  int64 `json:"dissonances"`
 	Embeddings      int64 `json:"embeddings"`
 }
 
@@ -188,7 +188,7 @@ type mcpWhichTestToTrustInput struct {
 }
 
 type mcpWhichTestToTrustCandidate struct {
-	ClaimID        string  `json:"claim_id"`
+	ClaimID        string  `json:"belief_id"`
 	Text           string  `json:"text"`
 	TestID         string  `json:"test_id,omitempty"`
 	TestAuthor     string  `json:"test_author,omitempty"`
@@ -203,13 +203,13 @@ type mcpWhichTestToTrustCandidate struct {
 type mcpWhichTestToTrustOutput struct {
 	RequirementRef string                         `json:"requirement_ref"`
 	Verdict        string                         `json:"verdict"`
-	WinnerClaimID  string                         `json:"winner_claim_id,omitempty"`
+	WinnerClaimID  string                         `json:"winner_belief_id,omitempty"`
 	WinnerScore    float64                        `json:"winner_score,omitempty"`
 	Candidates     []mcpWhichTestToTrustCandidate `json:"candidates"`
 }
 
 type mcpQueryLessonsOutput struct {
-	Lessons []domain.Lesson `json:"lessons"`
+	Lessons []domain.Lesson `json:"schemas"`
 }
 
 type mcpSynthesizeInput struct {
@@ -219,9 +219,9 @@ type mcpSynthesizeInput struct {
 
 type mcpSynthesizeOutput struct {
 	Clusters       int      `json:"clusters"`
-	LessonsEmitted int      `json:"lessons_emitted"`
+	LessonsEmitted int      `json:"schemas_emitted"`
 	Skipped        int      `json:"skipped"`
-	LessonIDs      []string `json:"lesson_ids"`
+	LessonIDs      []string `json:"schema_ids"`
 }
 
 type mcpRecordDecisionInput struct {
@@ -255,7 +255,7 @@ type mcpQueryPlaybookInput struct {
 }
 
 type mcpQueryPlaybookOutput struct {
-	Playbooks []domain.Playbook `json:"playbooks"`
+	Playbooks []domain.Playbook `json:"reflexes"`
 }
 
 type mcpSynthesizePlaybooksInput struct {
@@ -265,9 +265,9 @@ type mcpSynthesizePlaybooksInput struct {
 
 type mcpSynthesizePlaybooksOutput struct {
 	TriggerClusters  int      `json:"trigger_clusters"`
-	PlaybooksEmitted int      `json:"playbooks_emitted"`
+	PlaybooksEmitted int      `json:"reflexes_emitted"`
 	Skipped          int      `json:"skipped"`
-	PlaybookIDs      []string `json:"playbook_ids"`
+	PlaybookIDs      []string `json:"reflex_ids"`
 }
 
 // handleMCP starts the MCP server. By default it serves over stdio (for a
@@ -446,12 +446,12 @@ func handleMCP(args []string) {
 			return mcpRunConfigure(input)
 		})
 
-	srv.Tool("list_claims").
+	srv.Tool("list_beliefs").
 		Description("List claims with optional type/status filtering and pagination. Useful for browsing the knowledge base without a specific question.").
 		OutputSchema(mcpListClaimsOutput{}).
 		Handler(func(ctx context.Context, input mcpListClaimsInput) (mcpListClaimsOutput, error) {
 			if kernel != nil {
-				return dispatchAxiTool[mcpListClaimsOutput](ctx, kernel, nil, "list_claims", input)
+				return dispatchAxiTool[mcpListClaimsOutput](ctx, kernel, nil, "list_beliefs", input)
 			}
 			return mcpRunListClaims(ctx, input)
 		})
@@ -467,12 +467,12 @@ func handleMCP(args []string) {
 			return mcpRunListClaims(ctx, input)
 		})
 
-	srv.Tool("list_contradictions").
+	srv.Tool("list_dissonances").
 		Description("List contradiction relationships hydrated with both claims' text. Pagination supported.").
 		OutputSchema(mcpListContradictionsOutput{}).
 		Handler(func(ctx context.Context, input mcpListContradictionsInput) (mcpListContradictionsOutput, error) {
 			if kernel != nil {
-				return dispatchAxiTool[mcpListContradictionsOutput](ctx, kernel, nil, "list_contradictions", input)
+				return dispatchAxiTool[mcpListContradictionsOutput](ctx, kernel, nil, "list_dissonances", input)
 			}
 			return mcpRunListContradictions(ctx, input)
 		})
@@ -511,14 +511,14 @@ func handleMCP(args []string) {
 			return mcpRunRecordOutcome(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
-	srv.Tool("synthesize_lessons").
+	srv.Tool("synthesize_schemas").
 		Description("Run one full synthesis pass over actions+outcomes and emit derived Lessons. Idempotent: re-running on the same data refreshes confidence without churning ids.").
 		OutputSchema(mcpSynthesizeOutput{}).
 		Handler(func(ctx context.Context, input mcpSynthesizeInput) (mcpSynthesizeOutput, error) {
 			return mcpRunSynthesize(ctx, input)
 		})
 
-	srv.Tool("query_lessons").
+	srv.Tool("query_schemas").
 		Description("Return validated lessons (synthesised operational knowledge) optionally filtered by service or trigger. Lessons are evidence-backed: each carries the action ids that corroborated it and a confidence in [0, 1].").
 		OutputSchema(mcpQueryLessonsOutput{}).
 		Handler(func(ctx context.Context, input mcpQueryLessonsInput) (mcpQueryLessonsOutput, error) {
@@ -546,14 +546,14 @@ func handleMCP(args []string) {
 			return mcpRunQueryDecisions(ctx, input)
 		})
 
-	srv.Tool("query_playbook").
+	srv.Tool("query_reflex").
 		Description("Return playbooks (steps-only operational intelligence) by trigger or service scope. Mnemos returns steps; execution is the caller's responsibility — Praxis consumes this contract.").
 		OutputSchema(mcpQueryPlaybookOutput{}).
 		Handler(func(ctx context.Context, input mcpQueryPlaybookInput) (mcpQueryPlaybookOutput, error) {
 			return mcpRunQueryPlaybook(ctx, input)
 		})
 
-	srv.Tool("synthesize_playbooks").
+	srv.Tool("synthesize_reflexes").
 		Description("Run one full playbook-synthesis pass over the lessons store and emit derived Playbooks. Idempotent: re-running on the same lessons refreshes confidence without churning ids.").
 		OutputSchema(mcpSynthesizePlaybooksOutput{}).
 		Handler(func(ctx context.Context, input mcpSynthesizePlaybooksInput) (mcpSynthesizePlaybooksOutput, error) {
@@ -588,7 +588,7 @@ func handleMCP(args []string) {
 			return mcpRunMemoryDeprecate(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
-	srv.Tool("memory_resolve_contradiction").
+	srv.Tool("memory_resolve_dissonance").
 		Description("Pick the winner of two contradicting claims. Winner moves to status=resolved; loser to status=deprecated. Both transitions carry the rationale.").
 		OutputSchema(mcpMemoryResolveOutput{}).
 		Handler(func(ctx context.Context, input mcpMemoryResolveInput) (mcpMemoryResolveOutput, error) {
@@ -645,12 +645,12 @@ func handleMCP(args []string) {
 			return mcpRunSearchMemory(ctx, input)
 		})
 
-	srv.Tool("remember_event").
+	srv.Tool("remember_episode").
 		Description("Store a temporal event (deployment, incident, decision, ...) with a wall-clock timestamp.").
 		OutputSchema(mcpRememberEventOutput{}).
 		Handler(func(ctx context.Context, input mcpRememberEventInput) (mcpRememberEventOutput, error) {
 			if kernel != nil {
-				return dispatchAxiTool[mcpRememberEventOutput](ctx, kernel, nil, "remember_event", input)
+				return dispatchAxiTool[mcpRememberEventOutput](ctx, kernel, nil, "remember_episode", input)
 			}
 			return mcpRunRememberEvent(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
@@ -731,7 +731,7 @@ func handleMCP(args []string) {
 			return mcpRecombinations(ctx, mem, input)
 		})
 
-	srv.Tool("analogous_claims").
+	srv.Tool("analogous_beliefs").
 		Description("Return the claims most structurally analogous to a given one.").
 		OutputSchema(mcpAnalogousOutput{}).
 		Handler(func(ctx context.Context, input mcpAnalogousInput) (mcpAnalogousOutput, error) {
@@ -743,7 +743,7 @@ func handleMCP(args []string) {
 		})
 
 	// --- Claim reads + advanced recall (parity with HTTP/gRPC) ---
-	srv.Tool("get_claim").
+	srv.Tool("get_belief").
 		Description("Fetch a single claim's full detail (statement, trust, lifecycle, validity).").
 		OutputSchema(mcpClaimDetailOutput{}).
 		Handler(func(ctx context.Context, input mcpGetClaimInput) (mcpClaimDetailOutput, error) {
@@ -1711,12 +1711,12 @@ func mcpRunRecordOutcome(ctx context.Context, actor string, input mcpRecordOutco
 // JSON receipt. No agent-internal state is kept.
 
 type mcpMemoryDeprecateInput struct {
-	ClaimID string `json:"claim_id" jsonschema:"required,description=Claim id to deprecate"`
+	ClaimID string `json:"belief_id" jsonschema:"required,description=Claim id to deprecate"`
 	Reason  string `json:"reason,omitempty" jsonschema:"description=Free-form rationale stored on the status transition"`
 }
 
 type mcpMemoryDeprecateOutput struct {
-	ClaimID   string `json:"claim_id"`
+	ClaimID   string `json:"belief_id"`
 	OldStatus string `json:"old_status"`
 	NewStatus string `json:"new_status"`
 }
@@ -1733,21 +1733,21 @@ type mcpMemoryResolveOutput struct {
 }
 
 type mcpMemoryPromoteInput struct {
-	ClaimID string `json:"claim_id" jsonschema:"required,description=Claim id to promote (re-verify against fresh evidence)"`
+	ClaimID string `json:"belief_id" jsonschema:"required,description=Claim id to promote (re-verify against fresh evidence)"`
 }
 
 type mcpMemoryPromoteOutput struct {
-	ClaimID    string `json:"claim_id"`
+	ClaimID    string `json:"belief_id"`
 	VerifiedAt string `json:"verified_at"`
 }
 
 type mcpMemoryEscalateInput struct {
-	ClaimID string `json:"claim_id" jsonschema:"required,description=ID of the claim the agent cannot resolve autonomously"`
+	ClaimID string `json:"belief_id" jsonschema:"required,description=ID of the claim the agent cannot resolve autonomously"`
 	Reason  string `json:"reason,omitempty" jsonschema:"description=Why the agent is escalating this claim (shown verbatim in the audit trail)"`
 }
 
 type mcpMemoryEscalateOutput struct {
-	ClaimID          string `json:"claim_id"`
+	ClaimID          string `json:"belief_id"`
 	Action           string `json:"action"`
 	EscalationReason string `json:"escalation_reason"`
 	Rationale        string `json:"rationale"`
@@ -1911,32 +1911,32 @@ type mcpRememberInput struct {
 }
 
 type mcpRememberOutput struct {
-	ClaimID string `json:"claim_id"`
-	EventID string `json:"event_id"`
+	ClaimID string `json:"belief_id"`
+	EventID string `json:"episode_id"`
 	RunID   string `json:"run_id"`
 	Status  string `json:"status"`
 }
 
 type mcpForgetInput struct {
-	ClaimID string `json:"claim_id" jsonschema:"required,description=ID of the claim to forget (status flips to deprecated; audit history preserved)"`
+	ClaimID string `json:"belief_id" jsonschema:"required,description=ID of the claim to forget (status flips to deprecated; audit history preserved)"`
 	Reason  string `json:"reason,omitempty" jsonschema:"description=Why the agent is forgetting this claim (recorded in the audit trail)"`
 }
 
 type mcpForgetOutput struct {
-	ClaimID   string `json:"claim_id"`
+	ClaimID   string `json:"belief_id"`
 	OldStatus string `json:"old_status"`
 	NewStatus string `json:"new_status"`
 }
 
 type mcpUpdateInput struct {
-	ClaimID    string  `json:"claim_id" jsonschema:"required,description=ID of the claim to update"`
+	ClaimID    string  `json:"belief_id" jsonschema:"required,description=ID of the claim to update"`
 	NewText    string  `json:"new_text" jsonschema:"required,description=Replacement text for the claim"`
 	Confidence float64 `json:"confidence,omitempty" jsonschema:"description=New confidence in [0,1]; omit to keep the current value"`
 	Reason     string  `json:"reason,omitempty" jsonschema:"description=Why the agent is rewriting this claim (recorded in the audit trail)"`
 }
 
 type mcpUpdateOutput struct {
-	ClaimID string `json:"claim_id"`
+	ClaimID string `json:"belief_id"`
 	OldText string `json:"old_text"`
 	NewText string `json:"new_text"`
 }
@@ -1949,7 +1949,7 @@ type mcpSearchMemoryInput struct {
 }
 
 type mcpSearchMemoryHit struct {
-	ClaimID    string  `json:"claim_id"`
+	ClaimID    string  `json:"belief_id"`
 	Text       string  `json:"text"`
 	Similarity float64 `json:"similarity"`
 	Status     string  `json:"status"`

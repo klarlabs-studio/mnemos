@@ -261,16 +261,16 @@ type Analogy struct {
 
 // EvidenceLink ties a claim to one of the events it was extracted from.
 type EvidenceLink struct {
-	ClaimID string `json:"claim_id"`
-	EventID string `json:"event_id"`
+	ClaimID string `json:"belief_id"`
+	EventID string `json:"episode_id"`
 }
 
 // Relationship represents a directed edge between two claims.
 type Relationship struct {
 	ID          string `json:"id"`
 	Type        string `json:"type"` // supports | contradicts
-	FromClaimID string `json:"from_claim_id"`
-	ToClaimID   string `json:"to_claim_id"`
+	FromClaimID string `json:"from_belief_id"`
+	ToClaimID   string `json:"to_belief_id"`
 	CreatedAt   string `json:"created_at"`
 }
 
@@ -294,17 +294,17 @@ type HealthResponse struct {
 // mapping layer.
 type MetricsResponse struct {
 	Runs            int64 `json:"runs"`
-	Events          int64 `json:"events"`
-	Claims          int64 `json:"claims"`
-	ContestedClaims int64 `json:"contested_claims"`
-	Relationships   int64 `json:"relationships"`
-	Contradictions  int64 `json:"contradictions"`
+	Events          int64 `json:"episodes"`
+	Claims          int64 `json:"beliefs"`
+	ContestedClaims int64 `json:"contested_beliefs"`
+	Relationships   int64 `json:"associations"`
+	Contradictions  int64 `json:"dissonances"`
 	Embeddings      int64 `json:"embeddings"`
 }
 
 // ListEventsResponse is what GET /v1/events returns.
 type ListEventsResponse struct {
-	Events []Event `json:"events"`
+	Events []Event `json:"episodes"`
 	Total  int     `json:"total"`
 	Limit  int     `json:"limit"`
 	Offset int     `json:"offset"`
@@ -314,7 +314,7 @@ type ListEventsResponse struct {
 // included alongside the claims so a single round trip can recover the
 // claim → event mapping that the local query engine depends on.
 type ListClaimsResponse struct {
-	Claims   []Claim        `json:"claims"`
+	Claims   []Claim        `json:"beliefs"`
 	Evidence []EvidenceLink `json:"evidence,omitempty"`
 	Total    int            `json:"total"`
 	Limit    int            `json:"limit"`
@@ -323,7 +323,7 @@ type ListClaimsResponse struct {
 
 // ListRelationshipsResponse is what GET /v1/relationships returns.
 type ListRelationshipsResponse struct {
-	Relationships []Relationship `json:"relationships"`
+	Relationships []Relationship `json:"associations"`
 	Total         int            `json:"total"`
 	Limit         int            `json:"limit"`
 	Offset        int            `json:"offset"`
@@ -346,7 +346,7 @@ type AppendResponse struct {
 // AppendClaimsBody is the request body for POST /v1/claims. Evidence is
 // optional — pass nil if the claims don't have associated events yet.
 type AppendClaimsBody struct {
-	Claims   []Claim        `json:"claims"`
+	Claims   []Claim        `json:"beliefs"`
 	Evidence []EvidenceLink `json:"evidence,omitempty"`
 }
 

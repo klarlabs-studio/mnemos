@@ -164,12 +164,12 @@ async function loadClaims() {
   const root = document.getElementById('claims');
   root.innerHTML = '';
   try {
-    const data = await fetchJSON('/v1/claims?' + params);
+    const data = await fetchJSON('/v1/beliefs?' + params);
     claimsState.total = data.total;
-    if (!data.claims || data.claims.length === 0) {
-      root.appendChild(el('div', { class: 'empty' }, 'No claims match these filters.'));
+    if (!data.beliefs || data.beliefs.length === 0) {
+      root.appendChild(el('div', { class: 'empty' }, 'No beliefs match these filters.'));
     } else {
-      for (const c of data.claims) {
+      for (const c of data.beliefs) {
         root.appendChild(el('div', { class: 'row' },
           el('span', { class: 'pill' }, c.type),
           el('span', { class: 'pill' }, c.status),
@@ -192,14 +192,14 @@ async function loadContradictions() {
   const root = document.getElementById('contradictions');
   root.innerHTML = '';
   try {
-    const data = await fetchJSON('/v1/relationships?' + params);
+    const data = await fetchJSON('/v1/associations?' + params);
     contradictionsState.total = data.total;
-    if (!data.relationships || data.relationships.length === 0) {
+    if (!data.associations || data.associations.length === 0) {
       root.appendChild(el('div', { class: 'empty' }, 'No contradictions found.'));
     } else {
-      for (const r of data.relationships) {
+      for (const r of data.associations) {
         root.appendChild(el('div', { class: 'row contradicts' },
-          el('div', { class: 'text' }, `${r.from_claim_id} contradicts ${r.to_claim_id}`),
+          el('div', { class: 'text' }, `${r.from_belief_id} contradicts ${r.to_belief_id}`),
           el('div', { class: 'from-to' }, new Date(r.created_at).toLocaleString())));
       }
     }

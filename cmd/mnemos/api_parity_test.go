@@ -105,18 +105,19 @@ var parityMatrix = []parityEntry{
 	{Capability: "lead capture form (public)", MCPTool: parityNA, HTTPRoute: "/v1/leads", GRPCMethod: parityNA},
 
 	// Core knowledge surfaces.
-	{Capability: "list/append events", MCPTool: parityNA, HTTPRoute: "/v1/events", GRPCMethod: "ListEvents"},
-	{Capability: "append events (gRPC verb)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendEvents"},
-	{Capability: "list/append/delete claims", MCPTool: "list_claims", HTTPRoute: "/v1/claims", GRPCMethod: "ListClaims"},
-	{Capability: "append claims (gRPC verb)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendClaims"},
-	{Capability: "claim subresources (provenance/export)", MCPTool: parityNA, HTTPRoute: "/v1/claims/", GRPCMethod: parityNA},
-	{Capability: "list/append relationships", MCPTool: parityNA, HTTPRoute: "/v1/relationships", GRPCMethod: "ListRelationships"},
-	{Capability: "append relationships (gRPC verb)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendRelationships"},
+	{Capability: "list/append events", MCPTool: parityNA, HTTPRoute: "/v1/episodes", GRPCMethod: "ListEpisodes"},
+	{Capability: "append events (gRPC verb)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendEpisodes"},
+	{Capability: "list/append/delete claims", MCPTool: "list_beliefs", HTTPRoute: "/v1/beliefs", GRPCMethod: "ListBeliefs"},
+	{Capability: "append claims (gRPC verb)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendBeliefs"},
+	{Capability: "claim subresources (provenance/export)", MCPTool: parityNA, HTTPRoute: "/v1/beliefs/", GRPCMethod: parityNA},
+	{Capability: "list/append relationships", MCPTool: parityNA, HTTPRoute: "/v1/associations", GRPCMethod: "ListAssociations"},
+	{Capability: "append relationships (gRPC verb)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendAssociations"},
 	{Capability: "list/append embeddings", MCPTool: parityNA, HTTPRoute: "/v1/embeddings", GRPCMethod: "ListEmbeddings"},
 	{Capability: "append embeddings (gRPC verb)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendEmbeddings"},
 
 	// Metrics, search, context — read-only.
 	{Capability: "knowledge metrics", MCPTool: "knowledge_metrics", HTTPRoute: "/v1/metrics", GRPCMethod: "Metrics"},
+	{Capability: "promoted schemas (neocortex read)", MCPTool: parityNA, HTTPRoute: "/v1/schemas", GRPCMethod: parityNA},
 	{Capability: "Prometheus RED metrics (operators)", MCPTool: parityNA, HTTPRoute: "/internal/metrics", GRPCMethod: parityNA},
 	{Capability: "context block (chat-agent prompt slice)", MCPTool: parityNA, HTTPRoute: "/v1/context", GRPCMethod: parityNA},
 	{Capability: "hybrid search", MCPTool: parityNA, HTTPRoute: "/v1/search", GRPCMethod: parityNA},
@@ -135,12 +136,12 @@ var parityMatrix = []parityEntry{
 	{Capability: "confidence calibration", MCPTool: "calibration", HTTPRoute: "/v1/calibration", GRPCMethod: "Calibration"},
 	{Capability: "hypercorrections (contested established beliefs)", MCPTool: "hypercorrections", HTTPRoute: "/v1/hypercorrections", GRPCMethod: "Hypercorrections"},
 	{Capability: "recombinations (candidate novel connections)", MCPTool: "recombinations", HTTPRoute: "/v1/recombinations", GRPCMethod: "Recombinations"},
-	{Capability: "analogical retrieval", MCPTool: "analogous_claims", HTTPRoute: parityNA, GRPCMethod: "AnalogousClaims"},
+	{Capability: "analogical retrieval", MCPTool: "analogous_beliefs", HTTPRoute: parityNA, GRPCMethod: "AnalogousBeliefs"},
 
 	// Claim CRUD parity (v0.67 HTTP, gRPC parity added).
 	{Capability: "classify claim novelty", MCPTool: "classify", HTTPRoute: "/v1/classify", GRPCMethod: "Classify"},
-	{Capability: "get single claim", MCPTool: "get_claim", HTTPRoute: parityNA, GRPCMethod: "GetClaim"},
-	{Capability: "set claim lifecycle", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "SetClaimLifecycle"},
+	{Capability: "get single claim", MCPTool: "get_belief", HTTPRoute: parityNA, GRPCMethod: "GetBelief"},
+	{Capability: "set claim lifecycle", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "SetBeliefLifecycle"},
 	{Capability: "get single decision", MCPTool: "get_decision", HTTPRoute: parityNA, GRPCMethod: "GetDecision"},
 	{Capability: "advanced recall (sufficiency/effort/context/conflicts/iterative)", MCPTool: "recall", HTTPRoute: "/v1/recall", GRPCMethod: "Recall"},
 
@@ -156,7 +157,7 @@ var parityMatrix = []parityEntry{
 
 	// Browse helpers (MCP-only).
 	{Capability: "list decisions (browse helper)", MCPTool: "list_decisions", HTTPRoute: "/v1/decisions", GRPCMethod: parityNA},
-	{Capability: "list contradictions (browse helper)", MCPTool: "list_contradictions", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "list contradictions (browse helper)", MCPTool: "list_dissonances", HTTPRoute: parityNA, GRPCMethod: parityNA},
 
 	// Pipeline (MCP-only — agent action surface).
 	{Capability: "process text (ingest+extract+relate)", MCPTool: "process_text", HTTPRoute: "/v1/process", GRPCMethod: parityNA},
@@ -166,7 +167,7 @@ var parityMatrix = []parityEntry{
 	{Capability: "watch file", MCPTool: "watch_file", HTTPRoute: parityNA, GRPCMethod: parityNA},
 
 	// Temporal (MCP-only — bundled-Chronos surface).
-	{Capability: "remember temporal event", MCPTool: "remember_event", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "remember temporal event", MCPTool: "remember_episode", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "query timeline (range/type/run filter)", MCPTool: "timeline_query", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "recall knowledge at a historical instant", MCPTool: "recall_at_time", HTTPRoute: parityNA, GRPCMethod: parityNA},
 
@@ -179,10 +180,10 @@ var parityMatrix = []parityEntry{
 	{Capability: "append outcomes (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendOutcomes"},
 
 	// Phase 3 — Lessons.
-	{Capability: "synthesize lessons", MCPTool: "synthesize_lessons", HTTPRoute: parityNA, GRPCMethod: parityNA},
-	{Capability: "query lessons", MCPTool: "query_lessons", HTTPRoute: parityNA, GRPCMethod: parityNA},
-	{Capability: "list lessons (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "ListLessons"},
-	{Capability: "append lessons (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendLessons"},
+	{Capability: "synthesize lessons", MCPTool: "synthesize_schemas", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "query lessons", MCPTool: "query_schemas", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "list lessons (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "ListSchemas"},
+	{Capability: "append lessons (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendSchemas"},
 
 	// Phase 5 — Decisions.
 	{Capability: "record decision", MCPTool: "record_decision", HTTPRoute: parityNA, GRPCMethod: parityNA},
@@ -191,14 +192,14 @@ var parityMatrix = []parityEntry{
 	{Capability: "append decisions (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendDecisions"},
 
 	// Phase 6 — Playbooks.
-	{Capability: "query playbook", MCPTool: "query_playbook", HTTPRoute: parityNA, GRPCMethod: parityNA},
-	{Capability: "synthesize playbooks", MCPTool: "synthesize_playbooks", HTTPRoute: parityNA, GRPCMethod: parityNA},
-	{Capability: "list playbooks (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "ListPlaybooks"},
-	{Capability: "append playbooks (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendPlaybooks"},
+	{Capability: "query playbook", MCPTool: "query_reflex", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "synthesize playbooks", MCPTool: "synthesize_reflexes", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "list playbooks (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "ListReflexes"},
+	{Capability: "append playbooks (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendReflexes"},
 
 	// Memory governance (MCP-only — agent governance surface).
 	{Capability: "memory deprecate", MCPTool: "memory_deprecate", HTTPRoute: parityNA, GRPCMethod: parityNA},
-	{Capability: "memory resolve contradiction", MCPTool: "memory_resolve_contradiction", HTTPRoute: parityNA, GRPCMethod: parityNA},
+	{Capability: "memory resolve contradiction", MCPTool: "memory_resolve_dissonance", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "memory escalate", MCPTool: "memory_escalate", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "memory promote", MCPTool: "memory_promote", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "memory context (agent recall)", MCPTool: "memory_context", HTTPRoute: parityNA, GRPCMethod: parityNA},
@@ -207,11 +208,11 @@ var parityMatrix = []parityEntry{
 	{Capability: "remember (store a fact as a claim)", MCPTool: "remember", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "forget (soft-delete a claim)", MCPTool: "forget", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "update (rewrite a claim's text)", MCPTool: "update", HTTPRoute: parityNA, GRPCMethod: parityNA},
-	{Capability: "search_memory (semantic claim recall)", MCPTool: "search_memory", HTTPRoute: "/v1/claims", GRPCMethod: parityNA},
+	{Capability: "search_memory (semantic claim recall)", MCPTool: "search_memory", HTTPRoute: "/v1/beliefs", GRPCMethod: parityNA},
 
 	// Entity relationships (gRPC-only).
-	{Capability: "list entity relationships (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "ListEntityRelationships"},
-	{Capability: "append entity relationships (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendEntityRelationships"},
+	{Capability: "list entity relationships (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "ListEntityAssociations"},
+	{Capability: "append entity relationships (gRPC)", MCPTool: parityNA, HTTPRoute: parityNA, GRPCMethod: "AppendEntityAssociations"},
 
 	// Trust / epistemic provenance.
 	{Capability: "which test to trust", MCPTool: "which_test_to_trust", HTTPRoute: parityNA, GRPCMethod: parityNA},

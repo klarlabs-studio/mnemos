@@ -152,12 +152,12 @@ func (s *Server) AppendOutcomes(ctx context.Context, req *mnemosv1.AppendOutcome
 }
 
 // ---------------------------------------------------------------------------
-// Lessons
+// Schemas
 // ---------------------------------------------------------------------------
 
-// ListLessons returns synthesised lessons with optional service or
+// ListSchemas returns synthesised schemas with optional service or
 // trigger filter.
-func (s *Server) ListLessons(ctx context.Context, req *mnemosv1.ListLessonsRequest) (*mnemosv1.ListLessonsResponse, error) {
+func (s *Server) ListSchemas(ctx context.Context, req *mnemosv1.ListSchemasRequest) (*mnemosv1.ListSchemasResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
 	var lessons []domain.Lesson
 	var err error
@@ -170,30 +170,30 @@ func (s *Server) ListLessons(ctx context.Context, req *mnemosv1.ListLessonsReque
 		lessons, err = s.connFor(ctx).Lessons.ListAll(ctx)
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list lessons: %v", err)
+		return nil, status.Errorf(codes.Internal, "list schemas: %v", err)
 	}
 	total := len(lessons)
 	page := paginate(lessons, limit, offset)
-	out := make([]*mnemosv1.Lesson, 0, len(page))
+	out := make([]*mnemosv1.Schema, 0, len(page))
 	for _, l := range page {
-		out = append(out, lessonToProto(l))
+		out = append(out, schemaToProto(l))
 	}
-	return &mnemosv1.ListLessonsResponse{Lessons: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
+	return &mnemosv1.ListSchemasResponse{Schemas: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
 }
 
-// AppendLessons writes lessons idempotently.
-func (s *Server) AppendLessons(ctx context.Context, req *mnemosv1.AppendLessonsRequest) (*mnemosv1.AppendResponse, error) {
-	if len(req.Lessons) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "lessons array is empty")
+// AppendSchemas writes schemas idempotently.
+func (s *Server) AppendSchemas(ctx context.Context, req *mnemosv1.AppendSchemasRequest) (*mnemosv1.AppendResponse, error) {
+	if len(req.Schemas) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "schemas array is empty")
 	}
-	if len(req.Lessons) > maxBatchRecords {
-		return nil, status.Errorf(codes.InvalidArgument, "lessons batch size %d exceeds max %d", len(req.Lessons), maxBatchRecords)
+	if len(req.Schemas) > maxBatchRecords {
+		return nil, status.Errorf(codes.InvalidArgument, "schemas batch size %d exceeds max %d", len(req.Schemas), maxBatchRecords)
 	}
 	actor := actorFromContext(ctx)
 	accepted := 0
-	for i, l := range req.Lessons {
+	for i, l := range req.Schemas {
 		if l.Id == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "lessons[%d].id is required", i)
+			return nil, status.Errorf(codes.InvalidArgument, "schemas[%d].id is required", i)
 		}
 		derived := time.Now().UTC()
 		if l.DerivedAt != nil {
@@ -202,7 +202,7 @@ func (s *Server) AppendLessons(ctx context.Context, req *mnemosv1.AppendLessonsR
 		lesson := domain.Lesson{
 			ID:           l.Id,
 			Statement:    l.Statement,
-			Scope:        scopeFromProto(l.Scope),
+			Scope:        contextFromProto(l.Context),
 			Trigger:      l.Trigger,
 			Kind:         l.Kind,
 			Evidence:     l.Evidence,
@@ -213,7 +213,7 @@ func (s *Server) AppendLessons(ctx context.Context, req *mnemosv1.AppendLessonsR
 			CreatedBy:    firstNonEmptyStr(l.CreatedBy, actor),
 		}
 		if _, err := s.writerFor(ctx).Lesson(ctx, lesson); err != nil {
-			return nil, status.Errorf(codes.Internal, "append lesson %s: %v", lesson.ID, err)
+			return nil, status.Errorf(codes.Internal, "append schema %s: %v", lesson.ID, err)
 		}
 		accepted++
 	}
@@ -273,7 +273,7 @@ func (s *Server) AppendDecisions(ctx context.Context, req *mnemosv1.AppendDecisi
 			Beliefs:      d.Beliefs,
 			Alternatives: d.Alternatives,
 			OutcomeID:    d.OutcomeId,
-			Scope:        scopeFromProto(d.Scope),
+			Scope:        contextFromProto(d.Context),
 			ChosenAt:     chosen,
 			CreatedBy:    firstNonEmptyStr(d.CreatedBy, actor),
 		}
@@ -286,11 +286,11 @@ func (s *Server) AppendDecisions(ctx context.Context, req *mnemosv1.AppendDecisi
 }
 
 // ---------------------------------------------------------------------------
-// Playbooks
+// Reflexes
 // ---------------------------------------------------------------------------
 
-// ListPlaybooks returns synthesised or hand-authored playbooks.
-func (s *Server) ListPlaybooks(ctx context.Context, req *mnemosv1.ListPlaybooksRequest) (*mnemosv1.ListPlaybooksResponse, error) {
+// ListReflexes returns synthesised or hand-authored reflexes.
+func (s *Server) ListReflexes(ctx context.Context, req *mnemosv1.ListReflexesRequest) (*mnemosv1.ListReflexesResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
 	var playbooks []domain.Playbook
 	var err error
@@ -303,30 +303,30 @@ func (s *Server) ListPlaybooks(ctx context.Context, req *mnemosv1.ListPlaybooksR
 		playbooks, err = s.connFor(ctx).Playbooks.ListAll(ctx)
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list playbooks: %v", err)
+		return nil, status.Errorf(codes.Internal, "list reflexes: %v", err)
 	}
 	total := len(playbooks)
 	page := paginate(playbooks, limit, offset)
-	out := make([]*mnemosv1.Playbook, 0, len(page))
+	out := make([]*mnemosv1.Reflex, 0, len(page))
 	for _, p := range page {
-		out = append(out, playbookToProto(p))
+		out = append(out, reflexToProto(p))
 	}
-	return &mnemosv1.ListPlaybooksResponse{Playbooks: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
+	return &mnemosv1.ListReflexesResponse{Reflexes: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
 }
 
-// AppendPlaybooks writes playbooks idempotently.
-func (s *Server) AppendPlaybooks(ctx context.Context, req *mnemosv1.AppendPlaybooksRequest) (*mnemosv1.AppendResponse, error) {
-	if len(req.Playbooks) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "playbooks array is empty")
+// AppendReflexes writes reflexes idempotently.
+func (s *Server) AppendReflexes(ctx context.Context, req *mnemosv1.AppendReflexesRequest) (*mnemosv1.AppendResponse, error) {
+	if len(req.Reflexes) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "reflexes array is empty")
 	}
-	if len(req.Playbooks) > maxBatchRecords {
-		return nil, status.Errorf(codes.InvalidArgument, "playbooks batch size %d exceeds max %d", len(req.Playbooks), maxBatchRecords)
+	if len(req.Reflexes) > maxBatchRecords {
+		return nil, status.Errorf(codes.InvalidArgument, "reflexes batch size %d exceeds max %d", len(req.Reflexes), maxBatchRecords)
 	}
 	actor := actorFromContext(ctx)
 	accepted := 0
-	for i, p := range req.Playbooks {
+	for i, p := range req.Reflexes {
 		if p.Id == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "playbooks[%d].id is required", i)
+			return nil, status.Errorf(codes.InvalidArgument, "reflexes[%d].id is required", i)
 		}
 		derived := time.Now().UTC()
 		if p.DerivedAt != nil {
@@ -345,9 +345,9 @@ func (s *Server) AppendPlaybooks(ctx context.Context, req *mnemosv1.AppendPlaybo
 			ID:                 p.Id,
 			Trigger:            p.Trigger,
 			Statement:          p.Statement,
-			Scope:              scopeFromProto(p.Scope),
+			Scope:              contextFromProto(p.Context),
 			Steps:              steps,
-			DerivedFromLessons: p.DerivedFromLessons,
+			DerivedFromLessons: p.DerivedFromSchemas,
 			Confidence:         p.Confidence,
 			DerivedAt:          derived,
 			LastVerified:       timestampOrZero(p.LastVerified),
@@ -355,7 +355,7 @@ func (s *Server) AppendPlaybooks(ctx context.Context, req *mnemosv1.AppendPlaybo
 			CreatedBy:          firstNonEmptyStr(p.CreatedBy, actor),
 		}
 		if _, err := s.writerFor(ctx).Playbook(ctx, playbook); err != nil {
-			return nil, status.Errorf(codes.Internal, "append playbook %s: %v", playbook.ID, err)
+			return nil, status.Errorf(codes.Internal, "append reflex %s: %v", playbook.ID, err)
 		}
 		accepted++
 	}
@@ -363,11 +363,11 @@ func (s *Server) AppendPlaybooks(ctx context.Context, req *mnemosv1.AppendPlaybo
 }
 
 // ---------------------------------------------------------------------------
-// EntityRelationships (polymorphic edges)
+// EntityAssociations (polymorphic edges)
 // ---------------------------------------------------------------------------
 
-// ListEntityRelationships returns polymorphic cross-entity edges.
-func (s *Server) ListEntityRelationships(ctx context.Context, req *mnemosv1.ListEntityRelationshipsRequest) (*mnemosv1.ListEntityRelationshipsResponse, error) {
+// ListEntityAssociations returns polymorphic cross-entity edges.
+func (s *Server) ListEntityAssociations(ctx context.Context, req *mnemosv1.ListEntityAssociationsRequest) (*mnemosv1.ListEntityAssociationsResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
 	var edges []domain.EntityRelationship
 	var err error
@@ -380,19 +380,19 @@ func (s *Server) ListEntityRelationships(ctx context.Context, req *mnemosv1.List
 		edges, err = s.connFor(ctx).EntityRels.ListAll(ctx)
 	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list entity_relationships: %v", err)
+		return nil, status.Errorf(codes.Internal, "list entity_associations: %v", err)
 	}
 	total := len(edges)
 	page := paginate(edges, limit, offset)
-	out := make([]*mnemosv1.EntityRelationship, 0, len(page))
+	out := make([]*mnemosv1.EntityAssociation, 0, len(page))
 	for _, e := range page {
-		out = append(out, entityRelationshipToProto(e))
+		out = append(out, entityAssociationToProto(e))
 	}
-	return &mnemosv1.ListEntityRelationshipsResponse{Edges: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
+	return &mnemosv1.ListEntityAssociationsResponse{Edges: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
 }
 
-// AppendEntityRelationships writes polymorphic edges idempotently.
-func (s *Server) AppendEntityRelationships(ctx context.Context, req *mnemosv1.AppendEntityRelationshipsRequest) (*mnemosv1.AppendResponse, error) {
+// AppendEntityAssociations writes polymorphic edges idempotently.
+func (s *Server) AppendEntityAssociations(ctx context.Context, req *mnemosv1.AppendEntityAssociationsRequest) (*mnemosv1.AppendResponse, error) {
 	if len(req.Edges) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "edges array is empty")
 	}
@@ -421,7 +421,7 @@ func (s *Server) AppendEntityRelationships(ctx context.Context, req *mnemosv1.Ap
 		})
 	}
 	if _, err := s.writerFor(ctx).EntityRels(ctx, edges); err != nil {
-		return nil, status.Errorf(codes.Internal, "upsert entity_relationships: %v", err)
+		return nil, status.Errorf(codes.Internal, "upsert entity_associations: %v", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(len(edges))}, nil
 }
@@ -458,11 +458,11 @@ func outcomeToProto(o domain.Outcome) *mnemosv1.Outcome {
 	}
 }
 
-func lessonToProto(l domain.Lesson) *mnemosv1.Lesson {
-	return &mnemosv1.Lesson{
+func schemaToProto(l domain.Lesson) *mnemosv1.Schema {
+	return &mnemosv1.Schema{
 		Id:           l.ID,
 		Statement:    l.Statement,
-		Scope:        scopeToProto(l.Scope),
+		Context:      contextToProto(l.Scope),
 		Trigger:      l.Trigger,
 		Kind:         l.Kind,
 		Evidence:     l.Evidence,
@@ -484,30 +484,30 @@ func decisionToProto(d domain.Decision) *mnemosv1.Decision {
 		Beliefs:      d.Beliefs,
 		Alternatives: d.Alternatives,
 		OutcomeId:    d.OutcomeID,
-		Scope:        scopeToProto(d.Scope),
+		Context:      contextToProto(d.Scope),
 		ChosenAt:     timestampOrNil(d.ChosenAt),
 		CreatedBy:    d.CreatedBy,
 		CreatedAt:    timestampOrNil(d.CreatedAt),
 	}
 }
 
-func playbookToProto(p domain.Playbook) *mnemosv1.Playbook {
-	steps := make([]*mnemosv1.PlaybookStep, 0, len(p.Steps))
+func reflexToProto(p domain.Playbook) *mnemosv1.Reflex {
+	steps := make([]*mnemosv1.ReflexStep, 0, len(p.Steps))
 	for _, st := range p.Steps {
-		steps = append(steps, &mnemosv1.PlaybookStep{
+		steps = append(steps, &mnemosv1.ReflexStep{
 			Order:       int32(st.Order),
 			Action:      st.Action,
 			Description: st.Description,
 			Condition:   st.Condition,
 		})
 	}
-	return &mnemosv1.Playbook{
+	return &mnemosv1.Reflex{
 		Id:                 p.ID,
 		Trigger:            p.Trigger,
 		Statement:          p.Statement,
-		Scope:              scopeToProto(p.Scope),
+		Context:            contextToProto(p.Scope),
 		Steps:              steps,
-		DerivedFromLessons: p.DerivedFromLessons,
+		DerivedFromSchemas: p.DerivedFromLessons,
 		Confidence:         p.Confidence,
 		DerivedAt:          timestampOrNil(p.DerivedAt),
 		LastVerified:       timestampOrNil(p.LastVerified),
@@ -516,8 +516,8 @@ func playbookToProto(p domain.Playbook) *mnemosv1.Playbook {
 	}
 }
 
-func entityRelationshipToProto(e domain.EntityRelationship) *mnemosv1.EntityRelationship {
-	return &mnemosv1.EntityRelationship{
+func entityAssociationToProto(e domain.EntityRelationship) *mnemosv1.EntityAssociation {
+	return &mnemosv1.EntityAssociation{
 		Id:        e.ID,
 		Kind:      string(e.Kind),
 		FromId:    e.FromID,
@@ -529,14 +529,14 @@ func entityRelationshipToProto(e domain.EntityRelationship) *mnemosv1.EntityRela
 	}
 }
 
-func scopeToProto(s domain.Scope) *mnemosv1.Scope {
+func contextToProto(s domain.Scope) *mnemosv1.Context {
 	if s.IsEmpty() {
 		return nil
 	}
-	return &mnemosv1.Scope{Service: s.Service, Env: s.Env, Team: s.Team}
+	return &mnemosv1.Context{Service: s.Service, Env: s.Env, Team: s.Team}
 }
 
-func scopeFromProto(s *mnemosv1.Scope) domain.Scope {
+func contextFromProto(s *mnemosv1.Context) domain.Scope {
 	if s == nil {
 		return domain.Scope{}
 	}

@@ -8,7 +8,7 @@ import (
 	mnemos "go.klarlabs.de/mnemos"
 )
 
-// Claim-read + advanced-recall MCP tools (parity with HTTP GET /v1/claims/{id},
+// Claim-read + advanced-recall MCP tools (parity with HTTP GET /v1/beliefs/{id},
 // /v1/classify, /v1/decisions/{id}, /v1/recall and the gRPC equivalents).
 
 func rfc3339OrEmpty(t time.Time) string {
@@ -19,7 +19,7 @@ func rfc3339OrEmpty(t time.Time) string {
 }
 
 type mcpGetClaimInput struct {
-	ClaimID string `json:"claim_id" jsonschema:"required,description=The claim id to fetch"`
+	ClaimID string `json:"belief_id" jsonschema:"required,description=The claim id to fetch"`
 }
 type mcpClaimDetailOutput struct {
 	ID         string  `json:"id"`
@@ -104,7 +104,7 @@ type mcpRecallInput struct {
 	MaxRounds int     `json:"max_rounds,omitempty" jsonschema:"description=iterative mode: cap on rounds"`
 }
 type mcpRecallResult struct {
-	ClaimID     string  `json:"claim_id"`
+	ClaimID     string  `json:"belief_id"`
 	Text        string  `json:"text"`
 	Type        string  `json:"type"`
 	Confidence  float64 `json:"confidence"`
@@ -114,7 +114,7 @@ type mcpRecallResult struct {
 }
 type mcpRecallSufficiency struct {
 	Confidence float64 `json:"confidence"`
-	ClaimCount int     `json:"claim_count"`
+	ClaimCount int     `json:"belief_count"`
 	Sufficient bool    `json:"sufficient"`
 	Floor      float64 `json:"floor"`
 }
@@ -125,8 +125,8 @@ type mcpRecallEffort struct {
 	Breadth int     `json:"breadth"`
 }
 type mcpRecallConflict struct {
-	ClaimID            string  `json:"claim_id"`
-	ClaimText          string  `json:"claim_text"`
+	ClaimID            string  `json:"belief_id"`
+	ClaimText          string  `json:"belief_text"`
 	ContradictingID    string  `json:"contradicting_id"`
 	ContradictingText  string  `json:"contradicting_text"`
 	ContradictingTrust float64 `json:"contradicting_trust"`

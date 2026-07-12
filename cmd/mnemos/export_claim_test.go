@@ -203,13 +203,13 @@ func TestEscalateClaimForAgent_DefaultReason(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// HTTP GET /v1/claims/:id/export.md
+// HTTP GET /v1/beliefs/:id/export.md
 // ---------------------------------------------------------------------------
 
 func TestServeClaimExportMD_NotFound(t *testing.T) {
 	_, conn := openTestStore(t)
 	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn), nil)
-	req := httptest.NewRequest(http.MethodGet, "/v1/claims/missing_claim/export.md", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/beliefs/missing_claim/export.md", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
@@ -235,7 +235,7 @@ func TestServeClaimExportMD_ReturnsMarkdown(t *testing.T) {
 	}
 
 	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn), nil)
-	req := httptest.NewRequest(http.MethodGet, "/v1/claims/cl_http_export_1/export.md", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/beliefs/cl_http_export_1/export.md", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
@@ -258,7 +258,7 @@ func TestServeClaimExportMD_ReturnsMarkdown(t *testing.T) {
 func TestServeClaimExportMD_MethodNotAllowed(t *testing.T) {
 	_, conn := openTestStore(t)
 	h := makeClaimSubresourceHandler(conn, wrapTestWriter(t, conn), nil)
-	req := httptest.NewRequest(http.MethodPost, "/v1/claims/any_id/export.md", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/beliefs/any_id/export.md", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusMethodNotAllowed {

@@ -70,7 +70,7 @@ func (s *Server) SetBlock(ctx context.Context, req *mnemosv1.SetBlockRequest) (*
 	return &mnemosv1.SetBlockResponse{Owner: req.GetOwner(), Label: req.GetLabel()}, nil
 }
 
-// Synthesize runs a synthesis pass (actions -> lessons + playbooks).
+// Synthesize runs a synthesis pass (actions -> schemas + reflexes).
 func (s *Server) Synthesize(ctx context.Context, _ *mnemosv1.SynthesizeRequest) (*mnemosv1.SynthesizeResponse, error) {
 	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
@@ -80,11 +80,11 @@ func (s *Server) Synthesize(ctx context.Context, _ *mnemosv1.SynthesizeRequest) 
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &mnemosv1.SynthesizeResponse{
-		LessonsDerived: int32(res.LessonsDerived), PlaybooksDerived: int32(res.PlaybooksDerived),
+		SchemasDerived: int32(res.LessonsDerived), ReflexesDerived: int32(res.PlaybooksDerived),
 	}, nil
 }
 
-// Timeline returns events on the temporal timeline.
+// Timeline returns episodes on the temporal timeline.
 func (s *Server) Timeline(ctx context.Context, req *mnemosv1.TimelineRequest) (*mnemosv1.TimelineResponse, error) {
 	if s.memFor(ctx) == nil {
 		return nil, s.brainUnavailable()
@@ -102,7 +102,7 @@ func (s *Server) Timeline(ctx context.Context, req *mnemosv1.TimelineRequest) (*
 	}
 	out := &mnemosv1.TimelineResponse{}
 	for _, e := range events {
-		out.Events = append(out.Events, &mnemosv1.TimelineEvent{
+		out.Episodes = append(out.Episodes, &mnemosv1.TimelineEpisode{
 			Id: e.ID, At: tsOrNil(e.At), Type: e.Type, Content: e.Content, RunId: e.RunID, Metadata: e.Metadata,
 		})
 	}

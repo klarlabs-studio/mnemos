@@ -16,9 +16,9 @@ func crudStub(t *testing.T, gotLifecycle *string) *client.Client {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.URL.Path == "/v1/claims/cl1" && r.Method == http.MethodGet:
+		case r.URL.Path == "/v1/beliefs/cl1" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(client.ClaimDetail{ID: "cl1", Statement: "x", Type: "fact", TrustScore: 0.7, Lifecycle: "promoted"})
-		case r.URL.Path == "/v1/claims/missing" && r.Method == http.MethodGet:
+		case r.URL.Path == "/v1/beliefs/missing" && r.Method == http.MethodGet:
 			http.Error(w, `{"error":"claim not found"}`, http.StatusNotFound)
 		case strings.HasSuffix(r.URL.Path, "/lifecycle") && r.Method == http.MethodPost:
 			var b struct {

@@ -103,32 +103,32 @@ func TestGRPC_CrossTenantIsolation(t *testing.T) {
 	}
 
 	now := timestamppb.New(time.Now().UTC())
-	if _, err := client.AppendEvents(authCtx(tokA), &mnemosv1.AppendEventsRequest{
-		Events: []*mnemosv1.Event{
+	if _, err := client.AppendEpisodes(authCtx(tokA), &mnemosv1.AppendEpisodesRequest{
+		Episodes: []*mnemosv1.Episode{
 			{Id: "ev-acme", RunId: "r", SchemaVersion: "v1", Content: "acme secret", SourceInputId: "in", Timestamp: now, IngestedAt: now},
 		},
 	}); err != nil {
-		t.Fatalf("tenant A AppendEvents: %v", err)
+		t.Fatalf("tenant A AppendEpisodes: %v", err)
 	}
 
 	// Tenant B must see none of A's events.
-	bList, err := client.ListEvents(authCtx(tokB), &mnemosv1.ListEventsRequest{})
+	bList, err := client.ListEpisodes(authCtx(tokB), &mnemosv1.ListEpisodesRequest{})
 	if err != nil {
-		t.Fatalf("tenant B ListEvents: %v", err)
+		t.Fatalf("tenant B ListEpisodes: %v", err)
 	}
-	for _, e := range bList.Events {
+	for _, e := range bList.Episodes {
 		if e.Id == "ev-acme" {
 			t.Fatalf("CROSS-TENANT LEAK: tenant B read tenant A's event %q", e.Id)
 		}
 	}
 
 	// Tenant A sees its own.
-	aList, err := client.ListEvents(authCtx(tokA), &mnemosv1.ListEventsRequest{})
+	aList, err := client.ListEpisodes(authCtx(tokA), &mnemosv1.ListEpisodesRequest{})
 	if err != nil {
-		t.Fatalf("tenant A ListEvents: %v", err)
+		t.Fatalf("tenant A ListEpisodes: %v", err)
 	}
 	found := false
-	for _, e := range aList.Events {
+	for _, e := range aList.Episodes {
 		if e.Id == "ev-acme" {
 			found = true
 		}
@@ -139,7 +139,7 @@ func TestGRPC_CrossTenantIsolation(t *testing.T) {
 
 	// A token with no tenant claim is rejected.
 	plain, _, _ := issuer.IssueUserToken(user, time.Hour)
-	if _, err := client.ListEvents(authCtx(plain), &mnemosv1.ListEventsRequest{}); err == nil {
+	if _, err := client.ListEpisodes(authCtx(plain), &mnemosv1.ListEpisodesRequest{}); err == nil {
 		t.Error("expected a token without a tenant to be rejected")
 	}
 }
@@ -199,28 +199,28 @@ func TestGRPC_CrossTenantIsolation_SQLite(t *testing.T) {
 	}
 
 	now := timestamppb.New(time.Now().UTC())
-	if _, err := client.AppendEvents(authCtx(tokA), &mnemosv1.AppendEventsRequest{
-		Events: []*mnemosv1.Event{
+	if _, err := client.AppendEpisodes(authCtx(tokA), &mnemosv1.AppendEpisodesRequest{
+		Episodes: []*mnemosv1.Episode{
 			{Id: "ev-acme", RunId: "r", SchemaVersion: "v1", Content: "acme secret", SourceInputId: "in", Timestamp: now, IngestedAt: now},
 		},
 	}); err != nil {
-		t.Fatalf("tenant A AppendEvents: %v", err)
+		t.Fatalf("tenant A AppendEpisodes: %v", err)
 	}
-	bList, err := client.ListEvents(authCtx(tokB), &mnemosv1.ListEventsRequest{})
+	bList, err := client.ListEpisodes(authCtx(tokB), &mnemosv1.ListEpisodesRequest{})
 	if err != nil {
-		t.Fatalf("tenant B ListEvents: %v", err)
+		t.Fatalf("tenant B ListEpisodes: %v", err)
 	}
-	for _, e := range bList.Events {
+	for _, e := range bList.Episodes {
 		if e.Id == "ev-acme" {
 			t.Fatalf("CROSS-TENANT LEAK: tenant B read tenant A's event %q", e.Id)
 		}
 	}
-	aList, err := client.ListEvents(authCtx(tokA), &mnemosv1.ListEventsRequest{})
+	aList, err := client.ListEpisodes(authCtx(tokA), &mnemosv1.ListEpisodesRequest{})
 	if err != nil {
-		t.Fatalf("tenant A ListEvents: %v", err)
+		t.Fatalf("tenant A ListEpisodes: %v", err)
 	}
 	found := false
-	for _, e := range aList.Events {
+	for _, e := range aList.Episodes {
 		if e.Id == "ev-acme" {
 			found = true
 		}
@@ -230,7 +230,7 @@ func TestGRPC_CrossTenantIsolation_SQLite(t *testing.T) {
 	}
 	// A token with no tenant claim is rejected.
 	plain, _, _ := issuer.IssueUserToken(user, time.Hour)
-	if _, err := client.ListEvents(authCtx(plain), &mnemosv1.ListEventsRequest{}); err == nil {
+	if _, err := client.ListEpisodes(authCtx(plain), &mnemosv1.ListEpisodesRequest{}); err == nil {
 		t.Error("expected a token without a tenant to be rejected")
 	}
 }
@@ -312,16 +312,16 @@ func TestGRPC_CachedTenantConnSurvivesMultipleRPCs(t *testing.T) {
 	authCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok)
 
 	now := timestamppb.New(time.Now().UTC())
-	if _, err := client.AppendEvents(authCtx, &mnemosv1.AppendEventsRequest{
-		Events: []*mnemosv1.Event{
+	if _, err := client.AppendEpisodes(authCtx, &mnemosv1.AppendEpisodesRequest{
+		Episodes: []*mnemosv1.Episode{
 			{Id: "ev-1", RunId: "r", SchemaVersion: "v1", Content: "first", SourceInputId: "in", Timestamp: now, IngestedAt: now},
 		},
 	}); err != nil {
-		t.Fatalf("RPC 1 AppendEvents: %v", err)
+		t.Fatalf("RPC 1 AppendEpisodes: %v", err)
 	}
 	// RPC 2 over the SAME shared conn — must not hit a closed pool.
-	if _, err := client.ListEvents(authCtx, &mnemosv1.ListEventsRequest{}); err != nil {
-		t.Fatalf("RPC 2 ListEvents (shared conn closed by a prior RPC?): %v", err)
+	if _, err := client.ListEpisodes(authCtx, &mnemosv1.ListEpisodesRequest{}); err != nil {
+		t.Fatalf("RPC 2 ListEpisodes (shared conn closed by a prior RPC?): %v", err)
 	}
 	// The interceptor must have routed both releases through the supplied closer,
 	// never a raw Close on the shared conn.
@@ -385,28 +385,28 @@ func TestGRPC_TenantAllowlist_SelectionAndDenial(t *testing.T) {
 
 	now := timestamppb.New(time.Now().UTC())
 	// Write to the default tenant (no selection → "acme").
-	if _, err := client.AppendEvents(authTenant(""), &mnemosv1.AppendEventsRequest{
-		Events: []*mnemosv1.Event{{Id: "ev-acme", RunId: "r", SchemaVersion: "v1", Content: "acme", SourceInputId: "in", Timestamp: now, IngestedAt: now}},
+	if _, err := client.AppendEpisodes(authTenant(""), &mnemosv1.AppendEpisodesRequest{
+		Episodes: []*mnemosv1.Episode{{Id: "ev-acme", RunId: "r", SchemaVersion: "v1", Content: "acme", SourceInputId: "in", Timestamp: now, IngestedAt: now}},
 	}); err != nil {
 		t.Fatalf("append to default tenant: %v", err)
 	}
 	// Select the OTHER allowed tenant: it must not see acme's event (isolated).
-	repoList, err := client.ListEvents(authTenant("repo_x"), &mnemosv1.ListEventsRequest{})
+	repoList, err := client.ListEpisodes(authTenant("repo_x"), &mnemosv1.ListEpisodesRequest{})
 	if err != nil {
 		t.Fatalf("list as repo_x: %v", err)
 	}
-	for _, e := range repoList.Events {
+	for _, e := range repoList.Episodes {
 		if e.Id == "ev-acme" {
 			t.Fatalf("ISOLATION BREACH: repo_x saw acme's event")
 		}
 	}
 	// Selecting the default tenant sees the event.
-	acmeList, err := client.ListEvents(authTenant("acme"), &mnemosv1.ListEventsRequest{})
+	acmeList, err := client.ListEpisodes(authTenant("acme"), &mnemosv1.ListEpisodesRequest{})
 	if err != nil {
 		t.Fatalf("list as acme: %v", err)
 	}
 	found := false
-	for _, e := range acmeList.Events {
+	for _, e := range acmeList.Episodes {
 		if e.Id == "ev-acme" {
 			found = true
 		}
@@ -415,7 +415,7 @@ func TestGRPC_TenantAllowlist_SelectionAndDenial(t *testing.T) {
 		t.Fatal("selecting the default tenant should see its own event")
 	}
 	// Selecting a tenant OUTSIDE the allowlist is denied.
-	if _, err := client.ListEvents(authTenant("forbidden"), &mnemosv1.ListEventsRequest{}); err == nil {
+	if _, err := client.ListEpisodes(authTenant("forbidden"), &mnemosv1.ListEpisodesRequest{}); err == nil {
 		t.Fatal("selecting a tenant outside the allowlist must be denied")
 	}
 }

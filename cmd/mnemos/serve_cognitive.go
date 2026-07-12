@@ -230,7 +230,7 @@ type analogyDTO struct {
 	Similarity float64 `json:"similarity"`
 }
 
-// makeAnalogousHandler serves GET /v1/claims/<id>/analogous — the claims most
+// makeAnalogousHandler serves GET /v1/beliefs/<id>/analogous — the claims most
 // structurally analogous to the given one (Weisfeiler-Lehman similarity).
 func makeAnalogousHandler(mem mnemos.Memory, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

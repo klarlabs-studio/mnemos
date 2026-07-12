@@ -92,7 +92,7 @@ func TestSemanticSearch_RanksByCosine_RespectsRunID(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?similar_to=anything&run_id=tenant:A&top_k=10")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?similar_to=anything&run_id=tenant:A&top_k=10")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestSemanticSearch_RequiresRunID(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?similar_to=anything")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?similar_to=anything")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestSemanticSearch_NoEmbedderConfigured(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?similar_to=anything&run_id=tenant:A")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?similar_to=anything&run_id=tenant:A")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestSemanticSearch_MinSimilarityAndTopK(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?similar_to=q&run_id=tenant:X&top_k=2&min_similarity=0.9")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?similar_to=q&run_id=tenant:X&top_k=2&min_similarity=0.9")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestSemanticSearch_UnknownRunIDReturnsEmpty(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?similar_to=q&run_id=tenant:nobody")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?similar_to=q&run_id=tenant:nobody")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -264,13 +264,13 @@ func TestSemanticSearch_RejectsBadKnobs(t *testing.T) {
 		name string
 		url  string
 	}{
-		{"top_k zero", "/v1/claims?similar_to=q&run_id=t:A&top_k=0"},
-		{"top_k negative", "/v1/claims?similar_to=q&run_id=t:A&top_k=-1"},
-		{"top_k too large", "/v1/claims?similar_to=q&run_id=t:A&top_k=999"},
-		{"top_k garbage", "/v1/claims?similar_to=q&run_id=t:A&top_k=abc"},
-		{"min_similarity negative", "/v1/claims?similar_to=q&run_id=t:A&min_similarity=-0.1"},
-		{"min_similarity > 1", "/v1/claims?similar_to=q&run_id=t:A&min_similarity=1.5"},
-		{"min_similarity garbage", "/v1/claims?similar_to=q&run_id=t:A&min_similarity=high"},
+		{"top_k zero", "/v1/beliefs?similar_to=q&run_id=t:A&top_k=0"},
+		{"top_k negative", "/v1/beliefs?similar_to=q&run_id=t:A&top_k=-1"},
+		{"top_k too large", "/v1/beliefs?similar_to=q&run_id=t:A&top_k=999"},
+		{"top_k garbage", "/v1/beliefs?similar_to=q&run_id=t:A&top_k=abc"},
+		{"min_similarity negative", "/v1/beliefs?similar_to=q&run_id=t:A&min_similarity=-0.1"},
+		{"min_similarity > 1", "/v1/beliefs?similar_to=q&run_id=t:A&min_similarity=1.5"},
+		{"min_similarity garbage", "/v1/beliefs?similar_to=q&run_id=t:A&min_similarity=high"},
 	}
 	for _, tc := range cases {
 		tc := tc

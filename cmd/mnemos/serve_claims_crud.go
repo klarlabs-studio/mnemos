@@ -21,7 +21,7 @@ func notFound(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "not found")
 }
 
-// --- GET /v1/claims/{id} -----------------------------------------------------
+// --- GET /v1/beliefs/{id} -----------------------------------------------------
 
 type fullClaimDTO struct {
 	ID         string  `json:"id"`
@@ -67,7 +67,7 @@ func makeGetClaimHandler(mem mnemos.Memory, claimID string) http.HandlerFunc {
 	}
 }
 
-// --- POST /v1/claims/{id}/lifecycle ------------------------------------------
+// --- POST /v1/beliefs/{id}/lifecycle ------------------------------------------
 
 func makeLifecycleHandler(mem mnemos.Memory, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

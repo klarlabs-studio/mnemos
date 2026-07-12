@@ -165,7 +165,7 @@ func TestServe_ListEventsReturnsAndPaginates(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/events?limit=2&offset=1")
+	resp, err := http.Get(srv.URL + "/v1/episodes?limit=2&offset=1")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestServe_ListEventsFiltersByRunID(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/events?run_id=run-A")
+	resp, err := http.Get(srv.URL + "/v1/episodes?run_id=run-A")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestServe_ListClaimsBitemporalAxes(t *testing.T) {
 
 	get := func(query string) claimsResponse {
 		t.Helper()
-		resp, err := http.Get(srv.URL + "/v1/claims?" + query)
+		resp, err := http.Get(srv.URL + "/v1/beliefs?" + query)
 		if err != nil {
 			t.Fatalf("get: %v", err)
 		}
@@ -395,7 +395,7 @@ func TestServe_ListEventsCapsAtMax(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/events?limit=10000")
+	resp, err := http.Get(srv.URL + "/v1/episodes?limit=10000")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -421,7 +421,7 @@ func TestServe_ListClaimsFiltersByType(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?type=decision")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?type=decision")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -445,7 +445,7 @@ func TestServe_ListClaimsRejectsInvalidType(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(newServerTestStore_conn(t)))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?type=bogus")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?type=bogus")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -490,19 +490,19 @@ func TestServe_AppendClaimHonorsCreatedBy(t *testing.T) {
 	authHdr := map[string]string{"Authorization": "Bearer " + tok}
 
 	body := map[string]any{
-		"claims": []map[string]any{{
+		"beliefs": []map[string]any{{
 			"id": "cl_dec", "text": "approved plan", "type": "decision",
 			"status": "active", "created_by": "coach:99",
 		}},
-		"evidence": []map[string]any{{"claim_id": "cl_dec", "event_id": "ev_dec"}},
+		"evidence": []map[string]any{{"belief_id": "cl_dec", "episode_id": "ev_dec"}},
 	}
-	resp := postJSON(t, srv.URL+"/v1/claims", body, authHdr)
+	resp := postJSON(t, srv.URL+"/v1/beliefs", body, authHdr)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
 		t.Fatalf("append status = %d", resp.StatusCode)
 	}
 
-	got := getJSON(t, srv.URL+"/v1/claims?run_id=athlete:42", authHdr)
+	got := getJSON(t, srv.URL+"/v1/beliefs?run_id=athlete:42", authHdr)
 	defer func() { _ = got.Body.Close() }()
 	var out claimsResponse
 	if err := json.NewDecoder(got.Body).Decode(&out); err != nil {
@@ -540,7 +540,7 @@ func TestServe_ListClaimsByRunID(t *testing.T) {
 	defer srv.Close()
 
 	// Tenant A's filter should return ONLY cl_A — never cl_B.
-	resp, err := http.Get(srv.URL + "/v1/claims?run_id=tenant:A")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?run_id=tenant:A")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -566,7 +566,7 @@ func TestServe_ListClaimsByRunID_UnknownRun(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?run_id=tenant:nobody")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?run_id=tenant:nobody")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -602,7 +602,7 @@ func TestServe_ListClaimsByRunID_NoEvidenceFailsClosed(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/claims?run_id=tenant:X")
+	resp, err := http.Get(srv.URL + "/v1/beliefs?run_id=tenant:X")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -628,7 +628,7 @@ func TestServe_ListRelationshipsFiltersByType(t *testing.T) {
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/v1/relationships?type=contradicts")
+	resp, err := http.Get(srv.URL + "/v1/associations?type=contradicts")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -675,7 +675,7 @@ func TestServe_UnsupportedMethodReturns405(t *testing.T) {
 	// returns 401 before the method dispatch.
 	st := newServeJWTTest(t)
 
-	req, _ := http.NewRequest(http.MethodDelete, st.Srv.URL+"/v1/events", nil)
+	req, _ := http.NewRequest(http.MethodDelete, st.Srv.URL+"/v1/episodes", nil)
 	for k, v := range st.Auth {
 		req.Header.Set(k, v)
 	}
