@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -18,9 +21,20 @@ import (
 //	mnemos consolidate --promote [--min-tenants N] [--gate auto|operator]
 //	                   [--tenant-dsn <dsn> ... | --all-tenants --db <dsn>]
 //	                   [--global-dsn <dsn>] [--sensitive <token> ...]
+//	                   [--curate|--contribute --token <jwt>]
 //	                   [--dry-run | --apply]
 //
 //	mnemos consolidate --promote approve <id> --global-dsn <dsn>
+//
+// Two eligibility-cleared promotion paths (ADR 0012), both applied only to
+// class-level subjects (individual/unknown lessons are excluded up front and
+// never promote):
+//   - Emergent (default): a class-level lesson corroborated across ≥ MinTenants
+//     distinct tenants. Corroboration is the quality+privacy signal.
+//   - Curated (--curate/--contribute): a class-level lesson from a SINGLE source,
+//     bypassing the corroboration gate but requiring a curator token bearing the
+//     promote:global scope (--token <jwt> or MNEMOS_TOKEN). De-identification and
+//     the contradiction gate still apply.
 //
 // It reads the synthesized Schemas (Lessons) from each tenant, runs the pure
 // promotion engine (internal/consolidate) with its five gates, and emits a
@@ -66,6 +80,16 @@ func handlePromote(args []string, f Flags) {
 	if opts.allTenants && len(opts.tenantDSNs) > 0 {
 		exitWithMnemosError(false, NewUserError("--all-tenants and --tenant-dsn are alternative inputs; supply one, not both"))
 		return
+	}
+
+	// ADR 0012 curator gate: the curated single-source path requires a token
+	// bearing promote:global. Enforce it BEFORE reading any tenant data so an
+	// unauthorized --curate run does nothing.
+	if opts.curate {
+		if err := verifyCuratorToken(ctx, opts.token, opts.curatorRevocationDSN()); err != nil {
+			exitWithMnemosError(false, err)
+			return
+		}
 	}
 
 	// Load per-tenant lessons. Two alternative inputs:
@@ -152,6 +176,7 @@ func handlePromote(args []string, f Flags) {
 		"tenants_scanned": len(tenants),
 		"min_tenants":     opts.engine.MinTenants,
 		"gate":            string(opts.engine.Gate),
+		"curated":         opts.curate,
 		"dry_run":         !opts.apply,
 		"promoted":        res.Promoted,
 		"pending":         res.Pending,
@@ -259,6 +284,11 @@ type promoteOpts struct {
 	globalDSN  string
 	apply      bool
 	approveID  string
+	// curate enables the ADR 0012 curated single-source path. It requires a
+	// curator token (--token / MNEMOS_TOKEN) bearing the promote:global scope.
+	curate bool
+	// token is the curator JWT verified when curate is set.
+	token string
 }
 
 func parsePromoteOpts(args []string, _ Flags) (promoteOpts, error) {
@@ -324,6 +354,18 @@ func parsePromoteOpts(args []string, _ Flags) (promoteOpts, error) {
 			}
 			out.engine.SensitiveTokens = append(out.engine.SensitiveTokens, args[i+1])
 			i++
+		case "--curate", "--contribute":
+			// ADR 0012 curated single-source path. Enables promotion of a
+			// class-level fact from ONE source, bypassing cross-tenant
+			// corroboration. Requires a curator token (verified in handlePromote).
+			out.curate = true
+			out.engine.Curated = true
+		case "--token":
+			if i+1 >= len(args) {
+				return out, NewUserError("--token requires a value")
+			}
+			out.token = args[i+1]
+			i++
 		case "--apply":
 			out.apply = true
 		case "--dry-run":
@@ -334,6 +376,63 @@ func parsePromoteOpts(args []string, _ Flags) (promoteOpts, error) {
 		}
 	}
 	return out, nil
+}
+
+// verifyCuratorToken enforces the ADR 0012 curator authorization for the
+// curated single-source promotion path. It resolves the token from --token or
+// MNEMOS_TOKEN, validates its signature/expiry against the install's JWT secret,
+// honours the revocation denylist of the store identified by revocationDSN, and
+// requires the bearer to hold the promote:global scope (auth.Claims.CanCurate).
+// It FAILS CLOSED — any missing/invalid token or missing scope is an error, so
+// the curated path is unreachable without a valid curator capability.
+func verifyCuratorToken(ctx context.Context, tokenStr, revocationDSN string) error {
+	tokenStr = strings.TrimSpace(tokenStr)
+	if tokenStr == "" {
+		tokenStr = strings.TrimSpace(os.Getenv("MNEMOS_TOKEN"))
+	}
+	if tokenStr == "" {
+		return NewUserError("curated promotion (--curate) requires a curator token bearing %q — pass --token <jwt> or set MNEMOS_TOKEN", domain.ScopePromoteGlobal)
+	}
+
+	_, projectRoot, _ := findProjectDB()
+	secret, _, err := auth.LoadOrCreateSecret(auth.DefaultSecretPath(projectRoot))
+	if err != nil {
+		return NewSystemError(err, "load JWT secret to verify curator token")
+	}
+
+	conn, err := store.Open(ctx, revocationDSN)
+	if err != nil {
+		return NewSystemError(err, "open store %q to check curator-token revocation", revocationDSN)
+	}
+	defer func() { _ = conn.Close() }()
+	if conn.RevokedTokens == nil {
+		return NewUserError("store %q cannot verify token revocation", revocationDSN)
+	}
+
+	claims, err := auth.NewVerifier(secret, conn.RevokedTokens).ParseAndValidate(ctx, tokenStr)
+	if err != nil {
+		return NewUserError("curator token rejected: %v", err)
+	}
+	if !claims.CanCurate() {
+		return NewUserError("curator token lacks the %q scope required for --curate", domain.ScopePromoteGlobal)
+	}
+	return nil
+}
+
+// curatorRevocationDSN picks the store whose revocation denylist authorizes the
+// curator token: the global (neocortex) store when writing there, else the
+// operator's base store, else the resolved default.
+func (o promoteOpts) curatorRevocationDSN() string {
+	switch {
+	case o.globalDSN != "":
+		return o.globalDSN
+	case o.db != "":
+		return o.db
+	case len(o.tenantDSNs) > 0:
+		return o.tenantDSNs[0]
+	default:
+		return resolveDSN()
+	}
 }
 
 // storeGlobalKnowledge adapts a store DSN to the consolidate.GlobalKnowledge

@@ -122,6 +122,14 @@ type Schema struct {
 	LastVerified time.Time
 	Source       string // "synthesize" for engine-derived, "human" for hand-authored
 	CreatedBy    string
+
+	// SubjectClass classifies WHAT the schema is about — a specific instance
+	// (individual) versus a category (class) — for the ADR 0012 promotion
+	// eligibility gate. It flows up from the backing beliefs: a schema over
+	// class-level beliefs is class-level (see AggregateSubjectClass). Empty
+	// (SubjectClassUnknown) means unclassified. Only class-level schemas are
+	// eligible to promote to the shared global brain.
+	SubjectClass SubjectClass
 }
 
 // Lesson is the pre-ADR-0011 name for Schema; kept as a back-compat

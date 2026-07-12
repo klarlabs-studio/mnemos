@@ -176,6 +176,7 @@ type Lesson struct {
 	Source       string  `json:"source"`
 	CreatedBy    string  `json:"created_by"`
 	Polarity     string  `json:"polarity"`
+	SubjectClass string  `json:"subject_class"`
 }
 
 type LessonEvidence struct {

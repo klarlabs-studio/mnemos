@@ -18,11 +18,22 @@
 //
 // Gates, applied strictly in order:
 //
+//  0. Subject-class eligibility (ADR 0012) — applied FIRST, per lesson. A
+//     lesson is eligible only when its subject is class-level (about a
+//     category: a breed, species, disease, a spider). Individual-subject
+//     lessons (about a specific pet/owner) and unclassified (unknown) lessons
+//     are excluded here and can NEVER promote, no matter how many tenants
+//     corroborate them — the privacy invariant for a medical product. See
+//     domain.EligibleForPromotion.
 //  1. Cross-tenant corroboration — a candidate must have been produced
 //     independently in ≥ MinTenants distinct tenants. This is simultaneously
 //     the QUALITY signal (many tenants learned the same thing) and the PRIVACY
 //     gate (a single-tenant lesson cannot leak, because it never becomes a
-//     candidate).
+//     candidate). This is the EMERGENT path. The CURATED path (Options.Curated,
+//     gated by the caller holding the promote:global curator scope) BYPASSES
+//     this gate: a class-level fact may promote from a single source. Curated
+//     candidates still run every other gate (de-identification, contradiction,
+//     ranking, gate policy).
 //  2. Token-level corroboration + de-identification — the promoted statement is
 //     NOT one tenant's verbatim text. Within a cleared group the engine picks
 //     the highest-confidence member EVERY content token of which was seen in
@@ -112,6 +123,18 @@ type Options struct {
 	// themselves are always added to this set automatically. Entries shorter
 	// than minDenylistLen are ignored to avoid catastrophic over-blocking.
 	SensitiveTokens []string
+	// Curated enables the ADR 0012 CURATED single-source promotion path. When
+	// set, an eligible (class-level) lesson may promote from a SINGLE source,
+	// bypassing the cross-tenant corroboration gate (gate 1) and the token-level
+	// cross-tenant corroboration (gate 2a). It still runs the subject-class
+	// eligibility gate, denylist de-identification, and the contradiction gate.
+	//
+	// Curated is an AUTHORIZED capability: the caller MUST have verified the
+	// operator holds the promote:global curator scope (see auth.Claims.CanCurate)
+	// before setting it. The pure engine trusts that authorization has happened
+	// — it enforces the class-level + de-identification + contradiction floors,
+	// not the identity of the curator.
+	Curated bool
 }
 
 func (o Options) withDefaults() Options {
@@ -169,6 +192,11 @@ type PromotedLesson struct {
 	// data was available; HasSurprise disambiguates.
 	Surprise    float64
 	HasSurprise bool
+	// Curated records which ADR 0012 path produced this candidate: true for the
+	// curated single-source path (authorized by the promote:global scope), false
+	// for the emergent cross-tenant-corroborated path. Purely for audit output;
+	// both paths clear de-identification and the contradiction gate.
+	Curated bool
 }
 
 // DissonantCandidate is a candidate that cleared corroboration and
@@ -194,6 +222,7 @@ type SkippedCandidate struct {
 
 // Skip reasons (machine-stable).
 const (
+	ReasonIneligibleSubject         = "ineligible subject class (not class-level)"
 	ReasonInsufficientCorroboration = "insufficient cross-tenant corroboration"
 	ReasonNoCorroboratedPhrasing    = "no cross-tenant-corroborated phrasing"
 	ReasonTenantSpecificToken       = "statement contains tenant-specific or sensitive token"
@@ -303,6 +332,19 @@ func (p *Promoter) Promote(ctx context.Context, tenants []TenantLessons, opts Op
 	members := make([]member, 0)
 	for _, tl := range tenants {
 		for _, lesson := range tl.Lessons {
+			// Gate 0 (ADR 0012): subject-class eligibility, applied FIRST. Only
+			// class-level lessons are eligible; individual-subject and unknown
+			// lessons are excluded here and can NEVER promote — the privacy
+			// invariant. This runs BEFORE any cross-tenant counting so it holds
+			// on both the emergent and curated paths.
+			if !domain.EligibleForPromotion(lesson.SubjectClass) {
+				res.Skipped = append(res.Skipped, SkippedCandidate{
+					Statement:       lesson.Statement,
+					DistinctTenants: 0,
+					Reason:          ReasonIneligibleSubject,
+				})
+				continue
+			}
 			toks := relate.ContentTokens(lesson.Statement)
 			if len(toks) == 0 {
 				res.Skipped = append(res.Skipped, SkippedCandidate{
@@ -346,27 +388,42 @@ func (p *Promoter) Promote(ctx context.Context, tenants []TenantLessons, opts Op
 		tenantSet := g.tenants()
 		distinct := len(tenantSet)
 
-		// Gate 1: corroboration / privacy. A lesson in fewer than MinTenants
-		// distinct tenants can NEVER promote — this is the no-leak guarantee.
-		if distinct < opts.MinTenants {
-			res.Skipped = append(res.Skipped, SkippedCandidate{
-				Statement:       representativeStatement(g),
-				DistinctTenants: distinct,
-				Reason:          ReasonInsufficientCorroboration,
-			})
-			continue
-		}
+		// Gates 1 + 2a select the statement. The path differs:
+		//   - Emergent (default): require ≥MinTenants corroboration (gate 1) and
+		//     a phrasing every token of which was seen in ≥2 tenants (gate 2a) —
+		//     structural cross-tenant privacy.
+		//   - Curated (ADR 0012, authorized by promote:global): a single source
+		//     is allowed, so both are bypassed and the representative (highest-
+		//     confidence) statement is used. Eligibility (gate 0) already proved
+		//     the subject is class-level, and de-identification (gate 2b) still
+		//     runs — those are the privacy floor on this path.
+		var stmt string
+		if opts.Curated {
+			stmt = representativeStatement(g)
+		} else {
+			// Gate 1: corroboration / privacy. A lesson in fewer than MinTenants
+			// distinct tenants can NEVER promote — this is the no-leak guarantee.
+			if distinct < opts.MinTenants {
+				res.Skipped = append(res.Skipped, SkippedCandidate{
+					Statement:       representativeStatement(g),
+					DistinctTenants: distinct,
+					Reason:          ReasonInsufficientCorroboration,
+				})
+				continue
+			}
 
-		// Gate 2a: token-level corroboration. Choose the highest-confidence
-		// member every content token of which was seen in ≥2 distinct tenants.
-		stmt, ok := corroboratedStatement(g)
-		if !ok {
-			res.Skipped = append(res.Skipped, SkippedCandidate{
-				Statement:       representativeStatement(g),
-				DistinctTenants: distinct,
-				Reason:          ReasonNoCorroboratedPhrasing,
-			})
-			continue
+			// Gate 2a: token-level corroboration. Choose the highest-confidence
+			// member every content token of which was seen in ≥2 distinct tenants.
+			corr, ok := corroboratedStatement(g)
+			if !ok {
+				res.Skipped = append(res.Skipped, SkippedCandidate{
+					Statement:       representativeStatement(g),
+					DistinctTenants: distinct,
+					Reason:          ReasonNoCorroboratedPhrasing,
+				})
+				continue
+			}
+			stmt = corr
 		}
 
 		// Gate 2b: de-identification. Fail closed if the chosen statement still
@@ -389,6 +446,7 @@ func (p *Promoter) Promote(ctx context.Context, tenants []TenantLessons, opts Op
 			Confidence:      groupConfidence(g),
 			Surprise:        groupSurprise(g),
 			HasSurprise:     groupHasSurprise(g),
+			Curated:         opts.Curated,
 		}
 		if scope, shared := groupScope(g); shared {
 			cand.Scope = scope

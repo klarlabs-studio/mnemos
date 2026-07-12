@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store"
 )
@@ -32,6 +34,35 @@ func seedTenantLesson(t *testing.T, dsn, id, statement string) {
 	if err := conn.Lessons.Append(ctx, domain.Lesson{
 		ID: id, Statement: statement, Confidence: 0.8,
 		Evidence: []string{actionID}, DerivedAt: now,
+		// Class-level by default: these promotion tests use category-level facts
+		// (about services/incident classes), which are eligible past the ADR-0012
+		// subject-class gate. seedTenantLessonClass overrides for gate tests.
+		SubjectClass: domain.SubjectClassClass,
+	}); err != nil {
+		t.Fatalf("append lesson: %v", err)
+	}
+}
+
+// seedTenantLessonClass writes one synthesized schema with an explicit subject
+// class so the ADR-0012 eligibility gate can be exercised via the CLI path.
+func seedTenantLessonClass(t *testing.T, dsn, id, statement string, class domain.SubjectClass) {
+	t.Helper()
+	ctx := context.Background()
+	conn, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open tenant %s: %v", dsn, err)
+	}
+	defer func() { _ = conn.Close() }()
+	now := time.Now().UTC()
+	actionID := "a_" + id
+	if err := conn.Actions.Append(ctx, domain.Action{
+		ID: actionID, Kind: domain.ActionKindDeploy, Subject: "svc", At: now, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("append action: %v", err)
+	}
+	if err := conn.Lessons.Append(ctx, domain.Lesson{
+		ID: id, Statement: statement, Confidence: 0.8,
+		Evidence: []string{actionID}, DerivedAt: now, SubjectClass: class,
 	}); err != nil {
 		t.Fatalf("append lesson: %v", err)
 	}
@@ -315,5 +346,139 @@ func TestDirectSurpriseSource_UsesBackingClaimsNotScope(t *testing.T) {
 	l2 := domain.Lesson{ID: "L2", Statement: "deploy", Scope: scope, Evidence: []string{"A_orphan"}}
 	if _, ok := src.SurpriseFor(ctx, l2); ok {
 		t.Fatal("orphan-action lesson should have no surprise data")
+	}
+}
+
+// --- ADR 0012: subject-classified promotion (CLI) ---
+
+// curatorToken mints an agent token carrying the given scopes, signed with the
+// process-pinned test JWT secret (see TestMain).
+func curatorToken(t *testing.T, scopes []string) string {
+	t.Helper()
+	secret, err := hex.DecodeString(os.Getenv("MNEMOS_JWT_SECRET"))
+	if err != nil {
+		t.Fatalf("decode test secret: %v", err)
+	}
+	tok, _, err := auth.NewIssuer(secret).IssueAgentTokenWithScopes("agt_curator", scopes, time.Hour)
+	if err != nil {
+		t.Fatalf("issue curator token: %v", err)
+	}
+	return tok
+}
+
+// TestHandlePromote_EligibilityGate_CLI proves the ADR 0012 eligibility gate
+// through the CLI: an individual-subject fact corroborated across three tenants
+// is NEVER promoted, while an equally-corroborated class-level fact is.
+func TestHandlePromote_EligibilityGate_CLI(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	classFact := "rolling back a failed deploy restores service availability"
+	indivFact := "rex the retriever needs twice daily insulin for his condition"
+
+	var tenantArgs []string
+	for _, name := range []string{"t1", "t2", "t3"} {
+		dsn := "sqlite://" + filepath.Join(dir, name+".db")
+		seedTenantLessonClass(t, dsn, name+"_c", classFact, domain.SubjectClassClass)
+		seedTenantLessonClass(t, dsn, name+"_i", indivFact, domain.SubjectClassIndividual)
+		tenantArgs = append(tenantArgs, "--tenant-dsn", dsn)
+	}
+	globalDSN := "sqlite://" + filepath.Join(dir, "global.db")
+
+	args := append([]string{"--promote", "--gate", "operator", "--apply", "--global-dsn", globalDSN}, tenantArgs...)
+	_ = captureStdout(t, func() { handlePromote(args, Flags{}) })
+
+	gconn, err := store.Open(ctx, globalDSN)
+	if err != nil {
+		t.Fatalf("open global: %v", err)
+	}
+	defer func() { _ = gconn.Close() }()
+
+	pending, err := gconn.GlobalSchemas.ListByStatus(ctx, domain.GlobalSchemaStatusPending)
+	if err != nil {
+		t.Fatalf("list pending: %v", err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("want exactly 1 promoted schema (class fact only), got %d: %+v", len(pending), pending)
+	}
+	if pending[0].Statement != classFact {
+		t.Fatalf("promoted the wrong fact: %q", pending[0].Statement)
+	}
+	for _, s := range pending {
+		if contains(s.Statement, "rex the retriever") {
+			t.Fatalf("LEAK: individual-subject fact reached the global brain: %q", s.Statement)
+		}
+	}
+}
+
+// TestVerifyCuratorToken exercises the ADR 0012 curator-scope gate directly:
+// no token and a scopeless token are both rejected; a promote:global token
+// passes.
+func TestVerifyCuratorToken(t *testing.T) {
+	ctx := context.Background()
+	dsn := "sqlite://" + filepath.Join(t.TempDir(), "rev.db")
+	// Bootstrap the store so its revocation repo exists.
+	conn, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	_ = conn.Close()
+
+	t.Setenv("MNEMOS_TOKEN", "")
+	if err := verifyCuratorToken(ctx, "", dsn); err == nil {
+		t.Fatal("no token must be rejected")
+	}
+	if err := verifyCuratorToken(ctx, curatorToken(t, []string{"events:write"}), dsn); err == nil {
+		t.Fatal("token without promote:global must be rejected")
+	}
+	if err := verifyCuratorToken(ctx, curatorToken(t, []string{domain.ScopePromoteGlobal}), dsn); err != nil {
+		t.Fatalf("promote:global token must pass, got %v", err)
+	}
+}
+
+// TestHandlePromote_Curated_CLI proves the curated single-source path end to end:
+// a class-level fact from ONE tenant does not promote by default, but promotes
+// under --curate with a promote:global token supplied via MNEMOS_TOKEN.
+func TestHandlePromote_Curated_CLI(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	fact := "the sydney funnelweb spider bite requires antivenom within thirty minutes"
+	tenantDSN := "sqlite://" + filepath.Join(dir, "clinic.db")
+	seedTenantLessonClass(t, tenantDSN, "s1", fact, domain.SubjectClassClass)
+
+	// Baseline: single source, no curate → nothing promotes.
+	base := "sqlite://" + filepath.Join(dir, "global_base.db")
+	_ = captureStdout(t, func() {
+		handlePromote([]string{"--promote", "--gate", "operator", "--apply", "--global-dsn", base, "--tenant-dsn", tenantDSN}, Flags{})
+	})
+	bconn, err := store.Open(ctx, base)
+	if err != nil {
+		t.Fatalf("open base global: %v", err)
+	}
+	n, err := bconn.GlobalSchemas.CountAll(ctx)
+	_ = bconn.Close()
+	if err != nil {
+		t.Fatalf("count base: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("single-source fact must not promote without --curate, got %d", n)
+	}
+
+	// Curated: with a promote:global token, the single-source fact promotes.
+	t.Setenv("MNEMOS_TOKEN", curatorToken(t, []string{domain.ScopePromoteGlobal}))
+	globalDSN := "sqlite://" + filepath.Join(dir, "global_curated.db")
+	_ = captureStdout(t, func() {
+		handlePromote([]string{"--promote", "--curate", "--gate", "operator", "--apply", "--global-dsn", globalDSN, "--tenant-dsn", tenantDSN}, Flags{})
+	})
+	gconn, err := store.Open(ctx, globalDSN)
+	if err != nil {
+		t.Fatalf("open curated global: %v", err)
+	}
+	defer func() { _ = gconn.Close() }()
+	pending, err := gconn.GlobalSchemas.ListByStatus(ctx, domain.GlobalSchemaStatusPending)
+	if err != nil {
+		t.Fatalf("list pending: %v", err)
+	}
+	if len(pending) != 1 || pending[0].Statement != fact {
+		t.Fatalf("curated single-source class fact must promote, got %+v", pending)
 	}
 }
