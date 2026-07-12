@@ -174,6 +174,122 @@ func TestClaimVisibility_DefaultsToTeam(t *testing.T) {
 
 // TestClaimVisibility_RoundTrip verifies that each explicit Visibility value
 // survives a persist-and-retrieve cycle unchanged.
+// TestClaimSubjectClass_RoundTrip pins the ADR 0012 persistence contract:
+// a claim saved with a SubjectClass loads back with the same value on every
+// read path (ListAll via sqlc, ListByIDs + ListByEventIDs via the raw scanner).
+// Without the subject_class column the promotion path would always read back
+// SubjectClassUnknown and be inert.
+func TestClaimSubjectClass_RoundTrip(t *testing.T) {
+	cases := []domain.SubjectClass{
+		domain.SubjectClassClass,
+		domain.SubjectClassIndividual,
+		domain.SubjectClassUnknown,
+	}
+
+	for _, sc := range cases {
+		name := string(sc)
+		if name == "" {
+			name = "unknown"
+		}
+		t.Run(name, func(t *testing.T) {
+			db := openTestDB(t)
+			defer closeDB(db)
+
+			ctx := context.Background()
+			repo := NewClaimRepository(db)
+
+			ev := domain.Event{
+				ID:            "ev_sc_" + name,
+				RunID:         "run",
+				SchemaVersion: "1",
+				Content:       "subject-class round-trip",
+				SourceInputID: "in",
+				Timestamp:     time.Now().UTC(),
+				IngestedAt:    time.Now().UTC(),
+			}
+			if err := NewEventRepository(db).Append(ctx, ev); err != nil {
+				t.Fatalf("seed event: %v", err)
+			}
+
+			claim := domain.Claim{
+				ID:           "cl_sc_" + name,
+				Text:         "subject-class round-trip: " + name,
+				Type:         domain.ClaimTypeFact,
+				Confidence:   0.75,
+				Status:       domain.ClaimStatusActive,
+				CreatedAt:    time.Now().UTC(),
+				SubjectClass: sc,
+			}
+			if err := repo.Upsert(ctx, []domain.Claim{claim}); err != nil {
+				t.Fatalf("Upsert: %v", err)
+			}
+			if err := repo.UpsertEvidence(ctx, []domain.ClaimEvidence{{ClaimID: claim.ID, EventID: ev.ID}}); err != nil {
+				t.Fatalf("UpsertEvidence: %v", err)
+			}
+
+			// ListAll — sqlc path.
+			all, err := repo.ListAll(ctx)
+			if err != nil {
+				t.Fatalf("ListAll: %v", err)
+			}
+			if len(all) != 1 || all[0].SubjectClass != sc {
+				t.Fatalf("ListAll SubjectClass = %+v, want %q", all, sc)
+			}
+
+			// ListByIDs — raw scanClaim path.
+			byIDs, err := repo.ListByIDs(ctx, []string{claim.ID})
+			if err != nil {
+				t.Fatalf("ListByIDs: %v", err)
+			}
+			if len(byIDs) != 1 || byIDs[0].SubjectClass != sc {
+				t.Fatalf("ListByIDs SubjectClass = %+v, want %q", byIDs, sc)
+			}
+
+			// ListByEventIDs — raw scanClaim path (JOIN).
+			byEvents, err := repo.ListByEventIDs(ctx, []string{ev.ID})
+			if err != nil {
+				t.Fatalf("ListByEventIDs: %v", err)
+			}
+			if len(byEvents) != 1 || byEvents[0].SubjectClass != sc {
+				t.Fatalf("ListByEventIDs SubjectClass = %+v, want %q", byEvents, sc)
+			}
+		})
+	}
+}
+
+// TestClaimSubjectClass_UpsertRefresh proves a re-upsert overwrites the
+// stored subject_class (ON CONFLICT ... SET subject_class = excluded...).
+func TestClaimSubjectClass_UpsertRefresh(t *testing.T) {
+	db := openTestDB(t)
+	defer closeDB(db)
+	ctx := context.Background()
+	repo := NewClaimRepository(db)
+
+	claim := domain.Claim{
+		ID:           "cl_sc_refresh",
+		Text:         "starts individual",
+		Type:         domain.ClaimTypeFact,
+		Confidence:   0.6,
+		Status:       domain.ClaimStatusActive,
+		CreatedAt:    time.Now().UTC(),
+		SubjectClass: domain.SubjectClassIndividual,
+	}
+	if err := repo.Upsert(ctx, []domain.Claim{claim}); err != nil {
+		t.Fatalf("Upsert individual: %v", err)
+	}
+	claim.SubjectClass = domain.SubjectClassClass
+	if err := repo.Upsert(ctx, []domain.Claim{claim}); err != nil {
+		t.Fatalf("Upsert class: %v", err)
+	}
+	got, err := repo.ListByIDs(ctx, []string{claim.ID})
+	if err != nil {
+		t.Fatalf("ListByIDs: %v", err)
+	}
+	if len(got) != 1 || got[0].SubjectClass != domain.SubjectClassClass {
+		t.Fatalf("re-upsert did not refresh SubjectClass: %+v", got)
+	}
+}
+
 func TestClaimVisibility_RoundTrip(t *testing.T) {
 	cases := []domain.Visibility{
 		domain.VisibilityPersonal,

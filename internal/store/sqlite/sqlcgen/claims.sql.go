@@ -94,7 +94,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle
+       visibility, confidence_components, lifecycle, subject_class
 FROM claims
 ORDER BY created_at ASC
 `
@@ -142,6 +142,7 @@ func (q *Queries) ListAllClaims(ctx context.Context) ([]Claim, error) {
 			&i.Visibility,
 			&i.ConfidenceComponents,
 			&i.Lifecycle,
+			&i.SubjectClass,
 		); err != nil {
 			return nil, err
 		}
@@ -219,7 +220,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle
+       visibility, confidence_components, lifecycle, subject_class
 FROM claims
 WHERE type = 'test_result'
   AND test_requirement_ref = ?
@@ -273,6 +274,7 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 			&i.Visibility,
 			&i.ConfidenceComponents,
 			&i.Lifecycle,
+			&i.SubjectClass,
 		); err != nil {
 			return nil, err
 		}
@@ -348,8 +350,8 @@ func (q *Queries) UpdateClaimTrust(ctx context.Context, arg UpdateClaimTrustPara
 }
 
 const upsertClaim = `-- name: UpsertClaim :exec
-INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   text = excluded.text,
   type = excluded.type,
@@ -377,7 +379,8 @@ ON CONFLICT(id) DO UPDATE SET
   test_fail_count = excluded.test_fail_count,
   visibility = excluded.visibility,
   confidence_components = excluded.confidence_components,
-  lifecycle = excluded.lifecycle
+  lifecycle = excluded.lifecycle,
+  subject_class = excluded.subject_class
 `
 
 type UpsertClaimParams struct {
@@ -409,6 +412,7 @@ type UpsertClaimParams struct {
 	Visibility           string  `json:"visibility"`
 	ConfidenceComponents string  `json:"confidence_components"`
 	Lifecycle            string  `json:"lifecycle"`
+	SubjectClass         string  `json:"subject_class"`
 }
 
 // ON CONFLICT preserves trust_score and valid_to (computed/managed
@@ -445,6 +449,7 @@ func (q *Queries) UpsertClaim(ctx context.Context, arg UpsertClaimParams) error 
 		arg.Visibility,
 		arg.ConfidenceComponents,
 		arg.Lifecycle,
+		arg.SubjectClass,
 	)
 	return err
 }
