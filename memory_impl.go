@@ -1772,6 +1772,131 @@ func (m *memory) Hypercorrections(ctx context.Context) ([]Hypercorrection, error
 	return out, nil
 }
 
+// predictiveErrorSurpriseSaturation maps a raw surprise (tolerance units; 1 = edge of
+// the confirmed band) into [0,1] for the prediction-error surface: 0 → 0, an edge hit
+// (1) → 0.5, a 2×-or-worse miss → 1. Bounds an otherwise unbounded refutation.
+const predictiveErrorSurpriseSaturation = 2.0
+
+func saturateSurprise(s float64) float64 {
+	if s <= 0 {
+		return 0
+	}
+	if s >= predictiveErrorSurpriseSaturation {
+		return 1
+	}
+	return s / predictiveErrorSurpriseSaturation
+}
+
+// PredictiveError implements [Memory.PredictiveError] (ADR 0017): the read-only
+// hierarchical prediction-error surface. It reads four existing signals — outcome
+// surprise, schema surprise, active dissonance, calibration error — never writes, and
+// aggregates only the levels that have data.
+func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
+	levels := make([]PredictiveErrorLevel, 0, 4)
+
+	// Level 1 — outcome: mean saturated surprise over resolved decision predictions.
+	outcome := PredictiveErrorLevel{Level: "outcome"}
+	series, _, err := m.observedSurprises(ctx)
+	if err != nil {
+		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: outcome: %w", err)
+	}
+	outcome.Samples = len(series)
+	if len(series) > 0 {
+		sum := 0.0
+		for _, s := range series {
+			sum += saturateSurprise(s)
+		}
+		outcome.Error = sum / float64(len(series))
+		outcome.Basis = fmt.Sprintf("mean outcome surprise over %d resolved prediction(s)", len(series))
+	} else {
+		outcome.Basis = "no resolved predictions yet"
+	}
+	levels = append(levels, outcome)
+
+	// Level 2 — schema: mean saturated peak surprise over promoted generalizations.
+	schema := PredictiveErrorLevel{Level: "schema"}
+	if m.conn.GlobalSchemas != nil {
+		schemas, serr := m.conn.GlobalSchemas.ListAll(ctx)
+		if serr != nil {
+			return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: schema: %w", serr)
+		}
+		sum := 0.0
+		n := 0
+		for _, sc := range schemas {
+			if sc.HasSurprise {
+				sum += saturateSurprise(sc.Surprise)
+				n++
+			}
+		}
+		schema.Samples = n
+		if n > 0 {
+			schema.Error = sum / float64(n)
+			schema.Basis = fmt.Sprintf("mean peak surprise over %d generalization(s)", n)
+		} else {
+			schema.Basis = "no generalizations carry a surprise signal"
+		}
+	} else {
+		schema.Basis = "backend has no schema tier"
+	}
+	levels = append(levels, schema)
+
+	// Level 3 — dissonance: active high-stakes contradictions per belief.
+	diss := PredictiveErrorLevel{Level: "dissonance"}
+	hyper, herr := m.Hypercorrections(ctx)
+	if herr != nil {
+		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance: %w", herr)
+	}
+	claimCount, cerr := m.conn.Claims.CountAll(ctx)
+	if cerr != nil {
+		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance count: %w", cerr)
+	}
+	diss.Samples = int(claimCount)
+	if claimCount > 0 {
+		diss.Error = math.Min(float64(len(hyper))/float64(claimCount), 1)
+		diss.Basis = fmt.Sprintf("%d active hypercorrection(s) over %d belief(s)", len(hyper), claimCount)
+	} else {
+		diss.Basis = "no beliefs"
+	}
+	levels = append(levels, diss)
+
+	// Level 4 — calibration: expected calibration error over adjudicated beliefs.
+	cal := PredictiveErrorLevel{Level: "calibration"}
+	c, calErr := m.Calibration(ctx)
+	if calErr != nil {
+		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: calibration: %w", calErr)
+	}
+	cal.Samples = c.Samples
+	if c.Samples > 0 {
+		cal.Error = clamp01(c.ECE)
+		cal.Basis = fmt.Sprintf("expected calibration error over %d adjudicated belief(s)", c.Samples)
+	} else {
+		cal.Basis = "no adjudicated beliefs yet"
+	}
+	levels = append(levels, cal)
+
+	// Aggregate over the levels that HAVE data; hotspot = the highest-error such level.
+	sum := 0.0
+	n := 0
+	hotspot := ""
+	hi := -1.0
+	for _, l := range levels {
+		if l.Samples <= 0 {
+			continue
+		}
+		sum += l.Error
+		n++
+		if l.Error > hi {
+			hi = l.Error
+			hotspot = l.Level
+		}
+	}
+	total := 0.0
+	if n > 0 {
+		total = sum / float64(n)
+	}
+	return PredictiveError{Levels: levels, Total: total, Hotspot: hotspot}, nil
+}
+
 // Calibration implements [Memory.Calibration]. Pure read over the outcome edges
 // (validates / refutes) + claim confidences — no recomputation, no writes.
 func (m *memory) Calibration(ctx context.Context) (Calibration, error) {

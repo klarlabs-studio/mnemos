@@ -228,6 +228,12 @@ minimizing total surprise across levels — would unify credit assignment, salie
 curiosity, and consolidation under one objective. It is named here as direction; it
 is a research-scale change, deliberately **out of scope** for this ADR's batches.
 
+**Update (ADR 0017):** the first concrete step shipped — the *measurement* layer.
+`mnemos predictive-error` now reports hierarchical prediction error (outcome, schema,
+dissonance, calibration) and its aggregate — the observable free-energy objective — as
+a read-only surface. The generative model and active free-energy minimization remain
+the north star; see ADR 0017.
+
 ## Consequences
 
 - **Positive.** Completes the CLS frame (interleaved replay + interference

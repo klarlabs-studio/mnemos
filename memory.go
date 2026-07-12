@@ -879,6 +879,36 @@ type CalibrationBucket struct {
 	Accuracy float64
 }
 
+// PredictiveErrorLevel is the prediction error at one level of the memory hierarchy
+// (ADR 0017). Error is in [0,1] (higher = the model is more wrong at this level);
+// Samples is how many data points back the estimate — 0 means the level has no signal
+// yet and is excluded from the aggregate, so absence of evidence never reads as low error.
+type PredictiveErrorLevel struct {
+	// Level names the hierarchy tier: "outcome", "schema", "dissonance", "calibration".
+	Level string `json:"level"`
+	// Error is the normalized prediction error at this level, [0,1].
+	Error float64 `json:"error"`
+	// Samples is the number of data points the error is computed from.
+	Samples int `json:"samples"`
+	// Basis is a one-line human explanation of what was measured.
+	Basis string `json:"basis"`
+}
+
+// PredictiveError is the hierarchical prediction-error surface (ADR 0017): per-level
+// error plus a single aggregate (the free-energy proxy) and the hotspot level. It is
+// the observable form of the objective predictive coding minimizes — it measures, it
+// does not (yet) minimize.
+type PredictiveError struct {
+	// Levels is the per-level breakdown, in hierarchy order.
+	Levels []PredictiveErrorLevel `json:"levels"`
+	// Total is the mean error over the levels that HAVE data (Samples>0); 0 when no
+	// level has any signal. The single "how wrong is the whole model right now" number.
+	Total float64 `json:"total"`
+	// Hotspot is the highest-error level with data — where the model is most wrong;
+	// empty when no level has data.
+	Hotspot string `json:"hotspot"`
+}
+
 // SignalQuery selects which temporal signals [Memory.Signals] returns.
 type SignalQuery struct {
 	// RunID selects the run (Chronos scope) to read signals for. Empty means
@@ -1180,6 +1210,15 @@ type Memory interface {
 	// under-stated. Only outcome-adjudicated claims count, so Samples is small
 	// until outcomes accumulate — read it before trusting the curve. Pure read.
 	Calibration(ctx context.Context) (Calibration, error)
+
+	// PredictiveError reports the brain's prediction error at each level of the
+	// memory hierarchy and a single aggregate (ADR 0017) — the observable form of the
+	// free-energy objective predictive coding minimizes. It unifies four signals that
+	// already exist but are siloed (outcome surprise, schema surprise, active
+	// dissonance, calibration error) into one "where is my model most wrong?" view.
+	// Strictly read-only; a level with no data is omitted from the total so sparse
+	// evidence never reads as a well-predicted model.
+	PredictiveError(ctx context.Context) (PredictiveError, error)
 
 	// LastWriteSession returns the governance session recorded by the
 	// most recent write (Remember, RememberClaim, or RememberEvent) on
