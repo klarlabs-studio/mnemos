@@ -11,9 +11,7 @@ import (
 )
 
 const averageTrust = `-- name: AverageTrust :one
-e;
-
-SELECT CAST(COALESCE(AVG(trust_score), 0) AS REAL) AS avg_trust FROM clai
+SELECT CAST(COALESCE(AVG(trust_score), 0) AS REAL) AS avg_trust FROM claims
 `
 
 func (q *Queries) AverageTrust(ctx context.Context) (float64, error) {
@@ -24,9 +22,7 @@ func (q *Queries) AverageTrust(ctx context.Context) (float64, error) {
 }
 
 const countClaimsBelowTrust = `-- name: CountClaimsBelowTrust :one
-s;
-
-SELECT COUNT(*) AS n FROM claims WHERE trust_score <
+SELECT COUNT(*) AS n FROM claims WHERE trust_score < ?
 `
 
 func (q *Queries) CountClaimsBelowTrust(ctx context.Context, trustScore float64) (int64, error) {
@@ -37,9 +33,7 @@ func (q *Queries) CountClaimsBelowTrust(ctx context.Context, trustScore float64)
 }
 
 const deleteAllClaimEvidence = `-- name: DeleteAllClaimEvidence :exec
-?;
-
-DELETE FROM claim_eviden
+DELETE FROM claim_evidence
 `
 
 func (q *Queries) DeleteAllClaimEvidence(ctx context.Context) error {
@@ -48,9 +42,7 @@ func (q *Queries) DeleteAllClaimEvidence(ctx context.Context) error {
 }
 
 const deleteAllClaimStatusHistory = `-- name: DeleteAllClaimStatusHistory :exec
-?;
-
-DELETE FROM claim_status_histo
+DELETE FROM claim_status_history
 `
 
 func (q *Queries) DeleteAllClaimStatusHistory(ctx context.Context) error {
@@ -59,9 +51,7 @@ func (q *Queries) DeleteAllClaimStatusHistory(ctx context.Context) error {
 }
 
 const deleteAllClaims = `-- name: DeleteAllClaims :exec
-?;
-
-DELETE FROM clai
+DELETE FROM claims
 `
 
 func (q *Queries) DeleteAllClaims(ctx context.Context) error {
@@ -70,9 +60,7 @@ func (q *Queries) DeleteAllClaims(ctx context.Context) error {
 }
 
 const deleteClaimByID = `-- name: DeleteClaimByID :exec
-?;
-
-DELETE FROM claims WHERE id =
+DELETE FROM claims WHERE id = ?
 `
 
 func (q *Queries) DeleteClaimByID(ctx context.Context, id string) error {
@@ -81,9 +69,7 @@ func (q *Queries) DeleteClaimByID(ctx context.Context, id string) error {
 }
 
 const deleteClaimEvidenceByClaimID = `-- name: DeleteClaimEvidenceByClaimID :exec
-s;
-
-DELETE FROM claim_evidence WHERE claim_id =
+DELETE FROM claim_evidence WHERE claim_id = ?
 `
 
 func (q *Queries) DeleteClaimEvidenceByClaimID(ctx context.Context, claimID string) error {
@@ -92,9 +78,7 @@ func (q *Queries) DeleteClaimEvidenceByClaimID(ctx context.Context, claimID stri
 }
 
 const deleteClaimStatusHistoryByClaimID = `-- name: DeleteClaimStatusHistoryByClaimID :exec
-e;
-
-DELETE FROM claim_status_history WHERE claim_id =
+DELETE FROM claim_status_history WHERE claim_id = ?
 `
 
 func (q *Queries) DeleteClaimStatusHistoryByClaimID(ctx context.Context, claimID string) error {
@@ -195,7 +179,7 @@ type ListClaimTrustInputsRow struct {
 
 // Inputs to recompute trust_score for every claim: confidence, the count of
 // DISTINCT evidence-event authors and of total events (so corroboration can be
-// graded by independence — an echo-chamber guard), and the most-recent evidence
+// graded by independence - an echo-chamber guard), and the most-recent evidence
 // timestamp. LEFT JOIN so claims with no evidence still appear; the caller treats
 // the missing aggregate as 0/empty.
 func (q *Queries) ListClaimTrustInputs(ctx context.Context) ([]ListClaimTrustInputsRow, error) {
