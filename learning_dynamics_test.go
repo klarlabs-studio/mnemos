@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 )
 
 func upsertClaimAt(t *testing.T, m *memory, id string, confidence float64, createdAt time.Time) {
@@ -124,5 +125,48 @@ func TestConsolidate_MetaplasticityResistsCreditOnCrystallizedBelief(t *testing.
 	crystal := trustOf(t, m, "crystal").TrustScore
 	if !(crystal < fresh) {
 		t.Errorf("crystallized belief should gain LESS credit than fresh: crystal=%.5f fresh=%.5f", crystal, fresh)
+	}
+}
+
+// TestConsolidate_DecayAssociations verifies the ADR-0015 §5 sleep-pass wiring: a
+// consolidation pass with DecayAssociations pulls an over-base edge toward the base
+// and reports the count; without it, strength is untouched.
+func TestConsolidate_DecayAssociations(t *testing.T) {
+	ctx := context.Background()
+	m := calibMem(t)
+	now := time.Now().UTC()
+
+	upsertClaimAt(t, m, "a", 0.8, now)
+	upsertClaimAt(t, m, "b", 0.8, now)
+	if err := m.conn.Relationships.Upsert(ctx, []domain.Relationship{
+		{ID: "ab", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "b", CreatedAt: now},
+	}); err != nil {
+		t.Fatalf("edge: %v", err)
+	}
+	strengthener := m.conn.Relationships.(ports.RelationshipStrengthener)
+	if _, err := strengthener.StrengthenAssociations(ctx, []string{"a", "b"}, 4, 5); err != nil {
+		t.Fatalf("strengthen: %v", err)
+	}
+	strengthOf := func() float64 {
+		rels, _ := m.conn.Relationships.ListByClaimIDs(ctx, []string{"a"})
+		for _, r := range rels {
+			if r.ID == "ab" {
+				return r.Strength
+			}
+		}
+		t.Fatal("edge ab not found")
+		return 0
+	}
+	before := strengthOf()
+
+	res, err := m.Consolidate(ctx, ConsolidateOptions{DecayAssociations: true})
+	if err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+	if res.AssociationsDecayed != 1 {
+		t.Errorf("AssociationsDecayed = %d, want 1", res.AssociationsDecayed)
+	}
+	if after := strengthOf(); !(after < before) {
+		t.Errorf("edge strength should decay toward base: before=%v after=%v", before, after)
 	}
 }

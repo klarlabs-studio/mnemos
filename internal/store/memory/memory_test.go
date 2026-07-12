@@ -856,3 +856,48 @@ func TestRelationshipRepository_StrengthenAssociations(t *testing.T) {
 		t.Errorf("single-id should no-op, got %d", n)
 	}
 }
+
+// TestRelationshipRepository_DecayAssociations covers the memory backend's ADR-0015
+// §5 decay: an over-base edge is pulled toward the base, a base edge is untouched.
+func TestRelationshipRepository_DecayAssociations(t *testing.T) {
+	t.Parallel()
+	conn := openMemory(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := conn.Relationships.Upsert(ctx, []domain.Relationship{
+		{ID: "ab", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "b", CreatedAt: now},
+		{ID: "bc", Type: domain.RelationshipTypeSupports, FromClaimID: "b", ToClaimID: "c", CreatedAt: now},
+	}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	strengthener := conn.Relationships.(ports.RelationshipStrengthener)
+	if _, err := strengthener.StrengthenAssociations(ctx, []string{"a", "b"}, 4, 5); err != nil {
+		t.Fatalf("strengthen: %v", err)
+	}
+	n, err := strengthener.DecayAssociations(ctx, 0.8)
+	if err != nil {
+		t.Fatalf("DecayAssociations: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("decayed %d, want 1", n)
+	}
+	strengthOf := func(id string) float64 {
+		all, _ := conn.Relationships.ListAll(ctx)
+		for _, r := range all {
+			if r.ID == id {
+				return r.EffectiveStrength()
+			}
+		}
+		t.Fatalf("edge %s not found", id)
+		return 0
+	}
+	if got := strengthOf("ab"); got < 4.199 || got > 4.201 {
+		t.Errorf("ab decayed = %v, want ~4.2", got)
+	}
+	if got := strengthOf("bc"); got != 1 {
+		t.Errorf("base bc should be untouched, got %v", got)
+	}
+	if n, _ := strengthener.DecayAssociations(ctx, 1.5); n != 0 {
+		t.Errorf("out-of-range retain should no-op, got %d", n)
+	}
+}

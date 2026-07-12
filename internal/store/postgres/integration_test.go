@@ -863,3 +863,51 @@ func TestPostgres_RelationshipStrengthRoundTrip(t *testing.T) {
 		t.Errorf("capped strength = %v, want 5", got)
 	}
 }
+
+// TestPostgres_RelationshipDecay verifies the ADR-0015 §5 decay on Postgres: an
+// over-base edge is pulled toward the base 1.0, a base edge is untouched.
+func TestPostgres_RelationshipDecay(t *testing.T) {
+	conn := withConn(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := conn.Claims.Upsert(ctx, []domain.Claim{
+		{ID: "a", Text: "A", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "b", Text: "B", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+		{ID: "c", Text: "C", Type: domain.ClaimTypeFact, Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: now},
+	}); err != nil {
+		t.Fatalf("claims: %v", err)
+	}
+	if err := conn.Relationships.Upsert(ctx, []domain.Relationship{
+		{ID: "ab", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "b", CreatedAt: now},
+		{ID: "bc", Type: domain.RelationshipTypeSupports, FromClaimID: "b", ToClaimID: "c", CreatedAt: now},
+	}); err != nil {
+		t.Fatalf("edges: %v", err)
+	}
+	s := conn.Relationships.(ports.RelationshipStrengthener)
+	if _, err := s.StrengthenAssociations(ctx, []string{"a", "b"}, 4, 5); err != nil {
+		t.Fatalf("strengthen: %v", err)
+	}
+	n, err := s.DecayAssociations(ctx, 0.8)
+	if err != nil {
+		t.Fatalf("DecayAssociations: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("decayed %d, want 1", n)
+	}
+	strengthOf := func(id string) float64 {
+		rels, _ := conn.Relationships.ListByClaimIDs(ctx, []string{"a", "b", "c"})
+		for _, r := range rels {
+			if r.ID == id {
+				return r.Strength
+			}
+		}
+		t.Fatalf("edge %s not found", id)
+		return 0
+	}
+	if got := strengthOf("ab"); got < 4.199 || got > 4.201 {
+		t.Errorf("ab decayed = %v, want ~4.2", got)
+	}
+	if got := strengthOf("bc"); got != 1 {
+		t.Errorf("base bc untouched expected, got %v", got)
+	}
+}

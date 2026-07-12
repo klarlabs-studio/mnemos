@@ -219,3 +219,24 @@ func (r RelationshipRepository) StrengthenAssociations(_ context.Context, claimI
 	}
 	return n, nil
 }
+
+// DecayAssociations implements [ports.RelationshipStrengthener] (ADR 0015 §5): it pulls
+// every over-base edge's strength toward the base 1.0, keeping the given fraction of
+// its excess. Base edges (stored 0 or 1) are untouched and no edge is deleted.
+func (r RelationshipRepository) DecayAssociations(_ context.Context, retain float64) (int, error) {
+	if retain < 0 || retain >= 1 {
+		return 0, nil
+	}
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	n := 0
+	for id, rel := range r.state.relationships {
+		if rel.Strength <= 1 {
+			continue // base / unset — nothing to decay
+		}
+		rel.Strength = 1 + (rel.Strength-1)*retain
+		r.state.relationships[id] = rel
+		n++
+	}
+	return n, nil
+}

@@ -200,6 +200,12 @@ type AnswerOptions struct {
 	// existing edges are touched (co-retrieval is not itself a typed relationship);
 	// backends that cannot persist edge strength skip it.
 	Hebbian bool
+	// Reconsolidate enables the retrieval freshness touch (ADR 0015 §5): after the
+	// answer resolves, the top co-retrieved beliefs are re-marked verified-now so recall
+	// keeps a memory alive against decay (the testing effect). A bounded, best-effort
+	// WRITE on the read path — off by default; toggled by `query --reconsolidate` /
+	// MNEMOS_RECONSOLIDATE. It refreshes liveness only (last_verified), never trust.
+	Reconsolidate bool
 }
 
 // Answer searches all stored events for the best answer to the given question.
@@ -233,6 +239,11 @@ func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.A
 	// inside answerWithEvents (which can run twice under corrective retrieval) so it
 	// fires once on what was actually returned. Best-effort: never fails a read.
 	e.strengthenCoactivation(ctx, opts, ans)
+	// Reconsolidation (ADR 0015 §5): retrieval is a write opportunity — recalling a
+	// belief refreshes its liveness (the testing effect: retrieval practice keeps a
+	// memory alive). Same single-shot, opt-in, best-effort seam as the Hebbian
+	// write-back above.
+	e.reconsolidateRecalled(ctx, opts, ans)
 	return ans, nil
 }
 
@@ -296,6 +307,27 @@ func (e Engine) strengthenCoactivation(ctx context.Context, opts AnswerOptions, 
 		ids = append(ids, c.ID)
 	}
 	_, _ = strengthener.StrengthenAssociations(ctx, ids, hebbianDelta, hebbianMaxStrength)
+}
+
+// reconsolidateRecalled refreshes the liveness of the top co-retrieved beliefs
+// (ADR 0015 §5): recalling a belief re-marks it verified-now, so retrieval keeps a
+// memory fresh against the decay that prunes the unused — the testing effect. Opt-in
+// via AnswerOptions.Reconsolidate, bounded to the same top-N focus as the Hebbian
+// write-back, and best-effort: a freshness-touch failure must never fail the read, so
+// the error is intentionally dropped. Passes half-life 0 so any per-claim override is
+// preserved (matching consolidation replay's rehearse).
+func (e Engine) reconsolidateRecalled(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
+	if !opts.Reconsolidate || len(ans.Claims) == 0 {
+		return
+	}
+	now := time.Now().UTC()
+	n := len(ans.Claims)
+	if n > hebbianCoactivationTopN {
+		n = hebbianCoactivationTopN
+	}
+	for _, c := range ans.Claims[:n] {
+		_ = e.claims.MarkVerified(ctx, c.ID, now, 0)
+	}
 }
 
 // answerOnce runs a single recall pass and reports whether it took the native

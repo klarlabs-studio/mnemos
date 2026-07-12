@@ -1046,8 +1046,27 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.Replayed = replayed
 	}
+	// Hebbian decay (ADR 0015 §5): pull co-activated association edges back toward the
+	// base 1.0 so edge strength reflects RECENT use, not a lifetime tally — the sleep-
+	// pass complement to the `query --hebbian` write-back. Never deletes an edge. A
+	// no-op on backends that don't persist edge strength.
+	if opts.DecayAssociations {
+		if strengthener, ok := m.conn.Relationships.(ports.RelationshipStrengthener); ok {
+			decayed, derr := strengthener.DecayAssociations(ctx, associationDecayRetain)
+			if derr != nil {
+				return res, fmt.Errorf("mnemos: consolidate: decay associations: %w", derr)
+			}
+			res.AssociationsDecayed = decayed
+		}
+	}
 	return res, nil
 }
+
+// associationDecayRetain is the fraction of an edge's over-base strength kept per
+// consolidation pass (ADR 0015 §5): 0.8 sheds 20% of the excess each sleep, so a burst
+// of co-activation fades over several passes unless renewed — recency-weighted, and
+// asymptotic to the base 1.0 (never below, never deleted).
+const associationDecayRetain = 0.8
 
 // replayRecencyHalfLifeDays sets how fast replay priority decays with a claim's
 // age — recent memories are rehearsed preferentially (recency-weighted replay).

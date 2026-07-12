@@ -8,6 +8,31 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.92.0] — 2026-07-12
+
+### Added
+
+- **Learning dynamics, batch 2b — reconsolidation + Hebbian decay (ADR 0015 §5).**
+  Completes the association-plasticity loop from 2a and the retrieval→write story.
+  - **Reconsolidation — retrieval as a freshness touch.** `query --reconsolidate` (or
+    `MNEMOS_RECONSOLIDATE`) re-marks the top co-retrieved beliefs verified-now, so
+    recall keeps a memory alive against decay — the *testing effect*. Liveness only,
+    **never a trust change**; opt-in, single-shot, best-effort, at the same
+    `AnswerWithOptions` seam as the Hebbian write-back.
+  - **Hebbian decay.** `consolidate --decay-associations` pulls each over-base
+    association edge's strength back *toward* the base 1.0 (keeping 80% of the excess
+    per pass, asymptotic — never below base, never deleted), via the new
+    `ports.RelationshipStrengthener.DecayAssociations` across every backend. So edge
+    strength now tracks **recent** co-activation rather than a lifetime tally:
+    associations strengthen on use (2a) and fade on disuse (2b) — the full Hebbian
+    loop. `ConsolidateResult` gains `AssociationsDecayed`.
+
+  **Edge pruning was intentionally dropped** and competitive inhibition deferred:
+  mnemos's edges are all meaningful, evidence-derived *typed* relationships (2a's
+  Hebbian design never creates co-occurrence edges), so there is nothing spurious to
+  prune — pruning would only delete cited knowledge. Decay is the safe substitute.
+  Verified on live Postgres + MySQL; full race suite green.
+
 ## [0.91.0] — 2026-07-12
 
 ### Added

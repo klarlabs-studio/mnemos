@@ -225,3 +225,20 @@ WHERE from_claim_id IN (` + placeholders + `) AND to_claim_id IN (` + placeholde
 	n, _ := res.RowsAffected()
 	return int(n), nil
 }
+
+// DecayAssociations implements [ports.RelationshipStrengthener] (ADR 0015 §5): it pulls
+// every over-base edge's strength toward the base 1.0, keeping the given fraction of
+// its excess. Only edges above the base are touched, so base edges stay neutral and
+// none is deleted.
+func (r RelationshipRepository) DecayAssociations(ctx context.Context, retain float64) (int, error) {
+	if retain < 0 || retain >= 1 {
+		return 0, nil
+	}
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE relationships SET strength = 1 + (strength - 1) * ? WHERE strength > 1`, retain)
+	if err != nil {
+		return 0, fmt.Errorf("decay associations: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}

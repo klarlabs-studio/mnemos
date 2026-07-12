@@ -544,6 +544,7 @@ func handleQuery(args []string, f Flags) {
 			Prime:          qa.prime || spreadingActivationEnv(),
 			Salient:        qa.salient || salienceEnv(),
 			Hebbian:        qa.hebbian || hebbianEnv(),
+			Reconsolidate:  qa.reconsolidate || reconsolidateEnv(),
 		}
 		if entity != "" {
 			entRepo := conn.Entities
@@ -1381,6 +1382,7 @@ func printUsage() {
 	fmt.Println("  query --prime <question>             Prime associated beliefs via spreading activation (ADR 0013 §2)")
 	fmt.Println("  query --salient <question>           Bias recall toward high-stakes beliefs (ADR 0013 §4)")
 	fmt.Println("  query --hebbian <question>           Strengthen associations among co-retrieved beliefs (ADR 0015 §4)")
+	fmt.Println("  query --reconsolidate <question>     Refresh liveness of recalled beliefs — the testing effect (ADR 0015 §5)")
 	fmt.Println("                                          (e.g. causes,validates,refutes)")
 	fmt.Println("  query --llm <question>               Query with LLM-grounded answer")
 	fmt.Println("  query --min-trust X <question>       Only return claims with trust_score >= X (X in [0, 1])")
@@ -1545,6 +1547,11 @@ type queryArgs struct {
 	// so worn associations prime more strongly later. Off by default (it WRITES on a
 	// read); set by --hebbian or a truthy MNEMOS_HEBBIAN.
 	hebbian bool
+	// reconsolidate enables the retrieval freshness touch (ADR 0015 §5): recalled
+	// beliefs are re-marked verified-now so retrieval keeps a memory alive against
+	// decay. Off by default (it WRITES on a read); set by --reconsolidate or a truthy
+	// MNEMOS_RECONSOLIDATE.
+	reconsolidate bool
 	// salient enables salience-biased retrieval (ADR 0013 §4): a bounded stakes
 	// term is blended into the similarity score so a high-stakes belief outranks a
 	// trivial one of equal similarity. Off by default; set by --salient or a truthy
@@ -1620,6 +1627,8 @@ func parseQueryArgs(args []string) (queryArgs, error) {
 			out.salient = true
 		case "--hebbian":
 			out.hebbian = true
+		case "--reconsolidate":
+			out.reconsolidate = true
 			questionArgs = questionArgs[1:]
 		case "--entity":
 			if len(questionArgs) < 2 {
@@ -1723,6 +1732,18 @@ func salienceEnv() bool {
 // globally without the per-query --hebbian flag.
 func hebbianEnv() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_HEBBIAN"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// reconsolidateEnv reports whether the retrieval freshness touch (ADR 0015 §5) is
+// enabled via the MNEMOS_RECONSOLIDATE env var. Truthy values ("1"/"true"/"yes") turn
+// it on globally without the per-query --reconsolidate flag.
+func reconsolidateEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_RECONSOLIDATE"))) {
 	case "1", "true", "yes":
 		return true
 	default:
