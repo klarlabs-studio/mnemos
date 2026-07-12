@@ -35,7 +35,7 @@ func batch4Server(t *testing.T) (*httptest.Server, map[string]string) {
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}
-	srv := httptest.NewServer(newServerMuxWithMemory(conn, mem, false))
+	srv := httptest.NewServer(newServerMuxWithMemory(conn, mem, false, true))
 	t.Cleanup(srv.Close)
 	return srv, map[string]string{"Authorization": "Bearer " + tok}
 }

@@ -8,6 +8,21 @@ notable changes.
 
 ## [Unreleased]
 
+### Security
+
+- **`mnemos serve` reads now require authentication by default.** Previously,
+  single-tenant `serve` exposed a *public read API* — every GET (including the
+  neocortex `/v1/schemas`) was readable without a token on both REST and gRPC. It
+  is now secure by default: reads require a valid JWT like writes. The prior
+  browsable-registry behavior is available via an explicit opt-in
+  (`serve --public-reads` / `MNEMOS_PUBLIC_READS=1`), which prints a warning.
+  Infra endpoints (`/health`, `/`, `/app`, `/internal/metrics`) stay open;
+  multi-tenant `--require-tenant` mode was already fully authenticated and is
+  unchanged. No cross-tenant read is possible without auth in either mode, and the
+  `--all-tenants` promotion pass remains CLI-only (local DB credentials).
+  Guarded by `TestREST_ReadsRequireAuthByDefault` and
+  `TestAuthenticate_ReadsRequireTokenByDefault`.
+
 ## [0.85.0] — 2026-07-12
 
 ### Changed

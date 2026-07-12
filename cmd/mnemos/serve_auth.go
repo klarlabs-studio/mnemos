@@ -90,16 +90,19 @@ func requireScope(w http.ResponseWriter, r *http.Request, want string) bool {
 	return false
 }
 
-// jwtAuthMiddleware enforces JWT auth on mutating methods. Reads stay
-// open: the registry is meant to be browsable, and the blast radius of
-// an anonymous GET is bounded by the data we chose to expose.
+// jwtAuthMiddleware enforces JWT auth. Secure by default: every request —
+// reads included — requires a valid token, EXCEPT infra endpoints (health,
+// landing, Prometheus) and, only when the operator explicitly opts in with
+// publicReads (serve --public-reads / MNEMOS_PUBLIC_READS), anonymous GET/HEAD/
+// OPTIONS reads. Multi-tenant mode (requireTenant) always authenticates every
+// request so a tenant can be resolved, and ignores publicReads.
 //
-// On POST/PUT/DELETE:
+// On authenticated methods:
 //   - Missing or malformed Authorization header → 401
 //   - Invalid signature / expired / revoked token → 401
 //   - Valid token → user id from the `sub` claim lands on the request
 //     context for created_by stamping.
-func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant bool) http.Handler {
+func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant, publicReads bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/v1/leads" {
 			h.ServeHTTP(w, r)
@@ -113,10 +116,12 @@ func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant bo
 			return
 		}
 
-		// In single-tenant mode reads are unauthenticated (public read API).
-		// In multi-tenant mode EVERY request must present a token so its tenant
-		// can be resolved — there is no anonymous tenant.
-		if !requireTenant && (r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions) {
+		// Secure by default: reads require a token too. Only when the operator
+		// explicitly opts into a public read API (--public-reads /
+		// MNEMOS_PUBLIC_READS) do anonymous GET/HEAD/OPTIONS reads pass. In
+		// multi-tenant mode EVERY request must present a token so its tenant can
+		// be resolved — there is no anonymous tenant, and public-reads is ignored.
+		if publicReads && !requireTenant && (r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions) {
 			h.ServeHTTP(w, r)
 			return
 		}

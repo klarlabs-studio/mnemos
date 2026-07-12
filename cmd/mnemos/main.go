@@ -1346,6 +1346,7 @@ func printUsage() {
 	fmt.Println("  mcp --http <addr> --require-tenant   Multi-tenant: every request needs a token with a tenant (postgres, RLS-isolated)")
 	fmt.Println("  serve [--port N] [--grpc-port N]     REST + gRPC API service (default :7777)")
 	fmt.Println("  serve --require-tenant               Multi-tenant REST + gRPC: every request needs a token with a tenant (postgres, RLS)")
+	fmt.Println("  serve --public-reads                 Opt into anonymous GET reads (default: reads require a token too)")
 	fmt.Println("  repo-tenant [--json]                 Print this repo's derived hosted tenant id (ADR 0009), for `token issue --tenant`")
 	fmt.Println("")
 	fmt.Println("Pipeline Commands:")
