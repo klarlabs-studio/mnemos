@@ -39,14 +39,15 @@ func (q *Queries) CountLessons(ctx context.Context) (int64, error) {
 }
 
 const createLesson = `-- name: CreateLesson :exec
-INSERT INTO lessons (id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO lessons (id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity, subject_class)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   statement = excluded.statement,
   confidence = excluded.confidence,
   last_verified = excluded.last_verified,
   derived_at = excluded.derived_at,
-  polarity = excluded.polarity
+  polarity = excluded.polarity,
+  subject_class = excluded.subject_class
 `
 
 type CreateLessonParams struct {
@@ -63,6 +64,7 @@ type CreateLessonParams struct {
 	Source       string  `json:"source"`
 	CreatedBy    string  `json:"created_by"`
 	Polarity     string  `json:"polarity"`
+	SubjectClass string  `json:"subject_class"`
 }
 
 // Idempotent on id. Updates statement/confidence/last_verified on
@@ -83,6 +85,7 @@ func (q *Queries) CreateLesson(ctx context.Context, arg CreateLessonParams) erro
 		arg.Source,
 		arg.CreatedBy,
 		arg.Polarity,
+		arg.SubjectClass,
 	)
 	return err
 }
@@ -115,7 +118,7 @@ func (q *Queries) DeleteLessonEvidence(ctx context.Context, lessonID string) err
 }
 
 const getLessonByID = `-- name: GetLessonByID :one
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity, subject_class
 FROM lessons
 WHERE id = ?
 `
@@ -137,12 +140,13 @@ func (q *Queries) GetLessonByID(ctx context.Context, id string) (Lesson, error) 
 		&i.Source,
 		&i.CreatedBy,
 		&i.Polarity,
+		&i.SubjectClass,
 	)
 	return i, err
 }
 
 const listAllLessons = `-- name: ListAllLessons :many
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity, subject_class
 FROM lessons
 ORDER BY confidence DESC, derived_at DESC
 `
@@ -170,6 +174,7 @@ func (q *Queries) ListAllLessons(ctx context.Context) ([]Lesson, error) {
 			&i.Source,
 			&i.CreatedBy,
 			&i.Polarity,
+			&i.SubjectClass,
 		); err != nil {
 			return nil, err
 		}
@@ -214,7 +219,7 @@ func (q *Queries) ListLessonEvidence(ctx context.Context, lessonID string) ([]Le
 }
 
 const listLessonsByService = `-- name: ListLessonsByService :many
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity, subject_class
 FROM lessons
 WHERE scope_service = ?
 ORDER BY confidence DESC, derived_at DESC
@@ -243,6 +248,7 @@ func (q *Queries) ListLessonsByService(ctx context.Context, scopeService string)
 			&i.Source,
 			&i.CreatedBy,
 			&i.Polarity,
+			&i.SubjectClass,
 		); err != nil {
 			return nil, err
 		}
@@ -258,7 +264,7 @@ func (q *Queries) ListLessonsByService(ctx context.Context, scopeService string)
 }
 
 const listLessonsByTrigger = `-- name: ListLessonsByTrigger :many
-SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity
+SELECT id, statement, scope_service, scope_env, scope_team, trigger, kind, confidence, derived_at, last_verified, source, created_by, polarity, subject_class
 FROM lessons
 WHERE trigger = ?
 ORDER BY confidence DESC, derived_at DESC
@@ -287,6 +293,7 @@ func (q *Queries) ListLessonsByTrigger(ctx context.Context, trigger string) ([]L
 			&i.Source,
 			&i.CreatedBy,
 			&i.Polarity,
+			&i.SubjectClass,
 		); err != nil {
 			return nil, err
 		}

@@ -428,3 +428,26 @@ func TestVerifier_RotationDoesNotBypassExpiry(t *testing.T) {
 		t.Errorf("expired token should be rejected even when previous secret matches")
 	}
 }
+
+// TestClaims_CanCurate is the ADR 0012 curator-scope contract: only a token
+// bearing promote:global (or the wildcard "*") may take the curated
+// single-source promotion path.
+func TestClaims_CanCurate(t *testing.T) {
+	cases := []struct {
+		name   string
+		scopes []string
+		want   bool
+	}{
+		{"explicit curator scope", []string{domain.ScopePromoteGlobal}, true},
+		{"wildcard admin", []string{"*"}, true},
+		{"curator among others", []string{"events:write", domain.ScopePromoteGlobal}, true},
+		{"no curator scope", []string{"events:write", "claims:write"}, false},
+		{"empty scopes", nil, false},
+	}
+	for _, tc := range cases {
+		got := Claims{Scopes: tc.scopes}.CanCurate()
+		if got != tc.want {
+			t.Errorf("%s: CanCurate() = %v, want %v (scopes=%v)", tc.name, got, tc.want, tc.scopes)
+		}
+	}
+}

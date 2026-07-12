@@ -228,7 +228,11 @@ CREATE TABLE IF NOT EXISTS lessons (
   last_verified TEXT NOT NULL DEFAULT '',
   source TEXT NOT NULL DEFAULT 'synthesize',
   created_by TEXT NOT NULL DEFAULT '<system>',
-  polarity TEXT NOT NULL DEFAULT ''
+  polarity TEXT NOT NULL DEFAULT '',
+  -- subject_class (ADR 0012): 'individual' | 'class' | '' (unknown). Only
+  -- class-level schemas are eligible for promotion to the shared global brain;
+  -- individual and unknown are kept private (fail closed).
+  subject_class TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_lessons_scope_service ON lessons(scope_service);

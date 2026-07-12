@@ -81,6 +81,17 @@ func (c Claims) HasScope(want string) bool {
 	return false
 }
 
+// CanCurate reports whether the bearer holds the curator capability
+// (domain.ScopePromoteGlobal, "promote:global") required for the ADR 0012
+// CURATED single-source promotion path — contributing a novel class-level fact
+// to the shared global brain from one source, bypassing cross-tenant
+// corroboration. It is satisfied by the explicit scope or the wildcard "*"
+// (an operator/admin token). Without it, a bearer can still drive the emergent
+// (corroborated ≥N) promotion path, which needs no special scope.
+func (c Claims) CanCurate() bool {
+	return c.HasScope(domain.ScopePromoteGlobal)
+}
+
 // AllowsRun reports whether the bearer may write to the given
 // run_id. Empty Runs list means "no restriction" (allows every run).
 // Non-empty list accepts:

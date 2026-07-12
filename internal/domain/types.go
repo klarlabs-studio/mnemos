@@ -277,6 +277,15 @@ type Belief struct {
 	// already routes through claim->action->lesson scope upstream.
 	Scope Scope
 
+	// SubjectClass classifies WHAT the belief is about — a specific
+	// instance (individual) versus a category (class) — for the ADR 0012
+	// promotion eligibility gate. Empty (SubjectClassUnknown) means
+	// unclassified. It can be inferred from the belief's subject entities
+	// (see SubjectClassFromEntityTypes) or set by an extraction-time hint /
+	// explicit override. Only class-level beliefs are ever eligible to feed
+	// the shared global brain; individual and unknown are kept private.
+	SubjectClass SubjectClass
+
 	// --- Epistemic Provenance Fields ---
 
 	// SourceDocument is the original source (URL, file path, doc ID)
@@ -592,6 +601,14 @@ const (
 	ScopeClaimsWrite        = "claims:write"
 	ScopeRelationshipsWrite = "relationships:write"
 	ScopeEmbeddingsWrite    = "embeddings:write"
+	// ScopePromoteGlobal is the curator capability (ADR 0012): a token
+	// bearing it may take the CURATED single-source promotion path, pushing a
+	// novel class-level fact into the shared global brain from one source
+	// (bypassing cross-tenant corroboration). Without it, only the emergent
+	// (corroborated) promotion path is available. Modelled as a distinct scope
+	// so "contribute to global" is a granted vet/operator capability rather
+	// than something every tenant user holds.
+	ScopePromoteGlobal = "promote:global"
 )
 
 // Agent represents a non-human principal — a coding assistant, CI job,

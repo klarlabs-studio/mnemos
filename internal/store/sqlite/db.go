@@ -367,7 +367,8 @@ CREATE TABLE IF NOT EXISTS lessons (
 	last_verified TEXT NOT NULL DEFAULT '',
 	source TEXT NOT NULL DEFAULT 'synthesize',
 	created_by TEXT NOT NULL DEFAULT '<system>',
-	polarity TEXT NOT NULL DEFAULT ''
+	polarity TEXT NOT NULL DEFAULT '',
+	subject_class TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_lessons_scope_service ON lessons(scope_service);
 CREATE INDEX IF NOT EXISTS idx_lessons_scope_env ON lessons(scope_env);
@@ -628,6 +629,9 @@ var expectedColumns = []addMissingColumn{
 	// v12 — decision audit trail: refuted beliefs + failed outcome link.
 	{"decisions", "refuted_beliefs_json", "TEXT NOT NULL DEFAULT '[]'"},
 	{"decisions", "failed_outcome_id", "TEXT NOT NULL DEFAULT ''"},
+	// v18 - schema subject class (ADR 0012): 'individual' | 'class' | ''
+	// (unknown). Only class-level schemas may promote to the global brain.
+	{"lessons", "subject_class", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for
