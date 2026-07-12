@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS claims (
   scope_service  VARCHAR(190)     NOT NULL DEFAULT '',
   scope_env      VARCHAR(64)      NOT NULL DEFAULT '',
   scope_team     VARCHAR(190)     NOT NULL DEFAULT '',
+  subject_class  VARCHAR(32)      NOT NULL DEFAULT '',
   PRIMARY KEY (id),
   KEY idx_claims_trust_score   (trust_score),
   KEY idx_claims_valid_to      (valid_to),
