@@ -172,6 +172,18 @@ type AnswerOptions struct {
 	// disables the filter, so ordinary recall is unchanged — claims that
 	// were never routed through a candidate→promoted review still appear.
 	Lifecycle domain.ClaimLifecycle
+	// Prime enables spreading-activation priming at retrieval (ADR 0013 §2,
+	// Collins & Loftus). When true, after the initial ranked+expanded claim
+	// set is assembled, activation is seeded on the top-ranked beliefs and
+	// spread over relationship edges (decaying per hop, weighted by edge
+	// type). The accumulated activation is blended into each claim's ranking
+	// score as a small, bounded associative boost, so a belief strongly
+	// associated with a direct hit rises in the results. Off by default so
+	// ordinary recall is byte-for-byte unchanged; toggled by `query --prime`
+	// / MNEMOS_SPREADING_ACTIVATION. The boost is bounded (see
+	// spreadWeightActivation / spreadActivationCap) so a weakly-ranked belief
+	// can never outrank a strong direct match on association alone.
+	Prime bool
 }
 
 // Answer searches all stored events for the best answer to the given question.
@@ -611,6 +623,18 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 			return domain.Answer{}, fmt.Errorf("expand claims by %d hops: %w", opts.Hops, err)
 		}
 		claims = append(claims, expanded...)
+	}
+
+	// Spreading-activation priming (ADR 0013 §2): re-rank the assembled claim
+	// set by blending a bounded associative boost into each claim's score.
+	// Opt-in (opts.Prime) so ordinary recall is unchanged; purely a
+	// read-only re-weight over the already-retrieved + graph-expanded claims.
+	if opts.Prime {
+		primed, err := e.applySpreadingActivation(ctx, claims)
+		if err != nil {
+			return domain.Answer{}, fmt.Errorf("spreading-activation priming: %w", err)
+		}
+		claims = primed
 	}
 
 	contradictions, err := collectContradictions(ctx, e.relationships, claims)

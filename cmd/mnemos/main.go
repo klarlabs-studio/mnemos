@@ -541,6 +541,7 @@ func handleQuery(args []string, f Flags) {
 			RecordedAsOf:   qa.recordedAsOf,
 			IncludeHistory: includeHistory,
 			Visibility:     qa.visibility,
+			Prime:          qa.prime || spreadingActivationEnv(),
 		}
 		if entity != "" {
 			entRepo := conn.Entities
@@ -1375,6 +1376,7 @@ func printUsage() {
 	fmt.Println("  query [--run <run-id>] <question>    Query with evidence")
 	fmt.Println("  query --hops <N> <question>          Expand result claims via N hops of supports/contradicts")
 	fmt.Println("  query --hops <N> --kind <list>       Restrict hop expansion to comma-separated edge kinds")
+	fmt.Println("  query --prime <question>             Prime associated beliefs via spreading activation (ADR 0013 §2)")
 	fmt.Println("                                          (e.g. causes,validates,refutes)")
 	fmt.Println("  query --llm <question>               Query with LLM-grounded answer")
 	fmt.Println("  query --min-trust X <question>       Only return claims with trust_score >= X (X in [0, 1])")
@@ -1528,6 +1530,12 @@ type queryArgs struct {
 	// visibility controls workspace isolation. personal/team/org.
 	// Zero value treated as "team" (see AnswerOptions.Visibility).
 	visibility domain.Visibility
+	// prime enables spreading-activation priming at retrieval (ADR 0013 §2):
+	// after the initial ranked set is assembled, activation is spread over
+	// relationship edges from the top hits and blended into the ranking so
+	// strongly-associated beliefs are primed up. Off by default; set by
+	// --prime or a truthy MNEMOS_SPREADING_ACTIVATION.
+	prime bool
 }
 
 func parseQueryArgs(args []string) (queryArgs, error) {
@@ -1590,6 +1598,9 @@ func parseQueryArgs(args []string) (queryArgs, error) {
 			questionArgs = questionArgs[2:]
 		case "--include-history":
 			out.includeHistory = true
+			questionArgs = questionArgs[1:]
+		case "--prime":
+			out.prime = true
 			questionArgs = questionArgs[1:]
 		case "--entity":
 			if len(questionArgs) < 2 {
@@ -1661,6 +1672,19 @@ done:
 	}
 
 	return out, nil
+}
+
+// spreadingActivationEnv reports whether spreading-activation priming (ADR 0013
+// §2) is enabled via the MNEMOS_SPREADING_ACTIVATION env var. Truthy values
+// ("1"/"true"/"yes") turn priming on globally without the per-query --prime
+// flag; anything else (including unset) leaves it off.
+func spreadingActivationEnv() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_SPREADING_ACTIVATION"))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 // formatEvolution renders a one-line summary of a claim's temporal
