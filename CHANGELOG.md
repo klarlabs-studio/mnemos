@@ -8,6 +8,24 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.89.1] — 2026-07-12
+
+### Fixed
+
+- **Credit assignment + salience now work on the hosted backend (Postgres/MySQL) (#196).**
+  Both mechanisms store their audit data in the existing `confidence_components` map
+  column. sqlite/libsql/memory always round-tripped it, but the pg/mysql claim repos
+  silently dropped it — the column was never SELECTed or written and neither backend
+  implemented `ports.BeliefCreditWriter`, so credit assignment and salience were a
+  no-op on the "as a service" surface. The pg/mysql repositories now persist
+  `confidence_components` on every claim path (Upsert, scan, list, `ListByIDs`,
+  entity, tenant) and implement `ApplyBeliefCredit` (overwriting the map + `trust_score`
+  together, honoring the ADR-0011 no-silent-trust-change guardrail). MySQL gains the
+  column inline in `CREATE TABLE claims` (it rejects `ADD COLUMN IF NOT EXISTS`).
+  Verified by round-trip integration tests on live Postgres 16 + MySQL 8; the two
+  trust-updating cognitive mechanisms now behave identically on local and hosted
+  backends. Closes the ADR 0013 / ADR 0014 hosted-round-trip follow-up.
+
 ## [0.89.0] — 2026-07-12
 
 ### Added

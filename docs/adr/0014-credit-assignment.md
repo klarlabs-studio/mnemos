@@ -100,14 +100,15 @@ belief reality refuted can be swept up by `--forget-below-trust` in the same pas
 ### 5. Storage seam and backend scope
 
 Persistence is an **optional capability**, `ports.BeliefCreditWriter`, implemented by
-the backends that fully round-trip `confidence_components`: **SQLite** (and therefore
-local **libSQL**) and the in-memory store. The pass type-asserts for it exactly like
-`ports.TrustScorer`: a backend that cannot persist the attribution map **skips**
-credit assignment rather than mutating trust it could not attribute — the ADR-0011
-"no silent trust change" guardrail applied at the storage seam. Postgres and MySQL
-carry the `confidence_components` column in their schema but their Go repositories do
-not yet round-trip it, so credit assignment is a no-op there; wiring that column into
-those repositories is a mechanical follow-up that needs no new migration. This keeps
+every backend that fully round-trips `confidence_components`: **SQLite** (and therefore
+local **libSQL**), the in-memory store, and — as of #196 — **Postgres** and **MySQL**.
+The pass type-asserts for it exactly like `ports.TrustScorer`: a backend that cannot
+persist the attribution map **skips** credit assignment rather than mutating trust it
+could not attribute — the ADR-0011 "no silent trust change" guardrail applied at the
+storage seam. The pg/mysql repositories now SELECT/Upsert the `confidence_components`
+column on every claim path and implement `ApplyBeliefCredit` (overwriting the map +
+`trust_score` together), verified by round-trip integration tests on live Postgres +
+MySQL — so credit assignment works identically on local and hosted backends. This keeps
 the change free of the cross-backend column-parity risk called out in ADR 0007's
 "new table" gotcha.
 
