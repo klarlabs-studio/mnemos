@@ -99,7 +99,9 @@ type parityEntry struct {
 // label, leave a one-line comment.
 var parityMatrix = []parityEntry{
 	// Health & landing — public surfaces.
-	{Capability: "health probe", MCPTool: parityNA, HTTPRoute: "/health", GRPCMethod: "Health"},
+	{Capability: "health probe (bare liveness)", MCPTool: parityNA, HTTPRoute: "/health", GRPCMethod: "Health"},
+	{Capability: "health probe alias", MCPTool: parityNA, HTTPRoute: "/healthz", GRPCMethod: parityNA},
+	{Capability: "readiness probe (authed, DB write check)", MCPTool: parityNA, HTTPRoute: "/internal/ready", GRPCMethod: parityNA},
 	{Capability: "marketing landing (HTML)", MCPTool: parityNA, HTTPRoute: "/", GRPCMethod: parityNA},
 	{Capability: "registry SPA (HTML)", MCPTool: parityNA, HTTPRoute: "/app", GRPCMethod: parityNA},
 	{Capability: "lead capture form (public)", MCPTool: parityNA, HTTPRoute: "/v1/leads", GRPCMethod: parityNA},

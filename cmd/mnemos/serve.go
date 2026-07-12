@@ -81,13 +81,16 @@ func handleServe(args []string, _ Flags) {
 	port := defaultServePort
 	grpcPort := 0 // 0 = disabled
 	requireTenant := false
-	publicReads := false // secure by default: GET reads require a token unless opted in
+	publicReads := false   // secure by default: GET reads require a token unless opted in
+	metricsPublic := false // secure by default: /internal/metrics requires a token unless opted in
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--require-tenant":
 			requireTenant = true
 		case "--public-reads":
 			publicReads = true
+		case "--metrics-public":
+			metricsPublic = true
 		case "--port":
 			if i+1 >= len(args) {
 				exitWithMnemosError(false, NewUserError("--port requires a value"))
@@ -126,6 +129,10 @@ func handleServe(args []string, _ Flags) {
 	case "1", "true", "yes":
 		publicReads = true
 	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_METRICS_PUBLIC"))) {
+	case "1", "true", "yes":
+		metricsPublic = true
+	}
 	// Secure by default: without an explicit opt-in, GET reads require a token.
 	// --require-tenant already authenticates every request, so --public-reads is
 	// meaningless there and ignored; warn so the operator isn't misled.
@@ -135,6 +142,9 @@ func handleServe(args []string, _ Flags) {
 	}
 	if publicReads {
 		fmt.Fprintln(os.Stderr, "serve: WARNING --public-reads is set — GET endpoints (including /v1/schemas) are readable WITHOUT authentication.")
+	}
+	if metricsPublic {
+		fmt.Fprintln(os.Stderr, "serve: WARNING --metrics-public is set — /internal/metrics is scrapeable WITHOUT authentication; expose it only on a trusted internal network.")
 	}
 
 	dsn := resolveDSN()
@@ -182,7 +192,7 @@ func handleServe(args []string, _ Flags) {
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           newServerMuxWithMemory(conn, mem, requireTenant, publicReads),
+		Handler:           newServerMuxWithMemory(conn, mem, requireTenant, publicReads, metricsPublic),
 		ReadTimeout:       serveReadTimeout,
 		ReadHeaderTimeout: serveReadHeaderTimeout,
 		WriteTimeout:      serveWriteTimeout,
@@ -313,14 +323,16 @@ func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory, requireTenan
 func newServerMux(conn *store.Conn) http.Handler {
 	// Test/utility helper keeps the historical public-read behavior so existing
 	// surface tests don't each need a token; production defaults to secure.
-	return newServerMuxWithMemory(conn, nil, false, true)
+	// metricsPublic mirrors publicReads here so the metrics surface test can
+	// scrape /internal/metrics anonymously.
+	return newServerMuxWithMemory(conn, nil, false, true, true)
 }
 
 // newServerMuxWithMemory builds the full HTTP surface. When mem is non-nil the
 // connected-brain endpoints (who-knows, knowledge-gaps, calibration,
 // hypercorrections, recombinations, analogous) delegate to it; when nil they
 // return 503.
-func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, publicReads bool) http.Handler {
+func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, publicReads, metricsPublic bool) http.Handler {
 	_, projectRoot, _ := findProjectDB()
 	secretPath := auth.DefaultSecretPath(projectRoot)
 	secret, created, err := auth.LoadOrCreateSecret(secretPath)
@@ -367,7 +379,12 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleLanding)
 	mux.HandleFunc("/app", handleWebRoot)
-	mux.HandleFunc("/health", makeHealthHandler(conn))
+	// /health(z) is a bare liveness 200 — no version/db/tenant data, anonymous
+	// by design (probes need reachability, not data). The richer readiness probe
+	// (DB write check) lives at /internal/ready behind auth.
+	mux.HandleFunc("/health", makeHealthHandler())
+	mux.HandleFunc("/healthz", makeHealthHandler())
+	mux.HandleFunc("/internal/ready", makeReadinessHandler(conn))
 	leadsLogger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 	mux.Handle("/v1/leads", leadsRateLimitMiddleware(makeLeadsHandler(leadsLogger)))
 	mux.HandleFunc("/v1/process", makeProcessHandler())
@@ -417,7 +434,7 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	// log so duration recorded in prometheus matches what's logged.
 	// Auth stashes the tenant (multi-tenant mode); tenantScopeMiddleware then
 	// opens a per-request tenant connection the handlers resolve via scopedConn.
-	authed := jwtAuthMiddleware(verifier, tenantScopeMiddleware(mux), requireTenant, publicReads)
+	authed := jwtAuthMiddleware(verifier, tenantScopeMiddleware(mux), requireTenant, publicReads, metricsPublic)
 	return panicRecover(logger, securityHeaders(requestIDMiddleware(boltAccessLog(logger, metricsMiddleware(mux, authed)))))
 }
 
@@ -540,26 +557,32 @@ type healthResponse struct {
 	Checks  []healthCheck `json:"checks,omitempty"`
 }
 
-// makeHealthHandler returns the /health handler. Default response is
-// the cheap shallow check (status + version) for liveness probes;
-// callers asking for ?deep=true get the full subsystem report so an
-// orchestrator can readiness-gate on it.
+// makeHealthHandler returns the /health(z) handler: a bare liveness 200 with a
+// minimal body ({"status":"ok"}) and nothing else. A probe needs reachability,
+// not data, so this intentionally leaks no version, db path, counts, or tenant
+// info — and stays anonymous. The richer readiness probe (DB write check) lives
+// behind auth at /internal/ready.
+func makeHealthHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
+// makeReadinessHandler returns the authenticated /internal/ready handler: the
+// full subsystem report (DB write probe + version) an orchestrator can
+// readiness-gate on. It is NOT anonymous — auth applies via jwtAuthMiddleware —
+// because the report carries operational detail (version, subsystem status)
+// that shouldn't leak to unauthenticated callers on a hosted listener.
 //
-// Returns 503 when deep=true reveals a failed probe so HTTP-aware
-// load balancers / Kubernetes readiness gates can react without
-// parsing the JSON.
-func makeHealthHandler(conn *store.Conn) http.HandlerFunc {
+// Returns 503 when a probe fails so HTTP-aware load balancers / Kubernetes
+// readiness gates can react without parsing the JSON.
+func makeReadinessHandler(conn *store.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
-		if r.URL.Query().Get("deep") != "true" {
-			writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Version: version})
-			return
-		}
-		// Deep health probe still expects a *sql.DB for the SQLite-
-		// flavoured write check; non-SQLite backends would need a
-		// per-backend probe that we haven't built. Pull *sql.DB out
-		// of Conn.Raw when available, else degrade to the shallow
-		// Healthy=true response.
+		// The readiness probe expects a *sql.DB for the SQLite-flavoured write
+		// check; non-SQLite backends would need a per-backend probe we haven't
+		// built. Pull *sql.DB out of Conn.Raw when available, else degrade to the
+		// shallow Healthy=true response.
 		var db *sql.DB
 		if raw, ok := conn.Raw.(*sql.DB); ok {
 			db = raw
