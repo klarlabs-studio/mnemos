@@ -333,6 +333,10 @@ type Belief struct {
 	// negative feedback). Nil/empty means the producer did not
 	// surface a decomposition — consumers treat absent as "no
 	// decomposition available", NOT as "all components are zero".
+	//
+	// The map also carries the credit-assignment audit trail (ADR 0014):
+	// entries whose key starts with [CreditComponentPrefix] are SIGNED trust
+	// deltas attributed to the decision/prediction that drove them.
 	ConfidenceComponents map[string]float64
 }
 
@@ -860,6 +864,16 @@ func (c Belief) Validate() error {
 	for k, v := range c.ConfidenceComponents {
 		if strings.TrimSpace(k) == "" {
 			return errors.New("confidence_components key must be non-empty")
+		}
+		// Credit-assignment entries (ADR 0014) are SIGNED trust deltas — a refuted
+		// prediction blames its beliefs with a negative contribution — so they may
+		// range over [-1, 1]. All other components are confidence contributors in
+		// [0, 1].
+		if strings.HasPrefix(k, CreditComponentPrefix) {
+			if v < -1 || v > 1 {
+				return fmt.Errorf("confidence_components[%q] must be between -1 and 1", k)
+			}
+			continue
 		}
 		if v < 0 || v > 1 {
 			return fmt.Errorf("confidence_components[%q] must be between 0 and 1", k)

@@ -2,6 +2,14 @@ package domain
 
 import "time"
 
+// CreditComponentPrefix marks the entries that credit assignment (ADR 0014)
+// writes into a Claim's ConfidenceComponents map. Such entries are SIGNED trust
+// deltas (a refuted prediction blames its beliefs with a negative value) and their
+// key additionally encodes the driving decision and prediction, so the map doubles
+// as the credit audit trail. The prefix lives here — the single package both the
+// domain validator and the credit engine can reference without an import cycle.
+const CreditComponentPrefix = "credit:"
+
 // Expectation is a structured forward prediction attached to a claim (typically a
 // decision or hypothesis): "this numeric quantity will be Predicted, within
 // Tolerance, by Horizon". A reconciliation pass closes it against an observed

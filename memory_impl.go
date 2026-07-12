@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	axidomain "go.klarlabs.de/axi/domain"
 	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/credit"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/kernel"
@@ -903,6 +904,21 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 			res.TrustRefreshed = n
 		}
 	}
+	// Credit assignment (ADR 0014): propagate the signed prediction error of each
+	// resolved Expectation back to the beliefs that informed the decision it
+	// predicted — validated predictions credit their beliefs, refuted ones blame
+	// them, as a bounded, attributed trust delta on top of the evidence-based base
+	// just recomputed. This is the missing half of learning: trust now reflects
+	// not only "is this corroborated?" but "did acting on it work out?". Runs here,
+	// right after the base recompute and BEFORE forgetting, so a belief reality
+	// refuted can be swept up by --forget-below-trust in the same pass.
+	if opts.AssignCredit {
+		credited, cerr := m.assignCredit(ctx)
+		if cerr != nil {
+			return res, fmt.Errorf("mnemos: consolidate: assign credit: %w", cerr)
+		}
+		res.Credited = credited
+	}
 	// Active forgetting: prune stale, low-trust, non-promoted claims — the
 	// offline synaptic renormalisation the brain does during sleep. Reduced
 	// retrievability, not erasure (marked deprecated, history preserved).
@@ -1122,6 +1138,99 @@ func (m *memory) reinforceValidatedClaims(ctx context.Context) (int, error) {
 		n++
 	}
 	return n, nil
+}
+
+// assignCredit runs credit assignment (ADR 0014): it propagates the signed
+// prediction error of each resolved Expectation back to the beliefs that informed
+// the Decision it predicted, as a bounded, attributed, idempotent trust delta on
+// top of the evidence-based base trust. Returns the number of beliefs credited.
+//
+// Linkage. An Expectation attaches to a belief claim; a Decision lists that claim
+// among its Beliefs. So the chain the ADR names — Decision → Beliefs[] → Outcome,
+// with Expectation surprise — is walked by: for each decision, look up the
+// expectation on each of its beliefs; when one has an observation, reconcile it
+// into a signed error and split that credit equally across ALL of the decision's
+// beliefs (they were the load-bearing inputs). The pure [credit.Assign] computes
+// the contributions; this method is the I/O shell.
+//
+// Attribution + idempotency. Each contribution is stored in the belief's
+// confidence_components map under a key that encodes the driving decision and
+// prediction — the audit trail the ADR-0011 guardrail requires. The map is
+// rewritten by assignment (credit entries replaced, other components preserved),
+// and the trust delta is applied as base+creditSum where base is the freshly
+// recomputed evidence trust — so re-running produces byte-identical components and
+// the same trust, never a double-credit.
+//
+// Degradation. A no-op when the store lacks decisions or expectations, or when the
+// claim repository does not persist the confidence_components audit map
+// ([ports.BeliefCreditWriter]) — credit is never applied where it could not be
+// attributed. Relies on RecomputeTrust having run first (Consolidate does so
+// immediately before), so each claim's TrustScore is the evidence-based base.
+func (m *memory) assignCredit(ctx context.Context) (int, error) {
+	if m.conn.Expectations == nil || m.conn.Decisions == nil {
+		return 0, nil
+	}
+	writer, ok := m.conn.Claims.(ports.BeliefCreditWriter)
+	if !ok {
+		return 0, nil // backend does not persist the credit audit map — skip, don't guess
+	}
+
+	decisions, err := m.conn.Decisions.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list decisions: %w", err)
+	}
+	// Fetch the expectation attached to each belief a decision relied on.
+	exps := make(map[string]domain.Expectation)
+	for _, d := range decisions {
+		for _, b := range d.Beliefs {
+			if _, seen := exps[b]; seen {
+				continue
+			}
+			exp, ok, gerr := m.conn.Expectations.Get(ctx, b)
+			if gerr != nil {
+				return 0, fmt.Errorf("get expectation %s: %w", b, gerr)
+			}
+			if ok {
+				exps[b] = exp
+			}
+		}
+	}
+	contribs := credit.Assign(decisions, exps)
+
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list claims: %w", err)
+	}
+	credited := 0
+	for _, c := range all {
+		fresh := contribs[c.ID]
+		// Preserve non-credit components; replace all credit:* keys with the fresh set.
+		merged := make(map[string]float64)
+		hadCredit := false
+		for k, v := range c.ConfidenceComponents {
+			if credit.IsCreditKey(k) {
+				hadCredit = true
+				continue
+			}
+			merged[k] = v
+		}
+		for _, ct := range fresh {
+			merged[ct.Key] = ct.Delta
+		}
+		if len(fresh) == 0 && !hadCredit {
+			continue // no credit now, none before → nothing to write
+		}
+		// base+creditSum: c.TrustScore is the evidence base (RecomputeTrust just ran),
+		// so applying the clamped credit sum each pass is idempotent and self-healing.
+		newTrust := clamp01(c.TrustScore + credit.SumFor(fresh))
+		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, newTrust); err != nil {
+			return credited, fmt.Errorf("apply belief credit %s: %w", c.ID, err)
+		}
+		if len(fresh) > 0 {
+			credited++
+		}
+	}
+	return credited, nil
 }
 
 // forgetRefutedClaims invalidates currently-valid, non-promoted claims that an

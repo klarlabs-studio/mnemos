@@ -14,7 +14,7 @@ import (
 // stages (forget, reinforce, synthesize, replay) per flag. Deterministic, no LLM.
 //
 //	mnemos consolidate [--dry-run] [--forget-below-trust <f>] [--forget-refuted]
-//	                   [--reinforce-validated] [--reinforce-playbooks]
+//	                   [--reinforce-validated] [--reinforce-playbooks] [--credit]
 //	                   [--synthesize] [--replay-top-k <n>]
 func handleConsolidate(args []string, f Flags) {
 	// The promotion pass (ADR 0011 Phase B) is a distinct, read-only sub-mode of
@@ -54,6 +54,7 @@ func handleConsolidate(args []string, f Flags) {
 		"refuted":               res.Refuted,
 		"validated":             res.Validated,
 		"playbooks_reinforced":  res.PlaybooksReinforced,
+		"credited":              res.Credited,
 		"replayed":              res.Replayed,
 		"lessons_synthesized":   res.LessonsSynthesized,
 		"playbooks_synthesized": res.PlaybooksSynthesized,
@@ -73,6 +74,8 @@ func parseConsolidateOpts(args []string, f Flags) (mnemos.ConsolidateOptions, er
 			opts.ForgetRefuted = true
 		case "--reinforce-validated":
 			opts.ReinforceValidated = true
+		case "--credit":
+			opts.AssignCredit = true
 		case "--reinforce-playbooks":
 			opts.ReinforcePlaybooks = true
 		case "--synthesize":

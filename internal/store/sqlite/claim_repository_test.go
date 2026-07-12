@@ -331,3 +331,51 @@ func TestClaimVisibility_RoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// TestClaimRepository_ApplyBeliefCredit exercises the ADR-0014 credit persistence
+// seam: the confidence_components audit map and trust_score are written together
+// and round-trip through the real SQLite UPDATE + scan path.
+func TestClaimRepository_ApplyBeliefCredit(t *testing.T) {
+	db := openTestDB(t)
+	defer closeDB(db)
+
+	ctx := context.Background()
+	repo := NewClaimRepository(db)
+
+	// The repository must satisfy the optional capability.
+	var _ interface {
+		ApplyBeliefCredit(context.Context, string, map[string]float64, float64) error
+	} = repo
+
+	claim := domain.Claim{
+		ID: "cl_credit", Text: "belief backing a decision", Type: domain.ClaimTypeHypothesis,
+		Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: time.Now().UTC(),
+	}
+	if err := repo.Upsert(ctx, []domain.Claim{claim}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	comps := map[string]float64{"credit:dec_1:cl_credit": -0.1, "other": 0.42}
+	if err := repo.ApplyBeliefCredit(ctx, "cl_credit", comps, 0.7); err != nil {
+		t.Fatalf("ApplyBeliefCredit: %v", err)
+	}
+
+	got, err := repo.ListByIDs(ctx, []string{"cl_credit"})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("ListByIDs: err=%v n=%d", err, len(got))
+	}
+	if got[0].TrustScore != 0.7 {
+		t.Errorf("TrustScore = %v, want 0.7", got[0].TrustScore)
+	}
+	if got[0].ConfidenceComponents["credit:dec_1:cl_credit"] != -0.1 {
+		t.Errorf("credit component not persisted: %v", got[0].ConfidenceComponents)
+	}
+	if got[0].ConfidenceComponents["other"] != 0.42 {
+		t.Errorf("non-credit component clobbered: %v", got[0].ConfidenceComponents)
+	}
+
+	// A missing claim is a sql.ErrNoRows-wrapped error, not a silent no-op.
+	if err := repo.ApplyBeliefCredit(ctx, "nope", comps, 0.5); err == nil {
+		t.Error("ApplyBeliefCredit on missing claim should error")
+	}
+}
