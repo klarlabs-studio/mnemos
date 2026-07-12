@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS lessons (
   last_verified DATETIME(6)  NULL,
   source        VARCHAR(32)  NOT NULL DEFAULT 'synthesize',
   created_by    VARCHAR(190) NOT NULL DEFAULT '<system>',
+  subject_class VARCHAR(32)  NOT NULL DEFAULT '',
   PRIMARY KEY (id),
   KEY idx_lessons_scope_service (scope_service),
   KEY idx_lessons_scope_env     (scope_env),
@@ -245,6 +246,12 @@ CREATE TABLE IF NOT EXISTS lessons (
   KEY idx_lessons_trigger       (`trigger`),
   KEY idx_lessons_confidence    (confidence)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ADR 0012: subject-class eligibility gate. A plain column on lessons that
+-- flows up from the backing beliefs at synthesis time (see AggregateSubjectClass).
+-- Added for schemas created under an earlier generation of the schema.
+-- MySQL 8.0.29+ supports IF NOT EXISTS on ADD COLUMN.
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS subject_class VARCHAR(32) NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS lesson_evidence (
   lesson_id VARCHAR(190) NOT NULL,

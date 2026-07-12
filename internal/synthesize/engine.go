@@ -47,6 +47,19 @@ type Options struct {
 	Source string
 	// CreatedBy stamps lessons. Defaults to domain.SystemUser.
 	CreatedBy string
+	// SubjectClassForAction resolves the subject class of the belief(s)
+	// that back a given action — the evidence a synthesized schema is
+	// built from. The engine aggregates the classes of a cluster's
+	// backing actions with domain.AggregateSubjectClass so the schema's
+	// SubjectClass flows up from its evidence (ADR 0012): a schema over
+	// class-level beliefs is class-level; any individual belief taints it
+	// to individual; any unknown (and no individual) keeps it unknown.
+	//
+	// When nil, every action resolves to SubjectClassUnknown, so the
+	// schema is unknown — fail closed, private by default — until
+	// classification is wired end-to-end. This preserves the pre-ADR-0012
+	// behaviour (empty SubjectClass) for callers that do not supply it.
+	SubjectClassForAction func(action domain.Action) domain.SubjectClass
 }
 
 func (o Options) withDefaults() Options {
@@ -132,6 +145,7 @@ func Synthesize(ctx context.Context, actions ports.ActionRepository, outcomes po
 			Evidence:     actionIDs(c.Actions),
 			Confidence:   score,
 			Polarity:     clusterPolarity(c),
+			SubjectClass: clusterSubjectClass(c, opts.SubjectClassForAction),
 			DerivedAt:    now,
 			LastVerified: now,
 			Source:       opts.Source,
@@ -311,6 +325,27 @@ func clusterPolarity(c cluster) domain.LessonPolarity {
 		return domain.LessonPolarityNegative
 	}
 	return domain.LessonPolarityPositive
+}
+
+// clusterSubjectClass flows the subject class up from a cluster's
+// backing actions to the schema it synthesizes (ADR 0012). It resolves
+// each backing action's belief class via resolve and aggregates them
+// with domain.AggregateSubjectClass: the schema is class-level only when
+// EVERY backing action is class-level; a single individual taints it to
+// individual; any unknown (and no individual) keeps it unknown.
+//
+// A nil resolver means classification is not wired for this call — every
+// action resolves to SubjectClassUnknown, so the schema is unknown and
+// stays private (fail closed), matching the pre-ADR-0012 empty default.
+func clusterSubjectClass(c cluster, resolve func(domain.Action) domain.SubjectClass) domain.SubjectClass {
+	if resolve == nil {
+		return domain.SubjectClassUnknown
+	}
+	classes := make([]domain.SubjectClass, 0, len(c.Actions))
+	for _, a := range c.Actions {
+		classes = append(classes, resolve(a))
+	}
+	return domain.AggregateSubjectClass(classes)
 }
 
 func actionIDs(as []domain.Action) []string {

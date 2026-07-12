@@ -149,6 +149,106 @@ func TestSynthesize_DropsContradictoryCluster(t *testing.T) {
 	}
 }
 
+// TestSynthesize_SubjectClass_ClassLevelFlowsUp proves that a schema
+// synthesized over class-level backing beliefs is itself class-level
+// (ADR 0012 AggregateSubjectClass) and that the class is persisted.
+func TestSynthesize_SubjectClass_ClassLevelFlowsUp(t *testing.T) {
+	conn := openTestStore(t)
+	now := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	seedClusterSuccess(t, conn, "payments", domain.ActionKindRollback, 3, now.Add(-12*time.Hour))
+
+	// Every backing action's belief is class-level.
+	classForAll := func(domain.Action) domain.SubjectClass { return domain.SubjectClassClass }
+
+	res, err := Synthesize(context.Background(), conn.Actions, conn.Outcomes, conn.Lessons, Options{
+		Now:                   func() time.Time { return now },
+		SubjectClassForAction: classForAll,
+	})
+	if err != nil {
+		t.Fatalf("synthesize: %v", err)
+	}
+	if res.LessonsEmitted != 1 {
+		t.Fatalf("want 1 lesson, got %d", res.LessonsEmitted)
+	}
+	got, err := conn.Lessons.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("list lessons: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 stored lesson, got %d", len(got))
+	}
+	if got[0].SubjectClass != domain.SubjectClassClass {
+		t.Fatalf("want class-level schema, got %q", got[0].SubjectClass)
+	}
+	if !domain.EligibleForPromotion(got[0].SubjectClass) {
+		t.Fatalf("class-level schema must be promotion-eligible")
+	}
+}
+
+// TestSynthesize_SubjectClass_IndividualTaints proves that a single
+// individual-level backing belief taints the whole schema to individual
+// (private, never promotable) even when every other belief is class-level.
+func TestSynthesize_SubjectClass_IndividualTaints(t *testing.T) {
+	conn := openTestStore(t)
+	now := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	ids := seedClusterSuccess(t, conn, "payments", domain.ActionKindRollback, 3, now.Add(-12*time.Hour))
+
+	// One backing action is about a specific instance (individual); the
+	// rest are class-level. Fail-closed aggregation must taint the schema.
+	tainted := ids[1]
+	mixed := func(a domain.Action) domain.SubjectClass {
+		if a.ID == tainted {
+			return domain.SubjectClassIndividual
+		}
+		return domain.SubjectClassClass
+	}
+
+	res, err := Synthesize(context.Background(), conn.Actions, conn.Outcomes, conn.Lessons, Options{
+		Now:                   func() time.Time { return now },
+		SubjectClassForAction: mixed,
+	})
+	if err != nil {
+		t.Fatalf("synthesize: %v", err)
+	}
+	if res.LessonsEmitted != 1 {
+		t.Fatalf("want 1 lesson, got %d", res.LessonsEmitted)
+	}
+	got, err := conn.Lessons.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("list lessons: %v", err)
+	}
+	if got[0].SubjectClass != domain.SubjectClassIndividual {
+		t.Fatalf("want individual (tainted) schema, got %q", got[0].SubjectClass)
+	}
+	if domain.EligibleForPromotion(got[0].SubjectClass) {
+		t.Fatalf("individual schema must never be promotion-eligible")
+	}
+}
+
+// TestSynthesize_SubjectClass_NilResolverFailsClosed proves the default
+// (no classification wired) keeps schemas unknown and private.
+func TestSynthesize_SubjectClass_NilResolverFailsClosed(t *testing.T) {
+	conn := openTestStore(t)
+	now := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)
+	seedClusterSuccess(t, conn, "payments", domain.ActionKindRollback, 3, now.Add(-12*time.Hour))
+
+	if _, err := Synthesize(context.Background(), conn.Actions, conn.Outcomes, conn.Lessons, Options{
+		Now: func() time.Time { return now },
+	}); err != nil {
+		t.Fatalf("synthesize: %v", err)
+	}
+	got, err := conn.Lessons.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("list lessons: %v", err)
+	}
+	if got[0].SubjectClass != domain.SubjectClassUnknown {
+		t.Fatalf("nil resolver must leave schema unknown, got %q", got[0].SubjectClass)
+	}
+	if domain.EligibleForPromotion(got[0].SubjectClass) {
+		t.Fatalf("unknown schema must never be promotion-eligible")
+	}
+}
+
 func TestSynthesize_IsIdempotent(t *testing.T) {
 	conn := openTestStore(t)
 	now := time.Date(2026, 5, 1, 10, 0, 0, 0, time.UTC)

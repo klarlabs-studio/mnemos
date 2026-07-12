@@ -234,8 +234,14 @@ CREATE TABLE IF NOT EXISTS lessons (
   derived_at    timestamptz NOT NULL,
   last_verified timestamptz,
   source        text        NOT NULL DEFAULT 'synthesize',
-  created_by    text        NOT NULL DEFAULT '<system>'
+  created_by    text        NOT NULL DEFAULT '<system>',
+  subject_class text        NOT NULL DEFAULT ''
 );
+
+-- ADR 0012: subject-class eligibility gate. A plain column on lessons that
+-- flows up from the backing beliefs at synthesis time (see AggregateSubjectClass).
+-- Added for schemas created under an earlier generation of the schema.
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS subject_class text NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_lessons_scope_service ON lessons(scope_service);
 CREATE INDEX IF NOT EXISTS idx_lessons_scope_env     ON lessons(scope_env);
