@@ -237,8 +237,8 @@ type SearchResponse struct {
 	Query          string                 `json:"query"`
 	TopK           int                    `json:"top_k"`
 	Total          int                    `json:"total"`
-	Claims         []SearchClaim          `json:"claims"`
-	Contradictions []SearchContradiction  `json:"contradictions"`
+	Claims         []SearchClaim          `json:"beliefs"`
+	Contradictions []SearchContradiction  `json:"dissonances"`
 	AppliedFilters map[string]interface{} `json:"applied_filters,omitempty"`
 }
 

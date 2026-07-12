@@ -2140,8 +2140,8 @@ type searchClaimDTO struct {
 
 type searchResponse struct {
 	Query          string                 `json:"query"`
-	Claims         []searchClaimDTO       `json:"claims"`
-	Contradictions []relationshipDTO      `json:"contradictions"`
+	Claims         []searchClaimDTO       `json:"beliefs"`
+	Contradictions []relationshipDTO      `json:"dissonances"`
 	Total          int                    `json:"total"`
 	TopK           int                    `json:"top_k"`
 	AppliedFilters map[string]interface{} `json:"applied_filters,omitempty"`

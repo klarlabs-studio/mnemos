@@ -19,22 +19,26 @@ type auditExport struct {
 	GeneratedAt   string              `json:"generated_at"`
 	DBPath        string              `json:"db_path"`
 	Counts        auditCounts         `json:"counts"`
-	Events        []eventDTO          `json:"events"`
-	Claims        []claimDTO          `json:"claims"`
+	Events        []eventDTO          `json:"episodes"`
+	Claims        []claimDTO          `json:"beliefs"`
 	Evidence      []claimEvidenceItem `json:"evidence"`
-	Relationships []relationshipDTO   `json:"relationships"`
+	Relationships []relationshipDTO   `json:"associations"`
 	Embeddings    []embeddingDTO      `json:"embeddings,omitempty"`
 }
 
 type auditCounts struct {
-	Events        int `json:"events"`
-	Claims        int `json:"claims"`
+	Events        int `json:"episodes"`
+	Claims        int `json:"beliefs"`
 	Evidence      int `json:"evidence"`
-	Relationships int `json:"relationships"`
+	Relationships int `json:"associations"`
 	Embeddings    int `json:"embeddings"`
 }
 
-const auditSchemaVersion = "audit.v1"
+// auditSchemaVersion is bumped to v2 for the ADR-0011 brain-native wire rename:
+// the top-level collections are now episodes/beliefs/associations (matching the
+// brain-native edge fields belief_id/from_belief_id), a deliberate breaking
+// change to the export format.
+const auditSchemaVersion = "audit.v2"
 
 // handleAudit dispatches `mnemos audit` and its subcommands.
 //
