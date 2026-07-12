@@ -8,6 +8,35 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.85.0] — 2026-07-12
+
+### Changed
+
+- **BREAKING — brain-native wire across all served surfaces (ADR 0011).** Now that
+  every consumer is first-party, the served API speaks the brain vocabulary **in
+  place on v1** (no more v1/v2 split): REST resources are `/v1/beliefs`,
+  `/v1/episodes`, `/v1/associations`, `/v1/schemas`; JSON fields, edge
+  cross-references (`from_belief_id`/`to_belief_id`), metrics
+  (`dissonances`/`contested_beliefs`/…), MCP tool names + I/O
+  (`list_beliefs`, `list_dissonances`, `synthesize_schemas`, `query_reflex`, …),
+  and the gRPC proto/messages/RPCs are all renamed. The additive `/v2` REST layer
+  is retired (folded into v1). The CLI JSON outputs (`audit`, `query --json`) are
+  brain-native too (`audit.v2` format). The Go client + the hosted recall/brief/
+  capture hooks were updated in lockstep. **Unchanged:** DB columns / storage
+  schema and config keys / env vars (storage is not a consumer surface — no data
+  migration), plus `evidence` and `embedding`.
+
+### Added
+
+- **`consolidate --promote --all-tenants --db <dsn>` (ADR 0011).** The promotion
+  pass can enumerate the tenants of one multi-tenant store instead of requiring an
+  explicit `--tenant-dsn` per tenant: Postgres via `SELECT DISTINCT tenant` with
+  explicit `WHERE tenant = $1` per-tenant reads (correct even under an
+  RLS-bypassing role — closes a subtle cross-tenant-corroboration leak), and
+  file/database-per-namespace enumeration for sqlite/mysql/libsql. Backends that
+  can't isolate (`memory://`, remote libSQL) fail closed. Read-time isolation is
+  preserved and the no-leak promotion engine is untouched.
+
 ## [0.84.0] — 2026-07-11
 
 ### Added
