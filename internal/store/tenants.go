@@ -41,6 +41,15 @@ type TenantScope struct {
 	// so a promoted candidate can never gain false cross-tenant corroboration
 	// from an RLS-bypassing (superuser) connection.
 	Lessons []domain.Lesson
+
+	// Claims are this tenant's claims, read under the SAME tenant scope as
+	// Lessons (namespace isolation for sqlite/mysql/local libsql, an explicit
+	// `WHERE tenant = $1` filter for postgres). They feed the ADR 0012 knowledge
+	// promotion path (Path A): the consolidation pass synthesizes knowledge
+	// schemas from the class-level subset and unions them with Lessons. Pre-read
+	// under isolation for the same anti-leak reason as Lessons — a claim can never
+	// gain false cross-tenant corroboration from an RLS-bypassing connection.
+	Claims []domain.Claim
 }
 
 // TenantEnumerator discovers the tenant partitions of a single multi-tenant

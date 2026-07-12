@@ -63,11 +63,11 @@ func EnumerateFileTenants(ctx context.Context, baseDSN, scheme string) ([]store.
 			continue
 		}
 		scopedDSN := store.SetDSNParam(baseDSN, "namespace", ns)
-		lessons, err := readScopedLessons(ctx, scopedDSN)
+		lessons, claims, err := readScoped(ctx, scopedDSN)
 		if err != nil {
-			return nil, fmt.Errorf("%s: read lessons for namespace %q: %w", scheme, ns, err)
+			return nil, fmt.Errorf("%s: read tenant data for namespace %q: %w", scheme, ns, err)
 		}
-		scopes = append(scopes, store.TenantScope{Tenant: ns, DSN: scopedDSN, Lessons: lessons})
+		scopes = append(scopes, store.TenantScope{Tenant: ns, DSN: scopedDSN, Lessons: lessons, Claims: claims})
 	}
 	return scopes, nil
 }
@@ -85,12 +85,23 @@ func canonicalSQLiteDSN(baseDSN, scheme string) string {
 	return dsn
 }
 
-// readScopedLessons opens a single scoped sqlite DSN and returns its lessons.
-func readScopedLessons(ctx context.Context, scopedDSN string) ([]domain.Lesson, error) {
+// readScoped opens a single scoped sqlite DSN and returns its lessons and claims,
+// both read under that tenant's physical namespace isolation. Claims feed the
+// ADR 0012 knowledge promotion path (Path A). Reading through the scoped conn's
+// own repositories keeps SELECT/Scan parity with ListAll — no hand-written SQL.
+func readScoped(ctx context.Context, scopedDSN string) ([]domain.Lesson, []domain.Claim, error) {
 	conn, err := store.Open(ctx, scopedDSN)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() { _ = conn.Close() }()
-	return conn.Lessons.ListAll(ctx)
+	lessons, err := conn.Lessons.ListAll(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	claims, err := conn.Claims.ListAll(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return lessons, claims, nil
 }

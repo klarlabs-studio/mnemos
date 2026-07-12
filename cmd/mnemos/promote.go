@@ -119,7 +119,17 @@ func handlePromote(args []string, f Flags) {
 			return
 		}
 		for _, s := range scopes {
-			tenants = append(tenants, consolidate.TenantLessons{Tenant: s.Tenant, Lessons: s.Lessons})
+			// ADR 0012 Path A: union the tenant's operational lessons with the
+			// knowledge schemas synthesized from its class-level claims. Both feed
+			// the same promotion engine; the eligibility gate (0) blocks
+			// individual/unknown either way. Claims were read under this tenant's
+			// scope by the enumerator (namespace isolation, or an explicit
+			// WHERE tenant filter for postgres) so no cross-tenant bleed occurs.
+			knowledge := knowledgeSchemasFromClaims(s.Claims)
+			lessons := make([]domain.Lesson, 0, len(s.Lessons)+len(knowledge))
+			lessons = append(lessons, s.Lessons...)
+			lessons = append(lessons, knowledge...)
+			tenants = append(tenants, consolidate.TenantLessons{Tenant: s.Tenant, Lessons: lessons})
 			dsns = append(dsns, s.DSN)
 		}
 	} else {
@@ -134,11 +144,21 @@ func handlePromote(args []string, f Flags) {
 				return
 			}
 			lessons, err := conn.Lessons.ListAll(ctx)
-			_ = conn.Close()
 			if err != nil {
+				_ = conn.Close()
 				exitWithMnemosError(false, NewSystemError(err, "list lessons for %q", dsn))
 				return
 			}
+			// ADR 0012 Path A: also read the tenant's claims and synthesize
+			// knowledge schemas from the class-level subset (individual/unknown are
+			// skipped, fail-closed), unioning them with the operational lessons.
+			claims, err := conn.Claims.ListAll(ctx)
+			_ = conn.Close()
+			if err != nil {
+				exitWithMnemosError(false, NewSystemError(err, "list claims for %q", dsn))
+				return
+			}
+			lessons = append(lessons, knowledgeSchemasFromClaims(claims)...)
 			tenants = append(tenants, consolidate.TenantLessons{Tenant: dsn, Lessons: lessons})
 		}
 	}
@@ -198,6 +218,23 @@ func handlePromote(args []string, f Flags) {
 	}
 
 	emitJSON(out)
+}
+
+// knowledgeSchemasFromClaims synthesizes ADR 0012 Path A knowledge schemas from
+// a tenant's claims: it keeps only ACTIVE claims (contested/deprecated beliefs
+// are not promotable knowledge) and hands them to consolidate.SynthesizeKnowledgeSchemas,
+// which itself keeps only the class-level subset (individual/unknown are skipped,
+// fail-closed). The returned schemas are transient promotion inputs whose
+// Evidence holds claim ids — they are unioned with the tenant's operational
+// lessons and never persisted into the lessons table.
+func knowledgeSchemasFromClaims(claims []domain.Claim) []domain.Lesson {
+	active := make([]domain.Claim, 0, len(claims))
+	for _, c := range claims {
+		if c.Status == domain.ClaimStatusActive {
+			active = append(active, c)
+		}
+	}
+	return consolidate.SynthesizeKnowledgeSchemas(active)
 }
 
 // writeCounts records how many global records a promotion apply wrote.
