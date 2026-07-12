@@ -8,8 +8,34 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.89.0] — 2026-07-12
+
 ### Added
 
+- **Credit assignment — learning from consequences (ADR 0014, the capstone).**
+  Trust now updates from *outcomes*, not just evidence: when an `Expectation`
+  resolves, its signed surprise (validated → positive, refuted → negative)
+  propagates as a bounded, decayed, **attributed** trust delta to the beliefs that
+  backed the decision, split across them. This is the neural-network gradient / RL
+  credit assignment — the brain learning to be *right*, not just *corroborated*.
+  Run via `consolidate --credit`. Idempotent (assignment, not accumulation);
+  every delta records which outcome/decision drove it in `confidence_components`
+  (no store-schema change); backends that can't attribute the change skip it
+  (ADR-0011 no-silent-trust-change guardrail). Works on sqlite/libsql today;
+  hosted (pg/mysql) round-trip is a tracked follow-up.
+- **Spreading activation — associative priming at retrieval (ADR 0013 §2).**
+  Opt-in (`query --prime` / `MNEMOS_SPREADING_ACTIVATION`): recalling a belief
+  spreads decaying activation over the association graph, boosting related beliefs
+  into the ranking. Bounded so association alone can't overturn a strong direct
+  match; off by default (recall unchanged).
+- **Curiosity — `mnemos curiosity` (ADR 0013 §3).** Turns passive metacognition
+  into an active, prioritized "what to learn / verify next" queue from the brain's
+  knowledge-gaps, calibration, trust, and staleness — the uncertain/stale/contested
+  beliefs ranked first, each with a reason and an agent-facing question. Read-only.
+- **Schema-consistency fast-assimilation (ADR 0013 §5).** The positive complement
+  to dissonance: information consistent with an existing schema consolidates faster
+  (bounded boost); contradicting information routes to the existing accommodation
+  (dissonance) path. Never bypasses the eligibility/no-leak gates.
 - **Unified salience / stakes (ADR 0013 §4) — bias retrieval and consolidation by
   consequence severity.** Beliefs now carry a `salience` weight in `[0,1]` — the
   amygdala's stakes tag — so a high-consequence fact is recalled and consolidated

@@ -1,6 +1,10 @@
 # ADR 0013: Cognitive completeness — the brain/NN mechanisms Mnemos still lacks
 
-- **Status:** Proposed (roadmap; none of the five mechanisms below are implemented yet)
+- **Status:** Accepted; all five mechanisms **implemented** — credit assignment
+  (ADR 0014, PR #194), spreading activation (#192), curiosity (#193), salience
+  (#195), schema-consistency assimilation (#191). Each landed bounded, additive,
+  and (for the trust-touching ones) attributed. Credit + salience reuse the
+  `confidence_components` map (no store-schema change).
 - **Date:** 2026-07-12
 - **Deciders:** Felix Geelhaar
 - **Scope:** The cognitive core. Extends ADR 0011 (Complementary Learning Systems)
@@ -162,6 +166,13 @@ complement to the contradiction engine.
 - Salience and curiosity add configuration surface; keep them small and typed.
 
 ## Rollout
+
+**All five shipped (2026-07-12).** One follow-up remains: credit + salience persist
+into `confidence_components`, which sqlite/libsql/memory round-trip but the
+Postgres/MySQL claim repos do not yet — so those two trust-updating mechanisms are
+currently a no-op on the hosted backend (they work fully on the local/default
+sqlite path). The fix is a repo-mapping change only (the column already exists) plus
+a `BeliefCreditWriter` implementation for pg/mysql — tracked as the next store task.
 
 1. **Credit assignment** — its own ADR + the outcome→belief-trust loop (reconcile
    expectations/outcomes → propagate bounded, decayed, attributed trust deltas to
