@@ -50,7 +50,7 @@ func TestREST_TenantSelectionAndDenial(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	h := jwtAuthMiddleware(verifier, inner, true /* requireTenant */)
+	h := jwtAuthMiddleware(verifier, inner, true /* requireTenant */, false /* publicReads */)
 
 	do := func(selectTenant string) *httptest.ResponseRecorder {
 		gotTenant, handlerRan = "", false

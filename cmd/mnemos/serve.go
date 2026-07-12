@@ -81,10 +81,13 @@ func handleServe(args []string, _ Flags) {
 	port := defaultServePort
 	grpcPort := 0 // 0 = disabled
 	requireTenant := false
+	publicReads := false // secure by default: GET reads require a token unless opted in
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--require-tenant":
 			requireTenant = true
+		case "--public-reads":
+			publicReads = true
 		case "--port":
 			if i+1 >= len(args) {
 				exitWithMnemosError(false, NewUserError("--port requires a value"))
@@ -118,6 +121,20 @@ func handleServe(args []string, _ Flags) {
 		if p, err := strconv.Atoi(envPort); err == nil && p >= 1 && p <= 65535 {
 			port = p
 		}
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_PUBLIC_READS"))) {
+	case "1", "true", "yes":
+		publicReads = true
+	}
+	// Secure by default: without an explicit opt-in, GET reads require a token.
+	// --require-tenant already authenticates every request, so --public-reads is
+	// meaningless there and ignored; warn so the operator isn't misled.
+	if publicReads && requireTenant {
+		fmt.Fprintln(os.Stderr, "serve: --public-reads is ignored under --require-tenant (every request is authenticated)")
+		publicReads = false
+	}
+	if publicReads {
+		fmt.Fprintln(os.Stderr, "serve: WARNING --public-reads is set — GET endpoints (including /v1/schemas) are readable WITHOUT authentication.")
 	}
 
 	dsn := resolveDSN()
@@ -165,7 +182,7 @@ func handleServe(args []string, _ Flags) {
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           newServerMuxWithMemory(conn, mem, requireTenant),
+		Handler:           newServerMuxWithMemory(conn, mem, requireTenant, publicReads),
 		ReadTimeout:       serveReadTimeout,
 		ReadHeaderTimeout: serveReadHeaderTimeout,
 		WriteTimeout:      serveWriteTimeout,
@@ -175,7 +192,7 @@ func handleServe(args []string, _ Flags) {
 
 	var grpcSrv *grpc.Server
 	if grpcPort > 0 {
-		grpcSrv = startGRPCServer(grpcPort, conn, mem, requireTenant)
+		grpcSrv = startGRPCServer(grpcPort, conn, mem, requireTenant, publicReads)
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -231,7 +248,7 @@ func handleServe(args []string, _ Flags) {
 
 // startGRPCServer creates and starts a gRPC server on the given port.
 // It shares the store.Conn and auth verifier with the HTTP surface.
-func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory, requireTenant bool) *grpc.Server {
+func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory, requireTenant, publicReads bool) *grpc.Server {
 	_, projectRoot, _ := findProjectDB()
 	secretPath := auth.DefaultSecretPath(projectRoot)
 	secret, _, err := auth.LoadOrCreateSecret(secretPath)
@@ -248,6 +265,10 @@ func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory, requireTenan
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 
 	mnemosSrv := mnemosgrpc.NewServerWithMemory(conn, mem, verifier, logger, version)
+	if publicReads {
+		// Opt-in only: allow anonymous read RPCs (secure default requires a token).
+		mnemosSrv = mnemosSrv.WithPublicReads()
+	}
 	if requireTenant {
 		// Per-request tenant-scoped connections, RLS-isolated (ADR 0007).
 		mnemosSrv = mnemosSrv.WithTenantScoping(func(ctx context.Context, tenant string) (*store.Conn, error) {
@@ -282,21 +303,24 @@ func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory, requireTenan
 // newServerMux wires the routes. Exported in package for httptest in
 // serve_test.go without booting a real listener.
 //
-// Auth model: reads are open; mutating methods require a valid Mnemos
-// JWT signed with the server secret. The secret is resolved from
+// Auth model: secure by default — every request requires a valid Mnemos
+// JWT (reads too), except infra endpoints and, with --public-reads, anonymous
+// GET reads. The JWT is signed with the server secret. The secret is resolved from
 // MNEMOS_JWT_SECRET or a per-install file (auto-created on first boot).
 // Revoked JTIs are honored via the RevokedTokenRepository denylist.
 // newServerMux builds the HTTP surface with only the store-backed endpoints
 // (no cognitive facade). Kept for tests + callers that don't need the brain.
 func newServerMux(conn *store.Conn) http.Handler {
-	return newServerMuxWithMemory(conn, nil, false)
+	// Test/utility helper keeps the historical public-read behavior so existing
+	// surface tests don't each need a token; production defaults to secure.
+	return newServerMuxWithMemory(conn, nil, false, true)
 }
 
 // newServerMuxWithMemory builds the full HTTP surface. When mem is non-nil the
 // connected-brain endpoints (who-knows, knowledge-gaps, calibration,
 // hypercorrections, recombinations, analogous) delegate to it; when nil they
 // return 503.
-func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant bool) http.Handler {
+func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, publicReads bool) http.Handler {
 	_, projectRoot, _ := findProjectDB()
 	secretPath := auth.DefaultSecretPath(projectRoot)
 	secret, created, err := auth.LoadOrCreateSecret(secretPath)
@@ -393,7 +417,7 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant b
 	// log so duration recorded in prometheus matches what's logged.
 	// Auth stashes the tenant (multi-tenant mode); tenantScopeMiddleware then
 	// opens a per-request tenant connection the handlers resolve via scopedConn.
-	authed := jwtAuthMiddleware(verifier, tenantScopeMiddleware(mux), requireTenant)
+	authed := jwtAuthMiddleware(verifier, tenantScopeMiddleware(mux), requireTenant, publicReads)
 	return panicRecover(logger, securityHeaders(requestIDMiddleware(boltAccessLog(logger, metricsMiddleware(mux, authed)))))
 }
 

@@ -43,7 +43,11 @@ type Server struct {
 	// requireTenant is true, every RPC must present a token with a valid tenant;
 	// openTenantConn opens a per-request tenant-scoped connection the RPC methods
 	// resolve through connFor/writerFor/memFor.
-	requireTenant  bool
+	requireTenant bool
+	// publicReads, when true, allows anonymous (tokenless) read RPCs in
+	// single-tenant mode — an explicit operator opt-in (serve --public-reads).
+	// Secure by default: when false, read RPCs require a valid token like writes.
+	publicReads    bool
 	openTenantConn func(ctx context.Context, tenant string) (*store.Conn, error)
 	// closeTenantConn releases a conn from openTenantConn. It MUST mirror the
 	// opener's ownership: when the opener returns a process-cached pool (the
@@ -56,8 +60,9 @@ type Server struct {
 }
 
 // NewServer returns a gRPC server backed by the given store Conn.
-// If verifier is non-nil, write RPCs require a valid bearer token in
-// the "authorization" metadata.
+// If verifier is non-nil, every RPC — reads included — requires a valid bearer
+// token in the "authorization" metadata (secure by default). Call WithPublicReads
+// to allow anonymous read RPCs in single-tenant mode.
 //
 // Every durable write the server performs routes through the governed
 // govwrite.Writer (built over the borrowed conn) so the spec
@@ -93,6 +98,15 @@ func (s *Server) WithTenantScoping(openConn func(ctx context.Context, tenant str
 	s.requireTenant = true
 	s.openTenantConn = openConn
 	s.closeTenantConn = closeConn
+	return s
+}
+
+// WithPublicReads opts into anonymous (tokenless) read RPCs in single-tenant
+// mode. Without it, read RPCs require a valid token like writes (secure by
+// default). Ignored under tenant scoping, where every RPC is authenticated.
+// Returns the server for chaining.
+func (s *Server) WithPublicReads() *Server {
+	s.publicReads = true
 	return s
 }
 
@@ -251,8 +265,11 @@ func (s *Server) authenticate(ctx context.Context, method string) (context.Conte
 		return s.validateToken(ctx, vals[0])
 	}
 
-	// Read methods allow anonymous access.
-	if isReadMethod(method) {
+	// Read methods allow anonymous access ONLY when the operator opted into a
+	// public read API (WithPublicReads); a token, if present, is still validated
+	// for created_by/scope attribution. Secure by default: without the opt-in,
+	// reads require a token exactly like writes (fall through below).
+	if s.publicReads && isReadMethod(method) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
 			return ctx, nil
