@@ -9,6 +9,14 @@ LDFLAGS := -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main
 PROTO_DIR := proto
 PROTO_GEN := proto/gen
 
+# SQLC_VERSION pins the exact sqlc used to (re)generate internal/store/sqlite/sqlcgen.
+# It MUST match the `// sqlc vX.Y.Z` header stamped into the committed generated
+# files: an off-version sqlc silently rewrites the generated SQL and has, in the
+# past, corrupted a query string. The `sqlc` target runs this exact version via
+# `go run ...@$(SQLC_VERSION)` so whatever `sqlc` sits on the operator's PATH is
+# never used. The same version is recorded as a `tool` dependency in go.mod.
+SQLC_VERSION := v1.30.0
+
 .PHONY: fmt lint test test-integration build check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query
 
 fmt:
@@ -38,7 +46,7 @@ install:
 	$(GO) install $(LDFLAGS) ./cmd/mnemos
 
 sqlc:
-	sqlc generate
+	$(GO) run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate
 
 proto:
 	@mkdir -p $(PROTO_GEN)

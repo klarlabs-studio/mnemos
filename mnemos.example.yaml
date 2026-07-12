@@ -77,6 +77,13 @@ feedback:
 job:
   timeout:             # MNEMOS_JOB_TIMEOUT (Go duration, default 10m)
 
+floatback:
+  # When true, a session-end capture inside a repo/workspace also floats
+  # important learnings up into the personal central brain (best-effort, the
+  # same selection as `mnemos float-back --apply`). Off by default; the default
+  # capture path is unchanged when unset/false.
+  on_capture:          # MNEMOS_FLOATBACK_ON_CAPTURE (true/false; default off)
+
 # Read-time precedence when a federated read (global brain + tenant/repo brain)
 # surfaces the same topic from both tiers (ADR 0011 Phase C). One of:
 #   tenant-wins         the tenant/repo tier wins on conflict (default; local dev)
