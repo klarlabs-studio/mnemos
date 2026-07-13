@@ -44,6 +44,9 @@ func TestBrainHealth_EmptyIsHealthy(t *testing.T) {
 	if len(h.Pathologies) != 3 {
 		t.Errorf("want 3 pathologies, got %d", len(h.Pathologies))
 	}
+	if fe := vitalByName(h, "free_energy"); fe.Status != HealthOK {
+		t.Errorf("free_energy vital on empty brain = %+v, want ok", fe)
+	}
 }
 
 // TestBrainHealth_DetectsPathologies verifies the new integrity checks: an orphan belief
