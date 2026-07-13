@@ -28,6 +28,9 @@ func TestMCPCognitiveHandlers(t *testing.T) {
 	if _, err := mcpCalibration(ctx, mem, struct{}{}); err != nil {
 		t.Fatalf("calibration: %v", err)
 	}
+	if pe, err := mcpPredictiveError(ctx, mem, struct{}{}); err != nil || len(pe.Levels) != 4 {
+		t.Fatalf("predictive_error: %v %+v", err, pe)
+	}
 	if hc, err := mcpHypercorrections(ctx, mem, struct{}{}); err != nil || hc.Hypercorrections == nil {
 		t.Fatalf("hypercorrections: %v %+v", err, hc)
 	}

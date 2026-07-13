@@ -92,3 +92,11 @@ Shipped in v0.94.0: `Memory.PredictiveError`, `mnemos predictive-error` (human +
 the four levels, the sample-gated total, and the hotspot — with tests over each level
 and the aggregation. The generative model and active minimization remain the documented
 north star; this ADR converts it from "someday" into "measured, and here is the meter."
+
+**Follow-up (v0.95.0): exposed for agent active inference.** The meter is now a
+`predictive_error` MCP tool, so an agent using mnemos as its brain can read "where is my
+model most wrong?" and direct its own learning/verification there. That is *active
+inference* — the consumer minimizing its own prediction error — the first place the
+measure→act loop closes, ahead of baking active minimization into consolidation itself.
+Exposed MCP-only (the agent-facing surface); the API-parity matrix records the deliberate
+REST/gRPC asymmetry.

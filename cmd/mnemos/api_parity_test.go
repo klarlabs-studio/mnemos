@@ -137,6 +137,9 @@ var parityMatrix = []parityEntry{
 	{Capability: "knowledge gaps", MCPTool: "knowledge_gaps", HTTPRoute: "/v1/knowledge-gaps", GRPCMethod: "KnowledgeGaps"},
 	{Capability: "confidence calibration", MCPTool: "calibration", HTTPRoute: "/v1/calibration", GRPCMethod: "Calibration"},
 	{Capability: "hypercorrections (contested established beliefs)", MCPTool: "hypercorrections", HTTPRoute: "/v1/hypercorrections", GRPCMethod: "Hypercorrections"},
+	// Predictive-error surface (ADR 0017) is exposed MCP-only for agent active inference;
+	// no REST/gRPC surface (deliberate asymmetry, like list_dissonances below).
+	{Capability: "predictive error (hierarchical prediction error, ADR 0017)", MCPTool: "predictive_error", HTTPRoute: parityNA, GRPCMethod: parityNA},
 	{Capability: "recombinations (candidate novel connections)", MCPTool: "recombinations", HTTPRoute: "/v1/recombinations", GRPCMethod: "Recombinations"},
 	{Capability: "analogical retrieval", MCPTool: "analogous_beliefs", HTTPRoute: parityNA, GRPCMethod: "AnalogousBeliefs"},
 
