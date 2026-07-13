@@ -8,6 +8,19 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.95.0] — 2026-07-13
+
+### Added
+
+- **`predictive_error` MCP tool — the free-energy meter, for agents (ADR 0017).** The
+  hierarchical prediction-error surface shipped in v0.94.0 as a CLI/library capability is
+  now an MCP tool, so an agent using mnemos as its brain can ask **"where is my model most
+  wrong?"** and direct its own learning/verification there — *active inference*, the
+  consumer minimizing its own prediction error. This is the first place the measure→act
+  loop closes, ahead of baking active minimization into consolidation. Read-only; exposed
+  MCP-only (the agent-facing surface), with the API-parity matrix recording the deliberate
+  REST/gRPC asymmetry (like `list_dissonances`).
+
 ## [0.94.0] — 2026-07-12
 
 ### Added

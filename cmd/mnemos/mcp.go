@@ -709,6 +709,17 @@ func handleMCP(args []string) {
 			return mcpCalibration(ctx, mem, struct{}{})
 		})
 
+	srv.Tool("predictive_error").
+		Description("Report hierarchical prediction error (outcome/schema/dissonance/calibration) + total and hotspot — where the model is most wrong (ADR 0017).").
+		OutputSchema(mcpPredictiveErrorOutput{}).
+		Handler(func(ctx context.Context, _ struct{}) (mcpPredictiveErrorOutput, error) {
+			mem, err := getMem(ctx)
+			if err != nil {
+				return mcpPredictiveErrorOutput{}, err
+			}
+			return mcpPredictiveError(ctx, mem, struct{}{})
+		})
+
 	srv.Tool("hypercorrections").
 		Description("List established beliefs a newer claim now contradicts (worth re-examining).").
 		OutputSchema(mcpHypercorrectionsOutput{}).

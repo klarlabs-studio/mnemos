@@ -108,6 +108,33 @@ func mcpCalibration(ctx context.Context, mem mnemos.Memory, _ struct{}) (mcpCali
 	return out, nil
 }
 
+type mcpPredictiveErrorLevel struct {
+	Level   string  `json:"level"`
+	Error   float64 `json:"error"`
+	Samples int     `json:"samples"`
+	Basis   string  `json:"basis"`
+}
+type mcpPredictiveErrorOutput struct {
+	Levels  []mcpPredictiveErrorLevel `json:"levels"`
+	Total   float64                   `json:"total"`
+	Hotspot string                    `json:"hotspot"`
+}
+
+// mcpPredictiveError exposes the ADR-0017 hierarchical prediction-error surface — the
+// free-energy meter — so an agent using mnemos as its brain can ask "where is my model
+// most wrong?" and direct its own learning/verification there (active inference). Read-only.
+func mcpPredictiveError(ctx context.Context, mem mnemos.Memory, _ struct{}) (mcpPredictiveErrorOutput, error) {
+	pe, err := mem.PredictiveError(ctx)
+	if err != nil {
+		return mcpPredictiveErrorOutput{}, err
+	}
+	out := mcpPredictiveErrorOutput{Total: pe.Total, Hotspot: pe.Hotspot}
+	for _, l := range pe.Levels {
+		out.Levels = append(out.Levels, mcpPredictiveErrorLevel{l.Level, l.Error, l.Samples, l.Basis})
+	}
+	return out, nil
+}
+
 type mcpHypercorrection struct {
 	ContradictedClaimID  string  `json:"contradicted_belief_id"`
 	ContradictedText     string  `json:"contradicted_text"`
