@@ -300,6 +300,8 @@ func main() {
 		handlePredictiveError(args, flags)
 	case "journal":
 		handleJournal(args, flags)
+	case "health":
+		handleBrainHealth(args, flags)
 	default:
 		fmt.Fprintf(os.Stderr, "error: unknown command %q\n", command)
 		if suggestion := suggestCommand(command); suggestion != "" {
@@ -1405,6 +1407,7 @@ func printUsage() {
 	fmt.Println("  curiosity [--limit N] [--human]      What to learn/verify next: gap-driven acquisition queue (ADR 0013)")
 	fmt.Println("  predictive-error [--human]           Hierarchical prediction error — where the model is most wrong (ADR 0017)")
 	fmt.Println("  journal [--belief <id>] [--human]    Read the cognitive journal: what learning did over time (ADR 0018)")
+	fmt.Println("  health [--journal] [--human]         Brain health: vitals + integrity checks, one verdict (ADR 0019)")
 	fmt.Println("  audit [--include-embeddings]         Export the full knowledge base as JSON")
 	fmt.Println("")
 	fmt.Println("Decisions, Actions & Outcomes:")

@@ -15,10 +15,11 @@ import (
 // is the per-pass consolidation stream (the free-energy-over-time curve);
 // `--belief <id>` shows one belief's trust trajectory. Read-only.
 //
-//	mnemos journal [--limit N] [--belief <claim-id>] [--human]
+//	mnemos journal [--limit N] [--kind consolidation|belief_trust|health] [--belief <claim-id>] [--human]
 func handleJournal(args []string, f Flags) {
 	limit := 50
 	belief := ""
+	kind := domain.JournalKindConsolidation
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--limit":
@@ -32,6 +33,13 @@ func handleJournal(args []string, f Flags) {
 				return
 			}
 			limit = n
+			i++
+		case "--kind":
+			if i+1 >= len(args) {
+				exitWithMnemosError(false, NewUserError("--kind requires a value (consolidation|belief_trust|health)"))
+				return
+			}
+			kind = args[i+1]
 			i++
 		case "--belief":
 			if i+1 >= len(args) {
@@ -62,7 +70,7 @@ func handleJournal(args []string, f Flags) {
 	if belief != "" {
 		entries, err = conn.Journal.ListBySubject(ctx, belief, limit)
 	} else {
-		entries, err = conn.Journal.List(ctx, domain.JournalKindConsolidation, limit)
+		entries, err = conn.Journal.List(ctx, kind, limit)
 	}
 	if err != nil {
 		exitWithMnemosError(f.Verbose, NewSystemError(err, "read journal"))
@@ -135,6 +143,22 @@ func printJournalHuman(entries []domain.JournalEntry) {
 			}
 			_ = json.Unmarshal([]byte(e.Data), &bt)
 			fmt.Printf("%s  trust  %-24s  %.4f -> %.4f  (Δ %+.4f)\n", ts, e.SubjectID, bt.Before, bt.After, bt.Delta)
+		case domain.JournalKindHealth:
+			var h struct {
+				Status string `json:"status"`
+				Vitals []struct {
+					Name  string  `json:"name"`
+					Value float64 `json:"value"`
+				} `json:"vitals"`
+			}
+			_ = json.Unmarshal([]byte(e.Data), &h)
+			fe := 0.0
+			for _, v := range h.Vitals {
+				if v.Name == "free_energy" {
+					fe = v.Value
+				}
+			}
+			fmt.Printf("%s  health %-11s  free-energy=%.3f\n", ts, h.Status, fe)
 		default:
 			fmt.Printf("%s  %-6s %s  %s\n", ts, e.Kind, e.SubjectID, e.Data)
 		}

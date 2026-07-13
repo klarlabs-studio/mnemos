@@ -8,6 +8,33 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.97.0] — 2026-07-13
+
+### Added
+
+- **Brain health — vital signs, integrity checks, and health-over-time (ADR 0019).**
+  Mnemos had liveness checks (DB/LLM reachability) and scattered cognitive signals behind
+  separate commands, but **no unified "is the brain healthy?" verdict, no pathology
+  detection, and no health-over-time log.** This adds all three.
+  - **`mnemos health`** — one read-only verdict (`healthy` / `degraded` / `unhealthy`,
+    worst-wins) rolling up five **vitals** (free-energy, calibration ECE, dissonance,
+    low-trust rate, staleness) against thresholds, plus three **structural-integrity
+    checks that did not exist before**: `orphan_claims` (valid beliefs with zero
+    evidence), `dangling_edges` (relationships whose endpoint belief is missing —
+    referential corruption, critical), and `stale_expectations` (open predictions past
+    their horizon — a stalling prediction loop). Human table or JSON.
+  - **Health over time.** `mnemos health --journal` records the snapshot as a new
+    `health` kind in the ADR-0018 cognitive journal (no new table), so running it on a
+    cadence builds a vital-signs time series — read with `mnemos journal --kind health`.
+  - `Memory.BrainHealth` / `Memory.SnapshotHealth`.
+
+### Fixed
+
+- **`quality` / `CheckSLOs` stale count was structurally 0.** `ComputeMemoryQuality`
+  declared `staleCount` but never incremented it, so `StaleCount` was always 0 and the
+  `MaxStaleRatio` SLO silently checked nothing. It now counts currently-valid beliefs
+  unverified past a staleness horizon; guarded by a test.
+
 ## [0.96.0] — 2026-07-13
 
 ### Added

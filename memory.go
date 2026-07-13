@@ -919,6 +919,62 @@ type PredictiveError struct {
 	Hotspot string `json:"hotspot"`
 }
 
+// HealthStatus is a brain-health verdict (ADR 0019), worst-wins across all vitals and
+// pathologies.
+type HealthStatus string
+
+const (
+	// HealthOK — the brain is healthy on this axis.
+	HealthOK HealthStatus = "healthy"
+	// HealthDegraded — a vital or pathology crossed its warning threshold.
+	HealthDegraded HealthStatus = "degraded"
+	// HealthUnhealthy — a vital or pathology crossed its critical threshold.
+	HealthUnhealthy HealthStatus = "unhealthy"
+)
+
+// Vital is one brain-health vital sign (ADR 0019): a measured value plus its own
+// OK/WARN/CRIT verdict. The impl knows each vital's direction and thresholds.
+type Vital struct {
+	// Name identifies the vital ("free_energy", "calibration", "dissonance",
+	// "low_trust", "staleness").
+	Name string `json:"name"`
+	// Value is the measured quantity (see Detail for units).
+	Value float64 `json:"value"`
+	// Status is this vital's verdict against its thresholds.
+	Status HealthStatus `json:"status"`
+	// Detail is a one-line human explanation.
+	Detail string `json:"detail"`
+}
+
+// Pathology is a structural-integrity finding (ADR 0019): a class of corruption/backlog
+// with a count. Count 0 means the check passed.
+type Pathology struct {
+	// Kind identifies the pathology ("orphan_claims", "dangling_edges",
+	// "stale_expectations").
+	Kind string `json:"kind"`
+	// Count is how many instances were found.
+	Count int `json:"count"`
+	// Status is the severity given the count.
+	Status HealthStatus `json:"status"`
+	// Detail is a one-line human explanation.
+	Detail string `json:"detail"`
+}
+
+// BrainHealth is the unified brain-health report (ADR 0019): a single verdict rolling up
+// the cognitive vitals and structural-integrity checks. Strictly read-only.
+type BrainHealth struct {
+	// Status is the overall verdict — the worst of every vital and pathology.
+	Status HealthStatus `json:"status"`
+	// Vitals are the cognitive vital signs (free-energy, calibration, dissonance,
+	// low-trust, staleness).
+	Vitals []Vital `json:"vitals"`
+	// Pathologies are the structural-integrity findings (orphans, dangling edges,
+	// stale-expectation backlog).
+	Pathologies []Pathology `json:"pathologies"`
+	// At is when the report was computed.
+	At time.Time `json:"at"`
+}
+
 // SignalQuery selects which temporal signals [Memory.Signals] returns.
 type SignalQuery struct {
 	// RunID selects the run (Chronos scope) to read signals for. Empty means
@@ -1229,6 +1285,18 @@ type Memory interface {
 	// Strictly read-only; a level with no data is omitted from the total so sparse
 	// evidence never reads as a well-predicted model.
 	PredictiveError(ctx context.Context) (PredictiveError, error)
+
+	// BrainHealth reports whether the brain is healthy (ADR 0019): a single verdict
+	// rolling up the cognitive vitals (free-energy, calibration, dissonance, low-trust,
+	// staleness) and structural-integrity checks (orphan beliefs, dangling edges,
+	// stale-expectation backlog). Strictly read-only; a full-scan diagnostic meant for
+	// on-demand or modest-cadence use.
+	BrainHealth(ctx context.Context) (BrainHealth, error)
+
+	// SnapshotHealth computes [BrainHealth] and records it to the cognitive journal as a
+	// `health` entry (ADR 0019 + 0018), so vital signs become a queryable time series.
+	// Returns the computed health. A no-op record on backends without a journal.
+	SnapshotHealth(ctx context.Context) (BrainHealth, error)
 
 	// LastWriteSession returns the governance session recorded by the
 	// most recent write (Remember, RememberClaim, or RememberEvent) on

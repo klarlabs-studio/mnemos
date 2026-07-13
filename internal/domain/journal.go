@@ -15,6 +15,9 @@ const (
 	// JournalKindBeliefTrust is one row per belief whose trust a credit assignment moved
 	// this pass: before / after / delta (the per-belief trust trajectory).
 	JournalKindBeliefTrust = "belief_trust"
+	// JournalKindHealth is one row per brain-health snapshot (ADR 0019): the full
+	// BrainHealth verdict, so vital signs become a queryable time series.
+	JournalKindHealth = "health"
 )
 
 // JournalEntry is one append-only cognitive-journal record (ADR 0018) — a durable,

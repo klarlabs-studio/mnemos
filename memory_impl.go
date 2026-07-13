@@ -1967,6 +1967,216 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 	return PredictiveError{Levels: levels, Total: total, Hotspot: hotspot}, nil
 }
 
+// Brain-health thresholds (ADR 0019). All five vitals are "higher is worse" rates or
+// errors in [0,1], so one direction suffices: value >= crit → unhealthy, >= warn →
+// degraded, else healthy.
+const (
+	healthFreeEnergyWarn, healthFreeEnergyCrit   = 0.40, 0.70
+	healthCalibrationWarn, healthCalibrationCrit = 0.15, 0.30
+	healthDissonanceWarn, healthDissonanceCrit   = 0.05, 0.15
+	healthLowTrustWarn, healthLowTrustCrit       = 0.30, 0.60
+	healthStalenessWarn, healthStalenessCrit     = 0.40, 0.70
+
+	// healthLowTrustFloor is the trust below which a belief counts toward low_trust.
+	healthLowTrustFloor = 0.30
+	// healthStalenessHorizonDays: a currently-valid belief not verified/created within
+	// this window counts toward staleness (a recency proxy for freshness decay).
+	healthStalenessHorizonDays = 90.0
+	// healthStaleExpectationCrit: an open-expectation backlog past this many overdue is
+	// critical (the prediction loop is stalling).
+	healthStaleExpectationCrit = 25
+)
+
+func gradeHigherWorse(value, warn, crit float64) HealthStatus {
+	switch {
+	case value >= crit:
+		return HealthUnhealthy
+	case value >= warn:
+		return HealthDegraded
+	default:
+		return HealthOK
+	}
+}
+
+func worseHealth(a, b HealthStatus) HealthStatus {
+	rank := map[HealthStatus]int{HealthOK: 0, HealthDegraded: 1, HealthUnhealthy: 2}
+	if rank[b] > rank[a] {
+		return b
+	}
+	return a
+}
+
+// BrainHealth implements [Memory.BrainHealth] (ADR 0019): the unified read-only health
+// verdict. It rolls up the cognitive vitals (reusing PredictiveError for the error
+// signals) and runs the structural-integrity checks (orphan beliefs, dangling edges,
+// stale-expectation backlog). Full-scan diagnostic; no writes.
+func (m *memory) BrainHealth(ctx context.Context) (BrainHealth, error) {
+	now := time.Now().UTC()
+	claims, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list claims: %w", err)
+	}
+	evidence, err := m.conn.Claims.ListAllEvidence(ctx)
+	if err != nil {
+		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list evidence: %w", err)
+	}
+	pe, err := m.PredictiveError(ctx)
+	if err != nil {
+		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: predictive error: %w", err)
+	}
+	cal, err := m.Calibration(ctx)
+	if err != nil {
+		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: calibration: %w", err)
+	}
+
+	// --- Vitals ---
+	// Reuse the PredictiveError dissonance level (active hypercorrections per belief).
+	dissonance := 0.0
+	for _, l := range pe.Levels {
+		if l.Level == "dissonance" {
+			dissonance = l.Error
+		}
+	}
+	// low_trust + staleness over currently-valid beliefs.
+	evidenceCount := make(map[string]int, len(claims))
+	for _, e := range evidence {
+		evidenceCount[e.ClaimID]++
+	}
+	claimIDs := make(map[string]struct{}, len(claims))
+	validCount, lowTrust, stale, orphans := 0, 0, 0, 0
+	for _, c := range claims {
+		claimIDs[c.ID] = struct{}{}
+		if !c.ValidTo.IsZero() {
+			continue // only currently-valid beliefs count toward the vitals
+		}
+		validCount++
+		if c.TrustScore < healthLowTrustFloor {
+			lowTrust++
+		}
+		ref := c.CreatedAt
+		if c.LastVerified.After(ref) {
+			ref = c.LastVerified
+		}
+		if now.Sub(ref).Hours()/24 > healthStalenessHorizonDays {
+			stale++
+		}
+		if evidenceCount[c.ID] == 0 {
+			orphans++ // a claim requires evidence — an orphan is a data-integrity smell
+		}
+	}
+	rate := func(n int) float64 {
+		if validCount == 0 {
+			return 0
+		}
+		return float64(n) / float64(validCount)
+	}
+	lowTrustRate, stalenessRate := rate(lowTrust), rate(stale)
+
+	vitals := []Vital{
+		{"free_energy", pe.Total, gradeHigherWorse(pe.Total, healthFreeEnergyWarn, healthFreeEnergyCrit),
+			fmt.Sprintf("overall prediction-error aggregate; most wrong at: %s", orNone(pe.Hotspot))},
+		{"calibration", cal.ECE, gradeHigherWorse(cal.ECE, healthCalibrationWarn, healthCalibrationCrit),
+			fmt.Sprintf("expected calibration error over %d adjudicated belief(s)", cal.Samples)},
+		{"dissonance", dissonance, gradeHigherWorse(dissonance, healthDissonanceWarn, healthDissonanceCrit),
+			"active high-stakes contradictions per belief"},
+		{"low_trust", lowTrustRate, gradeHigherWorse(lowTrustRate, healthLowTrustWarn, healthLowTrustCrit),
+			fmt.Sprintf("%d/%d valid beliefs below trust %.2f", lowTrust, validCount, healthLowTrustFloor)},
+		{"staleness", stalenessRate, gradeHigherWorse(stalenessRate, healthStalenessWarn, healthStalenessCrit),
+			fmt.Sprintf("%d/%d valid beliefs unverified in %.0f days", stale, validCount, healthStalenessHorizonDays)},
+	}
+
+	// --- Pathologies (integrity checks that did not exist before) ---
+	rels, err := m.conn.Relationships.ListAll(ctx)
+	if err != nil {
+		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list relationships: %w", err)
+	}
+	dangling := 0
+	for _, r := range rels {
+		if _, ok := claimIDs[r.FromClaimID]; !ok {
+			dangling++
+			continue
+		}
+		if _, ok := claimIDs[r.ToClaimID]; !ok {
+			dangling++
+		}
+	}
+	staleExpectations := 0
+	if m.conn.Expectations != nil {
+		open, oerr := m.conn.Expectations.ListOpen(ctx)
+		if oerr != nil {
+			return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list open expectations: %w", oerr)
+		}
+		for _, exp := range open {
+			if !exp.Horizon.IsZero() && exp.Horizon.Before(now) {
+				staleExpectations++
+			}
+		}
+	}
+	orphanStatus := HealthOK
+	if orphans > 0 {
+		orphanStatus = HealthDegraded
+	}
+	danglingStatus := HealthOK
+	if dangling > 0 {
+		danglingStatus = HealthUnhealthy // referential corruption
+	}
+	staleExpStatus := HealthOK
+	if staleExpectations >= healthStaleExpectationCrit {
+		staleExpStatus = HealthUnhealthy
+	} else if staleExpectations > 0 {
+		staleExpStatus = HealthDegraded
+	}
+	pathologies := []Pathology{
+		{"orphan_claims", orphans, orphanStatus, "currently-valid beliefs with zero evidence"},
+		{"dangling_edges", dangling, danglingStatus, "relationships whose endpoint belief is missing"},
+		{"stale_expectations", staleExpectations, staleExpStatus, "open predictions past their horizon (unreconciled)"},
+	}
+
+	// --- Overall verdict: worst of everything ---
+	overall := HealthOK
+	for _, v := range vitals {
+		overall = worseHealth(overall, v.Status)
+	}
+	for _, p := range pathologies {
+		overall = worseHealth(overall, p.Status)
+	}
+	return BrainHealth{Status: overall, Vitals: vitals, Pathologies: pathologies, At: now}, nil
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+// SnapshotHealth implements [Memory.SnapshotHealth] (ADR 0019): compute BrainHealth and
+// append it to the cognitive journal (ADR 0018) as a `health` entry, so vital signs
+// become a queryable time series. A no-op record on backends without a journal.
+func (m *memory) SnapshotHealth(ctx context.Context) (BrainHealth, error) {
+	h, err := m.BrainHealth(ctx)
+	if err != nil {
+		return h, err
+	}
+	if m.conn.Journal == nil {
+		return h, nil
+	}
+	data, err := json.Marshal(h)
+	if err != nil {
+		return h, fmt.Errorf("mnemos: SnapshotHealth: marshal: %w", err)
+	}
+	entry := domain.JournalEntry{
+		ID:   uuid.NewString(),
+		At:   h.At,
+		Kind: domain.JournalKindHealth,
+		Data: string(data),
+	}
+	if err := m.conn.Journal.Append(ctx, []domain.JournalEntry{entry}); err != nil {
+		return h, fmt.Errorf("mnemos: SnapshotHealth: append journal: %w", err)
+	}
+	return h, nil
+}
+
 // Calibration implements [Memory.Calibration]. Pure read over the outcome edges
 // (validates / refutes) + claim confidences — no recomputation, no writes.
 func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
