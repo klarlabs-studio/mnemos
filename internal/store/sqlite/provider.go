@@ -49,6 +49,7 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 		Jobs:          NewCompilationJobRepository(db),
 		Actions:       NewActionRepository(db),
 		Outcomes:      NewOutcomeRepository(db),
+		Journal:       NewJournalRepository(db),
 		Lessons:       NewLessonRepository(db),
 		Decisions:     NewDecisionRepository(db),
 		Playbooks:     NewPlaybookRepository(db),

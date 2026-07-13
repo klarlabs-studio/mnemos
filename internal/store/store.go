@@ -69,6 +69,11 @@ type Conn struct {
 	// providers without an implementation; callers type-check before use.
 	GlobalSchemas ports.GlobalSchemaRepository
 
+	// Journal is the append-only cognitive journal (ADR 0018): what the learning
+	// mechanisms did, over time, for research + constant tuning. nil on providers
+	// without an implementation; callers type-check before use.
+	Journal ports.JournalRepository
+
 	// Raw is the provider's underlying handle (e.g. *sql.DB for
 	// SQLite/Postgres, an in-memory state struct for memory). It is
 	// nil-safe to ignore. Some call sites still issue raw SQL or

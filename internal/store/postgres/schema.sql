@@ -122,6 +122,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_unique_edge
 CREATE INDEX IF NOT EXISTS idx_relationships_from_claim ON relationships(from_claim_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_to_claim   ON relationships(to_claim_id);
 
+-- cognitive_journal (ADR 0018): append-only learning log. Registered in the RLS `scoped`
+-- array below so it is per-tenant isolated (each tenant's brain journals separately).
+CREATE TABLE IF NOT EXISTS cognitive_journal (
+  id         text        PRIMARY KEY,
+  at         timestamptz NOT NULL,
+  run_id     text        NOT NULL DEFAULT '',
+  kind       text        NOT NULL,
+  subject_id text        NOT NULL DEFAULT '',
+  data       jsonb       NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_cognitive_journal_kind_at  ON cognitive_journal (kind, at);
+CREATE INDEX IF NOT EXISTS idx_cognitive_journal_subject  ON cognitive_journal (subject_id);
+
 CREATE TABLE IF NOT EXISTS compilation_jobs (
   id         text        PRIMARY KEY,
   kind       text        NOT NULL,
@@ -428,7 +441,8 @@ DECLARE
     'compilation_jobs','claim_status_history','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
-    'entity_relationships','working_memory_blocks','claim_expectations'
+    'entity_relationships','working_memory_blocks','claim_expectations',
+    'cognitive_journal'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

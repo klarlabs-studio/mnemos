@@ -139,6 +139,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_unique_edge
 CREATE INDEX IF NOT EXISTS idx_relationships_from_claim ON relationships(from_claim_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_to_claim ON relationships(to_claim_id);
 
+-- cognitive_journal (ADR 0018): append-only learning log; data is a kind-specific JSON payload.
+CREATE TABLE IF NOT EXISTS cognitive_journal (
+	id TEXT PRIMARY KEY,
+	at TEXT NOT NULL,
+	run_id TEXT NOT NULL DEFAULT '',
+	kind TEXT NOT NULL,
+	subject_id TEXT NOT NULL DEFAULT '',
+	data TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_cognitive_journal_kind_at ON cognitive_journal(kind, at);
+CREATE INDEX IF NOT EXISTS idx_cognitive_journal_subject ON cognitive_journal(subject_id);
+
 CREATE TABLE IF NOT EXISTS compilation_jobs (
 	id TEXT PRIMARY KEY,
 	kind TEXT NOT NULL,
@@ -548,7 +560,10 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 // v21 (ADR 0015 §4) adds relationships.strength — the Hebbian co-activation weight.
 // Existing edges backfill to the base 1.0 via the DEFAULT, so pre-strength graphs are
 // neutral until co-retrieval strengthens them.
-const currentSchemaVersion = 21
+// v22 (ADR 0018) adds the cognitive_journal table (append-only learning log). It is a
+// new table, so it auto-creates via CREATE TABLE IF NOT EXISTS and needs no column-add
+// entry; the bump keeps user_version in step.
+const currentSchemaVersion = 22
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
