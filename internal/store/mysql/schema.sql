@@ -123,6 +123,19 @@ CREATE TABLE IF NOT EXISTS relationships (
   CONSTRAINT fk_relationships_to   FOREIGN KEY (to_claim_id)   REFERENCES claims(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- cognitive_journal (ADR 0018): append-only learning log; data is a kind-specific JSON payload.
+CREATE TABLE IF NOT EXISTS cognitive_journal (
+  id         VARCHAR(190) NOT NULL,
+  at         DATETIME(6)  NOT NULL,
+  run_id     VARCHAR(190) NOT NULL DEFAULT '',
+  kind       VARCHAR(64)  NOT NULL,
+  subject_id VARCHAR(190) NOT NULL DEFAULT '',
+  data       JSON         NULL,
+  PRIMARY KEY (id),
+  KEY idx_cognitive_journal_kind_at (kind, at),
+  KEY idx_cognitive_journal_subject (subject_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS compilation_jobs (
   id         VARCHAR(190) NOT NULL,
   kind       VARCHAR(64)  NOT NULL,

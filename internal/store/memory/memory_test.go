@@ -901,3 +901,35 @@ func TestRelationshipRepository_DecayAssociations(t *testing.T) {
 		t.Errorf("out-of-range retain should no-op, got %d", n)
 	}
 }
+
+// TestJournalRepository_RoundTrip covers the memory backend's ADR-0018 append-only
+// journal: kinds/subjects filter correctly, newest-first, idempotent on id.
+func TestJournalRepository_RoundTrip(t *testing.T) {
+	t.Parallel()
+	conn := openMemory(t)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC)
+	entries := []domain.JournalEntry{
+		{ID: "p1", At: now, Kind: domain.JournalKindConsolidation, Data: `{"total":0.4}`},
+		{ID: "b1", At: now.Add(time.Second), Kind: domain.JournalKindBeliefTrust, SubjectID: "cl1", Data: `{"delta":0.05}`},
+		{ID: "b2", At: now.Add(2 * time.Second), Kind: domain.JournalKindBeliefTrust, SubjectID: "cl1", Data: `{"delta":-0.02}`},
+	}
+	if err := conn.Journal.Append(ctx, entries); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := conn.Journal.Append(ctx, entries); err != nil { // idempotent
+		t.Fatalf("re-Append: %v", err)
+	}
+	cons, _ := conn.Journal.List(ctx, domain.JournalKindConsolidation, 10)
+	if len(cons) != 1 || cons[0].ID != "p1" {
+		t.Fatalf("consolidation = %+v, want 1 (p1)", cons)
+	}
+	all, _ := conn.Journal.List(ctx, "", 10)
+	if len(all) != 3 || all[0].ID != "b2" {
+		t.Fatalf("all = %+v, want 3 newest-first", all)
+	}
+	bs, _ := conn.Journal.ListBySubject(ctx, "cl1", 10)
+	if len(bs) != 2 || bs[0].ID != "b2" {
+		t.Fatalf("subject = %+v, want 2 newest-first", bs)
+	}
+}

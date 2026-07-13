@@ -721,6 +721,16 @@ type ConsolidateOptions struct {
 	// don't persist confidence_components.
 	DecayInhibition bool
 
+	// Journal, when true, records what this consolidation pass did to the append-only
+	// cognitive journal (ADR 0018): one pass-level entry (the full ConsolidateResult +
+	// a PredictiveError snapshot — the free-energy-over-time curve) and, if credit ran,
+	// one belief_trust entry per belief whose trust credit moved (before/after/delta).
+	// A side record for research + constant tuning — it never changes what the pass
+	// computes; with it off the write path is unchanged. A journaled pass is
+	// intentionally non-idempotent (each pass appends). No-op on backends without a
+	// journal. Off by default.
+	Journal bool
+
 	// ReinforcePlaybooks bends each playbook's confidence toward the observed
 	// success rate of the outcomes recorded against the actions its lessons were
 	// derived from — the skill-learning half of the sleep pass. Synthesize writes

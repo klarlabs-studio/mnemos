@@ -92,6 +92,7 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 		Blocks:        BlockRepository{state: st},
 		Expectations:  ExpectationRepository{state: st},
 		GlobalSchemas: GlobalSchemaRepository{state: st},
+		Journal:       JournalRepository{state: st},
 		ClaimVersions: ClaimVersionRepository{state: st},
 		Raw:           st,
 		Closer:        func() error { st.clear(); return nil },
@@ -152,6 +153,7 @@ type state struct {
 	blocks           map[string]domain.WorkingMemoryBlock // owner\x00label -> working-memory block
 	expectations     map[string]domain.Expectation        // claim_id -> forward expectation
 	globalSchemas    map[string]domain.GlobalSchema       // id -> promoted global (neocortex) schema
+	journalEntries   []domain.JournalEntry                // append-only cognitive journal (ADR 0018), insertion order
 }
 
 // storedEntityVersion is the in-memory analogue of a row in

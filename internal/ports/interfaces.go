@@ -471,6 +471,22 @@ type OutcomeRepository interface {
 	DeleteAll(ctx context.Context) error
 }
 
+// JournalRepository is the append-only cognitive journal (ADR 0018): a durable,
+// timestamped log of what the brain's learning mechanisms did, so trajectories can be
+// studied and constants tuned against real data. Append-only — rows are never updated or
+// deleted on the write path. nil on providers without an implementation; callers
+// type-check before use.
+type JournalRepository interface {
+	// Append persists journal entries. Idempotent on id.
+	Append(ctx context.Context, entries []domain.JournalEntry) error
+	// List returns the most recent entries of the given kind (empty kind = any),
+	// newest first, capped at limit (limit <= 0 means a sane default).
+	List(ctx context.Context, kind string, limit int) ([]domain.JournalEntry, error)
+	// ListBySubject returns the most recent entries for one subject id (e.g. a claim's
+	// trust trajectory), newest first, capped at limit.
+	ListBySubject(ctx context.Context, subjectID string, limit int) ([]domain.JournalEntry, error)
+}
+
 // EntityRelationshipRepository persists polymorphic edges between
 // arbitrary entities (action↔outcome, outcome↔claim, decision
 // ↔outcome). The classic claim-only relationships graph stays

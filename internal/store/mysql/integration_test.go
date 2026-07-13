@@ -601,3 +601,33 @@ func TestMySQL_RelationshipDecay(t *testing.T) {
 		t.Errorf("base bc untouched expected, got %v", got)
 	}
 }
+
+// TestMySQL_JournalRoundTrip verifies the ADR-0018 append-only journal on MySQL.
+func TestMySQL_JournalRoundTrip(t *testing.T) {
+	conn := withConn(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	entries := []domain.JournalEntry{
+		{ID: "p1", At: now, Kind: domain.JournalKindConsolidation, Data: `{"total":0.4}`},
+		{ID: "b1", At: now.Add(time.Second), Kind: domain.JournalKindBeliefTrust, SubjectID: "cl1", Data: `{"delta":0.05}`},
+		{ID: "b2", At: now.Add(2 * time.Second), Kind: domain.JournalKindBeliefTrust, SubjectID: "cl1", Data: `{"delta":-0.02}`},
+	}
+	if err := conn.Journal.Append(ctx, entries); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := conn.Journal.Append(ctx, entries); err != nil {
+		t.Fatalf("re-Append: %v", err)
+	}
+	cons, err := conn.Journal.List(ctx, domain.JournalKindConsolidation, 10)
+	if err != nil || len(cons) != 1 || cons[0].ID != "p1" {
+		t.Fatalf("consolidation = %+v err=%v, want 1 (p1)", cons, err)
+	}
+	all, _ := conn.Journal.List(ctx, "", 10)
+	if len(all) != 3 || all[0].ID != "b2" {
+		t.Fatalf("all = %+v, want 3 newest-first (idempotent)", all)
+	}
+	bs, _ := conn.Journal.ListBySubject(ctx, "cl1", 10)
+	if len(bs) != 2 {
+		t.Fatalf("subject = %d, want 2", len(bs))
+	}
+}

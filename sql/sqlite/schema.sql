@@ -112,6 +112,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_unique_edge
 CREATE INDEX IF NOT EXISTS idx_relationships_from_claim ON relationships(from_claim_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_to_claim ON relationships(to_claim_id);
 
+-- cognitive_journal (ADR 0018): append-only log of what the learning mechanisms did,
+-- over time, for research + constant tuning. data is a kind-specific JSON payload.
+CREATE TABLE IF NOT EXISTS cognitive_journal (
+  id TEXT PRIMARY KEY,
+  at TEXT NOT NULL,
+  run_id TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL,
+  subject_id TEXT NOT NULL DEFAULT '',
+  data TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_cognitive_journal_kind_at ON cognitive_journal(kind, at);
+CREATE INDEX IF NOT EXISTS idx_cognitive_journal_subject ON cognitive_journal(subject_id);
+
 CREATE TABLE IF NOT EXISTS compilation_jobs (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,

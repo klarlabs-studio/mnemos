@@ -2,6 +2,7 @@ package mnemos
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -938,17 +939,19 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 	// When Plastic (ADR 0015) the update rate is modulated: the global neuromodulatory
 	// gain (from the surprise series above) and, per belief, its metaplastic
 	// resistance — both bounded so trust still moves at most ±CreditCap.
+	var beliefChanges []beliefTrustChange // captured for the ADR-0018 journal below
 	if opts.AssignCredit {
 		gain := 1.0
 		if opts.Plastic {
 			gain = plasticity.Gain(surpriseSeries, plasticity.DefaultRecentWindow, plasticitySensitivity())
 			res.PlasticityGain = gain
 		}
-		credited, cerr := m.assignCredit(ctx, opts.Plastic, gain)
+		credited, changes, cerr := m.assignCredit(ctx, opts.Plastic, gain)
 		if cerr != nil {
 			return res, fmt.Errorf("mnemos: consolidate: assign credit: %w", cerr)
 		}
 		res.Credited = credited
+		beliefChanges = changes
 	}
 	// Unified salience / stakes (ADR 0013 §4): derive each belief's consequence-
 	// severity weight from the risk level and outcome severity of the decisions it
@@ -1070,7 +1073,62 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.InhibitionDecayed = decayed
 	}
+	// Cognitive journal (ADR 0018): record what this pass did — the pass-level result +
+	// a PredictiveError snapshot, and the per-belief credit trust moves — for research
+	// and constant tuning. A side record; a journal failure surfaces (it is the
+	// operator's data) but is only reached under the explicit --journal flag.
+	if opts.Journal {
+		if err := m.journalConsolidation(ctx, res, beliefChanges); err != nil {
+			return res, fmt.Errorf("mnemos: consolidate: journal: %w", err)
+		}
+	}
 	return res, nil
+}
+
+// journalConsolidation writes one pass-level cognitive-journal entry (the
+// ConsolidateResult + a PredictiveError snapshot) plus one belief_trust entry per
+// credit-driven trust move (ADR 0018). A no-op on backends without a journal.
+func (m *memory) journalConsolidation(ctx context.Context, res ConsolidateResult, changes []beliefTrustChange) error {
+	if m.conn.Journal == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	passID := uuid.NewString()
+
+	pe, err := m.PredictiveError(ctx)
+	if err != nil {
+		return fmt.Errorf("predictive-error snapshot: %w", err)
+	}
+	passJSON, err := json.Marshal(struct {
+		Result          ConsolidateResult `json:"result"`
+		PredictiveError PredictiveError   `json:"predictive_error"`
+	}{res, pe})
+	if err != nil {
+		return fmt.Errorf("marshal pass entry: %w", err)
+	}
+	entries := make([]domain.JournalEntry, 0, 1+len(changes))
+	entries = append(entries, domain.JournalEntry{
+		ID: passID, At: now, Kind: domain.JournalKindConsolidation, Data: string(passJSON),
+	})
+	for i, ch := range changes {
+		b, err := json.Marshal(struct {
+			PassID string  `json:"pass_id"`
+			Before float64 `json:"before"`
+			After  float64 `json:"after"`
+			Delta  float64 `json:"delta"`
+		}{passID, ch.Before, ch.After, ch.After - ch.Before})
+		if err != nil {
+			return fmt.Errorf("marshal belief_trust entry: %w", err)
+		}
+		entries = append(entries, domain.JournalEntry{
+			ID:        fmt.Sprintf("%s:%d", passID, i),
+			At:        now,
+			Kind:      domain.JournalKindBeliefTrust,
+			SubjectID: ch.ClaimID,
+			Data:      string(b),
+		})
+	}
+	return m.conn.Journal.Append(ctx, entries)
 }
 
 // inhibitionDecayRetain sheds half of a claim's competitive-inhibition weight each
@@ -1411,19 +1469,19 @@ func (m *memory) observedSurprises(ctx context.Context) ([]float64, map[string]f
 // ([ports.BeliefCreditWriter]) — credit is never applied where it could not be
 // attributed. Relies on RecomputeTrust having run first (Consolidate does so
 // immediately before), so each claim's TrustScore is the evidence-based base.
-func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float64) (int, error) {
+func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float64) (int, []beliefTrustChange, error) {
 	if m.conn.Expectations == nil || m.conn.Decisions == nil {
-		return 0, nil
+		return 0, nil, nil
 	}
 	now := time.Now().UTC()
 	writer, ok := m.conn.Claims.(ports.BeliefCreditWriter)
 	if !ok {
-		return 0, nil // backend does not persist the credit audit map — skip, don't guess
+		return 0, nil, nil // backend does not persist the credit audit map — skip, don't guess
 	}
 
 	decisions, err := m.conn.Decisions.ListAll(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("list decisions: %w", err)
+		return 0, nil, fmt.Errorf("list decisions: %w", err)
 	}
 	// Fetch the expectation attached to each belief a decision relied on.
 	exps := make(map[string]domain.Expectation)
@@ -1434,7 +1492,7 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 			}
 			exp, ok, gerr := m.conn.Expectations.Get(ctx, b)
 			if gerr != nil {
-				return 0, fmt.Errorf("get expectation %s: %w", b, gerr)
+				return 0, nil, fmt.Errorf("get expectation %s: %w", b, gerr)
 			}
 			if ok {
 				exps[b] = exp
@@ -1445,9 +1503,10 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 
 	all, err := m.conn.Claims.ListAll(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("list claims: %w", err)
+		return 0, nil, fmt.Errorf("list claims: %w", err)
 	}
 	credited := 0
+	var changes []beliefTrustChange
 	for _, c := range all {
 		fresh := contribs[c.ID]
 		// Preserve non-credit components; replace all credit:* keys with the fresh set.
@@ -1477,13 +1536,24 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 		}
 		newTrust := clamp01(c.TrustScore + credit.SumForModulated(fresh, resistance, gain))
 		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, newTrust); err != nil {
-			return credited, fmt.Errorf("apply belief credit %s: %w", c.ID, err)
+			return credited, changes, fmt.Errorf("apply belief credit %s: %w", c.ID, err)
 		}
 		if len(fresh) > 0 {
 			credited++
+			// Record the trust move for the cognitive journal (ADR 0018) — only when a
+			// credit was actually applied this pass.
+			changes = append(changes, beliefTrustChange{ClaimID: c.ID, Before: c.TrustScore, After: newTrust})
 		}
 	}
-	return credited, nil
+	return credited, changes, nil
+}
+
+// beliefTrustChange is one belief's credit-driven trust move in a consolidation pass,
+// captured for the cognitive journal (ADR 0018).
+type beliefTrustChange struct {
+	ClaimID string
+	Before  float64
+	After   float64
 }
 
 // deriveSalience derives the unified salience / stakes weight (ADR 0013 §4) for

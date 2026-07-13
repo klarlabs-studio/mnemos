@@ -8,7 +8,36 @@ notable changes.
 
 ## [Unreleased]
 
-## [0.95.0] — 2026-07-13
+## [0.96.0] — 2026-07-13
+
+### Added
+
+- **The cognitive journal — instrumentation for studying learning (ADR 0018).** Mnemos
+  persisted the raw *inputs* to learning but recorded almost none of the *derived state*
+  the mechanisms produce — trust was overwritten in place, per-pass effects were computed
+  and discarded, free-energy was never snapshotted. So you couldn't ask "did
+  metaplasticity dampen churn? is free-energy trending down? which beliefs did inhibition
+  suppress, and did they recover?" This adds an append-only log that makes the brain's
+  learning **queryable and exportable over time**.
+  - **`cognitive_journal` table** across every backend (sqlite migration v22, Postgres +
+    tenant-RLS, mysql, memory, libSQL) — one generic append-only table with a JSON
+    payload, so new journal kinds are a code-only change.
+  - **`consolidate --journal`** records, per pass: one `consolidation` entry (the full
+    `ConsolidateResult` — including counters the CLI never printed — plus a
+    `PredictiveError` snapshot, i.e. the **free-energy-over-time curve**) and, when credit
+    ran, one `belief_trust` entry per belief whose trust credit moved (before / after /
+    delta, i.e. **per-belief trust trajectories**). A side record — it never changes what
+    the pass computes; off by default; a journaled pass is intentionally non-idempotent.
+  - **`mnemos journal`** reads it: the per-pass free-energy stream by default,
+    `--belief <id>` for one belief's trust trajectory, JSON (nested, unescaped) for
+    research tooling, `--human` for a readable table.
+  - This directly unblocks tuning the hardcoded cognitive constants against real data,
+    and is the prerequisite for empirically validating any active-free-energy-minimization
+    work — you can now *plot* free-energy, which the ADR-0017 north star requires.
+
+  Verified on live Postgres + MySQL (journal round-trip + tenant-RLS isolation with the
+  new table); full race suite green. `ports.JournalRepository` (`Append`/`List`/
+  `ListBySubject`) on `store.Conn`, nil on backends without it.
 
 ### Added
 
