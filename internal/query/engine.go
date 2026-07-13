@@ -2239,12 +2239,24 @@ func (e Engine) ComputeMemoryQuality(ctx context.Context) (MemoryQualityMetrics,
 
 	var trustSum, confSum, citSum float64
 	staleCount, contestedCount := 0, 0
+	now := time.Now().UTC()
+	const staleHorizonDays = 90.0 // a currently-valid belief unverified this long is stale
 	for _, c := range claims {
 		trustSum += c.TrustScore
 		confSum += c.Confidence
 		citSum += float64(c.CitationCount)
 		if c.Status == domain.ClaimStatusContested {
 			contestedCount++
+		}
+		// Staleness: a currently-valid belief not verified/created within the horizon.
+		// (Previously never counted — StaleCount was structurally 0, silently breaking
+		// the MaxStaleRatio SLO in CheckSLOs.)
+		ref := c.CreatedAt
+		if c.LastVerified.After(ref) {
+			ref = c.LastVerified
+		}
+		if c.ValidTo.IsZero() && now.Sub(ref).Hours()/24 > staleHorizonDays {
+			staleCount++
 		}
 	}
 	// Get contradiction count.

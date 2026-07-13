@@ -1,0 +1,97 @@
+package mnemos
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+	"time"
+
+	"go.klarlabs.de/mnemos/internal/domain"
+)
+
+func vitalByName(h BrainHealth, name string) Vital {
+	for _, v := range h.Vitals {
+		if v.Name == name {
+			return v
+		}
+	}
+	return Vital{Name: "MISSING"}
+}
+
+func pathologyByKind(h BrainHealth, kind string) Pathology {
+	for _, p := range h.Pathologies {
+		if p.Kind == kind {
+			return p
+		}
+	}
+	return Pathology{Kind: "MISSING"}
+}
+
+// TestBrainHealth_EmptyIsHealthy verifies the ADR-0019 verdict: an empty brain is
+// healthy with all vitals + integrity checks present and clean.
+func TestBrainHealth_EmptyIsHealthy(t *testing.T) {
+	m := calibMem(t)
+	h, err := m.BrainHealth(context.Background())
+	if err != nil {
+		t.Fatalf("BrainHealth: %v", err)
+	}
+	if h.Status != HealthOK {
+		t.Errorf("empty brain status = %q, want healthy", h.Status)
+	}
+	if len(h.Vitals) != 5 {
+		t.Errorf("want 5 vitals, got %d", len(h.Vitals))
+	}
+	if len(h.Pathologies) != 3 {
+		t.Errorf("want 3 pathologies, got %d", len(h.Pathologies))
+	}
+}
+
+// TestBrainHealth_DetectsPathologies verifies the new integrity checks: an orphan belief
+// (no evidence) and a dangling edge (endpoint missing) are found, and a dangling edge
+// drives the overall verdict to unhealthy (referential corruption).
+func TestBrainHealth_DetectsPathologies(t *testing.T) {
+	m := calibMem(t)
+	ctx := context.Background()
+	seedClaim(t, m, "a", 0.8) // seedClaim adds no evidence → orphan
+	if err := m.conn.Relationships.Upsert(ctx, []domain.Relationship{
+		{ID: "r1", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "ghost", CreatedAt: time.Now().UTC()},
+	}); err != nil {
+		t.Fatalf("seed dangling edge: %v", err)
+	}
+	h, err := m.BrainHealth(ctx)
+	if err != nil {
+		t.Fatalf("BrainHealth: %v", err)
+	}
+	if orphan := pathologyByKind(h, "orphan_claims"); orphan.Count < 1 || orphan.Status == HealthOK {
+		t.Errorf("orphan_claims = %+v, want count>=1 and non-ok", orphan)
+	}
+	dangling := pathologyByKind(h, "dangling_edges")
+	if dangling.Count < 1 || dangling.Status != HealthUnhealthy {
+		t.Errorf("dangling_edges = %+v, want count>=1 and unhealthy", dangling)
+	}
+	if h.Status != HealthUnhealthy {
+		t.Errorf("a dangling edge should make the brain unhealthy overall, got %q", h.Status)
+	}
+}
+
+// TestSnapshotHealth_RecordsToJournal verifies ADR-0019 health-over-time: SnapshotHealth
+// appends a `health` entry that round-trips into a BrainHealth verdict.
+func TestSnapshotHealth_RecordsToJournal(t *testing.T) {
+	m := calibMem(t)
+	ctx := context.Background()
+	got, err := m.SnapshotHealth(ctx)
+	if err != nil {
+		t.Fatalf("SnapshotHealth: %v", err)
+	}
+	entries, err := m.conn.Journal.List(ctx, domain.JournalKindHealth, 10)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("health entries = %d err=%v, want 1", len(entries), err)
+	}
+	var recorded BrainHealth
+	if err := json.Unmarshal([]byte(entries[0].Data), &recorded); err != nil {
+		t.Fatalf("unmarshal health snapshot: %v", err)
+	}
+	if recorded.Status != got.Status || len(recorded.Vitals) != 5 {
+		t.Errorf("recorded snapshot = %+v, want status %q with 5 vitals", recorded, got.Status)
+	}
+}
