@@ -8,7 +8,31 @@ notable changes.
 
 ## [Unreleased]
 
-## [0.98.0] — 2026-07-17
+## [0.99.0] — 2026-07-17
+
+### Added
+
+- **Structured operational logs for the important brain operations (ADR 0021).** The
+  cognitive mechanisms were silent — and `serve` built its `Memory` with a **nil logger**,
+  so nothing cognitive reached stderr (and a naive log call would have panicked). Now one
+  structured JSON stderr logger is wired in, so on-call can watch the brain in Loki/Grafana
+  and alert on anomalies (the log complement to ADR 0020's metrics):
+  - **Consolidation pass** (`info`, `mnemos: consolidation pass`) — one line per pass with
+    every `ConsolidateResult` count + plasticity gain (the "what did the sleep pass do"
+    record).
+  - **Mass forgetting** (`warn`) — when a pass prunes/refutes an unusually large number of
+    beliefs.
+  - **Brain-health degradation** (`warn` degraded / `error` unhealthy, `mnemos: brain
+    health degraded`) — emitted by the metrics sampler each cycle the verdict isn't
+    healthy, naming the failing vitals/pathologies. The primary alerting log.
+  - **Metrics-sample error** (`warn`) — the sampler's previously-dropped error is now
+    logged, so a broken monitoring pipeline is visible.
+  - **Promotion** (`info`, `mnemos: promotion`) — each tenant→global promotion run.
+  - **`MNEMOS_LOG_LEVEL`** (`trace|debug|info|warn|error`, default `info`) tunes verbosity.
+    Wiring the logger also enables the axi-kernel per-write `axi_event` audit line (info) —
+    the write trail; set `MNEMOS_LOG_LEVEL=warn` to keep only degradation/anomaly logs.
+  - A nil-safe `memory.log()` accessor means library consumers that never call `WithLogger`
+    neither panic nor spam. Config leaf `log.level`.
 
 ### Added
 

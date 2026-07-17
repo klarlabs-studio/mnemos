@@ -34,7 +34,7 @@ func TestProductMetricsSampler_SetsGaugesAndExposes(t *testing.T) {
 	}
 	defer func() { _ = mem.Close() }()
 
-	sampleProductMetrics(ctx, conn, mem)
+	sampleProductMetrics(ctx, conn, mem, nil)
 
 	if got := testutil.ToFloat64(gaugeBeliefs); got != 2 {
 		t.Errorf("mnemos_beliefs_total = %v, want 2", got)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.klarlabs.de/bolt"
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -80,13 +81,14 @@ func metricsSampleInterval() time.Duration {
 }
 
 // startProductMetricsSampler launches the background sampler (ADR 0020): it samples once
-// immediately, then every interval, until ctx is cancelled. interval<=0 disables it.
-func startProductMetricsSampler(ctx context.Context, conn *store.Conn, mem mnemos.Memory, interval time.Duration) {
+// immediately, then every interval, until ctx is cancelled. interval<=0 disables it. The
+// logger carries the ADR-0021 health-degradation and sample-error logs.
+func startProductMetricsSampler(ctx context.Context, conn *store.Conn, mem mnemos.Memory, interval time.Duration, logger *bolt.Logger) {
 	if interval <= 0 || conn == nil {
 		return
 	}
 	go func() {
-		sampleProductMetrics(ctx, conn, mem)
+		sampleProductMetrics(ctx, conn, mem, logger)
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
@@ -94,7 +96,7 @@ func startProductMetricsSampler(ctx context.Context, conn *store.Conn, mem mnemo
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				sampleProductMetrics(ctx, conn, mem)
+				sampleProductMetrics(ctx, conn, mem, logger)
 			}
 		}
 	}()
@@ -104,13 +106,17 @@ func startProductMetricsSampler(ctx context.Context, conn *store.Conn, mem mnemo
 // Read-only and failure-isolated: a per-metric error increments the error counter and is
 // skipped, leaving the last-good gauge value; a bad sample never crashes serve, and the
 // success timestamp only advances when the whole sample was clean.
-func sampleProductMetrics(ctx context.Context, conn *store.Conn, mem mnemos.Memory) {
+func sampleProductMetrics(ctx context.Context, conn *store.Conn, mem mnemos.Memory, logger *bolt.Logger) {
 	start := time.Now()
 	failed := false
 	fail := func(err error) bool {
 		if err != nil {
 			failed = true
 			counterSampleErrors.Inc()
+			// Log the dropped error (ADR 0021) so a broken monitoring pipeline is visible.
+			if logger != nil {
+				logger.Warn().Err(err).Msg("mnemos: metrics sample error")
+			}
 			return true
 		}
 		return false
@@ -178,6 +184,9 @@ func sampleProductMetrics(ctx context.Context, conn *store.Conn, mem mnemos.Memo
 					gaugeStaleExpectations.Set(float64(p.Count))
 				}
 			}
+			// Health-degradation log (ADR 0021): the primary alerting log, on the sampler
+			// cadence.
+			logHealthDegradation(logger, h)
 		}
 	}
 
@@ -185,6 +194,31 @@ func sampleProductMetrics(ctx context.Context, conn *store.Conn, mem mnemos.Memo
 	if !failed {
 		gaugeSampleTimestamp.SetToCurrentTime()
 	}
+}
+
+// logHealthDegradation emits the ADR-0021 alerting log when the brain is not healthy:
+// warn when degraded, error when unhealthy, carrying only the failing vitals/pathologies.
+// A no-op when healthy or when no logger is wired.
+func logHealthDegradation(logger *bolt.Logger, h mnemos.BrainHealth) {
+	if logger == nil || h.Status == mnemos.HealthOK {
+		return
+	}
+	ev := logger.Warn()
+	if h.Status == mnemos.HealthUnhealthy {
+		ev = logger.Error()
+	}
+	ev = ev.Str("status", string(h.Status))
+	for _, v := range h.Vitals {
+		if v.Status != mnemos.HealthOK {
+			ev = ev.Float64(v.Name, v.Value)
+		}
+	}
+	for _, p := range h.Pathologies {
+		if p.Status != mnemos.HealthOK {
+			ev = ev.Int(p.Kind, p.Count)
+		}
+	}
+	ev.Msg("mnemos: brain health degraded")
 }
 
 func healthStatusCode(s mnemos.HealthStatus) float64 {

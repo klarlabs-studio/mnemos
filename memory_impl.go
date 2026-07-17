@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"math"
 	"os"
@@ -876,6 +877,19 @@ func (m *memory) Signals(ctx context.Context, q SignalQuery) ([]Signal, error) {
 }
 
 // Consolidate implements [Memory.Consolidate] — the maintenance "sleep" pass.
+// discardLogger backs [memory.log] when no logger was wired (library consumers that
+// never call WithLogger) — a nil *bolt.Logger would panic, so calls route here to /dev/null.
+var discardLogger = bolt.New(bolt.NewJSONHandler(io.Discard))
+
+// log returns the memory's structured logger, or a discard logger when none was wired
+// (ADR 0021), so operational log calls are nil-safe.
+func (m *memory) log() *bolt.Logger {
+	if m.logger != nil {
+		return m.logger
+	}
+	return discardLogger
+}
+
 func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (ConsolidateResult, error) {
 	threshold := opts.DedupeThreshold
 	if threshold <= 0 {
@@ -1082,8 +1096,37 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 			return res, fmt.Errorf("mnemos: consolidate: journal: %w", err)
 		}
 	}
+	// Operational log (ADR 0021): one structured line per consolidation pass — the "what
+	// did the sleep pass do" record for Loki/Grafana. Not reached on a dry run (returned
+	// earlier).
+	m.log().Ctx(ctx).Info().
+		Int("scanned", res.ClaimsScanned).
+		Int("merged", res.Merged).
+		Int("credited", res.Credited).
+		Int("forgotten", res.Forgotten).
+		Int("refuted", res.Refuted).
+		Int("validated", res.Validated).
+		Int("replayed", res.Replayed).
+		Int("associations_decayed", res.AssociationsDecayed).
+		Int("inhibition_decayed", res.InhibitionDecayed).
+		Int("lessons_synthesized", res.LessonsSynthesized).
+		Int("playbooks_synthesized", res.PlaybooksSynthesized).
+		Float64("plasticity_gain", res.PlasticityGain).
+		Msg("mnemos: consolidation pass")
+	// Anomaly: a pass that prunes/refutes an unusually large number of beliefs is worth
+	// an alert.
+	if pruned := res.Forgotten + res.Refuted; pruned >= massForgetWarnThreshold {
+		m.log().Ctx(ctx).Warn().
+			Int("forgotten", res.Forgotten).
+			Int("refuted", res.Refuted).
+			Msg("mnemos: consolidation pruned a large number of beliefs")
+	}
 	return res, nil
 }
+
+// massForgetWarnThreshold is how many beliefs a single consolidation pass must
+// forget+refute before it logs a warning (ADR 0021) — a possible over-pruning anomaly.
+const massForgetWarnThreshold = 100
 
 // journalConsolidation writes one pass-level cognitive-journal entry (the
 // ConsolidateResult + a PredictiveError snapshot) plus one belief_trust entry per
