@@ -98,6 +98,12 @@ metrics:
   # Each tick runs one full-scan BrainHealth; raise it for a large brain. 0 disables.
   sample_interval:     # MNEMOS_METRICS_SAMPLE_INTERVAL (Go duration, default 60s)
 
+log:
+  # Level of the structured operational logs (ADR 0021): consolidation passes, brain-
+  # health degradation, promotion, the axi write-audit. One of trace|debug|info|warn|
+  # error (default info). Set to warn to keep only degradation/anomaly logs.
+  level:               # MNEMOS_LOG_LEVEL (default info)
+
 # Read-time precedence when a federated read (global brain + tenant/repo brain)
 # surfaces the same topic from both tiers (ADR 0011 Phase C). One of:
 #   tenant-wins         the tenant/repo tier wins on conflict (default; local dev)

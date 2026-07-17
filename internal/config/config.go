@@ -144,6 +144,12 @@ type Config struct {
 		SampleInterval scalar `yaml:"sample_interval"`
 	} `yaml:"metrics"`
 
+	// Log tunes the structured operational logs (ADR 0021). Level is one of
+	// trace|debug|info|warn|error (default info).
+	Log struct {
+		Level scalar `yaml:"level"`
+	} `yaml:"log"`
+
 	// Precedence selects the read-time federation policy (ADR 0011 Phase C):
 	// tenant-wins (default), global-wins, or surface-dissonance. It decides which
 	// tier wins — or whether the conflict is surfaced — when a federated read
@@ -214,6 +220,8 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_PLASTICITY_SENSITIVITY", c.Plasticity.Sensitivity},
 
 		{"MNEMOS_METRICS_SAMPLE_INTERVAL", c.Metrics.SampleInterval},
+
+		{"MNEMOS_LOG_LEVEL", c.Log.Level},
 
 		{"MNEMOS_PRECEDENCE", c.Precedence},
 	}

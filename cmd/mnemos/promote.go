@@ -192,6 +192,18 @@ func handlePromote(args []string, f Flags) {
 		return
 	}
 
+	// Operational log (ADR 0021): promotion (tenant→global) is an important epistemic
+	// event — record what crossed into the shared brain.
+	newStderrLogger().Info().
+		Int("tenants_scanned", len(tenants)).
+		Int("promoted", len(res.Promoted)).
+		Int("pending", len(res.Pending)).
+		Int("dissonant", len(res.Dissonant)).
+		Int("skipped", len(res.Skipped)).
+		Bool("apply", opts.apply).
+		Str("gate", string(opts.engine.Gate)).
+		Msg("mnemos: promotion")
+
 	out := map[string]any{
 		"tenants_scanned": len(tenants),
 		"min_tenants":     opts.engine.MinTenants,

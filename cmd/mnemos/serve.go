@@ -195,7 +195,7 @@ func handleServe(args []string, _ Flags) {
 	// the full-scan cost of computing them. Stopped when serve returns.
 	samplerCtx, stopSampler := context.WithCancel(context.Background())
 	defer stopSampler()
-	startProductMetricsSampler(samplerCtx, conn, mem, metricsSampleInterval())
+	startProductMetricsSampler(samplerCtx, conn, mem, metricsSampleInterval(), newStderrLogger())
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),

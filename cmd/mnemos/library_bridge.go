@@ -43,6 +43,10 @@ func newLibraryMemoryForDSN(dsn, actor string) (mnemos.Memory, error) {
 	if actor != "" {
 		opts = append(opts, mnemos.WithActor(actor))
 	}
+	// Structured stderr logger (ADR 0021): lights up the brain's operational logs
+	// (consolidation, health, promotion, the axi write-audit) for Loki/Grafana. Level
+	// via MNEMOS_LOG_LEVEL (default info).
+	opts = append(opts, mnemos.WithLogger(newStderrLogger()))
 
 	if llmCfg, err := llm.ConfigFromEnv(); err == nil && llmCfg.Provider != "" {
 		// Enhanced mode: Mnemos uses its own LLM + embedding config
