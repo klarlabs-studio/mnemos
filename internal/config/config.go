@@ -138,6 +138,12 @@ type Config struct {
 		Sensitivity scalar `yaml:"sensitivity"`
 	} `yaml:"plasticity"`
 
+	// Metrics tunes the `serve` Prometheus product-metrics sampler (ADR 0020).
+	// SampleInterval is a Go duration (default 60s; 0 disables the sampler).
+	Metrics struct {
+		SampleInterval scalar `yaml:"sample_interval"`
+	} `yaml:"metrics"`
+
 	// Precedence selects the read-time federation policy (ADR 0011 Phase C):
 	// tenant-wins (default), global-wins, or surface-dissonance. It decides which
 	// tier wins — or whether the conflict is surfaced — when a federated read
@@ -206,6 +212,8 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_FLOATBACK_ON_CAPTURE", c.Floatback.OnCapture},
 
 		{"MNEMOS_PLASTICITY_SENSITIVITY", c.Plasticity.Sensitivity},
+
+		{"MNEMOS_METRICS_SAMPLE_INTERVAL", c.Metrics.SampleInterval},
 
 		{"MNEMOS_PRECEDENCE", c.Precedence},
 	}
