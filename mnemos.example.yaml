@@ -91,6 +91,13 @@ plasticity:
   # per-belief metaplasticity (crystallization) on. Only consulted with --plastic.
   sensitivity:         # MNEMOS_PLASTICITY_SENSITIVITY (float >= 0, default 1.0)
 
+metrics:
+  # How often `mnemos serve` samples product + cognitive metrics for Prometheus
+  # (ADR 0020): counts, trust, free-energy, calibration, dissonance, brain-health
+  # status, and integrity pathologies — scrapeable at /internal/metrics for Grafana.
+  # Each tick runs one full-scan BrainHealth; raise it for a large brain. 0 disables.
+  sample_interval:     # MNEMOS_METRICS_SAMPLE_INTERVAL (Go duration, default 60s)
+
 # Read-time precedence when a federated read (global brain + tenant/repo brain)
 # surfaces the same topic from both tiers (ADR 0011 Phase C). One of:
 #   tenant-wins         the tenant/repo tier wins on conflict (default; local dev)

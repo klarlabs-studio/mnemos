@@ -190,6 +190,13 @@ func handleServe(args []string, _ Flags) {
 		defer func() { _ = mem.Close() }()
 	}
 
+	// Product + cognitive metrics sampler (ADR 0020): a background goroutine populates
+	// the Prometheus gauges on /internal/metrics so scrape frequency is decoupled from
+	// the full-scan cost of computing them. Stopped when serve returns.
+	samplerCtx, stopSampler := context.WithCancel(context.Background())
+	defer stopSampler()
+	startProductMetricsSampler(samplerCtx, conn, mem, metricsSampleInterval())
+
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
 		Handler:           newServerMuxWithMemory(conn, mem, requireTenant, publicReads, metricsPublic),

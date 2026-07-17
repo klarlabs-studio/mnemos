@@ -8,7 +8,33 @@ notable changes.
 
 ## [Unreleased]
 
-## [0.97.0] — 2026-07-13
+## [0.98.0] — 2026-07-17
+
+### Added
+
+- **Operational metrics for Prometheus/Grafana (ADR 0020).** `/internal/metrics` on
+  `mnemos serve` previously exposed only three HTTP RED metrics — nothing product or
+  cognitive, so on-call couldn't see the brain's state in Grafana. This exports the
+  product and cognitive signals as Prometheus gauges:
+  - **Volume:** `mnemos_beliefs_total`, `mnemos_episodes_total`,
+    `mnemos_associations_total`, `mnemos_contradictions_total`, `mnemos_embeddings_total`.
+  - **Trust:** `mnemos_belief_trust_avg`, `mnemos_low_trust_beliefs`,
+    `mnemos_contested_beliefs`.
+  - **Cognitive (from BrainHealth):** `mnemos_free_energy`, `mnemos_calibration_ece`,
+    `mnemos_dissonance_rate`, `mnemos_staleness_rate`, and
+    **`mnemos_brain_health_status`** (0 healthy / 1 degraded / 2 unhealthy — a single
+    alertable SLI).
+  - **Integrity:** `mnemos_orphan_beliefs`, `mnemos_dangling_associations`,
+    `mnemos_stale_expectations`.
+  - **Sampler self-health:** `mnemos_metrics_sample_timestamp_seconds` (alert on
+    staleness), `_duration_seconds`, `_errors_total`.
+  - Populated by a **background sampler** tied to the server lifecycle, so a Prometheus
+    scrape reads O(1) last-sampled gauges rather than triggering the full-scan
+    `BrainHealth` on every scrape. Cadence via `MNEMOS_METRICS_SAMPLE_INTERVAL`
+    (Go duration, default 60s; 0 disables). A sampling error is isolated (counter + last-
+    good value), never fatal. `/internal/metrics` stays authenticated by default — scrape
+    with a bearer token or `serve --metrics-public` on a trusted network. (Structured
+    logs are already JSON on stderr for Promtail/Loki.)
 
 ### Added
 
