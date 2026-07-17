@@ -876,7 +876,6 @@ func (m *memory) Signals(ctx context.Context, q SignalQuery) ([]Signal, error) {
 	return out, nil
 }
 
-// Consolidate implements [Memory.Consolidate] — the maintenance "sleep" pass.
 // discardLogger backs [memory.log] when no logger was wired (library consumers that
 // never call WithLogger) — a nil *bolt.Logger would panic, so calls route here to /dev/null.
 var discardLogger = bolt.New(bolt.NewJSONHandler(io.Discard))
@@ -890,6 +889,7 @@ func (m *memory) log() *bolt.Logger {
 	return discardLogger
 }
 
+// Consolidate implements [Memory.Consolidate] — the maintenance "sleep" pass.
 func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (ConsolidateResult, error) {
 	threshold := opts.DedupeThreshold
 	if threshold <= 0 {
