@@ -10,7 +10,7 @@ spec:
     spec:
       namespace: hermes
       resource: deployment/mnemos
-      image: ghcr.io/klarlabs-studio/mnemos:latest@sha256:087af6436f8740ada7e36bb0f99f5083ce90a3c49d020a572ff00f2115592074
+      image: ghcr.io/klarlabs-studio/mnemos:latest@sha256:3503607ba6e5fcb309dc5514d55bd0f81c454272b722a319418e78b429d7bf7d
       manifest: |
         apiVersion: apps/v1
         kind: Deployment
