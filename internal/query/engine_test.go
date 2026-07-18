@@ -1558,3 +1558,70 @@ func TestWhyWereWeWrong_ForwardReferenceClaimNotFoundIsGraceful(t *testing.T) {
 		t.Errorf("explanation should mention the forward-ref claim id, got: %q", report.Explanation)
 	}
 }
+
+// Forgetting a claim has to actually stop it being recalled. `forget` and
+// `memory_deprecate` document that "future recall paths exclude it from active
+// context", and BuildContextBlock honored that — but the main Answer path did
+// not filter by status at all, so a deprecated claim kept coming back and kept
+// being injected by the recall hook every turn. Found by forgetting a claim in
+// a real brain and watching the next query return it.
+func TestAnswerExcludesDeprecatedClaims(t *testing.T) {
+	now := time.Now().UTC()
+	events := fakeEventRepo{events: []domain.Event{
+		{ID: "ev_1", RunID: "run_1", Content: "Cache backend notes", Timestamp: now},
+	}}
+	claims := []domain.Claim{
+		{ID: "cl_keep", Text: "The cache backend is Redis", Type: domain.ClaimTypeFact, Status: domain.ClaimStatusActive, Confidence: 0.9, CreatedAt: now},
+		{ID: "cl_gone", Text: "The cache backend is Memcached", Type: domain.ClaimTypeFact, Status: domain.ClaimStatusDeprecated, Confidence: 0.9, CreatedAt: now},
+	}
+	engine := NewEngine(events, fakeClaimRepo{claims: claims},
+		fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
+
+	answer, err := engine.Answer("what is the cache backend")
+	if err != nil {
+		t.Fatalf("Answer() error = %v", err)
+	}
+	for _, c := range answer.Claims {
+		if c.ID == "cl_gone" {
+			t.Error("a deprecated claim was recalled; forgetting it changed the record but not what gets retrieved")
+		}
+		if c.Status == domain.ClaimStatusDeprecated {
+			t.Errorf("deprecated claim %q in the answer", c.Text)
+		}
+	}
+	// The surviving claim must still come back — this filters the forgotten
+	// one, it does not empty the result.
+	var kept bool
+	for _, c := range answer.Claims {
+		if c.ID == "cl_keep" {
+			kept = true
+		}
+	}
+	if !kept {
+		t.Error("over-filtered: the active claim was dropped too")
+	}
+}
+
+// Contested and resolved claims must survive. Contested is how a disagreement
+// is represented, and hiding it would silently pick a side; resolved is the
+// winner of one. Only deprecated means "do not recall this".
+func TestAnswerKeepsContestedAndResolved(t *testing.T) {
+	now := time.Now().UTC()
+	events := fakeEventRepo{events: []domain.Event{
+		{ID: "ev_1", RunID: "run_1", Content: "We deploy on Fridays. We deploy every weekday.", Timestamp: now},
+	}}
+	claims := []domain.Claim{
+		{ID: "cl_c", Text: "We deploy on Fridays", Type: domain.ClaimTypeFact, Status: domain.ClaimStatusContested, Confidence: 0.8, CreatedAt: now},
+		{ID: "cl_r", Text: "We deploy every weekday", Type: domain.ClaimTypeFact, Status: domain.ClaimStatusResolved, Confidence: 0.8, CreatedAt: now},
+	}
+	engine := NewEngine(events, fakeClaimRepo{claims: claims},
+		fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
+
+	answer, err := engine.Answer("when do we deploy")
+	if err != nil {
+		t.Fatalf("Answer() error = %v", err)
+	}
+	if len(answer.Claims) != 2 {
+		t.Errorf("got %d claims, want 2 (contested and resolved must both survive)", len(answer.Claims))
+	}
+}
