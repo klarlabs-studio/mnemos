@@ -310,3 +310,25 @@ func TestResolveCaptureStrategyFromInitOptions(t *testing.T) {
 		})
 	}
 }
+
+// In hosted mode the server does the extraction, so the local provider says
+// nothing about how long it takes. Keying on it would flip a hosted client to
+// per-turn capture just because ollama happens to be installed for something
+// else — one request per turn to the server, where one per session would do.
+func TestAutoStrategyIgnoresLocalProviderWhenHosted(t *testing.T) {
+	t.Setenv("MNEMOS_CAPTURE_STRATEGY", "")
+	t.Setenv("MNEMOS_LLM_PROVIDER", "ollama")
+	t.Setenv("MNEMOS_URL", "https://brain.example.com")
+
+	if got := captureStrategy(); got != captureAtEnd {
+		t.Errorf("hosted brain with local ollama -> %q, want %q "+
+			"(extraction runs server-side; the local provider is irrelevant)", got, captureAtEnd)
+	}
+
+	// An explicit choice still wins — a self-hosted server on slow hardware is
+	// a real case, and only the operator knows.
+	t.Setenv("MNEMOS_CAPTURE_STRATEGY", "incremental")
+	if got := captureStrategy(); got != captureIncremental {
+		t.Errorf("explicit strategy overridden in hosted mode: %q", got)
+	}
+}

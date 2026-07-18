@@ -125,12 +125,12 @@ capture:
   #     one API call per turn, each re-sending the ~5KB extraction prompt —
   #     materially more spend for no benefit.
   #
-  # `auto` decides from the provider (ollama -> incremental; anthropic/openai/
-  # gemini -> end, even behind a local gateway), and for openai-compat — which
-  # fronts LM Studio and cloud proxies alike — from the model name. Unsure
-  # means `end`, because a wrong `end` degrades extraction visibly while a
-  # wrong `incremental` quietly spends money. Set it explicitly if you run an
-  # open-weight model under a name `auto` will not recognise.
+  # `auto` resolves exactly one case: a local ollama daemon -> incremental.
+  # Everything else -> end, including a hosted brain (server.url), where the
+  # SERVER runs extraction and your local provider is irrelevant. Unsure means
+  # `end`, because a wrong `end` degrades extraction visibly while a wrong
+  # `incremental` quietly spends money. Set it explicitly for a local runtime
+  # behind openai-compat, or a self-hosted serve on slow hardware.
   #
   # Changing this takes effect immediately for hooks that are already
   # installed, but re-run `mnemos init` to add or remove the per-turn hooks.

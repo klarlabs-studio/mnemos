@@ -272,6 +272,15 @@ func captureStrategy() string {
 // capture.strategy explicitly — see docs/integrations.md for the symptom that
 // says they should.
 func autoStrategy() string {
+	// Hosted brain: the server runs extraction from its own config, so the
+	// local provider says nothing about how long it takes. Without this, a
+	// hosted client with ollama installed for something else would capture per
+	// turn — one request per turn to the server where one per session would do.
+	// A self-hosted server on slow hardware is a real case, but only its
+	// operator knows, so that stays an explicit capture.strategy.
+	if hostedConfigured() {
+		return captureAtEnd
+	}
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")), "ollama") {
 		return captureIncremental
 	}
