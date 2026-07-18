@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,7 +24,7 @@ func TestEngineExtractCreatesClaimAndEvidencePerEvent(t *testing.T) {
 		{ID: "ev_3", Content: "The churn rate increased to 7%."},
 	}
 
-	claims, evidence, err := engine.Extract(events)
+	claims, evidence, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("Extract() error = %v", err)
 	}
@@ -58,7 +59,7 @@ func TestEngineExtractSplitsSentencesAndDedupes(t *testing.T) {
 		{ID: "ev_2", Content: "We decided to expand EU operations."},
 	}
 
-	claims, evidence, err := engine.Extract(events)
+	claims, evidence, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("Extract() error = %v", err)
 	}
@@ -84,7 +85,7 @@ func TestEngineExtractMarksContestedClaims(t *testing.T) {
 		{ID: "ev_2", Content: "Revenue did not decrease after launch."},
 	}
 
-	claims, _, err := engine.Extract(events)
+	claims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("Extract() error = %v", err)
 	}
@@ -109,7 +110,7 @@ func TestEngineExtractPreservesDecimalsInSentenceSplit(t *testing.T) {
 		{ID: "ev_1", Content: "Revenue grew 3.5% in Q3."},
 	}
 
-	claims, _, err := engine.Extract(events)
+	claims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("Extract() error = %v", err)
 	}
@@ -132,7 +133,7 @@ func TestEngineExtractMarksSamePolarityContradictions(t *testing.T) {
 		{ID: "ev_2", Content: "We will use Vue for the frontend."},
 	}
 
-	claims, _, err := engine.Extract(events)
+	claims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("Extract() error = %v", err)
 	}

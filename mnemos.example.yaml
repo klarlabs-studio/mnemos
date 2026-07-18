@@ -77,6 +77,17 @@ feedback:
 job:
   timeout:             # MNEMOS_JOB_TIMEOUT (Go duration, default 10m)
 
+capture:
+  # Bounds the whole SessionEnd capture (ingest→extract→relate) for one
+  # session. A ceiling, not a reservation: a fast provider returns as soon as
+  # it is done. The 4m default is sized for a slow local model — cloud or
+  # hosted brains can safely set this much lower (e.g. 60s).
+  #
+  # `mnemos init` writes a matching Claude Code hook timeout. Raising this
+  # above that hook timeout means Claude Code kills capture first, so re-run
+  # `mnemos init` after raising it.
+  timeout:             # MNEMOS_CAPTURE_TIMEOUT (Go duration, default 4m)
+
 floatback:
   # When true, a session-end capture inside a repo/workspace also floats
   # important learnings up into the personal central brain (best-effort, the

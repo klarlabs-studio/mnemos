@@ -1244,11 +1244,20 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 	conn := w.Conn()
 
 	runner := workflow.NewRunner(conn.Jobs)
+	// 30s fits rule-based extraction, but LLM extraction alone budgets 3x the
+	// per-request timeout, so a flat 30s would cancel every LLM attempt and the
+	// job would persist nothing. Give the LLM path room for its own budget plus
+	// the relate/embed/persist work that follows. This is a ceiling, not a
+	// reservation: the caller's context (the capture hook's budget) still
+	// caps it, and a fast run returns as soon as it is done.
 	runner.Timeout = 30 * time.Second
+	if input.UseLLM {
+		runner.Timeout = 3*llm.Timeout() + 60*time.Second
+	}
 	runner.MaxRetries = 1
 
 	var result mcpProcessTextOutput
-	err = runner.Run("process", map[string]string{"source": "raw_text", "mcp": "true"}, func(ctx context.Context, job *workflow.Job) error {
+	err = runner.Run(ctx, "process", map[string]string{"source": "raw_text", "mcp": "true"}, func(ctx context.Context, job *workflow.Job) error {
 		total := 5.0
 		_ = progress.Report(0, &total)
 
@@ -1277,7 +1286,7 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 		if err != nil {
 			return err
 		}
-		claims, links, mcpEntities, err := ext.ExtractFn(events)
+		claims, links, mcpEntities, err := ext.ExtractFn(ctx, events)
 		if err != nil {
 			return err
 		}

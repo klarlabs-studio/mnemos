@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -33,8 +34,11 @@ func NewEngine() Engine {
 	}
 }
 
-// Extract derives deduplicated claims and their evidence links from the given events.
-func (e Engine) Extract(events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, error) {
+// Extract derives deduplicated claims and their evidence links from the given
+// events. Rule-based extraction is pure CPU work with no I/O, so the context is
+// accepted for interface symmetry with LLMEngine and ports.ExtractionEngine but
+// is not consulted.
+func (e Engine) Extract(_ context.Context, events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, error) {
 	claims := make([]domain.Claim, 0, len(events))
 	evidence := make([]domain.ClaimEvidence, 0, len(events))
 	seen := map[string]struct{}{}
@@ -90,8 +94,8 @@ func (e Engine) Extract(events []domain.Event) ([]domain.Claim, []domain.ClaimEv
 }
 
 // ExtractClaims is a convenience wrapper around Extract that returns only the claims.
-func (e Engine) ExtractClaims(events []domain.Event) ([]domain.Claim, error) {
-	claims, _, err := e.Extract(events)
+func (e Engine) ExtractClaims(ctx context.Context, events []domain.Event) ([]domain.Claim, error) {
+	claims, _, err := e.Extract(ctx, events)
 	if err != nil {
 		return nil, err
 	}

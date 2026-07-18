@@ -28,7 +28,7 @@ func TestRunnerCompletesJob(t *testing.T) {
 	runner.MaxRetries = 0
 	runner.nextID = func() (string, error) { return "job_test", nil }
 
-	err := runner.Run("ingest", map[string]string{"path": "README.md"}, func(_ context.Context, job *Job) error {
+	err := runner.Run(context.Background(), "ingest", map[string]string{"path": "README.md"}, func(_ context.Context, job *Job) error {
 		if err := job.SetStatus("loading", ""); err != nil {
 			return err
 		}
@@ -50,7 +50,7 @@ func TestRunnerRetriesAndFails(t *testing.T) {
 	runner.nextID = func() (string, error) { return "job_fail", nil }
 
 	attempts := 0
-	err := runner.Run("extract", nil, func(_ context.Context, _ *Job) error {
+	err := runner.Run(context.Background(), "extract", nil, func(_ context.Context, _ *Job) error {
 		attempts++
 		return errors.New("boom")
 	})

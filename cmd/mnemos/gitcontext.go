@@ -202,7 +202,7 @@ func ingestGitLog(ctx context.Context, w *govwrite.Writer, repoRoot string, limi
 			continue
 		}
 		event := buildCommitEvent(runID, c, now)
-		claims, links, extractErr := extractor.Extract([]domain.Event{event})
+		claims, links, extractErr := extractor.Extract(ctx, []domain.Event{event})
 		if extractErr != nil {
 			fmt.Fprintf(os.Stderr, "git: extract %s: %v\n", c.SHA, extractErr)
 			continue

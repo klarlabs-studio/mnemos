@@ -278,7 +278,7 @@ func ingestSingleDoc(
 	for i := range events {
 		events[i].RunID = runID
 	}
-	claims, links, autoEntities, err := extractor.ExtractFn(events)
+	claims, links, autoEntities, err := extractor.ExtractFn(ctx, events)
 	if err != nil {
 		return fmt.Errorf("extract: %w", err)
 	}

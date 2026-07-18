@@ -156,6 +156,7 @@ MNEMOS_EMBED_API_KEY   # Falls back to LLM_API_KEY if unset
 MNEMOS_EMBED_MODEL     # Embedding model name
 MNEMOS_EMBED_BASE_URL  # Embedding endpoint
 MNEMOS_LLM_CACHE_MAX_BYTES  # LLM extraction cache cap (default 1 GiB; 0 disables eviction)
+MNEMOS_CAPTURE_TIMEOUT      # SessionEnd capture budget (Go duration, default 4m). Ceiling, not a reservation; sized for a slow local model. `mnemos init` writes a matching Claude Code hook timeout — re-run it after raising this.
 MNEMOS_DB_MAX_CONNS         # Postgres/MySQL pool MaxOpenConns (default 25)
 MNEMOS_DB_MAX_IDLE_CONNS    # Postgres/MySQL pool MaxIdleConns (default 5)
 MNEMOS_DB_CONN_MAX_LIFETIME # Pool ConnMaxLifetime, e.g. "30m" (default 30m)

@@ -122,6 +122,16 @@ type Config struct {
 		Timeout scalar `yaml:"timeout"`
 	} `yaml:"job"`
 
+	// Capture tunes the SessionEnd capture hook. Timeout bounds the whole
+	// ingest→extract→relate pipeline for one session (default 4m, sized for a
+	// slow local model). It is a ceiling, not a reservation: a fast provider
+	// returns as soon as it is done, so cloud/hosted setups can lower it. Note
+	// that the Claude Code hook timeout written by `mnemos init` caps this in
+	// practice — re-run `mnemos init` after raising it.
+	Capture struct {
+		Timeout scalar `yaml:"timeout"`
+	} `yaml:"capture"`
+
 	// Floatback tunes the local upward flow that promotes important repo/workspace
 	// learnings into the personal central brain (`mnemos float-back`). OnCapture is
 	// an opt-in (default false): when true, a session-end capture inside a
@@ -214,6 +224,8 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_FEEDBACK_DECAY", c.Feedback.Decay},
 
 		{"MNEMOS_JOB_TIMEOUT", c.Job.Timeout},
+
+		{"MNEMOS_CAPTURE_TIMEOUT", c.Capture.Timeout},
 
 		{"MNEMOS_FLOATBACK_ON_CAPTURE", c.Floatback.OnCapture},
 

@@ -24,25 +24,41 @@ type hookMatcher struct {
 }
 
 // hookSpec describes one hook we install: the event it binds to, an optional
-// matcher, and the `mnemos hook <name>` sub-command it runs.
+// matcher, the `mnemos hook <name>` sub-command it runs, and the wall-clock
+// timeout Claude Code should allow it.
 type hookSpec struct {
 	Event   string // e.g. "UserPromptSubmit"
 	Matcher string // optional; "" fires on all
 	Sub     string // "recall" | "brief" | "capture"
+	Timeout int    // seconds; must exceed the hook's own internal budget
 }
+
+// Hook timeouts, in seconds. Claude Code applies a 60s default when a hook
+// omits one, which is *below* what `hook capture` budgets itself
+// (defaultCaptureBudget, plus a 20s float-back) — so an unset timeout meant
+// Claude Code SIGKILLed capture mid-pipeline and the session's knowledge was
+// lost ("Hook cancelled"). Each
+// value sits above the corresponding hook's internal context budget so the
+// hook's own graceful, fail-open timeout is what actually governs; Claude
+// Code's kill is only a last-resort backstop.
+const (
+	recallHookTimeout  = 15  // hookRecall budgets 12s
+	briefHookTimeout   = 25  // hookBrief budgets 10s + 8s doc sync-back
+	captureHookTimeout = 300 // hookCapture budgets captureBudget (240s) + 20s float-back
+)
 
 // hookSpecsFor returns the hook specs for the selected behaviors.
 // behaviors is a set of "recall" | "brief" | "capture".
 func hookSpecsFor(behaviors map[string]bool) []hookSpec {
 	var specs []hookSpec
 	if behaviors["recall"] {
-		specs = append(specs, hookSpec{Event: "UserPromptSubmit", Sub: "recall"})
+		specs = append(specs, hookSpec{Event: "UserPromptSubmit", Sub: "recall", Timeout: recallHookTimeout})
 	}
 	if behaviors["brief"] {
-		specs = append(specs, hookSpec{Event: "SessionStart", Matcher: "startup|resume", Sub: "brief"})
+		specs = append(specs, hookSpec{Event: "SessionStart", Matcher: "startup|resume", Sub: "brief", Timeout: briefHookTimeout})
 	}
 	if behaviors["capture"] {
-		specs = append(specs, hookSpec{Event: "SessionEnd", Sub: "capture"})
+		specs = append(specs, hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeout})
 	}
 	return specs
 }
@@ -95,7 +111,11 @@ func installHooks(settingsPath, bin, dsn string, specs []hookSpec, inlineDSN boo
 	for _, spec := range specs {
 		m := hookMatcher{
 			Matcher: spec.Matcher,
-			Hooks:   []hookCommand{{Type: "command", Command: buildHookCommand(bin, dsn, spec.Sub, inlineDSN)}},
+			Hooks: []hookCommand{{
+				Type:    "command",
+				Command: buildHookCommand(bin, dsn, spec.Sub, inlineDSN),
+				Timeout: spec.Timeout,
+			}},
 		}
 		hooks[spec.Event] = append(hooks[spec.Event], m)
 	}

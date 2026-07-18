@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func readHooksMap(t *testing.T, path string) map[string][]hookMatcher {
@@ -98,6 +99,47 @@ func TestInstallHooksPreservesForeignEntries(t *testing.T) {
 	}
 	if foreign != 1 || ours != 1 {
 		t.Errorf("expected 1 foreign + 1 mnemos hook, got foreign=%d ours=%d", foreign, ours)
+	}
+}
+
+// TestInstallHooksSetsTimeouts guards the capture-hook regression: Claude Code
+// defaults an unset hook timeout to 60s, but `hook capture` budgets itself 90s
+// (plus a 20s float-back), so a timeout-less entry got SIGKILLed mid-pipeline
+// and the session was lost ("Hook cancelled"). Every installed hook must carry
+// a timeout that exceeds its own internal budget, so the hook's graceful,
+// fail-open timeout is what actually governs.
+func TestInstallHooksSetsTimeouts(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	specs := hookSpecsFor(map[string]bool{"recall": true, "brief": true, "capture": true})
+	if _, err := installHooks(path, "/bin/mnemos", "sqlite:///tmp/a.db", specs, true); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	// event -> the hook's own internal context budget, in seconds.
+	internalBudget := map[string]int{
+		"UserPromptSubmit": 12,                                         // hookRecall
+		"SessionStart":     18,                                         // hookBrief: 10s + 8s doc sync-back
+		"SessionEnd":       int(defaultCaptureBudget/time.Second) + 20, // hookCapture: captureBudget + float-back
+	}
+	hooks := readHooksMap(t, path)
+	for event, budget := range internalBudget {
+		matchers := hooks[event]
+		if len(matchers) == 0 {
+			t.Fatalf("%s: no hook installed", event)
+		}
+		for _, m := range matchers {
+			for _, h := range m.Hooks {
+				if h.Timeout == 0 {
+					t.Errorf("%s: timeout unset, so Claude Code applies its 60s default", event)
+					continue
+				}
+				if h.Timeout <= budget {
+					t.Errorf("%s: timeout %ds <= internal budget %ds; the hook would be killed mid-run",
+						event, h.Timeout, budget)
+				}
+			}
+		}
 	}
 }
 

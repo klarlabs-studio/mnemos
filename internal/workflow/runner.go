@@ -48,8 +48,12 @@ func NewRunner(store jobStore) Runner {
 	}
 }
 
-// Run creates a job of the given kind and executes fn with retry and timeout handling.
-func (r Runner) Run(kind string, scope map[string]string, fn func(context.Context, *Job) error) error {
+// Run creates a job of the given kind and executes fn with retry and timeout
+// handling. Each attempt gets
+// a context bounded by r.Timeout and derived from parent, so a caller's
+// deadline or cancellation reaches the job body. Pass context.Background() when
+// there is no caller deadline to honor.
+func (r Runner) Run(parent context.Context, kind string, scope map[string]string, fn func(context.Context, *Job) error) error {
 	jobID, err := r.nextID()
 	if err != nil {
 		return fmt.Errorf("generate job id: %w", err)
@@ -84,7 +88,10 @@ func (r Runner) Run(kind string, scope map[string]string, fn func(context.Contex
 		}
 		job.log("attempt", map[string]any{"attempt": attempt})
 
-		ctx, cancel := context.WithTimeout(context.Background(), r.Timeout)
+		// Derive from parent, not context.Background(): r.Timeout caps a single
+		// attempt, but the caller's deadline still applies (WithTimeout keeps
+		// whichever is earlier) and caller cancellation propagates into fn.
+		ctx, cancel := context.WithTimeout(parent, r.Timeout)
 		start := r.now()
 		err := fn(ctx, job)
 		cancel()
