@@ -1213,9 +1213,9 @@ func mcpRunQuery(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, erro
 
 	var answer domain.Answer
 	if strings.TrimSpace(input.RunID) != "" {
-		answer, err = engine.AnswerForRunWithOptions(strings.TrimSpace(input.Question), strings.TrimSpace(input.RunID), opts)
+		answer, err = engine.AnswerForRunWithOptions(ctx, strings.TrimSpace(input.Question), strings.TrimSpace(input.RunID), opts)
 	} else {
-		answer, err = engine.AnswerWithOptions(strings.TrimSpace(input.Question), opts)
+		answer, err = engine.AnswerWithOptions(ctx, strings.TrimSpace(input.Question), opts)
 	}
 	if err != nil {
 		return mcpQueryOutput{}, err

@@ -295,7 +295,7 @@ func TestAnswerIncludesClaimsAndContradictions(t *testing.T) {
 	}}
 
 	engine := NewEngine(events, fakeClaimRepo{claims: claims}, rels)
-	answer, err := engine.Answer("what happened to revenue after launch")
+	answer, err := engine.Answer(context.Background(), "what happened to revenue after launch")
 	if err != nil {
 		t.Fatalf("Answer() error = %v", err)
 	}
@@ -328,7 +328,7 @@ func TestAnswerForRunScopesEvents(t *testing.T) {
 	}
 	engine := NewEngine(events, fakeClaimRepo{claims: claims}, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
-	answer, err := engine.AnswerForRun("what happened to revenue", "run_a")
+	answer, err := engine.AnswerForRun(context.Background(), "what happened to revenue", "run_a")
 	if err != nil {
 		t.Fatalf("AnswerForRun() error = %v", err)
 	}
@@ -378,7 +378,7 @@ func TestAnswer_HopExpansionWalksRelationshipGraph(t *testing.T) {
 	engine := NewEngine(events, wrapper, rels)
 
 	// Hops = 0 → just the seed.
-	noHops, err := engine.Answer("cache eviction policy")
+	noHops, err := engine.Answer(context.Background(), "cache eviction policy")
 	if err != nil {
 		t.Fatalf("Answer(0 hops): %v", err)
 	}
@@ -387,7 +387,7 @@ func TestAnswer_HopExpansionWalksRelationshipGraph(t *testing.T) {
 	}
 
 	// Hops = 2 → seed + 1-hop neighbor + 2-hop neighbor.
-	withHops, err := engine.AnswerWithOptions("cache eviction policy", AnswerOptions{Hops: 2})
+	withHops, err := engine.AnswerWithOptions(context.Background(), "cache eviction policy", AnswerOptions{Hops: 2})
 	if err != nil {
 		t.Fatalf("Answer(2 hops): %v", err)
 	}
@@ -408,7 +408,7 @@ func TestAnswer_HopExpansionWalksRelationshipGraph(t *testing.T) {
 	}
 
 	// Hops = 1 → seed + only the 1-hop neighbor (cl_two should not appear).
-	oneHop, err := engine.AnswerWithOptions("cache eviction policy", AnswerOptions{Hops: 1})
+	oneHop, err := engine.AnswerWithOptions(context.Background(), "cache eviction policy", AnswerOptions{Hops: 1})
 	if err != nil {
 		t.Fatalf("Answer(1 hop): %v", err)
 	}
@@ -470,7 +470,7 @@ func TestAnswer_NarrativeSurfacesStatusTransitions(t *testing.T) {
 	}
 
 	engine := NewEngine(events, repo, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
-	answer, err := engine.Answer("cache eviction policy")
+	answer, err := engine.Answer(context.Background(), "cache eviction policy")
 	if err != nil {
 		t.Fatalf("Answer: %v", err)
 	}
@@ -523,7 +523,7 @@ func TestAnswer_AttributesProvenanceFromPulledEvent(t *testing.T) {
 	}
 
 	engine := NewEngine(events, repo, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
-	answer, err := engine.Answer("cache eviction policy")
+	answer, err := engine.Answer(context.Background(), "cache eviction policy")
 	if err != nil {
 		t.Fatalf("Answer: %v", err)
 	}
@@ -563,7 +563,7 @@ func TestDualMode_AgentAutoResolvesHighMarginContradiction(t *testing.T) {
 	events, claimRepo, relRepo := makeContradictingSetup(now, 0.92, 0.71)
 
 	engine := NewEngine(events, claimRepo, relRepo)
-	answer, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{
+	answer, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{
 		Consumer: domain.ConsumerAgent,
 	})
 	if err != nil {
@@ -610,7 +610,7 @@ func TestDualMode_AgentKeepsBothOnSlimMargin(t *testing.T) {
 		"cl_low":  {{ID: "rel1", Type: domain.RelationshipTypeContradicts, FromClaimID: "cl_high", ToClaimID: "cl_low", CreatedAt: now}},
 	}}
 	engine := NewEngine(ev, claimRepo, relRepo)
-	answer, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{
+	answer, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{
 		Consumer: domain.ConsumerAgent,
 	})
 	if err != nil {
@@ -633,7 +633,7 @@ func TestDualMode_UserGetExplanation(t *testing.T) {
 	events, claimRepo, relRepo := makeContradictingSetup(now, 0.92, 0.71)
 
 	engine := NewEngine(events, claimRepo, relRepo)
-	answer, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{
+	answer, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{
 		Consumer: domain.ConsumerUser,
 	})
 	if err != nil {
@@ -664,7 +664,7 @@ func TestDualMode_DefaultConsumerBehavesLikeUser(t *testing.T) {
 
 	engine := NewEngine(events, claimRepo, relRepo)
 	// Zero-value AnswerOptions — Consumer is empty string, treated as ConsumerUser.
-	answer, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{})
+	answer, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{})
 	if err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
@@ -679,7 +679,7 @@ func TestVerdict_AgentHighMarginProducesTrustVerdict(t *testing.T) {
 	events, claimRepo, relRepo := makeContradictingSetup(now, 0.92, 0.71)
 
 	engine := NewEngine(events, claimRepo, relRepo)
-	answer, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{
+	answer, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{
 		Consumer: domain.ConsumerAgent,
 	})
 	if err != nil {
@@ -736,7 +736,7 @@ func TestVerdict_AgentSlimMarginProducesEscalateVerdict(t *testing.T) {
 		"cl_low":  {{ID: "rel1", Type: domain.RelationshipTypeContradicts, FromClaimID: "cl_high", ToClaimID: "cl_low", CreatedAt: now}},
 	}}
 	engine := NewEngine(ev, claimRepo, relRepo)
-	answer, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{
+	answer, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{
 		Consumer: domain.ConsumerAgent,
 	})
 	if err != nil {
@@ -763,7 +763,7 @@ func TestVerdict_UserConsumerProducesNoVerdicts(t *testing.T) {
 	events, claimRepo, relRepo := makeContradictingSetup(now, 0.92, 0.71)
 
 	engine := NewEngine(events, claimRepo, relRepo)
-	answer, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{
+	answer, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{
 		Consumer: domain.ConsumerUser,
 	})
 	if err != nil {
@@ -955,7 +955,7 @@ func TestVisibility_PersonalOnlySeesPersonal(t *testing.T) {
 	repo := fakeClaimRepo{claims: claims, evidence: evidence}
 	engine := NewEngine(events, repo, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
-	answer, err := engine.AnswerWithOptions("personal note", AnswerOptions{Visibility: domain.VisibilityPersonal})
+	answer, err := engine.AnswerWithOptions(context.Background(), "personal note", AnswerOptions{Visibility: domain.VisibilityPersonal})
 	if err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
@@ -984,7 +984,7 @@ func TestVisibility_TeamSeesPersonalAndTeam(t *testing.T) {
 	repo := fakeClaimRepo{claims: claims, evidence: evidence}
 	engine := NewEngine(events, repo, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
-	answer, err := engine.AnswerWithOptions("some claim", AnswerOptions{Visibility: domain.VisibilityTeam})
+	answer, err := engine.AnswerWithOptions(context.Background(), "some claim", AnswerOptions{Visibility: domain.VisibilityTeam})
 	if err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
@@ -1013,7 +1013,7 @@ func TestVisibility_OrgSeesAll(t *testing.T) {
 	repo := fakeClaimRepo{claims: claims, evidence: evidence}
 	engine := NewEngine(events, repo, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
-	answer, err := engine.AnswerWithOptions("event", AnswerOptions{Visibility: domain.VisibilityOrg})
+	answer, err := engine.AnswerWithOptions(context.Background(), "event", AnswerOptions{Visibility: domain.VisibilityOrg})
 	if err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
@@ -1047,7 +1047,7 @@ func TestVisibility_ZeroValueDefaultsToTeam(t *testing.T) {
 	engine := NewEngine(events, repo, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
 	// zero-value Visibility → treated as team: personal+team visible, org not
-	answer, err := engine.AnswerWithOptions("event", AnswerOptions{})
+	answer, err := engine.AnswerWithOptions(context.Background(), "event", AnswerOptions{})
 	if err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
@@ -1577,7 +1577,7 @@ func TestAnswerExcludesDeprecatedClaims(t *testing.T) {
 	engine := NewEngine(events, fakeClaimRepo{claims: claims},
 		fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
-	answer, err := engine.Answer("what is the cache backend")
+	answer, err := engine.Answer(context.Background(), "what is the cache backend")
 	if err != nil {
 		t.Fatalf("Answer() error = %v", err)
 	}
@@ -1617,11 +1617,44 @@ func TestAnswerKeepsContestedAndResolved(t *testing.T) {
 	engine := NewEngine(events, fakeClaimRepo{claims: claims},
 		fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
-	answer, err := engine.Answer("when do we deploy")
+	answer, err := engine.Answer(context.Background(), "when do we deploy")
 	if err != nil {
 		t.Fatalf("Answer() error = %v", err)
 	}
 	if len(answer.Claims) != 2 {
 		t.Errorf("got %d claims, want 2 (contested and resolved must both survive)", len(answer.Claims))
+	}
+}
+
+// The corrective pass rescans the whole corpus, costing time proportional to
+// brain size (~20s at 3000 claims). A caller on a short deadline — the recall
+// hook budgets 12s and runs before every prompt — would spend its whole budget
+// there and get killed mid-scan, returning nothing. Better a weaker answer
+// delivered than a stronger one the caller never sees.
+func TestHasBudgetForCorrectiveScan(t *testing.T) {
+	// No deadline: CLI and server callers keep the corrective pass.
+	if !hasBudgetForCorrectiveScan(context.Background()) {
+		t.Error("a context without a deadline must keep the corrective pass")
+	}
+
+	// Plenty of time left: proceed.
+	ample, cancel := context.WithTimeout(context.Background(), correctiveScanReserve*4)
+	defer cancel()
+	if !hasBudgetForCorrectiveScan(ample) {
+		t.Error("ample budget should allow the corrective pass")
+	}
+
+	// Nearly exhausted: skip rather than start a scan that cannot finish.
+	tight, cancel2 := context.WithTimeout(context.Background(), correctiveScanReserve/5)
+	defer cancel2()
+	if hasBudgetForCorrectiveScan(tight) {
+		t.Error("a nearly-exhausted budget must skip the corrective scan")
+	}
+
+	// Already past deadline.
+	dead, cancel3 := context.WithTimeout(context.Background(), -time.Second)
+	defer cancel3()
+	if hasBudgetForCorrectiveScan(dead) {
+		t.Error("an expired context must skip the corrective scan")
 	}
 }

@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -74,7 +75,7 @@ func TestSpreadingActivation_BoostsAssociatedBelief(t *testing.T) {
 	engine, question := primingFixture(edges)
 
 	// Baseline: priming OFF → ranking unchanged from today (insertion order).
-	base, err := engine.AnswerWithOptions(question, AnswerOptions{})
+	base, err := engine.AnswerWithOptions(context.Background(), question, AnswerOptions{})
 	if err != nil {
 		t.Fatalf("baseline AnswerWithOptions error = %v", err)
 	}
@@ -86,7 +87,7 @@ func TestSpreadingActivation_BoostsAssociatedBelief(t *testing.T) {
 	baseC6 := indexOf(base.Claims, "c6")
 
 	// Priming ON → c6 is boosted above lower-associated neighbours.
-	primed, err := engine.AnswerWithOptions(question, AnswerOptions{Prime: true})
+	primed, err := engine.AnswerWithOptions(context.Background(), question, AnswerOptions{Prime: true})
 	if err != nil {
 		t.Fatalf("primed AnswerWithOptions error = %v", err)
 	}
@@ -124,7 +125,7 @@ func TestSpreadingActivation_BoundedBelowStrongMatch(t *testing.T) {
 
 	engine, question := primingFixture(edges)
 
-	primed, err := engine.AnswerWithOptions(question, AnswerOptions{Prime: true})
+	primed, err := engine.AnswerWithOptions(context.Background(), question, AnswerOptions{Prime: true})
 	if err != nil {
 		t.Fatalf("primed AnswerWithOptions error = %v", err)
 	}
@@ -145,7 +146,7 @@ func TestSpreadingActivation_BoundedBelowStrongMatch(t *testing.T) {
 func TestSpreadingActivation_NoEdgesIsNoOp(t *testing.T) {
 	engine, question := primingFixture(map[string][]domain.Relationship{})
 
-	primed, err := engine.AnswerWithOptions(question, AnswerOptions{Prime: true})
+	primed, err := engine.AnswerWithOptions(context.Background(), question, AnswerOptions{Prime: true})
 	if err != nil {
 		t.Fatalf("primed AnswerWithOptions error = %v", err)
 	}

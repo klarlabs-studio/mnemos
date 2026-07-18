@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func TestReconsolidation(t *testing.T) {
 	engine := NewEngine(events, fakeClaimRepo{claims: claims, verifiedRecorder: recorder}, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
 	// Off: no reconsolidation.
-	if _, err := engine.AnswerWithOptions(question, AnswerOptions{}); err != nil {
+	if _, err := engine.AnswerWithOptions(context.Background(), question, AnswerOptions{}); err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
 	if len(*recorder) != 0 {
@@ -35,7 +36,7 @@ func TestReconsolidation(t *testing.T) {
 	}
 
 	// On: every recalled belief is refreshed.
-	if _, err := engine.AnswerWithOptions(question, AnswerOptions{Reconsolidate: true}); err != nil {
+	if _, err := engine.AnswerWithOptions(context.Background(), question, AnswerOptions{Reconsolidate: true}); err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
 	if len(*recorder) == 0 {

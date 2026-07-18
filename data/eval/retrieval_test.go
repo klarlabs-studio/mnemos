@@ -200,7 +200,7 @@ func TestRetrievalQuality(t *testing.T) {
 
 		// Strategy 1: token-overlap (legacy)
 		legacy := query.NewEngine(conn.Events, conn.Claims, conn.Relationships)
-		ans, err := legacy.Answer(c.Query)
+		ans, err := legacy.Answer(context.Background(), c.Query)
 		if err != nil {
 			t.Fatalf("[%s] token-overlap answer: %v", c.ID, err)
 		}
@@ -209,7 +209,7 @@ func TestRetrievalQuality(t *testing.T) {
 		// Strategy 2: BM25-only
 		bm25Only := query.NewEngine(conn.Events, conn.Claims, conn.Relationships).
 			WithTextSearch(eventTS, claimTS)
-		ans, err = bm25Only.Answer(c.Query)
+		ans, err = bm25Only.Answer(context.Background(), c.Query)
 		if err != nil {
 			t.Fatalf("[%s] bm25 answer: %v", c.ID, err)
 		}
@@ -224,7 +224,7 @@ func TestRetrievalQuality(t *testing.T) {
 		stub := stubSemantic{textByID: textByID}
 		hybrid := query.NewEngine(conn.Events, conn.Claims, conn.Relationships).
 			WithTextSearch(eventTS, stub)
-		ans, err = hybrid.Answer(c.Query)
+		ans, err = hybrid.Answer(context.Background(), c.Query)
 		if err != nil {
 			t.Fatalf("[%s] hybrid answer: %v", c.ID, err)
 		}

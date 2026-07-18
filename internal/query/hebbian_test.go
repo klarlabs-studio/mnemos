@@ -46,7 +46,7 @@ func TestHebbianCoactivation_OffByDefault(t *testing.T) {
 	edge("r_0_1", domain.RelationshipTypeSupports, "c0", "c1", edges)
 	engine, question, _, recorder := hebbianFixture(edges)
 
-	if _, err := engine.AnswerWithOptions(question, AnswerOptions{}); err != nil {
+	if _, err := engine.AnswerWithOptions(context.Background(), question, AnswerOptions{}); err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
 	if len(*recorder) != 0 {
@@ -62,7 +62,7 @@ func TestHebbianCoactivation_StrengthensCoRetrievedEdges(t *testing.T) {
 	edge("r_0_1", domain.RelationshipTypeSupports, "c0", "c1", edges)
 	engine, question, rels, recorder := hebbianFixture(edges)
 
-	if _, err := engine.AnswerWithOptions(question, AnswerOptions{Hebbian: true}); err != nil {
+	if _, err := engine.AnswerWithOptions(context.Background(), question, AnswerOptions{Hebbian: true}); err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
 	if len(*recorder) != 1 {

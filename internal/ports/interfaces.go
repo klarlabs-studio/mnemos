@@ -222,7 +222,7 @@ type ExtractionEngine interface {
 
 // QueryEngine answers natural-language queries against the knowledge base.
 type QueryEngine interface {
-	Answer(query string) (domain.Answer, error)
+	Answer(ctx context.Context, query string) (domain.Answer, error)
 }
 
 // EmbeddingRepository persists and retrieves vector embeddings.
