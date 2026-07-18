@@ -611,6 +611,17 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 	if err != nil {
 		return domain.Answer{}, fmt.Errorf("load claims for query: %w", err)
 	}
+	// Drop deprecated claims before anything ranks them. `forget` and
+	// `memory_deprecate` promise that a forgotten claim stops being recalled,
+	// and BuildContextBlock honored that, but this path — the one the recall
+	// hook uses to inject context every turn — did not filter by status at all,
+	// so forgetting changed the record without changing what came back.
+	//
+	// Only deprecated is excluded. Contested is how a live disagreement is
+	// represented and hiding it would silently pick a side; resolved is the
+	// winner of one. The evidence and history of a deprecated claim stay
+	// queryable — this governs recall, not retention.
+	claims = excludeDeprecated(claims)
 	nowUTC := time.Now().UTC()
 	for i := range claims {
 		if claims[i].LastExecuted.IsZero() {

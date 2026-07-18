@@ -65,12 +65,7 @@ func (e Engine) BuildContextBlock(ctx context.Context, opts ContextBlockOptions)
 
 	// Drop deprecated claims; keep active + contested + resolved so
 	// the agent can see which decisions were superseded with reason.
-	active := make([]domain.Claim, 0, len(claims))
-	for _, c := range claims {
-		if c.Status != domain.ClaimStatusDeprecated {
-			active = append(active, c)
-		}
-	}
+	active := excludeDeprecated(claims)
 
 	// Stable trust-then-id ordering. Trust score may not be set on
 	// every backend; fall back to confidence then to ID.
@@ -195,4 +190,18 @@ func (r runListAdapter) ListByRunID(ctx context.Context, runID string) ([]domain
 		}
 	}
 	return out, nil
+}
+
+// excludeDeprecated removes claims that have been forgotten or superseded.
+// Shared by the recall path and the run-scoped context block so "forgotten"
+// means the same thing in both — they disagreed until the recall path was
+// found returning deprecated claims a user had explicitly forgotten.
+func excludeDeprecated(claims []domain.Claim) []domain.Claim {
+	out := make([]domain.Claim, 0, len(claims))
+	for _, c := range claims {
+		if c.Status != domain.ClaimStatusDeprecated {
+			out = append(out, c)
+		}
+	}
+	return out
 }
