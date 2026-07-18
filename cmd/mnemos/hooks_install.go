@@ -34,9 +34,10 @@ type hookSpec struct {
 }
 
 // Hook timeouts, in seconds. Claude Code applies a 60s default when a hook
-// omits one, which is *below* what `hook capture` budgets itself (90s, plus a
-// 20s float-back) — so an unset timeout meant Claude Code SIGKILLed capture
-// mid-pipeline and the session's knowledge was lost ("Hook cancelled"). Each
+// omits one, which is *below* what `hook capture` budgets itself
+// (defaultCaptureBudget, plus a 20s float-back) — so an unset timeout meant
+// Claude Code SIGKILLed capture mid-pipeline and the session's knowledge was
+// lost ("Hook cancelled"). Each
 // value sits above the corresponding hook's internal context budget so the
 // hook's own graceful, fail-open timeout is what actually governs; Claude
 // Code's kill is only a last-resort backstop.

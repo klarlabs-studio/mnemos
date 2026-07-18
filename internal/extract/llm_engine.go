@@ -138,7 +138,7 @@ func (e LLMEngine) ExtractWithEntities(ctx context.Context, events []domain.Even
 	//
 	// Derive from the caller's context, never context.Background(): this is a
 	// ceiling, not a grant. A caller with a shorter deadline (the SessionEnd
-	// capture hook budgets 90s) keeps its own — WithTimeout preserves the
+	// capture hook sets its own budget) keeps it — WithTimeout preserves the
 	// earlier deadline — and caller cancellation still propagates. Detaching
 	// here previously let extraction run the full 3x budget (360s by default)
 	// regardless of what the caller asked for, overrunning the hook timeout.

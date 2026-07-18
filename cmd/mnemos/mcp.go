@@ -1248,7 +1248,7 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 	// per-request timeout, so a flat 30s would cancel every LLM attempt and the
 	// job would persist nothing. Give the LLM path room for its own budget plus
 	// the relate/embed/persist work that follows. This is a ceiling, not a
-	// reservation: the caller's context (the capture hook budgets 90s) still
+	// reservation: the caller's context (the capture hook's budget) still
 	// caps it, and a fast run returns as soon as it is done.
 	runner.Timeout = 30 * time.Second
 	if input.UseLLM {
