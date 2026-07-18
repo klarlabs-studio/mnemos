@@ -62,14 +62,26 @@ func hookSpecsFor(behaviors map[string]bool) []hookSpec {
 		specs = append(specs, hookSpec{Event: "SessionStart", Matcher: "startup|resume", Sub: "brief", Timeout: briefHookTimeout})
 	}
 	if behaviors["capture"] {
-		specs = append(specs, hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeout})
-		// Incremental capture: Stop after each response, PreCompact before
-		// context is summarised away. Both only spawn a detached worker and
-		// return, so their timeout covers a fork, not extraction.
-		specs = append(specs,
-			hookSpec{Event: "Stop", Sub: "capture-incremental", Timeout: incrementalHookTimeout},
-			hookSpec{Event: "PreCompact", Sub: "capture-incremental", Timeout: incrementalHookTimeout},
-		)
+		// The strategy decides how much capture machinery gets installed.
+		// `off` installs none; `end` installs only the SessionEnd capture (the
+		// original behavior, and the right one for a fast hosted model, where
+		// per-turn capture would mean an API call per turn); `incremental`
+		// adds Stop and PreCompact, which a slow local model needs because it
+		// cannot extract a whole transcript in one request.
+		switch captureStrategy() {
+		case captureOff:
+			// no capture hooks
+		case captureIncremental:
+			specs = append(specs,
+				hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeout},
+				// Both only spawn a detached worker and return, so their
+				// timeout covers a fork, not extraction.
+				hookSpec{Event: "Stop", Sub: "capture-incremental", Timeout: incrementalHookTimeout},
+				hookSpec{Event: "PreCompact", Sub: "capture-incremental", Timeout: incrementalHookTimeout},
+			)
+		default: // captureAtEnd
+			specs = append(specs, hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeout})
+		}
 	}
 	return specs
 }

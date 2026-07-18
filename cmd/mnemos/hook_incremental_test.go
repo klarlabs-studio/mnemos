@@ -107,6 +107,7 @@ func TestCaptureOffsetRoundTrip(t *testing.T) {
 // spawn a detached worker, so a large timeout would let a hung fork stall the
 // user's editor loop.
 func TestIncrementalHooksInstalled(t *testing.T) {
+	t.Setenv("MNEMOS_CAPTURE_STRATEGY", "incremental")
 	specs := hookSpecsFor(map[string]bool{"capture": true})
 	got := map[string]int{}
 	for _, s := range specs {
@@ -127,5 +128,115 @@ func TestIncrementalHooksInstalled(t *testing.T) {
 	// Ours must still be recognised for idempotent re-install.
 	if !isMnemosHookCommand(buildHookCommand("/bin/mnemos", "sqlite:///tmp/a.db", "capture-incremental", true)) {
 		t.Error("capture-incremental command not recognised as ours; re-running init would duplicate it")
+	}
+}
+
+// The capture strategy decides how much work happens when. It matters because
+// the right answer differs by provider: a slow local model can only manage
+// small continuous chunks, while a fast cloud model is better served by one
+// request at session end (N per-turn calls each re-send the ~5KB extraction
+// prompt, so continuous capture costs a paid API materially more).
+func TestCaptureStrategyResolution(t *testing.T) {
+	cases := []struct {
+		name     string
+		strategy string
+		provider string
+		baseURL  string
+		want     string
+	}{
+		// Explicit always wins.
+		{"explicit incremental", "incremental", "anthropic", "", captureIncremental},
+		{"explicit end", "end", "ollama", "http://localhost:11434", captureAtEnd},
+		{"explicit off", "off", "ollama", "", captureOff},
+		{"case insensitive", "  INCREMENTAL ", "anthropic", "", captureIncremental},
+
+		// auto: local inference is slow, so capture continuously.
+		{"auto ollama", "", "ollama", "", captureIncremental},
+		{"auto localhost base url", "", "openai-compat", "http://localhost:1234/v1", captureIncremental},
+		{"auto 127.0.0.1", "", "openai-compat", "http://127.0.0.1:8080", captureIncremental},
+
+		// auto: hosted providers are fast; one request at the end is cheaper.
+		{"auto anthropic", "", "anthropic", "", captureAtEnd},
+		{"auto openai", "", "openai", "https://api.openai.com/v1", captureAtEnd},
+
+		// No provider at all: rule-based extraction is instant, so end is fine.
+		{"auto no provider", "", "", "", captureAtEnd},
+
+		// Unrecognised values must not silently disable capture.
+		{"garbage falls back to auto", "sometimes", "ollama", "", captureIncremental},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("MNEMOS_CAPTURE_STRATEGY", tc.strategy)
+			t.Setenv("MNEMOS_LLM_PROVIDER", tc.provider)
+			t.Setenv("MNEMOS_LLM_BASE_URL", tc.baseURL)
+			if got := captureStrategy(); got != tc.want {
+				t.Errorf("captureStrategy() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Installing Stop/PreCompact for a cloud user would add an API call per turn.
+// The hook set must follow the strategy.
+func TestHookSpecsFollowCaptureStrategy(t *testing.T) {
+	hasIncremental := func(specs []hookSpec) bool {
+		for _, s := range specs {
+			if s.Sub == "capture-incremental" {
+				return true
+			}
+		}
+		return false
+	}
+	hasSessionEnd := func(specs []hookSpec) bool {
+		for _, s := range specs {
+			if s.Event == "SessionEnd" {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Setenv("MNEMOS_CAPTURE_STRATEGY", "incremental")
+	specs := hookSpecsFor(map[string]bool{"capture": true})
+	if !hasIncremental(specs) || !hasSessionEnd(specs) {
+		t.Error("incremental strategy needs Stop/PreCompact plus the SessionEnd sweep")
+	}
+
+	t.Setenv("MNEMOS_CAPTURE_STRATEGY", "end")
+	specs = hookSpecsFor(map[string]bool{"capture": true})
+	if hasIncremental(specs) {
+		t.Error("end strategy must not install per-turn hooks; that is an API call per turn")
+	}
+	if !hasSessionEnd(specs) {
+		t.Error("end strategy still needs the SessionEnd capture")
+	}
+
+	t.Setenv("MNEMOS_CAPTURE_STRATEGY", "off")
+	specs = hookSpecsFor(map[string]bool{"capture": true})
+	if len(specs) != 0 {
+		t.Errorf("off strategy installed %d capture hook(s), want none", len(specs))
+	}
+}
+
+// A strategy change must take effect without re-running `mnemos init`: hooks
+// already installed have to respect the current config at runtime.
+func TestIncrementalHookNoOpsWhenStrategyIsEnd(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("MNEMOS_CAPTURE_STRATEGY", "end")
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	body := `{"type":"user","message":{"role":"user","content":"a durable decision was recorded"}}` + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ev := hookEvent{SessionID: "s1", TranscriptPath: path}
+
+	// Worker mode so no process is spawned; it must decline to do the work.
+	hookCaptureIncremental(ev, true, nil)
+
+	if off := loadCaptureOffset("s1"); off != 0 {
+		t.Errorf("incremental capture ran under strategy=end (offset advanced to %d)", off)
 	}
 }

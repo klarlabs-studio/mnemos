@@ -213,14 +213,14 @@ func TestBuildInitPlanUserScopeDefaults(t *testing.T) {
 	if !plan.registerMCP {
 		t.Error("registerMCP should default true")
 	}
-	// recall + brief + capture, plus incremental capture on Stop and PreCompact
-	// (which keeps SessionEnd cheap by capturing during the session).
+	// With no local provider configured, capture.strategy=auto resolves to
+	// `end`: one capture at SessionEnd, and no per-turn hooks (which for a
+	// hosted model would mean an API call per turn). The incremental hook set
+	// is covered by TestIncrementalHooksInstalled.
 	wantEvents := map[string]string{
 		"UserPromptSubmit": "recall",
 		"SessionStart":     "brief",
 		"SessionEnd":       "capture",
-		"Stop":             "capture-incremental",
-		"PreCompact":       "capture-incremental",
 	}
 	gotEvents := map[string]string{}
 	for _, s := range plan.specs {

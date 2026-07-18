@@ -183,6 +183,12 @@ func hookCaptureIncremental(ev hookEvent, isWorker bool, raw []byte) {
 	if strings.TrimSpace(ev.TranscriptPath) == "" {
 		return
 	}
+	// Honor the strategy at runtime, not just at install time: changing
+	// capture.strategy should take effect without re-running `mnemos init`,
+	// and the hooks may already be installed from an earlier choice.
+	if captureStrategy() != captureIncremental {
+		return
+	}
 	if !isWorker {
 		// Best-effort: if spawning fails there is simply no incremental capture
 		// this turn, and SessionEnd still sweeps the remainder.
@@ -211,4 +217,63 @@ func captureRange(ev hookEvent, maxBytes int) {
 	if err := storeCaptureOffset(ev.SessionID, newOffset); err != nil {
 		fmt.Fprintf(os.Stderr, "mnemos: capture offset not saved: %v\n", err)
 	}
+}
+
+// Capture strategies. Which one is right depends on the provider, and the
+// difference is not cosmetic:
+//
+//   - A slow local model cannot extract a whole transcript in one request at
+//     all (measured: ~23 minutes for 20KiB on qwen2.5:14b), so it needs the
+//     work spread across the session.
+//   - A fast hosted model handles a whole transcript in one request, and
+//     capturing per turn would instead mean an API call per turn — each
+//     re-sending the ~5KB extraction prompt. That is real money for no gain.
+const (
+	// captureIncremental captures during the session (Stop + PreCompact), with
+	// SessionEnd sweeping the remainder.
+	captureIncremental = "incremental"
+	// captureAtEnd captures once at SessionEnd. The original behavior.
+	captureAtEnd = "end"
+	// captureOff installs no capture hooks at all.
+	captureOff = "off"
+	// "auto" is also accepted (and is the default): it resolves to one of the
+	// above from the configured provider, so it is never itself a result.
+)
+
+// captureStrategy resolves MNEMOS_CAPTURE_STRATEGY (`capture.strategy` in
+// mnemos.yaml). Unset or unrecognised means auto, which never disables
+// capture: a typo should not silently stop recording knowledge.
+func captureStrategy() string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_CAPTURE_STRATEGY"))) {
+	case captureIncremental:
+		return captureIncremental
+	case captureAtEnd:
+		return captureAtEnd
+	case captureOff:
+		return captureOff
+	}
+	if localInference() {
+		return captureIncremental
+	}
+	return captureAtEnd
+}
+
+// localInference reports whether extraction runs against a model on this
+// machine, where throughput is the binding constraint. Detects the ollama
+// provider or a loopback base URL (openai-compat pointed at llama.cpp, LM
+// Studio, vLLM, and friends).
+func localInference() bool {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")), "ollama") {
+		return true
+	}
+	base := strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_LLM_BASE_URL")))
+	if base == "" {
+		return false
+	}
+	for _, host := range []string{"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host.docker.internal"} {
+		if strings.Contains(base, host) {
+			return true
+		}
+	}
+	return false
 }

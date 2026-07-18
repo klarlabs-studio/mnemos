@@ -165,7 +165,11 @@ type Config struct {
 	// that the Claude Code hook timeout written by `mnemos init` caps this in
 	// practice — re-run `mnemos init` after raising it.
 	Capture struct {
-		Timeout scalar `yaml:"timeout"`
+		// Strategy is auto | incremental | end | off. See mnemos.example.yaml
+		// for the per-provider guidance; auto picks incremental for local
+		// inference and end for hosted providers.
+		Strategy scalar `yaml:"strategy"`
+		Timeout  scalar `yaml:"timeout"`
 	} `yaml:"capture"`
 
 	// Floatback tunes the local upward flow that promotes important repo/workspace
@@ -270,6 +274,7 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_RECONSOLIDATE", c.Query.Reconsolidate},
 		{"MNEMOS_INHIBIT", c.Query.Inhibit},
 
+		{"MNEMOS_CAPTURE_STRATEGY", c.Capture.Strategy},
 		{"MNEMOS_CAPTURE_TIMEOUT", c.Capture.Timeout},
 
 		{"MNEMOS_FLOATBACK_ON_CAPTURE", c.Floatback.OnCapture},

@@ -103,6 +103,32 @@ query:
   inhibit:              # MNEMOS_INHIBIT (bool) suppress a beaten contradiction loser (ADR 0016)
 
 capture:
+  # How the session gets recorded into the brain.
+  #
+  #   auto        (default) incremental for local inference, end for hosted
+  #   incremental capture during the session: Stop after each response and
+  #               PreCompact before context is summarised away, each ingesting
+  #               only what is new. SessionEnd sweeps the remainder. Work is
+  #               detached, so the hook returns in ~1s.
+  #   end         one capture at SessionEnd (the original behavior)
+  #   off         no capture hooks at all
+  #
+  # Pick by provider — the trade-off is real in both directions:
+  #
+  #   ollama / llama.cpp / LM Studio (local)   -> incremental
+  #     A whole 20KiB transcript in one extraction request is ~23 minutes on
+  #     qwen2.5:14b, so it never completes and silently degrades to rule-based.
+  #     Per-turn chunks (median ~136 chars) extract in seconds.
+  #
+  #   claude-haiku / gpt-4o-mini / gemini-flash (hosted) -> end
+  #     Fast enough for one request per session. Incremental would instead mean
+  #     one API call per turn, each re-sending the ~5KB extraction prompt —
+  #     materially more spend for no benefit.
+  #
+  # Changing this takes effect immediately for hooks that are already
+  # installed, but re-run `mnemos init` to add or remove the per-turn hooks.
+  strategy:            # MNEMOS_CAPTURE_STRATEGY (auto|incremental|end|off, default auto)
+
   # Bounds the whole SessionEnd capture (ingest→extract→relate) for one
   # session. A ceiling, not a reservation: a fast provider returns as soon as
   # it is done. The 4m default is sized for a slow local model — cloud or

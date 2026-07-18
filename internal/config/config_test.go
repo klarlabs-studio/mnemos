@@ -192,6 +192,7 @@ func TestCaptureBlockEnvOverrides(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, `
 capture:
+  strategy: incremental
   timeout: 5m
 `)
 	cfg, err := Load(path)
@@ -200,6 +201,9 @@ capture:
 	}
 	if got := cfg.EnvOverrides()["MNEMOS_CAPTURE_TIMEOUT"]; got != "5m" {
 		t.Errorf("MNEMOS_CAPTURE_TIMEOUT = %q, want %q", got, "5m")
+	}
+	if got := cfg.EnvOverrides()["MNEMOS_CAPTURE_STRATEGY"]; got != "incremental" {
+		t.Errorf("MNEMOS_CAPTURE_STRATEGY = %q, want %q", got, "incremental")
 	}
 }
 
