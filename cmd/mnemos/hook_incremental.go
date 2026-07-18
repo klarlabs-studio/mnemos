@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // Incremental capture (ADR-adjacent to the SessionEnd capture in hook.go).
@@ -166,9 +165,8 @@ func spawnDetachedCapture(sub string, payload []byte) error {
 	}
 	defer func() { _ = tmp.Close() }()
 	cmd.Stdin = tmp
-	// Detach: new session so the worker outlives the hook process and is not
-	// killed when Claude Code reaps the hook's process group.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	// Detach so the worker outlives this process (platform-specific).
+	cmd.SysProcAttr = detachSysProcAttr()
 	cmd.Stdout, cmd.Stderr = nil, nil
 	if err := cmd.Start(); err != nil {
 		return err
