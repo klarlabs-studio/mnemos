@@ -25,11 +25,14 @@ llm:
   timeout:             # MNEMOS_LLM_TIMEOUT (Go duration, default 120s)
   cache_max_bytes:     # MNEMOS_LLM_CACHE_MAX_BYTES (default 1 GiB; 0 disables eviction)
   extract_model:       # MNEMOS_EXTRACT_MODEL (override model for the extract stage only)
-  # Bounds one extraction request. A whole transcript in a single prompt
-  # overruns the per-request timeout on local models, which silently degrades
-  # extraction to rule-based (no entities). Raise for fast/large-context
-  # providers; lower if a local model still times out per batch.
-  extract_batch_chars: # MNEMOS_EXTRACT_BATCH_CHARS (int, default 3000)
+  # Bounds one extraction request. The default sits above the 20KiB cap on a
+  # session capture, so a capture stays a single request as before; batching is
+  # a safety valve for unusually large inputs. Lower it only if a whole input
+  # would exceed the per-request LLM timeout but a slice would not. Note the
+  # ~5KB system prompt is re-sent per request, so smaller batches multiply that
+  # fixed cost — on a slow local model no batch size makes a big transcript
+  # practical, and rule-based fallback is the expected outcome.
+  extract_batch_chars: # MNEMOS_EXTRACT_BATCH_CHARS (int, default 24000)
 
 embed:
   provider:            # MNEMOS_EMBED_PROVIDER (falls back to llm.provider)

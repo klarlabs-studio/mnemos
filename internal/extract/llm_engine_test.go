@@ -139,6 +139,28 @@ func bigEvents(n, size int) []domain.Event {
 	return events
 }
 
+// Batching must not change the common path. `hook capture` caps a transcript
+// at 20KiB, and the ~5KB system prompt is re-sent per request — so splitting a
+// normal capture would cost a cloud user several extra round-trips and several
+// extra copies of that prompt, to no benefit. The default must leave a
+// hook-sized input as a single request.
+func TestDefaultBatchLeavesHookSizedCaptureSingleRequest(t *testing.T) {
+	if defaultExtractBatchChars <= 20*1024 {
+		t.Fatalf("default batch %d <= the 20KiB hook transcript cap; a normal capture would be split",
+			defaultExtractBatchChars)
+	}
+	client := &countingLLMClient{}
+	engine := newTestLLMEngine(client)
+
+	// A full hook-sized capture, chunked the way the normalizer would.
+	if _, _, _, err := engine.ExtractWithEntities(context.Background(), bigEvents(24, 850)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if client.calls != 1 {
+		t.Errorf("a 20KiB capture made %d requests, want 1; batching changed the common path", client.calls)
+	}
+}
+
 // A whole session's transcript must not go to the model as one prompt. A 20KiB
 // capture sent as a single request exceeded the per-request LLM timeout on a
 // local model, so every attempt failed and extraction silently fell back to

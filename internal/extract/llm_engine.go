@@ -305,22 +305,29 @@ func batchByChars(texts []string, events []domain.Event, maxChars int) []promptB
 	return out
 }
 
-// defaultExtractBatchChars bounds one extraction request. The number is
-// measured, not guessed: on qwen2.5:14b via ollama (Apple silicon) a 6000-char
-// extraction prompt took ~150s — past the 120s default per-request timeout, so
-// every such request failed, retried, failed again, and the whole run degraded
-// to rule-based. ~3000 chars lands near ~75s, comfortably inside that timeout.
+// defaultExtractBatchChars bounds one extraction request. It sits above the
+// 20KiB cap `hook capture` puts on a transcript, so a session capture stays a
+// single request exactly as before — batching is a safety valve for unusually
+// large inputs (`mnemos process` on a big file), not a change to the common
+// path.
 //
-// Batching does not make a slow model fast: a large transcript still costs
-// roughly the same total inference. What it buys is that each request can
-// actually complete, so batches that finish inside the caller's budget yield
-// real LLM claims and only the remainder falls back — partial extraction
-// instead of none. The genuine fix for a slow setup is a faster extraction
-// model (llm.extract_model) rather than a larger batch.
+// The default is deliberately not tuned for slow local models, because
+// measurement says that cannot work. With the real ~5KB extraction system
+// prompt on qwen2.5:14b via ollama (Apple silicon):
 //
-// Cloud providers are far faster and have larger context; raise this there to
-// cut request count.
-const defaultExtractBatchChars = 3000
+//	1500 chars of content -> ~93s
+//	3000 chars of content -> ~133s   (past the 120s default LLM timeout)
+//
+// The system prompt is re-sent on every request, so it dominates: smaller
+// batches multiply that fixed cost rather than amortising it. A 20KiB
+// transcript at a batch size this model can finish is ~15 requests, ~23
+// minutes — impractical for a session-end hook regardless of how it is sliced.
+// Rule-based fallback is the right outcome there, and per-batch fallback keeps
+// it graceful.
+//
+// Lower this only when the model is fast enough that a whole input would
+// otherwise exceed the per-request timeout but a slice would not.
+const defaultExtractBatchChars = 24000
 
 // extractBatchChars returns the per-request character budget, honoring
 // MNEMOS_EXTRACT_BATCH_CHARS (`llm.extract_batch_chars` in mnemos.yaml).
