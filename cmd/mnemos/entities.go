@@ -215,7 +215,7 @@ func handleExtractEntities(args []string, f Flags) {
 					Metadata:      map[string]string{"synthetic": "true", "source_claim_id": c.ID},
 				})
 			}
-			_, _, entities, err := ext.ExtractFn(synthetic)
+			_, _, entities, err := ext.ExtractFn(ctx, synthetic)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  extract batch %d-%d: %v (continuing)\n", start, end, err)
 				continue

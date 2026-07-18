@@ -102,8 +102,8 @@ type ExtractedEntity struct {
 // Kept as a thin shim over ExtractWithEntities so callers that don't
 // care about entities (rule-based downstream paths, older tests) see
 // no behavior change.
-func (e LLMEngine) Extract(events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, error) {
-	claims, links, _, err := e.ExtractWithEntities(events)
+func (e LLMEngine) Extract(ctx context.Context, events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, error) {
+	claims, links, _, err := e.ExtractWithEntities(ctx, events)
 	return claims, links, err
 }
 
@@ -113,7 +113,7 @@ func (e LLMEngine) Extract(events []domain.Event) ([]domain.Claim, []domain.Clai
 // nil when the rule-based fallback fires or when the model's output
 // predates the v1.4 prompt — callers should treat absent entries as
 // "no entities for this claim", not as an error.
-func (e LLMEngine) ExtractWithEntities(events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]ExtractedEntity, error) {
+func (e LLMEngine) ExtractWithEntities(ctx context.Context, events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]ExtractedEntity, error) {
 	// Collect non-empty event texts.
 	var texts []string
 	var sourceEvents []domain.Event
@@ -135,7 +135,14 @@ func (e LLMEngine) ExtractWithEntities(events []domain.Event) ([]domain.Claim, [
 	// both per-call HTTP budget and total extraction budget without a
 	// second knob: the user picks one timeout and gets enough headroom
 	// for retries.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*llm.Timeout())
+	//
+	// Derive from the caller's context, never context.Background(): this is a
+	// ceiling, not a grant. A caller with a shorter deadline (the SessionEnd
+	// capture hook budgets 90s) keeps its own — WithTimeout preserves the
+	// earlier deadline — and caller cancellation still propagates. Detaching
+	// here previously let extraction run the full 3x budget (360s by default)
+	// regardless of what the caller asked for, overrunning the hook timeout.
+	ctx, cancel := context.WithTimeout(ctx, 3*llm.Timeout())
 	defer cancel()
 
 	messages := []llm.Message{
@@ -164,7 +171,7 @@ func (e LLMEngine) ExtractWithEntities(events []domain.Event) ([]domain.Claim, [
 	if err != nil {
 		// Fallback to rule-based extraction. Rule-based produces no
 		// entities, hence the nil third return.
-		c, l, ferr := e.fallback.Extract(events)
+		c, l, ferr := e.fallback.Extract(ctx, events)
 		return c, l, nil, ferr
 	}
 
@@ -178,7 +185,7 @@ func (e LLMEngine) ExtractWithEntities(events []domain.Event) ([]domain.Claim, [
 
 	rawClaims, err := parseLLMResponse(resp.Content)
 	if err != nil {
-		c, l, ferr := e.fallback.Extract(events)
+		c, l, ferr := e.fallback.Extract(ctx, events)
 		return c, l, nil, ferr
 	}
 
@@ -408,8 +415,8 @@ func evictCacheIfOverCap(dir string, cap int64) {
 }
 
 // ExtractClaims implements ports.ExtractionEngine.
-func (e LLMEngine) ExtractClaims(events []domain.Event) ([]domain.Claim, error) {
-	claims, _, err := e.Extract(events)
+func (e LLMEngine) ExtractClaims(ctx context.Context, events []domain.Event) ([]domain.Claim, error) {
+	claims, _, err := e.Extract(ctx, events)
 	return claims, err
 }
 

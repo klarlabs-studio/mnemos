@@ -66,7 +66,7 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 		events[i].CreatedBy = m.actorID
 	}
 
-	claims, links, _, err := m.extractor.ExtractFn(events)
+	claims, links, _, err := m.extractor.ExtractFn(ctx, events)
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("extract: %w", err)
 	}

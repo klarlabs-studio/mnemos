@@ -217,7 +217,7 @@ type RelationshipStrengthener interface {
 
 // ExtractionEngine extracts structured claims from domain events.
 type ExtractionEngine interface {
-	ExtractClaims([]domain.Event) ([]domain.Claim, error)
+	ExtractClaims(context.Context, []domain.Event) ([]domain.Claim, error)
 }
 
 // QueryEngine answers natural-language queries against the knowledge base.

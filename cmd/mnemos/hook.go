@@ -451,6 +451,18 @@ func renderBrief(claims, runs, contradictions, repoClaims int64, policy query.Pr
 	return b.String()
 }
 
+// captureBudget bounds the whole SessionEnd capture. It has to fit a real
+// worst case, not an optimistic one: a full 20KiB transcript extracted by a
+// local model (qwen2.5:14b via ollama) measured ~165s end to end. The old 90s
+// was never enforced — extraction and the job runner both detached from the
+// caller's context — so it went unnoticed until those leaks were closed. Too
+// small a budget is not a graceful degradation here: the pipeline persists at
+// the end, so a mid-flight cancel drops the entire session's knowledge.
+//
+// Keep captureHookTimeout (the Claude Code hook timeout in hooks_install.go)
+// above this, so this budget is what actually governs.
+const captureBudget = 240 * time.Second
+
 // hookCapture (SessionEnd) distills the session transcript into the brain.
 // SessionEnd ignores hook stdout, so this is pure side effect. It reads the
 // JSONL transcript, extracts the conversational text, caps the size, and runs
@@ -464,7 +476,7 @@ func hookCapture(ev hookEvent) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), captureBudget)
 	defer cancel()
 
 	if hostedConfigured() {

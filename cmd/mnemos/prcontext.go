@@ -155,7 +155,7 @@ func ingestGhPRs(ctx context.Context, w *govwrite.Writer, repoRoot string, limit
 			continue
 		}
 		event := buildPREvent(runID, p, now)
-		claims, links, extractErr := extractor.Extract([]domain.Event{event})
+		claims, links, extractErr := extractor.Extract(ctx, []domain.Event{event})
 		if extractErr != nil {
 			fmt.Fprintf(os.Stderr, "git-prs: extract #%d: %v\n", p.Number, extractErr)
 			continue

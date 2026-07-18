@@ -26,6 +26,47 @@ func (m *mockLLMClient) Complete(_ context.Context, _ []llm.Message) (llm.Respon
 	return llm.Response{Content: m.response, Model: "test-model", InputTokens: 10, OutputTokens: 5}, nil
 }
 
+// blockingLLMClient hangs until its context is cancelled, standing in for a
+// slow local model.
+type blockingLLMClient struct{ started chan struct{} }
+
+func (b *blockingLLMClient) Complete(ctx context.Context, _ []llm.Message) (llm.Response, error) {
+	select {
+	case b.started <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return llm.Response{}, ctx.Err()
+}
+
+// Extraction must honor the caller's deadline. It previously built its budget
+// from context.Background(), detaching from the caller entirely: a hook that
+// budgeted itself 90s could still block for 3x the per-request LLM timeout
+// (360s by default), which is what let `hook capture` overrun any hook timeout
+// Claude Code enforced. The caller's deadline must cap the extraction budget.
+func TestExtractWithEntitiesHonorsCallerDeadline(t *testing.T) {
+	engine := newTestLLMEngine(&blockingLLMClient{started: make(chan struct{}, 1)})
+	events := []domain.Event{{ID: "ev_1", Content: "Revenue grew 15% in Q3."}}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Falls back to rule-based extraction when the LLM call fails; we only
+		// care that it returns promptly rather than running the full budget.
+		_, _, _, _ = engine.ExtractWithEntities(ctx, events)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("ExtractWithEntities ignored the caller's 150ms deadline; it is still " +
+			"deriving its budget from context.Background()")
+	}
+}
+
 func TestLLMEngineExtractFromJSON(t *testing.T) {
 	claims := []llmClaim{
 		{Text: "Revenue grew 15% in Q3", Type: "fact", Confidence: 0.92},
@@ -41,7 +82,7 @@ func TestLLMEngineExtractFromJSON(t *testing.T) {
 		{ID: "ev_1", Content: "Revenue grew 15% in Q3. We will migrate to PostgreSQL. Users might prefer dark mode."},
 	}
 
-	gotClaims, gotEvidence, err := engine.Extract(events)
+	gotClaims, gotEvidence, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,7 +126,7 @@ func TestLLMEngineDeduplicates(t *testing.T) {
 	engine := newTestLLMEngine(client)
 
 	events := []domain.Event{{ID: "ev_1", Content: "Revenue grew 15%."}}
-	gotClaims, _, err := engine.Extract(events)
+	gotClaims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,7 +143,7 @@ func TestLLMEngineFallsBackOnError(t *testing.T) {
 		{ID: "ev_1", Content: "We will use React for the frontend"},
 	}
 
-	gotClaims, gotEvidence, err := engine.Extract(events)
+	gotClaims, gotEvidence, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("should not error on fallback: %v", err)
 	}
@@ -124,7 +165,7 @@ func TestLLMEngineFallsBackOnBadJSON(t *testing.T) {
 		{ID: "ev_1", Content: "We decided to use Go for the backend"},
 	}
 
-	gotClaims, _, err := engine.Extract(events)
+	gotClaims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("should not error on fallback: %v", err)
 	}
@@ -144,7 +185,7 @@ func TestLLMEngineStripsMarkdownFences(t *testing.T) {
 	engine := newTestLLMEngine(client)
 
 	events := []domain.Event{{ID: "ev_1", Content: "The server runs on port 8080."}}
-	gotClaims, _, err := engine.Extract(events)
+	gotClaims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,7 +205,7 @@ func TestLLMEngineContestedDetection(t *testing.T) {
 	engine := newTestLLMEngine(client)
 
 	events := []domain.Event{{ID: "ev_1", Content: "The database supports transactions. The database does not support transactions."}}
-	gotClaims, _, err := engine.Extract(events)
+	gotClaims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -194,7 +235,7 @@ func TestLLMEngineMultiEventMatching(t *testing.T) {
 		{ID: "ev_2", Content: "We chose PostgreSQL for the database"},
 	}
 
-	_, gotEvidence, err := engine.Extract(events)
+	_, gotEvidence, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -216,7 +257,7 @@ func TestLLMEngineEmptyResponse(t *testing.T) {
 	engine := newTestLLMEngine(client)
 
 	events := []domain.Event{{ID: "ev_1", Content: "Hello world"}}
-	gotClaims, gotEvidence, err := engine.Extract(events)
+	gotClaims, gotEvidence, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -239,10 +280,10 @@ func TestLLMEngineUsesPersistentCache(t *testing.T) {
 	t.Setenv("MNEMOS_LLM_MODEL", "gpt-4o-mini")
 
 	events := []domain.Event{{ID: "ev_1", Content: "Revenue grew 15% in Q3."}}
-	if _, _, err := engine.Extract(events); err != nil {
+	if _, _, err := engine.Extract(context.Background(), events); err != nil {
 		t.Fatalf("first extract error: %v", err)
 	}
-	if _, _, err := engine.Extract(events); err != nil {
+	if _, _, err := engine.Extract(context.Background(), events); err != nil {
 		t.Fatalf("second extract error: %v", err)
 	}
 	if client.calls != 1 {
@@ -267,7 +308,7 @@ func TestLLMEngineUsageSinkFires(t *testing.T) {
 	})
 
 	events := []domain.Event{{ID: "ev_1", Content: "Revenue grew 15%."}}
-	if _, _, _, err := engine.ExtractWithEntities(events); err != nil {
+	if _, _, _, err := engine.ExtractWithEntities(context.Background(), events); err != nil {
 		t.Fatalf("ExtractWithEntities: %v", err)
 	}
 
@@ -294,7 +335,7 @@ func TestLLMEngineUsageSinkSkippedOnFallback(t *testing.T) {
 	})
 
 	events := []domain.Event{{ID: "ev_1", Content: "We will use React for the frontend"}}
-	if _, _, _, err := engine.ExtractWithEntities(events); err != nil {
+	if _, _, _, err := engine.ExtractWithEntities(context.Background(), events); err != nil {
 		t.Fatalf("ExtractWithEntities: %v", err)
 	}
 
@@ -321,7 +362,7 @@ func TestLLMEngineSubjectClassFromLLM(t *testing.T) {
 	engine := newTestLLMEngine(client)
 
 	events := []domain.Event{{ID: "ev_1", Content: "Bella has diabetes. Golden Retrievers are predisposed to diabetes. Response times averaged 45ms. The database was upgraded. Latency dropped after the fix."}}
-	gotClaims, _, err := engine.Extract(events)
+	gotClaims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -369,7 +410,7 @@ func TestLLMEngineSubjectClassEntityFallback(t *testing.T) {
 	engine := newTestLLMEngine(client)
 
 	events := []domain.Event{{ID: "ev_1", Content: "Golden Retrievers get diabetes. Acme missed its target. The migration used PostgreSQL."}}
-	gotClaims, _, err := engine.Extract(events)
+	gotClaims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -409,7 +450,7 @@ func TestLLMEngineSubjectClassExplicitBeatsEntities(t *testing.T) {
 	engine := newTestLLMEngine(client)
 
 	events := []domain.Event{{ID: "ev_1", Content: "Rex the Golden Retriever has diabetes."}}
-	gotClaims, _, err := engine.Extract(events)
+	gotClaims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -429,7 +470,7 @@ func TestLLMEngineRuleFallbackSubjectClassUnknown(t *testing.T) {
 	engine := newTestLLMEngine(client)
 
 	events := []domain.Event{{ID: "ev_1", Content: "We will use React for the frontend"}}
-	gotClaims, _, err := engine.Extract(events)
+	gotClaims, _, err := engine.Extract(context.Background(), events)
 	if err != nil {
 		t.Fatalf("should not error on fallback: %v", err)
 	}

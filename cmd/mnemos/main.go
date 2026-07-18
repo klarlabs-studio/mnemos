@@ -881,7 +881,7 @@ func handleExtract(args []string, f Flags) {
 		if err != nil {
 			return err
 		}
-		claims, links, entities, err := ext.ExtractFn(events)
+		claims, links, entities, err := ext.ExtractFn(ctx, events)
 		if err != nil {
 			return NewSystemError(err, "extraction failed")
 		}
@@ -1033,7 +1033,7 @@ func handleProcess(args []string, f Flags) {
 		if f.LLM {
 			printProgress("llm extraction: sending content to %s", os.Getenv("MNEMOS_LLM_PROVIDER"))
 		}
-		claims, links, entities, err := ext.ExtractFn(events)
+		claims, links, entities, err := ext.ExtractFn(ctx, events)
 		if err != nil {
 			return NewSystemError(err, "claim extraction failed")
 		}
@@ -1915,7 +1915,9 @@ func runJob(kind string, scope map[string]string, verbose bool, fn func(context.
 	runner.MaxRetries = 1
 	runner.Verbose = verbose
 
-	jobErr := runner.Run(kind, scope, func(ctx context.Context, job *workflow.Job) error {
+	// CLI invocations have no caller deadline to inherit; jobTimeout() (10m by
+	// default, MNEMOS_JOB_TIMEOUT) is the bound.
+	jobErr := runner.Run(context.Background(), kind, scope, func(ctx context.Context, job *workflow.Job) error {
 		return fn(ctx, job, w)
 	})
 	return jobErr

@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,7 +100,7 @@ func testCaseToEvent(tc TestCase) domain.Event {
 
 func runTestCase(t *testing.T, tc TestCase, engine extract.Engine) {
 	event := testCaseToEvent(tc)
-	claims, _, err := engine.Extract([]domain.Event{event})
+	claims, _, err := engine.Extract(context.Background(), []domain.Event{event})
 	if err != nil {
 		t.Errorf("%s: extraction failed: %v", tc.ID, err)
 		return
@@ -349,7 +350,7 @@ func TestLLMExtraction(t *testing.T) {
 // since LLMs rephrase claims rather than extracting verbatim text.
 func runLLMTestCase(t *testing.T, tc TestCase, engine extract.LLMEngine) {
 	event := testCaseToEvent(tc)
-	claims, _, err := engine.Extract([]domain.Event{event})
+	claims, _, err := engine.Extract(context.Background(), []domain.Event{event})
 	if err != nil {
 		t.Errorf("%s: extraction failed: %v", tc.ID, err)
 		return
@@ -428,7 +429,7 @@ func TestPrecisionRecall(t *testing.T) {
 			}
 
 			event := testCaseToEvent(tc)
-			claims, _, err := engine.Extract([]domain.Event{event})
+			claims, _, err := engine.Extract(context.Background(), []domain.Event{event})
 			if err != nil {
 				continue
 			}

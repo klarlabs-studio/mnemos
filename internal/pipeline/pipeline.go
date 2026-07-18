@@ -32,7 +32,7 @@ import (
 // is the canonical bridge into axi-go capability evidence so the
 // kernel's MaxTokens budget can sum spend across a session.
 type Extractor struct {
-	ExtractFn func([]domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error)
+	ExtractFn func(context.Context, []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error)
 
 	lastUsage *extract.TokenUsage
 }
@@ -59,8 +59,8 @@ func NewExtractor(useLLM bool) (*Extractor, error) {
 		// Rule-based extraction doesn't tag entities — return nil for
 		// the entity map so the pipeline knows there's nothing to
 		// materialise.
-		return &Extractor{ExtractFn: func(events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error) {
-			c, l, err := engine.Extract(events)
+		return &Extractor{ExtractFn: func(ctx context.Context, events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error) {
+			c, l, err := engine.Extract(ctx, events)
 			return c, l, nil, err
 		}}, nil
 	}
@@ -105,9 +105,9 @@ func NewLLMExtractor(client llm.Client) *Extractor {
 		usage := u
 		ext.lastUsage = &usage
 	})
-	ext.ExtractFn = func(events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error) {
+	ext.ExtractFn = func(ctx context.Context, events []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]extract.ExtractedEntity, error) {
 		ext.lastUsage = nil
-		return engine.ExtractWithEntities(events)
+		return engine.ExtractWithEntities(ctx, events)
 	}
 	return ext
 }
