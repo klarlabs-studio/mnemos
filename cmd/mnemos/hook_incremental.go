@@ -252,28 +252,59 @@ func captureStrategy() string {
 	case captureOff:
 		return captureOff
 	}
-	if localInference() {
-		return captureIncremental
-	}
-	return captureAtEnd
+	return autoStrategy()
 }
 
-// localInference reports whether extraction runs against a model on this
-// machine, where throughput is the binding constraint. Detects the ollama
-// provider or a loopback base URL (openai-compat pointed at llama.cpp, LM
-// Studio, vLLM, and friends).
-func localInference() bool {
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")), "ollama") {
-		return true
+// autoStrategy guesses a strategy from the configured provider and model.
+//
+// The axis that matters is extraction LATENCY, not where the socket points. An
+// earlier version keyed on a loopback base URL, which gets the common cases
+// right and the interesting one wrong: a hosted model behind a local gateway
+// (Sonnet via a proxy on localhost) is a loopback URL with cloud speed, and
+// would have been billed per turn for no reason.
+//
+// So: decide on the provider where the provider settles it, fall back to the
+// model name where it does not, and prefer `end` when genuinely unsure —
+// guessing `end` wrongly degrades extraction on a slow model (visible, and
+// fixable by setting the strategy), while guessing `incremental` wrongly
+// spends real money per turn.
+func autoStrategy() string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER"))) {
+	case "ollama":
+		// Always inference on this machine.
+		return captureIncremental
+	case "anthropic", "openai", "gemini":
+		// Always hosted, regardless of any base-URL override.
+		return captureAtEnd
+	case "":
+		// No LLM: rule-based extraction is instant, so one pass at the end.
+		return captureAtEnd
 	}
-	base := strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_LLM_BASE_URL")))
-	if base == "" {
-		return false
+	// openai-compat is genuinely ambiguous — it fronts LM Studio, llama.cpp and
+	// vLLM as readily as it fronts a cloud gateway. The model name is the best
+	// remaining signal: open-weight names indicate local inference.
+	return strategyForModel(os.Getenv("MNEMOS_LLM_MODEL"))
+}
+
+// openWeightModels are name fragments of models that are run locally. Matching
+// on names is a heuristic and will age; it only ever selects between two
+// working modes, and capture.strategy overrides it outright.
+var openWeightModels = []string{
+	"llama", "qwen", "mistral", "mixtral", "gemma", "phi",
+	"deepseek", "codestral", "starcoder", "granite", "olmo", "smollm",
+}
+
+// strategyForModel infers from the model name, defaulting to `end` for
+// anything unrecognised.
+func strategyForModel(model string) string {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if m == "" {
+		return captureAtEnd
 	}
-	for _, host := range []string{"localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host.docker.internal"} {
-		if strings.Contains(base, host) {
-			return true
+	for _, frag := range openWeightModels {
+		if strings.Contains(m, frag) {
+			return captureIncremental
 		}
 	}
-	return false
+	return captureAtEnd
 }

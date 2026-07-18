@@ -150,17 +150,15 @@ func TestCaptureStrategyResolution(t *testing.T) {
 		{"explicit off", "off", "ollama", "", captureOff},
 		{"case insensitive", "  INCREMENTAL ", "anthropic", "", captureIncremental},
 
-		// auto: local inference is slow, so capture continuously.
+		// auto, settled by provider.
 		{"auto ollama", "", "ollama", "", captureIncremental},
-		{"auto localhost base url", "", "openai-compat", "http://localhost:1234/v1", captureIncremental},
-		{"auto 127.0.0.1", "", "openai-compat", "http://127.0.0.1:8080", captureIncremental},
-
-		// auto: hosted providers are fast; one request at the end is cheaper.
 		{"auto anthropic", "", "anthropic", "", captureAtEnd},
 		{"auto openai", "", "openai", "https://api.openai.com/v1", captureAtEnd},
-
-		// No provider at all: rule-based extraction is instant, so end is fine.
 		{"auto no provider", "", "", "", captureAtEnd},
+
+		// A hosted provider stays hosted even behind a local gateway. Keying on
+		// a loopback URL got this wrong and would bill an API call per turn.
+		{"anthropic via localhost proxy", "", "anthropic", "http://localhost:4000", captureAtEnd},
 
 		// Unrecognised values must not silently disable capture.
 		{"garbage falls back to auto", "sometimes", "ollama", "", captureIncremental},
@@ -238,5 +236,33 @@ func TestIncrementalHookNoOpsWhenStrategyIsEnd(t *testing.T) {
 
 	if off := loadCaptureOffset("s1"); off != 0 {
 		t.Errorf("incremental capture ran under strategy=end (offset advanced to %d)", off)
+	}
+}
+
+// openai-compat fronts local runtimes (LM Studio, llama.cpp, vLLM) and cloud
+// gateways alike, so the provider cannot settle it and the model name decides.
+// Unsure means `end`: degrading extraction is visible and fixable, whereas
+// capturing per turn against a hosted model silently costs money.
+func TestAutoStrategyForAmbiguousProvider(t *testing.T) {
+	cases := map[string]string{
+		"qwen2.5:14b":              captureIncremental,
+		"llama3.2:latest":          captureIncremental,
+		"mistral-small":            captureIncremental,
+		"gemma3:12b":               captureIncremental,
+		"claude-sonnet-4-20250514": captureAtEnd,
+		"gpt-4o-mini":              captureAtEnd,
+		"some-new-hosted-model":    captureAtEnd,
+		"":                         captureAtEnd,
+	}
+	for model, want := range cases {
+		t.Run(model, func(t *testing.T) {
+			t.Setenv("MNEMOS_CAPTURE_STRATEGY", "")
+			t.Setenv("MNEMOS_LLM_PROVIDER", "openai-compat")
+			t.Setenv("MNEMOS_LLM_BASE_URL", "http://localhost:1234/v1")
+			t.Setenv("MNEMOS_LLM_MODEL", model)
+			if got := captureStrategy(); got != want {
+				t.Errorf("model %q -> %q, want %q", model, got, want)
+			}
+		})
 	}
 }

@@ -105,7 +105,7 @@ query:
 capture:
   # How the session gets recorded into the brain.
   #
-  #   auto        (default) incremental for local inference, end for hosted
+  #   auto        (default) inferred from provider, then model name
   #   incremental capture during the session: Stop after each response and
   #               PreCompact before context is summarised away, each ingesting
   #               only what is new. SessionEnd sweeps the remainder. Work is
@@ -113,17 +113,24 @@ capture:
   #   end         one capture at SessionEnd (the original behavior)
   #   off         no capture hooks at all
   #
-  # Pick by provider — the trade-off is real in both directions:
+  # What matters is extraction LATENCY, not where the endpoint lives:
   #
-  #   ollama / llama.cpp / LM Studio (local)   -> incremental
+  #   slow (open-weight models on your own hardware) -> incremental
   #     A whole 20KiB transcript in one extraction request is ~23 minutes on
   #     qwen2.5:14b, so it never completes and silently degrades to rule-based.
   #     Per-turn chunks (median ~136 chars) extract in seconds.
   #
-  #   claude-haiku / gpt-4o-mini / gemini-flash (hosted) -> end
+  #   fast (claude-haiku, gpt-4o-mini, gemini-flash) -> end
   #     Fast enough for one request per session. Incremental would instead mean
   #     one API call per turn, each re-sending the ~5KB extraction prompt —
   #     materially more spend for no benefit.
+  #
+  # `auto` decides from the provider (ollama -> incremental; anthropic/openai/
+  # gemini -> end, even behind a local gateway), and for openai-compat — which
+  # fronts LM Studio and cloud proxies alike — from the model name. Unsure
+  # means `end`, because a wrong `end` degrades extraction visibly while a
+  # wrong `incremental` quietly spends money. Set it explicitly if you run an
+  # open-weight model under a name `auto` will not recognise.
   #
   # Changing this takes effect immediately for hooks that are already
   # installed, but re-run `mnemos init` to add or remove the per-turn hooks.
