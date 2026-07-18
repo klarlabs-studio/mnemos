@@ -8,6 +8,35 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.100.0] — 2026-07-18
+
+### Added
+
+- **Observability bundle — shipped Grafana dashboard, alert rules, and scrape config
+  (ADR 0022).** ADR 0020/0021 made `mnemos serve` *emit* metrics and structured logs; this
+  ships the **consumer side** so on-call can collect and see them without building
+  dashboards from scratch (closing ADR 0020's "starter Grafana dashboard" follow-up). New
+  canonical, importable bundle at `deploy/observability/`:
+  - **`grafana-dashboard.json`** — the "mnemos — brain" dashboard: volume, trust, the
+    cognitive vitals (with the ADR-0019 warn/crit threshold lines), the single
+    `mnemos_brain_health_status` SLI, integrity pathologies, HTTP RED, and sampler
+    self-health. Templated Prometheus datasource — import and pick your datasource.
+  - **`alerts.yml`** — Prometheus alerting rules whose thresholds are **copied from the
+    `BrainHealth` grader** (ADR 0019), so a firing alert means the same thing as the CLI
+    verdict and the gauge. Grouped into availability, brain-health, cognitive-vitals, and
+    API-SLO (`MnemosBrainHealthUnhealthy`, `MnemosDanglingAssociations`, `MnemosDown`,
+    `MnemosMetricsSampleStale`, 5xx-rate, p99-latency, …).
+  - **`prometheus.yml`** — a minimal `mnemos` scrape job wiring in `alerts.yml`, with the
+    `/internal/metrics` **auth caveat** documented inline (bearer token by default, or
+    `serve --metrics-public` on a trusted network).
+  - **`README.md`** — how to import each piece, the scrape auth postures, and how to ship
+    the ADR-0021 logs to Loki.
+  - A **drift-guard test** (`observability_bundle_test.go`) parses the shipped assets and
+    asserts every `mnemos_*` metric they reference is actually emitted on `mnemosRegistry`
+    — a renamed/dropped metric breaks the build instead of rotting the dashboard.
+  - The `mnemos init --service` README now points at the bundle (single source of truth —
+    the dashboard JSON is not duplicated into the scaffold).
+
 ## [0.99.0] — 2026-07-17
 
 ### Added

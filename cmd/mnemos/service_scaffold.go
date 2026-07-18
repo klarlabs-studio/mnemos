@@ -217,6 +217,23 @@ to start until it is non-empty.
 - A gRPC endpoint is also served (enable/configure it via ` + "`mnemos serve --grpc-port`" + `);
   see the project docs for the service definitions.
 
+## Observability (Prometheus + Grafana)
+
+` + "`mnemos serve`" + ` emits product + cognitive metrics (ADR 0020) and structured JSON
+logs (ADR 0021). A ready-to-import bundle — a Grafana dashboard, Prometheus
+alert rules with thresholds matched to the brain-health verdict, and a scrape
+config — ships in the repo at ` + "`deploy/observability/`" + ` (ADR 0022). Point your
+existing Prometheus/Grafana at this deployment:
+
+- **Scrape** ` + "`/internal/metrics`" + `. It is **authenticated by default** and is not
+  covered by ` + "`--public-reads`" + `, so either give Prometheus a bearer token
+  (` + "`mnemos token issue --user prometheus --tenant <id>`" + ` → a ` + "`0600`" + ` file
+  referenced via ` + "`authorization: credentials_file:`" + `) or run
+  ` + "`serve --metrics-public`" + ` on a trusted internal network and scrape anonymously.
+- **Import** ` + "`deploy/observability/grafana-dashboard.json`" + ` into Grafana and load
+  ` + "`deploy/observability/alerts.yml`" + ` into Prometheus. See that folder's README
+  for the step-by-step, including shipping the logs to Loki.
+
 ## Authentication (multi-tenant)
 
 Every request — reads and writes — must carry a JWT signed with

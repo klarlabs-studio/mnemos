@@ -72,6 +72,9 @@ func TestServiceScaffoldContent(t *testing.T) {
 			// Both the required-secret preflight and the single-tenant escape.
 			"cannot issue usable tokens",
 			"Single-tenant",
+			// The ADR-0022 observability pointer.
+			"deploy/observability/",
+			"grafana-dashboard.json",
 		}},
 	}
 	for _, tc := range cases {

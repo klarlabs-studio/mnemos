@@ -1,0 +1,393 @@
+{
+  "__doc__": "mnemos brain dashboard (ADR 0022). Import into Grafana; pick your Prometheus datasource when prompted. Metric names are the product vocabulary emitted by `mnemos serve` /internal/metrics.",
+  "title": "mnemos — brain",
+  "uid": "mnemos-brain",
+  "tags": ["mnemos", "brain", "observability"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Overview",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1
+    },
+    {
+      "type": "stat",
+      "title": "Brain health",
+      "id": 2,
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_brain_health_status", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Healthy", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "Degraded", "color": "yellow" } } },
+            { "type": "value", "options": { "2": { "text": "Unhealthy", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Beliefs",
+      "id": 3,
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_beliefs_total", "refId": "A" }],
+      "options": { "graphMode": "area", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Episodes",
+      "id": 4,
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_episodes_total", "refId": "A" }],
+      "options": { "graphMode": "area", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Associations",
+      "id": 5,
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_associations_total", "refId": "A" }],
+      "options": { "graphMode": "area", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Contradictions",
+      "id": 6,
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_contradictions_total", "refId": "A" }],
+      "options": { "graphMode": "area", "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Embeddings",
+      "id": 7,
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_embeddings_total", "refId": "A" }],
+      "options": { "graphMode": "area", "colorMode": "value" }
+    },
+    {
+      "type": "row",
+      "title": "Trust",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "id": 10
+    },
+    {
+      "type": "gauge",
+      "title": "Mean belief trust",
+      "id": 11,
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_belief_trust_avg", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.4 },
+              { "color": "green", "value": 0.7 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Low-trust beliefs (< 0.5)",
+      "id": 12,
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_low_trust_beliefs", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Contested beliefs",
+      "id": 13,
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_contested_beliefs", "refId": "A" }]
+    },
+    {
+      "type": "row",
+      "title": "Cognitive vitals (ADR 0019)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "id": 20
+    },
+    {
+      "type": "timeseries",
+      "title": "Free energy (warn 0.40 / crit 0.70)",
+      "id": 21,
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_free_energy", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.4 },
+              { "color": "red", "value": 0.7 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Calibration ECE (warn 0.15 / crit 0.30)",
+      "id": 22,
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_calibration_ece", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.15 },
+              { "color": "red", "value": 0.3 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Dissonance rate (warn 0.05 / crit 0.15)",
+      "id": 23,
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_dissonance_rate", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red", "value": 0.15 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Staleness rate (warn 0.40 / crit 0.70)",
+      "id": 24,
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_staleness_rate", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.4 },
+              { "color": "red", "value": 0.7 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Integrity pathologies",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "id": 30
+    },
+    {
+      "type": "stat",
+      "title": "Orphan beliefs",
+      "id": 31,
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_orphan_beliefs", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none" }
+    },
+    {
+      "type": "stat",
+      "title": "Dangling associations",
+      "id": 32,
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_dangling_associations", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none" }
+    },
+    {
+      "type": "stat",
+      "title": "Stale expectations",
+      "id": 33,
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_stale_expectations", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 25 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none" }
+    },
+    {
+      "type": "row",
+      "title": "HTTP API (RED)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "id": 40
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by route",
+      "id": 41,
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 27 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum by (route) (rate(mnemos_http_requests_total[5m]))", "legendFormat": "{{route}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx error ratio",
+      "id": 42,
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 27 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(rate(mnemos_http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(mnemos_http_requests_total[5m])), 1)", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p50 / p99",
+      "id": 43,
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 27 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(mnemos_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(mnemos_http_request_duration_seconds_bucket[5m])))", "legendFormat": "p99", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "row",
+      "title": "Sampler self-health",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+      "id": 50
+    },
+    {
+      "type": "timeseries",
+      "title": "In-flight requests",
+      "id": 51,
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 35 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_http_in_flight_requests", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Metrics sample duration",
+      "id": 52,
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 35 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "mnemos_metrics_sample_duration_seconds", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sampling errors (rate)",
+      "id": 53,
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 35 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "rate(mnemos_metrics_sample_errors_total[15m])", "refId": "A" }]
+    }
+  ]
+}
