@@ -17,7 +17,7 @@ PROTO_GEN := proto/gen
 # never used. The same version is recorded as a `tool` dependency in go.mod.
 SQLC_VERSION := v1.30.0
 
-.PHONY: fmt lint test test-integration build check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query
+.PHONY: fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query
 
 fmt:
 	$(GO) fmt ./...
@@ -57,7 +57,23 @@ proto:
 		$(shell find $(PROTO_DIR) -name '*.proto')
 	$(GO) fmt ./$(PROTO_GEN)/...
 
-check: fmt lint test build
+# cross compiles every target the release builds. CI runs linux only
+# (cross-platform: false in ci.yml), so a platform-specific mistake — a
+# syscall field that exists on Unix but not Windows, say — otherwise gets
+# discovered by GoReleaser after the tag is already pushed.
+cross:
+	@fail=0; \
+	for t in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do \
+		goos=$${t%/*}; goarch=$${t#*/}; \
+		if GOOS=$$goos GOARCH=$$goarch go build ./... 2>/tmp/cross-$$goos-$$goarch.err; then \
+			echo "  ok    $$t"; \
+		else \
+			echo "  FAIL  $$t"; sed 's/^/        /' /tmp/cross-$$goos-$$goarch.err | head -5; fail=1; \
+		fi; \
+	done; \
+	exit $$fail
+
+check: fmt lint test build cross
 
 # nox-scan runs the security baseline scan and exits non-zero when any
 # new finding is detected (anything not present in findings.json).
