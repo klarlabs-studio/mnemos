@@ -213,7 +213,25 @@ func TestBuildInitPlanUserScopeDefaults(t *testing.T) {
 	if !plan.registerMCP {
 		t.Error("registerMCP should default true")
 	}
-	if len(plan.specs) != 3 {
-		t.Errorf("expected 3 hook specs, got %d", len(plan.specs))
+	// recall + brief + capture, plus incremental capture on Stop and PreCompact
+	// (which keeps SessionEnd cheap by capturing during the session).
+	wantEvents := map[string]string{
+		"UserPromptSubmit": "recall",
+		"SessionStart":     "brief",
+		"SessionEnd":       "capture",
+		"Stop":             "capture-incremental",
+		"PreCompact":       "capture-incremental",
+	}
+	gotEvents := map[string]string{}
+	for _, s := range plan.specs {
+		gotEvents[s.Event] = s.Sub
+	}
+	for event, sub := range wantEvents {
+		if gotEvents[event] != sub {
+			t.Errorf("hook on %s = %q, want %q", event, gotEvents[event], sub)
+		}
+	}
+	if len(plan.specs) != len(wantEvents) {
+		t.Errorf("expected %d hook specs, got %d: %v", len(wantEvents), len(plan.specs), gotEvents)
 	}
 }

@@ -62,7 +62,16 @@ func handleHook(args []string) {
 		}
 	}
 
-	ev := readHookEvent(os.Stdin)
+	// Incremental capture re-execs itself as a detached worker, so the raw
+	// payload is kept to hand to the child on stdin.
+	ev, raw := readHookEventRaw(os.Stdin)
+	isWorker := false
+	for _, a := range args {
+		if a == "--worker" {
+			isWorker = true
+			break
+		}
+	}
 
 	switch name {
 	case "recall", "prompt-submitted":
@@ -71,6 +80,8 @@ func handleHook(args []string) {
 		hookBrief(ev)
 	case "capture", "session-end":
 		hookCapture(ev)
+	case "capture-incremental", "stop", "pre-compact":
+		hookCaptureIncremental(ev, isWorker, raw)
 	default:
 		// Unknown hook name: nothing to do, but don't fail the session.
 	}
@@ -80,13 +91,20 @@ func handleHook(args []string) {
 // readHookEvent decodes the hook payload, tolerating an empty or malformed
 // stdin (returns a zero event).
 func readHookEvent(r io.Reader) hookEvent {
+	ev, _ := readHookEventRaw(r)
+	return ev
+}
+
+// readHookEventRaw also returns the undecoded payload, which the incremental
+// capture hook forwards verbatim to its detached worker.
+func readHookEventRaw(r io.Reader) (hookEvent, []byte) {
 	var ev hookEvent
 	data, err := io.ReadAll(io.LimitReader(r, 1<<20))
 	if err != nil || len(data) == 0 {
-		return ev
+		return ev, nil
 	}
 	_ = json.Unmarshal(data, &ev)
-	return ev
+	return ev, data
 }
 
 // emitContext writes the additionalContext injection payload. Empty context
@@ -495,10 +513,17 @@ func hookCapture(ev hookEvent) {
 	if strings.TrimSpace(ev.TranscriptPath) == "" {
 		return
 	}
-	text := extractTranscriptText(ev.TranscriptPath, 20*1024)
-	if strings.TrimSpace(text) == "" {
-		return
-	}
+	// Sweep whatever the incremental Stop/PreCompact captures did not already
+	// take. When they kept up there is nothing left and this is a no-op, which
+	// is what keeps a session's end fast; when they failed or never ran, this
+	// captures the whole transcript exactly as it always did.
+	captureRange(ev, 20*1024)
+}
+
+// captureText runs one chunk of session text through the standard
+// ingest→extract→relate pipeline. Reports whether it was persisted, so the
+// incremental caller only advances its offset on success.
+func captureText(ev hookEvent, text string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), captureBudget())
 	defer cancel()
 
@@ -509,19 +534,21 @@ func hookCapture(ev hookEvent) {
 		// from ITS config (the hook machine can't know the hosted providers): omit
 		// the flags (nil).
 		pctx := client.WithTenant(ctx, hostedWorkspaceTenant(ev.Cwd))
-		_, _ = hostedClient(90*time.Second).Process(pctx, client.ProcessRequest{Text: text})
-		return
+		_, err := hostedClient(90*time.Second).Process(pctx, client.ProcessRequest{Text: text})
+		return err == nil
 	}
 
 	// Local brain: auto-enable LLM/embeddings when a provider is configured on
 	// this machine; the pipeline degrades to rule-based extraction otherwise.
 	useLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
+	ok := false
 	write := func() {
-		_, _ = mcpRunProcessText(ctx, "claude-code", mcpProcessTextInput{
+		_, err := mcpRunProcessText(ctx, "claude-code", mcpProcessTextInput{
 			Text:          text,
 			UseLLM:        useLLM,
 			UseEmbeddings: useLLM,
 		})
+		ok = err == nil
 	}
 	// Repo-first routing: a session inside an opted-in repo captures to the repo
 	// brain (keeping repo-specific knowledge local); otherwise the global brain.
@@ -546,9 +573,10 @@ func hookCapture(ev hookEvent) {
 			floatBackOnCapture(fbCtx, dsn)
 			fbCancel()
 		}
-		return
+		return ok
 	}
 	write()
+	return ok
 }
 
 // transcriptLine is the lenient shape we read from each JSONL transcript row.
@@ -574,8 +602,16 @@ func extractTranscriptText(path string, maxBytes int) string {
 	if err != nil {
 		return ""
 	}
+	return transcriptTextFromLines(string(data), maxBytes)
+}
+
+// transcriptTextFromLines pulls user prompts and assistant text out of raw
+// JSONL transcript lines, stopping once maxBytes is reached. Shared by the
+// whole-file and incremental (offset-based) readers so both see identical
+// content rules.
+func transcriptTextFromLines(data string, maxBytes int) string {
 	var b strings.Builder
-	for raw := range strings.SplitSeq(string(data), "\n") {
+	for raw := range strings.SplitSeq(data, "\n") {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			continue

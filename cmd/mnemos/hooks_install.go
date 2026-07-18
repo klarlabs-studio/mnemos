@@ -45,6 +45,10 @@ const (
 	recallHookTimeout  = 15  // hookRecall budgets 12s
 	briefHookTimeout   = 25  // hookBrief budgets 10s + 8s doc sync-back
 	captureHookTimeout = 300 // hookCapture budgets captureBudget (240s) + 20s float-back
+	// Stop/PreCompact only fork a detached worker and exit, so this bounds a
+	// spawn rather than extraction. It fires after every assistant response,
+	// so it must never be something the user can feel.
+	incrementalHookTimeout = 5
 )
 
 // hookSpecsFor returns the hook specs for the selected behaviors.
@@ -59,6 +63,13 @@ func hookSpecsFor(behaviors map[string]bool) []hookSpec {
 	}
 	if behaviors["capture"] {
 		specs = append(specs, hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeout})
+		// Incremental capture: Stop after each response, PreCompact before
+		// context is summarised away. Both only spawn a detached worker and
+		// return, so their timeout covers a fork, not extraction.
+		specs = append(specs,
+			hookSpec{Event: "Stop", Sub: "capture-incremental", Timeout: incrementalHookTimeout},
+			hookSpec{Event: "PreCompact", Sub: "capture-incremental", Timeout: incrementalHookTimeout},
+		)
 	}
 	return specs
 }
@@ -68,6 +79,7 @@ func hookSpecsFor(behaviors map[string]bool) []hookSpec {
 func isMnemosHookCommand(cmd string) bool {
 	for _, sub := range []string{
 		"hook recall", "hook brief", "hook capture",
+		"hook capture-incremental", "hook stop", "hook pre-compact",
 		"hook prompt-submitted", "hook session-start", "hook session-end",
 	} {
 		if strings.Contains(cmd, sub) {
