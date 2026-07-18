@@ -134,6 +134,30 @@ type Config struct {
 		Timeout scalar `yaml:"timeout"`
 	} `yaml:"job"`
 
+	// Query enables the optional retrieval behaviors that otherwise need a
+	// per-invocation flag (`query --prime`, `--salient`, ...). All default off.
+	//
+	// Hebbian, Reconsolidate and Inhibit WRITE during a read: enabling them
+	// here makes every query mutate the store. That is the same exposure as
+	// exporting the corresponding MNEMOS_* var in a shell profile, but stated
+	// in a file that can be reviewed, so it is the better place for a standing
+	// choice. Leave them unset to keep reads read-only.
+	Query struct {
+		// SpreadingActivation primes strongly-associated beliefs (ADR 0013 §2).
+		// Read-only ranking.
+		SpreadingActivation scalar `yaml:"spreading_activation"`
+		// Salience blends a bounded stakes term into ranking (ADR 0013 §4).
+		// Read-only ranking.
+		Salience scalar `yaml:"salience"`
+		// Hebbian strengthens edges among co-retrieved beliefs (ADR 0015 §4). WRITES.
+		Hebbian scalar `yaml:"hebbian"`
+		// Reconsolidate re-marks recalled beliefs verified-now (ADR 0015 §5). WRITES.
+		Reconsolidate scalar `yaml:"reconsolidate"`
+		// Inhibit suppresses retrievability of a beaten contradiction loser
+		// (ADR 0016), never its trust. WRITES.
+		Inhibit scalar `yaml:"inhibit"`
+	} `yaml:"query"`
+
 	// Capture tunes the SessionEnd capture hook. Timeout bounds the whole
 	// ingest→extract→relate pipeline for one session (default 4m, sized for a
 	// slow local model). It is a ceiling, not a reservation: a fast provider
@@ -239,6 +263,12 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_FEEDBACK_DECAY", c.Feedback.Decay},
 
 		{"MNEMOS_JOB_TIMEOUT", c.Job.Timeout},
+
+		{"MNEMOS_SPREADING_ACTIVATION", c.Query.SpreadingActivation},
+		{"MNEMOS_SALIENCE", c.Query.Salience},
+		{"MNEMOS_HEBBIAN", c.Query.Hebbian},
+		{"MNEMOS_RECONSOLIDATE", c.Query.Reconsolidate},
+		{"MNEMOS_INHIBIT", c.Query.Inhibit},
 
 		{"MNEMOS_CAPTURE_TIMEOUT", c.Capture.Timeout},
 

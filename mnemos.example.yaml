@@ -86,6 +86,19 @@ feedback:
 job:
   timeout:             # MNEMOS_JOB_TIMEOUT (Go duration, default 10m)
 
+query:
+  # Optional retrieval behaviors, all off by default. Each also has a
+  # per-invocation flag (`query --prime`, `--salient`, ...); set here to make
+  # the choice standing.
+  spreading_activation: # MNEMOS_SPREADING_ACTIVATION (bool) prime associated beliefs (ADR 0013 §2)
+  salience:             # MNEMOS_SALIENCE (bool) blend a stakes term into ranking (ADR 0013 §4)
+  # ⚠ The three below WRITE during a read: enabling them means every query
+  # mutates the store. Same exposure as exporting the env var permanently, but
+  # visible here. Leave unset to keep reads read-only.
+  hebbian:              # MNEMOS_HEBBIAN (bool) strengthen co-retrieved edges (ADR 0015 §4)
+  reconsolidate:        # MNEMOS_RECONSOLIDATE (bool) mark recalled beliefs verified-now (ADR 0015 §5)
+  inhibit:              # MNEMOS_INHIBIT (bool) suppress a beaten contradiction loser (ADR 0016)
+
 capture:
   # Bounds the whole SessionEnd capture (ingest→extract→relate) for one
   # session. A ceiling, not a reservation: a fast provider returns as soon as
