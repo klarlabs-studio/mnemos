@@ -572,9 +572,9 @@ func handleQuery(args []string, f Flags) {
 			}
 		}
 		if runID != "" {
-			answer, queryErr = engine.AnswerForRunWithOptions(question, runID, opts)
+			answer, queryErr = engine.AnswerForRunWithOptions(ctx, question, runID, opts)
 		} else {
-			answer, queryErr = engine.AnswerWithOptions(question, opts)
+			answer, queryErr = engine.AnswerWithOptions(ctx, question, opts)
 		}
 		if queryErr != nil {
 			return NewSystemError(queryErr, "query engine failed")

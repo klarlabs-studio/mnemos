@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestCorrectiveGate_RelaxesMinTrustOnInsufficient(t *testing.T) {
 	engine := NewEngine(events, claims, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}}).
 		WithEmbeddings(repo, fakeEmbedClient{})
 
-	ans, err := engine.AnswerWithOptions("what caused the error spike?", AnswerOptions{MinTrust: 0.5})
+	ans, err := engine.AnswerWithOptions(context.Background(), "what caused the error spike?", AnswerOptions{MinTrust: 0.5})
 	if err != nil {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
@@ -59,7 +60,7 @@ func TestCorrectiveGate_NoRetryWhenNothingToRecover(t *testing.T) {
 	// unset → nothing to relax → the gate must not fire a second pass.
 	engine := NewEngine(events, fakeClaimRepo{}, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}})
 
-	if _, err := engine.Answer("anything?"); err != nil {
+	if _, err := engine.Answer(context.Background(), "anything?"); err != nil {
 		t.Fatalf("Answer: %v", err)
 	}
 	if listAllCalls != 1 {

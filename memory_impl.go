@@ -533,9 +533,9 @@ func (m *memory) recall(ctx context.Context, q Query) ([]Result, domain.Answer, 
 	var ans domain.Answer
 	var err error
 	if q.RunID != "" {
-		ans, err = m.query.AnswerForRunWithOptions(q.Text, q.RunID, opts)
+		ans, err = m.query.AnswerForRunWithOptions(ctx, q.Text, q.RunID, opts)
 	} else {
-		ans, err = m.query.AnswerWithOptions(q.Text, opts)
+		ans, err = m.query.AnswerWithOptions(ctx, q.Text, opts)
 	}
 	if err != nil {
 		return nil, domain.Answer{}, fmt.Errorf("mnemos: answer: %w", err)

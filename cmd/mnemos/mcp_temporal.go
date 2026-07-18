@@ -200,9 +200,9 @@ func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (mcpQue
 
 	var answer domain.Answer
 	if runID := strings.TrimSpace(input.RunID); runID != "" {
-		answer, err = engine.AnswerForRunWithOptions(q, runID, opts)
+		answer, err = engine.AnswerForRunWithOptions(ctx, q, runID, opts)
 	} else {
-		answer, err = engine.AnswerWithOptions(q, opts)
+		answer, err = engine.AnswerWithOptions(ctx, q, opts)
 	}
 	if err != nil {
 		return mcpQueryOutput{}, err

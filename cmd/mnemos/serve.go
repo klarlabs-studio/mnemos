@@ -2299,9 +2299,9 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 		var answer domain.Answer
 		var err error
 		if req.RunID != "" {
-			answer, err = engine.AnswerForRunWithOptions(req.Query, req.RunID, opts)
+			answer, err = engine.AnswerForRunWithOptions(r.Context(), req.Query, req.RunID, opts)
 		} else {
-			answer, err = engine.AnswerWithOptions(req.Query, opts)
+			answer, err = engine.AnswerWithOptions(r.Context(), req.Query, opts)
 		}
 		if err != nil {
 			writeInternalError(w, "search", err)

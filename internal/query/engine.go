@@ -218,8 +218,8 @@ type AnswerOptions struct {
 }
 
 // Answer searches all stored events for the best answer to the given question.
-func (e Engine) Answer(question string) (domain.Answer, error) {
-	return e.AnswerWithOptions(question, AnswerOptions{})
+func (e Engine) Answer(ctx context.Context, question string) (domain.Answer, error) {
+	return e.AnswerWithOptions(ctx, question, AnswerOptions{})
 }
 
 // AnswerWithOptions is the configurable form of Answer. The plain Answer
@@ -236,8 +236,13 @@ func (e Engine) Answer(question string) (domain.Answer, error) {
 // never returns an answer worse than the one it started with. Semantic filters
 // (Scope, Lifecycle, Visibility, AsOf) are NEVER relaxed — loosening them would
 // return results the caller explicitly excluded.
-func (e Engine) AnswerWithOptions(question string, opts AnswerOptions) (domain.Answer, error) {
-	ctx := context.Background()
+func (e Engine) AnswerWithOptions(ctx context.Context, question string, opts AnswerOptions) (domain.Answer, error) {
+	// Derive nothing here: the caller's deadline is the budget. This used to
+	// start from context.Background(), so a caller on a short deadline — the
+	// recall hook budgets 12s and runs before every prompt — had no way to
+	// bound the work, and a whole-corpus corrective scan ran for as long as it
+	// liked. Third instance of that pattern in this codebase, after extraction
+	// and the job runner.
 	ans, err := e.resolveAnswer(ctx, question, opts)
 	if err != nil {
 		return domain.Answer{}, err
@@ -276,6 +281,15 @@ func (e Engine) resolveAnswer(ctx context.Context, question string, opts AnswerO
 	// it was set). If neither applies, the retry can't recover anything, so skip.
 	relaxed, relaxedFilters := relaxRecall(opts)
 	if !usedFastPath && !relaxedFilters {
+		return ans, nil
+	}
+	// The corrective pass rescans the whole corpus, which costs time
+	// proportional to the brain's size — ~20s at 3000 claims. Callers on a
+	// short deadline (the recall hook budgets 12s and runs before every prompt)
+	// would spend their entire budget on it and get killed mid-scan, returning
+	// nothing at all. A slightly weaker answer now beats a better answer the
+	// caller never receives, so only start the scan if there is room to finish.
+	if !hasBudgetForCorrectiveScan(ctx) {
 		return ans, nil
 	}
 	corrected, cerr := e.answerCorpusWide(ctx, question, relaxed)
@@ -417,6 +431,24 @@ func (e Engine) answerCorpusWide(ctx context.Context, question string, opts Answ
 	return e.answerWithEvents(ctx, question, allEvents, opts, false)
 }
 
+// correctiveScanReserve is the time the whole-corpus corrective pass is
+// assumed to need. It is a floor, not a measurement: the real cost scales with
+// corpus size, and the point is only to avoid starting a scan that clearly
+// cannot finish. Callers with no deadline are unaffected.
+const correctiveScanReserve = 5 * time.Second
+
+// hasBudgetForCorrectiveScan reports whether ctx has room left for the
+// whole-corpus rescan. A context without a deadline always qualifies — CLI and
+// server callers keep the corrective pass; only deadline-bound callers like
+// the hooks skip it when short.
+func hasBudgetForCorrectiveScan(ctx context.Context) bool {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return true
+	}
+	return time.Until(deadline) >= correctiveScanReserve
+}
+
 // recallSufficiencyFloor is the Answer.Confidence below which the first recall
 // pass is graded "insufficient" and the corrective gate fires. computeConfidence
 // tops out around 0.7, so a genuinely grounded answer clears this comfortably
@@ -552,13 +584,12 @@ func fuseRRF(rankings [][]string) []string {
 }
 
 // AnswerForRun searches events belonging to the specified run for the best answer.
-func (e Engine) AnswerForRun(question, runID string) (domain.Answer, error) {
-	return e.AnswerForRunWithOptions(question, runID, AnswerOptions{})
+func (e Engine) AnswerForRun(ctx context.Context, question, runID string) (domain.Answer, error) {
+	return e.AnswerForRunWithOptions(ctx, question, runID, AnswerOptions{})
 }
 
 // AnswerForRunWithOptions is the configurable form of AnswerForRun.
-func (e Engine) AnswerForRunWithOptions(question, runID string, opts AnswerOptions) (domain.Answer, error) {
-	ctx := context.Background()
+func (e Engine) AnswerForRunWithOptions(ctx context.Context, question, runID string, opts AnswerOptions) (domain.Answer, error) {
 	if strings.TrimSpace(runID) == "" {
 		return domain.Answer{}, fmt.Errorf("run id is required")
 	}

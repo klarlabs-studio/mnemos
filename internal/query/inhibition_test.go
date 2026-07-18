@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -40,7 +41,7 @@ func TestInhibition_SuppressesLoserOnAgentResolution(t *testing.T) {
 	engine := NewEngine(events, claimRepo, relRepo)
 
 	// Off: no suppression.
-	if _, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{Consumer: domain.ConsumerAgent}); err != nil {
+	if _, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{Consumer: domain.ConsumerAgent}); err != nil {
 		t.Fatalf("answer: %v", err)
 	}
 	if len(writes) != 0 {
@@ -48,7 +49,7 @@ func TestInhibition_SuppressesLoserOnAgentResolution(t *testing.T) {
 	}
 
 	// On: the beaten loser is suppressed; the winner is not.
-	if _, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{Consumer: domain.ConsumerAgent, Inhibit: true}); err != nil {
+	if _, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{Consumer: domain.ConsumerAgent, Inhibit: true}); err != nil {
 		t.Fatalf("answer: %v", err)
 	}
 	comps, ok := writes["cl_low"]
@@ -77,7 +78,7 @@ func TestInhibition_ProtectsPromotedLoser(t *testing.T) {
 	claimRepo.creditWrites = &writes
 	engine := NewEngine(events, claimRepo, relRepo)
 
-	if _, err := engine.AnswerWithOptions("deployment strategy", AnswerOptions{Consumer: domain.ConsumerAgent, Inhibit: true}); err != nil {
+	if _, err := engine.AnswerWithOptions(context.Background(), "deployment strategy", AnswerOptions{Consumer: domain.ConsumerAgent, Inhibit: true}); err != nil {
 		t.Fatalf("answer: %v", err)
 	}
 	if _, w := writes["cl_low"]; w {

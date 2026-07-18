@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -27,7 +28,7 @@ func TestAnswer_TemporalFilter_DefaultsToCurrentlyValid(t *testing.T) {
 	}
 	engine := NewEngine(events, fakeClaimRepo{claims: claims}, fakeRelationshipRepo{})
 
-	got, err := engine.AnswerWithOptions("Felix engineer role", AnswerOptions{AsOf: now})
+	got, err := engine.AnswerWithOptions(context.Background(), "Felix engineer role", AnswerOptions{AsOf: now})
 	if err != nil {
 		t.Fatalf("answer: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestAnswer_IncludeHistory_ReturnsSuperseded(t *testing.T) {
 	}
 	engine := NewEngine(events, fakeClaimRepo{claims: claims}, fakeRelationshipRepo{})
 
-	got, err := engine.AnswerWithOptions("Felix", AnswerOptions{AsOf: now, IncludeHistory: true})
+	got, err := engine.AnswerWithOptions(context.Background(), "Felix", AnswerOptions{AsOf: now, IncludeHistory: true})
 	if err != nil {
 		t.Fatalf("answer: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestAnswer_AsOf_ReturnsHistoricalState(t *testing.T) {
 	engine := NewEngine(events, fakeClaimRepo{claims: claims}, fakeRelationshipRepo{})
 
 	// As of March, only `old` was true.
-	got, err := engine.AnswerWithOptions("Felix role", AnswerOptions{AsOf: march})
+	got, err := engine.AnswerWithOptions(context.Background(), "Felix role", AnswerOptions{AsOf: march})
 	if err != nil {
 		t.Fatalf("answer: %v", err)
 	}

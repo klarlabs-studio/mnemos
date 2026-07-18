@@ -137,7 +137,7 @@ func TestAnswer_VectorFastPath_SkipsListAll(t *testing.T) {
 	engine := NewEngine(events, claims, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}}).
 		WithEmbeddings(repo, fakeEmbedClient{})
 
-	if _, err := engine.Answer("why is payments slow?"); err != nil {
+	if _, err := engine.Answer(context.Background(), "why is payments slow?"); err != nil {
 		t.Fatalf("Answer: %v", err)
 	}
 	if searchCalls != 1 {
@@ -173,7 +173,7 @@ func TestAnswer_FallsBackWhenVectorUnavailable(t *testing.T) {
 	engine := NewEngine(events, fakeClaimRepo{}, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}}).
 		WithEmbeddings(repo, fakeEmbedClient{})
 
-	if _, err := engine.Answer("why is payments slow?"); err != nil {
+	if _, err := engine.Answer(context.Background(), "why is payments slow?"); err != nil {
 		t.Fatalf("Answer: %v", err)
 	}
 	if searchCalls != 1 {
@@ -206,7 +206,7 @@ func TestAnswer_ThreadsEmbedderModelToSearcher(t *testing.T) {
 	engine := NewEngine(events, fakeClaimRepo{}, fakeRelationshipRepo{rels: map[string][]domain.Relationship{}}).
 		WithEmbeddings(repo, modelAwareEmbedClient{model: "voyage-3-large-256"})
 
-	if _, err := engine.Answer("why is payments slow?"); err != nil {
+	if _, err := engine.Answer(context.Background(), "why is payments slow?"); err != nil {
 		t.Fatalf("Answer: %v", err)
 	}
 	if searchCalls != 1 {
