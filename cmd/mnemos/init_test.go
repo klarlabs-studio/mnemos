@@ -213,7 +213,25 @@ func TestBuildInitPlanUserScopeDefaults(t *testing.T) {
 	if !plan.registerMCP {
 		t.Error("registerMCP should default true")
 	}
-	if len(plan.specs) != 3 {
-		t.Errorf("expected 3 hook specs, got %d", len(plan.specs))
+	// With no local provider configured, capture.strategy=auto resolves to
+	// `end`: one capture at SessionEnd, and no per-turn hooks (which for a
+	// hosted model would mean an API call per turn). The incremental hook set
+	// is covered by TestIncrementalHooksInstalled.
+	wantEvents := map[string]string{
+		"UserPromptSubmit": "recall",
+		"SessionStart":     "brief",
+		"SessionEnd":       "capture",
+	}
+	gotEvents := map[string]string{}
+	for _, s := range plan.specs {
+		gotEvents[s.Event] = s.Sub
+	}
+	for event, sub := range wantEvents {
+		if gotEvents[event] != sub {
+			t.Errorf("hook on %s = %q, want %q", event, gotEvents[event], sub)
+		}
+	}
+	if len(plan.specs) != len(wantEvents) {
+		t.Errorf("expected %d hook specs, got %d: %v", len(wantEvents), len(plan.specs), gotEvents)
 	}
 }

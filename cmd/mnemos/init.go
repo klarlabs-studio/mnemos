@@ -30,6 +30,7 @@ type initOptions struct {
 	hooks   map[string]bool // which hooks to install: recall|brief|capture
 	noHooks bool            // install no hooks
 	noMCP   bool            // skip MCP registration (already registered)
+	capture string          // capture strategy: incremental|end|off ("" = ask, or auto when non-interactive)
 	service bool            // scaffold a hosted `mnemos serve` deployment instead
 	out     string          // output directory for --service scaffolding (default ".")
 	force   bool
@@ -65,6 +66,18 @@ func parseInitArgs(args []string, globalDSN string) (initOptions, error) {
 				return opts, NewUserError("--token requires a bearer token value")
 			}
 			opts.token = args[i+1]
+			i++
+		case "--capture":
+			if i+1 >= len(args) {
+				return opts, NewUserError("--capture requires one of: incremental, end, off")
+			}
+			v := strings.ToLower(strings.TrimSpace(args[i+1]))
+			switch v {
+			case captureIncremental, captureAtEnd, captureOff:
+			default:
+				return opts, NewUserError("--capture %q is not valid (want incremental, end, or off)", args[i+1])
+			}
+			opts.capture = v
 			i++
 		case "--service":
 			// Handled by a dedicated path (handleInit) before plan building.
@@ -247,6 +260,18 @@ func buildInitPlan(opts initOptions) initPlan {
 
 	// Compose the config file the server/hooks discover at runtime.
 	configKV := map[string]string{}
+	// Capture strategy. Nothing in the configuration reveals how fast
+	// extraction will be — an open-weight model is slow under ollama and fast
+	// under an aggregator like OpenRouter — so ask rather than infer. Skipped
+	// when the answer was given on the command line, when capture is not being
+	// installed, or when there is no terminal to answer with.
+	if strategy := resolveCaptureStrategy(opts); strategy != "" {
+		configKV["capture.strategy"] = strategy
+		// buildInitPlan runs before the config is written, so hookSpecsFor
+		// below has to see the choice now.
+		_ = os.Setenv("MNEMOS_CAPTURE_STRATEGY", strategy)
+		plan.specs = hookSpecsFor(opts.hooks)
+	}
 	// A networked DSN carries credentials — persist it to the 0600 config file
 	// instead of inlining it into Claude Code's settings.
 	if !inline {
@@ -622,9 +647,17 @@ func mcpFallbackNote(e environment) string {
 	return "  (claude CLI not found — init will print the command/JSON instead)"
 }
 
+// hookNames lists the distinct behaviors being installed. Deduplicated,
+// because one behavior can bind to several events — incremental capture runs
+// on both Stop and PreCompact, and listing it twice reads like a bug.
 func hookNames(specs []hookSpec) []string {
 	out := make([]string, 0, len(specs))
+	seen := make(map[string]struct{}, len(specs))
 	for _, s := range specs {
+		if _, dup := seen[s.Sub]; dup {
+			continue
+		}
+		seen[s.Sub] = struct{}{}
 		out = append(out, s.Sub)
 	}
 	return out
@@ -734,4 +767,53 @@ func mcpRunConfigure(input mcpConfigureInput) (mcpConfigureOutput, error) {
 		DetectedLLM: llmDetail(plan.env.LLM),
 		NextSteps:   "Restart Claude Code (or it may pick hooks up live), then run /hooks and /mcp to confirm. Recall/brief/capture now fire automatically.",
 	}, nil
+}
+
+// resolveCaptureStrategy decides what to write to capture.strategy, returning
+// "" when nothing should be written.
+//
+// Configuration cannot tell us how fast extraction will be. Endpoint locality
+// misreads a hosted model behind a local gateway; model names misread every
+// aggregator, since OpenRouter, Together, Groq and friends serve open-weight
+// models fast over an OpenAI-compatible API. The user knows, so ask them, and
+// record the answer instead of re-deriving it.
+func resolveCaptureStrategy(opts initOptions) string {
+	if opts.noHooks || !opts.hooks["capture"] {
+		return "" // no capture hooks, nothing to choose
+	}
+	if s := strings.ToLower(strings.TrimSpace(opts.capture)); s != "" {
+		return s // answered on the command line
+	}
+	if opts.yes || opts.dryRun || !stdinIsInteractive() {
+		// No one to ask. Leave it unset so the documented default applies
+		// rather than baking a guess into the user's config file.
+		return ""
+	}
+	return askCaptureStrategy()
+}
+
+// askCaptureStrategy puts the question to the user in the terms they can
+// actually answer — where the model runs — and translates it.
+func askCaptureStrategy() string {
+	fmt.Println("\nWhere does your extraction model run?")
+	fmt.Println("  1) Cloud / hosted API (Anthropic, OpenAI, OpenRouter, Groq, ...)")
+	fmt.Println("     One capture per session. Fast enough, and one API call instead of one per turn.")
+	fmt.Println("  2) Locally on this machine (Ollama, LM Studio, llama.cpp, ...)")
+	fmt.Println("     Captures continuously during the session. A whole transcript at once is")
+	fmt.Println("     minutes of local inference, which silently degrades to rule-based extraction.")
+	line, ok := promptLine("Choose [1/2] (default 1): ")
+	if !ok {
+		// EOF: nobody to answer. Fall back to the safe default rather than
+		// guessing, and say so, since the answer shapes what gets installed.
+		fmt.Println("\n  → no answer read; using capture.strategy: end")
+		return captureAtEnd
+	}
+	switch strings.ToLower(line) {
+	case "2", "local", "l":
+		fmt.Println("  → capture.strategy: incremental")
+		return captureIncremental
+	default:
+		fmt.Println("  → capture.strategy: end")
+		return captureAtEnd
+	}
 }

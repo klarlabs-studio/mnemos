@@ -25,6 +25,14 @@ llm:
   timeout:             # MNEMOS_LLM_TIMEOUT (Go duration, default 120s)
   cache_max_bytes:     # MNEMOS_LLM_CACHE_MAX_BYTES (default 1 GiB; 0 disables eviction)
   extract_model:       # MNEMOS_EXTRACT_MODEL (override model for the extract stage only)
+  # Bounds one extraction request. The default sits above the 20KiB cap on a
+  # session capture, so a capture stays a single request as before; batching is
+  # a safety valve for unusually large inputs. Lower it only if a whole input
+  # would exceed the per-request LLM timeout but a slice would not. Note the
+  # ~5KB system prompt is re-sent per request, so smaller batches multiply that
+  # fixed cost — on a slow local model no batch size makes a big transcript
+  # practical, and rule-based fallback is the expected outcome.
+  extract_batch_chars: # MNEMOS_EXTRACT_BATCH_CHARS (int, default 24000)
 
 embed:
   provider:            # MNEMOS_EMBED_PROVIDER (falls back to llm.provider)
@@ -38,6 +46,10 @@ serve:
   tls_cert_file:       # MNEMOS_TLS_CERT_FILE
   tls_key_file:        # MNEMOS_TLS_KEY_FILE
   mtls_client_ca_file: # MNEMOS_MTLS_CLIENT_CA_FILE (enables mTLS client-cert verification)
+  # Both LOOSEN authentication. Secure by default when unset: every data
+  # endpoint requires a JWT, reads included.
+  public_reads:        # MNEMOS_PUBLIC_READS (bool, default false — allow anonymous GET/HEAD/OPTIONS)
+  metrics_public:      # MNEMOS_METRICS_PUBLIC (bool, default false — unauthenticate /internal/metrics)
 
 # Point a CLIENT (e.g. the recall/brief/capture hooks) at a remote hosted brain.
 # Written by `mnemos init --url <endpoint> [--token]`. When server.url is set, the
@@ -77,7 +89,53 @@ feedback:
 job:
   timeout:             # MNEMOS_JOB_TIMEOUT (Go duration, default 10m)
 
+query:
+  # Optional retrieval behaviors, all off by default. Each also has a
+  # per-invocation flag (`query --prime`, `--salient`, ...); set here to make
+  # the choice standing.
+  spreading_activation: # MNEMOS_SPREADING_ACTIVATION (bool) prime associated beliefs (ADR 0013 §2)
+  salience:             # MNEMOS_SALIENCE (bool) blend a stakes term into ranking (ADR 0013 §4)
+  # ⚠ The three below WRITE during a read: enabling them means every query
+  # mutates the store. Same exposure as exporting the env var permanently, but
+  # visible here. Leave unset to keep reads read-only.
+  hebbian:              # MNEMOS_HEBBIAN (bool) strengthen co-retrieved edges (ADR 0015 §4)
+  reconsolidate:        # MNEMOS_RECONSOLIDATE (bool) mark recalled beliefs verified-now (ADR 0015 §5)
+  inhibit:              # MNEMOS_INHIBIT (bool) suppress a beaten contradiction loser (ADR 0016)
+
 capture:
+  # How the session gets recorded into the brain.
+  #
+  #   auto        (default) inferred from provider, then model name
+  #   incremental capture during the session: Stop after each response and
+  #               PreCompact before context is summarised away, each ingesting
+  #               only what is new. SessionEnd sweeps the remainder. Work is
+  #               detached, so the hook returns in ~1s.
+  #   end         one capture at SessionEnd (the original behavior)
+  #   off         no capture hooks at all
+  #
+  # What matters is extraction LATENCY, not where the endpoint lives:
+  #
+  #   slow (open-weight models on your own hardware) -> incremental
+  #     A whole 20KiB transcript in one extraction request is ~23 minutes on
+  #     qwen2.5:14b, so it never completes and silently degrades to rule-based.
+  #     Per-turn chunks (median ~136 chars) extract in seconds.
+  #
+  #   fast (claude-haiku, gpt-4o-mini, gemini-flash) -> end
+  #     Fast enough for one request per session. Incremental would instead mean
+  #     one API call per turn, each re-sending the ~5KB extraction prompt —
+  #     materially more spend for no benefit.
+  #
+  # `auto` decides from the provider (ollama -> incremental; anthropic/openai/
+  # gemini -> end, even behind a local gateway), and for openai-compat — which
+  # fronts LM Studio and cloud proxies alike — from the model name. Unsure
+  # means `end`, because a wrong `end` degrades extraction visibly while a
+  # wrong `incremental` quietly spends money. Set it explicitly if you run an
+  # open-weight model under a name `auto` will not recognise.
+  #
+  # Changing this takes effect immediately for hooks that are already
+  # installed, but re-run `mnemos init` to add or remove the per-turn hooks.
+  strategy:            # MNEMOS_CAPTURE_STRATEGY (auto|incremental|end|off, default auto)
+
   # Bounds the whole SessionEnd capture (ingest→extract→relate) for one
   # session. A ceiling, not a reservation: a fast provider returns as soon as
   # it is done. The 4m default is sized for a slow local model — cloud or

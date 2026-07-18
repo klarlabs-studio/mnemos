@@ -59,10 +59,140 @@ federation:
 	}
 }
 
+// EnvOverrides is the single registry of settings the config file can supply.
+// Adding a MNEMOS_* var to the code without a YAML leaf makes it env-only —
+// invisible in a user's config and unreviewable in a deployment. This asserts
+// the registry stays complete for the sections we have deliberately mapped, so
+// a new env-only knob is a conscious choice rather than drift.
+//
+// It reads a fully-populated config rather than enumerating names, so a new
+// leaf is covered automatically once it is added to the fixture.
+func TestEnvOverridesRegistryIsComplete(t *testing.T) {
+	var c Config
+	// Every section must be represented here; a new section with no entry is
+	// the drift this test exists to catch.
+	sections := map[string]int{
+		"MNEMOS_DB_":        0,
+		"MNEMOS_LLM_":       0,
+		"MNEMOS_EMBED_":     0,
+		"MNEMOS_SERVE_":     0,
+		"MNEMOS_TELEMETRY_": 0,
+	}
+	c.DB.URL = "x"
+	c.LLM.Provider = "x"
+	c.LLM.ExtractBatchChars = "1"
+	c.Embed.Provider = "x"
+	c.Serve.Port = "1"
+	c.Serve.PublicReads = "true"
+	c.Telemetry.OptIn = "1"
+	c.Query.Hebbian = "true"
+	c.Capture.Timeout = "1m"
+
+	env := c.EnvOverrides()
+	for k := range env {
+		for prefix := range sections {
+			if len(k) >= len(prefix) && k[:len(prefix)] == prefix {
+				sections[prefix]++
+			}
+		}
+	}
+	for prefix, n := range sections {
+		if n == 0 {
+			t.Errorf("no %s* setting reached EnvOverrides; the section is not wired up", prefix)
+		}
+	}
+	// The knobs that were env-only before this audit must stay reachable.
+	for _, k := range []string{
+		"MNEMOS_EXTRACT_BATCH_CHARS", "MNEMOS_PUBLIC_READS",
+		"MNEMOS_HEBBIAN", "MNEMOS_CAPTURE_TIMEOUT",
+	} {
+		if _, ok := env[k]; !ok {
+			t.Errorf("%s regressed to env-only; it must be settable in mnemos.yaml", k)
+		}
+	}
+}
+
+// The YAML schema is the reviewable surface: a setting reachable only through
+// an environment variable is one a user cannot see in their config. This locks
+// in the query/capture/serve/llm knobs that were env-only, so a new one is a
+// deliberate choice rather than an oversight.
+func TestQueryTogglesReachableFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+query:
+  spreading_activation: true
+  salience: true
+  hebbian: true
+  reconsolidate: true
+  inhibit: true
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	env := cfg.EnvOverrides()
+	for _, k := range []string{
+		"MNEMOS_SPREADING_ACTIVATION", "MNEMOS_SALIENCE",
+		"MNEMOS_HEBBIAN", "MNEMOS_RECONSOLIDATE", "MNEMOS_INHIBIT",
+	} {
+		if env[k] != "true" {
+			t.Errorf("env[%s] = %q, want %q", k, env[k], "true")
+		}
+	}
+}
+
+// Unset leaves must not emit an env var: an empty value would shadow the
+// downstream default and silently turn a toggle off (or on) in ways the file
+// does not say.
+func TestUnsetQueryTogglesEmitNothing(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, "query:\n  salience: true\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	env := cfg.EnvOverrides()
+	if _, ok := env["MNEMOS_HEBBIAN"]; ok {
+		t.Error("unset query.hebbian must not emit MNEMOS_HEBBIAN")
+	}
+	if env["MNEMOS_SALIENCE"] != "true" {
+		t.Errorf("set leaf lost: %q", env["MNEMOS_SALIENCE"])
+	}
+}
+
+// Every MNEMOS_* setting a user is expected to tune should be reachable from
+// mnemos.yaml — the file exists so a deployment is reviewable in one place
+// instead of reconstructed from a process's environment.
+func TestTuningAndAuthPostureReachableFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+llm:
+  extract_batch_chars: 8000
+serve:
+  public_reads: true
+  metrics_public: false
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	env := cfg.EnvOverrides()
+	for k, want := range map[string]string{
+		"MNEMOS_EXTRACT_BATCH_CHARS": "8000",
+		"MNEMOS_PUBLIC_READS":        "true",
+		"MNEMOS_METRICS_PUBLIC":      "false",
+	} {
+		if env[k] != want {
+			t.Errorf("env[%s] = %q, want %q", k, env[k], want)
+		}
+	}
+}
+
 func TestCaptureBlockEnvOverrides(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, `
 capture:
+  strategy: incremental
   timeout: 5m
 `)
 	cfg, err := Load(path)
@@ -71,6 +201,9 @@ capture:
 	}
 	if got := cfg.EnvOverrides()["MNEMOS_CAPTURE_TIMEOUT"]; got != "5m" {
 		t.Errorf("MNEMOS_CAPTURE_TIMEOUT = %q, want %q", got, "5m")
+	}
+	if got := cfg.EnvOverrides()["MNEMOS_CAPTURE_STRATEGY"]; got != "incremental" {
+		t.Errorf("MNEMOS_CAPTURE_STRATEGY = %q, want %q", got, "incremental")
 	}
 }
 
