@@ -59,6 +59,34 @@ federation:
 	}
 }
 
+// Every MNEMOS_* setting a user is expected to tune should be reachable from
+// mnemos.yaml — the file exists so a deployment is reviewable in one place
+// instead of reconstructed from a process's environment.
+func TestTuningAndAuthPostureReachableFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+llm:
+  extract_batch_chars: 8000
+serve:
+  public_reads: true
+  metrics_public: false
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	env := cfg.EnvOverrides()
+	for k, want := range map[string]string{
+		"MNEMOS_EXTRACT_BATCH_CHARS": "8000",
+		"MNEMOS_PUBLIC_READS":        "true",
+		"MNEMOS_METRICS_PUBLIC":      "false",
+	} {
+		if env[k] != want {
+			t.Errorf("env[%s] = %q, want %q", k, env[k], want)
+		}
+	}
+}
+
 func TestCaptureBlockEnvOverrides(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, `

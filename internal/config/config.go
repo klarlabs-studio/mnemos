@@ -58,6 +58,11 @@ type Config struct {
 		Timeout       scalar `yaml:"timeout"`
 		CacheMaxBytes scalar `yaml:"cache_max_bytes"`
 		ExtractModel  scalar `yaml:"extract_model"`
+		// ExtractBatchChars bounds one extraction request. A whole transcript in
+		// a single prompt overran the per-request timeout on local models, so
+		// extraction silently fell back to rule-based; batching keeps each
+		// request completable. Raise it for fast/large-context providers.
+		ExtractBatchChars scalar `yaml:"extract_batch_chars"`
 	} `yaml:"llm"`
 
 	Embed struct {
@@ -73,6 +78,13 @@ type Config struct {
 		TLSCertFile      scalar `yaml:"tls_cert_file"`
 		TLSKeyFile       scalar `yaml:"tls_key_file"`
 		MTLSClientCAFile scalar `yaml:"mtls_client_ca_file"`
+		// PublicReads and MetricsPublic mirror `serve --public-reads` /
+		// `--metrics-public`. Both LOOSEN authentication, so they live here
+		// rather than only on the command line: a deployment's auth posture
+		// belongs in reviewable config, not in whichever flags the process
+		// happened to start with. Secure by default when unset.
+		PublicReads   scalar `yaml:"public_reads"`
+		MetricsPublic scalar `yaml:"metrics_public"`
 	} `yaml:"serve"`
 
 	// Server points a CLIENT (e.g. the recall/brief/capture hooks) at a remote
@@ -187,6 +199,7 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_LLM_TIMEOUT", c.LLM.Timeout},
 		{"MNEMOS_LLM_CACHE_MAX_BYTES", c.LLM.CacheMaxBytes},
 		{"MNEMOS_EXTRACT_MODEL", c.LLM.ExtractModel},
+		{"MNEMOS_EXTRACT_BATCH_CHARS", c.LLM.ExtractBatchChars},
 
 		{"MNEMOS_EMBED_PROVIDER", c.Embed.Provider},
 		{"MNEMOS_EMBED_API_KEY", c.Embed.APIKey},
@@ -198,6 +211,8 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_TLS_CERT_FILE", c.Serve.TLSCertFile},
 		{"MNEMOS_TLS_KEY_FILE", c.Serve.TLSKeyFile},
 		{"MNEMOS_MTLS_CLIENT_CA_FILE", c.Serve.MTLSClientCAFile},
+		{"MNEMOS_PUBLIC_READS", c.Serve.PublicReads},
+		{"MNEMOS_METRICS_PUBLIC", c.Serve.MetricsPublic},
 
 		{"MNEMOS_URL", c.Server.URL},
 		{"MNEMOS_TOKEN", c.Server.Token},

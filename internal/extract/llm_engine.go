@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -130,30 +131,96 @@ func (e LLMEngine) ExtractWithEntities(ctx context.Context, events []domain.Even
 		return nil, nil, nil, nil
 	}
 
-	// Bound the entire extract operation (including up to 3 retries) by
-	// 3x the per-request LLM timeout. This lets MNEMOS_LLM_TIMEOUT govern
-	// both per-call HTTP budget and total extraction budget without a
-	// second knob: the user picks one timeout and gets enough headroom
-	// for retries.
-	//
-	// Derive from the caller's context, never context.Background(): this is a
-	// ceiling, not a grant. A caller with a shorter deadline (the SessionEnd
-	// capture hook sets its own budget) keeps it — WithTimeout preserves the
-	// earlier deadline — and caller cancellation still propagates. Detaching
-	// here previously let extraction run the full 3x budget (360s by default)
-	// regardless of what the caller asked for, overrunning the hook timeout.
-	ctx, cancel := context.WithTimeout(ctx, 3*llm.Timeout())
+	// Split into bounded batches. A whole session's transcript in one prompt
+	// (a 20KiB capture) regularly exceeded the per-request timeout on a local
+	// model, so every attempt failed and the run silently degraded to
+	// rule-based while still burning the full budget. Batching keeps each
+	// request completable, caches per batch, and contains a failure to the
+	// batch that caused it.
+	batches := batchByChars(texts, sourceEvents, extractBatchChars())
+
+	var (
+		allClaims   []domain.Claim
+		allEvidence []domain.ClaimEvidence
+		allEntities = make(map[string][]ExtractedEntity)
+		seen        = make(map[string]struct{}, len(texts))
+		usage       TokenUsage
+	)
+
+	for _, b := range batches {
+		claims, evidence, entities := e.extractBatch(ctx, b, &usage)
+
+		// Dedupe across batches: buildClaims only dedupes within one call, and
+		// a recurring statement legitimately appears in several batches.
+		for i, c := range claims {
+			key := normalizeForDedupe(c.Text)
+			if key == "" {
+				continue
+			}
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			allClaims = append(allClaims, c)
+			if i < len(evidence) {
+				allEvidence = append(allEvidence, evidence[i])
+			}
+			if ents, ok := entities[c.ID]; ok {
+				allEntities[c.ID] = ents
+			}
+		}
+	}
+
+	if e.onUsage != nil && (usage.InputTokens > 0 || usage.OutputTokens > 0) {
+		e.onUsage(usage)
+	}
+
+	// Contested detection has to see the whole set: buildClaims runs it per
+	// batch, which cannot spot a claim contradicted by a different batch.
+	markContestedClaims(allClaims)
+
+	if len(allEntities) == 0 {
+		allEntities = nil
+	}
+	return allClaims, allEvidence, allEntities, nil
+}
+
+// extractBatch runs one batch through the LLM, falling back to rule-based
+// extraction for just this batch's events on any failure. Token usage is
+// accumulated into usage so the caller reports one total.
+func (e LLMEngine) extractBatch(ctx context.Context, b promptBatch, usage *TokenUsage) ([]domain.Claim, []domain.ClaimEvidence, map[string][]ExtractedEntity) {
+	// Rule-based fallback for just this batch. It produces no entities, and is
+	// pure CPU work, so it still succeeds on an expired context — which is what
+	// lets a timed-out capture persist something instead of nothing.
+	fallback := func() ([]domain.Claim, []domain.ClaimEvidence) {
+		c, l, err := e.fallback.Extract(ctx, b.events)
+		if err != nil {
+			return nil, nil
+		}
+		return c, l
+	}
+
+	cacheKey := e.cacheKey(b.texts)
+	if rawClaims, ok := e.loadCachedClaims(cacheKey); ok {
+		claims, links, ents, err := e.buildClaims(rawClaims, b.events)
+		if err != nil {
+			c, l := fallback()
+			return c, l, nil
+		}
+		return claims, links, ents
+	}
+
+	// Bound one request (including its retries) by 3x the per-request LLM
+	// timeout, derived from the caller's context — never context.Background().
+	// A caller with a shorter deadline (the SessionEnd capture hook sets its
+	// own budget) keeps it, since WithTimeout preserves the earlier deadline,
+	// and caller cancellation still propagates.
+	bctx, cancel := context.WithTimeout(ctx, 3*llm.Timeout())
 	defer cancel()
 
 	messages := []llm.Message{
 		{Role: llm.RoleSystem, Content: systemPrompt},
-		{Role: llm.RoleUser, Content: buildExtractionPrompt(texts)},
-	}
-
-	cacheKey := e.cacheKey(texts)
-	if rawClaims, ok := e.loadCachedClaims(cacheKey); ok {
-		claims, links, ents, err := e.buildClaims(rawClaims, sourceEvents)
-		return claims, links, ents, err
+		{Role: llm.RoleUser, Content: buildExtractionPrompt(b.texts)},
 	}
 
 	retrier := retry.New[llm.Response](retry.Config{
@@ -165,39 +232,111 @@ func (e LLMEngine) ExtractWithEntities(ctx context.Context, events []domain.Even
 		Logger:        slog.New(slog.NewJSONHandler(os.Stderr, nil)),
 	})
 
-	resp, err := retrier.Execute(ctx, func(ctx context.Context) (llm.Response, error) {
+	resp, err := retrier.Execute(bctx, func(ctx context.Context) (llm.Response, error) {
 		return e.client.Complete(ctx, messages)
 	})
 	if err != nil {
-		// Fallback to rule-based extraction. Rule-based produces no
-		// entities, hence the nil third return.
-		c, l, ferr := e.fallback.Extract(ctx, events)
-		return c, l, nil, ferr
+		c, l := fallback()
+		return c, l, nil
 	}
 
-	if e.onUsage != nil && (resp.InputTokens > 0 || resp.OutputTokens > 0) {
-		e.onUsage(TokenUsage{
-			InputTokens:  resp.InputTokens,
-			OutputTokens: resp.OutputTokens,
-			Model:        resp.Model,
-		})
+	usage.InputTokens += resp.InputTokens
+	usage.OutputTokens += resp.OutputTokens
+	if resp.Model != "" {
+		usage.Model = resp.Model
 	}
 
 	rawClaims, err := parseLLMResponse(resp.Content)
 	if err != nil {
-		c, l, ferr := e.fallback.Extract(ctx, events)
-		return c, l, nil, ferr
-	}
-
-	if len(rawClaims) == 0 {
-		e.storeCachedClaims(cacheKey, rawClaims)
-		return nil, nil, nil, nil
+		c, l := fallback()
+		return c, l, nil
 	}
 	if cacheKey != "" {
 		e.storeCachedClaims(cacheKey, rawClaims)
 	}
+	if len(rawClaims) == 0 {
+		return nil, nil, nil
+	}
 
-	return e.buildClaims(rawClaims, sourceEvents)
+	claims, links, ents, err := e.buildClaims(rawClaims, b.events)
+	if err != nil {
+		c, l := fallback()
+		return c, l, nil
+	}
+	return claims, links, ents
+}
+
+// promptBatch is one unit of work sent to the model: the texts for the
+// prompt and the events they came from, kept together so evidence links
+// resolve against the right subset.
+type promptBatch struct {
+	texts  []string
+	events []domain.Event
+}
+
+// batchByChars groups texts so each batch stays near maxChars. A single text
+// larger than the budget becomes its own batch rather than being split, since
+// cutting mid-statement would corrupt the claim it carries.
+func batchByChars(texts []string, events []domain.Event, maxChars int) []promptBatch {
+	if maxChars <= 0 || len(texts) == 0 {
+		return []promptBatch{{texts: texts, events: events}}
+	}
+	var (
+		out     []promptBatch
+		cur     promptBatch
+		curSize int
+	)
+	for i, t := range texts {
+		ev := domain.Event{}
+		if i < len(events) {
+			ev = events[i]
+		}
+		if curSize > 0 && curSize+len(t) > maxChars {
+			out = append(out, cur)
+			cur, curSize = promptBatch{}, 0
+		}
+		cur.texts = append(cur.texts, t)
+		cur.events = append(cur.events, ev)
+		curSize += len(t)
+	}
+	if len(cur.texts) > 0 {
+		out = append(out, cur)
+	}
+	return out
+}
+
+// defaultExtractBatchChars bounds one extraction request. The number is
+// measured, not guessed: on qwen2.5:14b via ollama (Apple silicon) a 6000-char
+// extraction prompt took ~150s — past the 120s default per-request timeout, so
+// every such request failed, retried, failed again, and the whole run degraded
+// to rule-based. ~3000 chars lands near ~75s, comfortably inside that timeout.
+//
+// Batching does not make a slow model fast: a large transcript still costs
+// roughly the same total inference. What it buys is that each request can
+// actually complete, so batches that finish inside the caller's budget yield
+// real LLM claims and only the remainder falls back — partial extraction
+// instead of none. The genuine fix for a slow setup is a faster extraction
+// model (llm.extract_model) rather than a larger batch.
+//
+// Cloud providers are far faster and have larger context; raise this there to
+// cut request count.
+const defaultExtractBatchChars = 3000
+
+// extractBatchChars returns the per-request character budget, honoring
+// MNEMOS_EXTRACT_BATCH_CHARS (`llm.extract_batch_chars` in mnemos.yaml).
+// Non-numeric or non-positive values fall back to the default; 0 is not a way
+// to disable batching, since that is what the bug was.
+func extractBatchChars() int {
+	raw := strings.TrimSpace(os.Getenv("MNEMOS_EXTRACT_BATCH_CHARS"))
+	if raw == "" {
+		return defaultExtractBatchChars
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		log.Printf("invalid MNEMOS_EXTRACT_BATCH_CHARS=%q (want a positive integer); using %d", raw, defaultExtractBatchChars)
+		return defaultExtractBatchChars
+	}
+	return n
 }
 
 // Convert LLM output to domain claims plus a per-claim entity map.
@@ -313,6 +452,12 @@ func (e LLMEngine) cacheKey(texts []string) string {
 	_, _ = h.Write([]byte(strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER"))))
 	_, _ = h.Write([]byte("\n"))
 	_, _ = h.Write([]byte(strings.TrimSpace(os.Getenv("MNEMOS_LLM_MODEL"))))
+	// MNEMOS_EXTRACT_MODEL overrides the model for extraction specifically
+	// (see pipeline.NewExtractor), so it is part of what produced these claims.
+	// Leaving it out let two different extract models share one entry: a switch
+	// silently served the previous model's output.
+	_, _ = h.Write([]byte("\n"))
+	_, _ = h.Write([]byte(strings.TrimSpace(os.Getenv("MNEMOS_EXTRACT_MODEL"))))
 	for _, text := range texts {
 		_, _ = h.Write([]byte("\n"))
 		_, _ = h.Write([]byte(text))

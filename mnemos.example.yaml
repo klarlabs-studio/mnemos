@@ -25,6 +25,11 @@ llm:
   timeout:             # MNEMOS_LLM_TIMEOUT (Go duration, default 120s)
   cache_max_bytes:     # MNEMOS_LLM_CACHE_MAX_BYTES (default 1 GiB; 0 disables eviction)
   extract_model:       # MNEMOS_EXTRACT_MODEL (override model for the extract stage only)
+  # Bounds one extraction request. A whole transcript in a single prompt
+  # overruns the per-request timeout on local models, which silently degrades
+  # extraction to rule-based (no entities). Raise for fast/large-context
+  # providers; lower if a local model still times out per batch.
+  extract_batch_chars: # MNEMOS_EXTRACT_BATCH_CHARS (int, default 3000)
 
 embed:
   provider:            # MNEMOS_EMBED_PROVIDER (falls back to llm.provider)
@@ -38,6 +43,10 @@ serve:
   tls_cert_file:       # MNEMOS_TLS_CERT_FILE
   tls_key_file:        # MNEMOS_TLS_KEY_FILE
   mtls_client_ca_file: # MNEMOS_MTLS_CLIENT_CA_FILE (enables mTLS client-cert verification)
+  # Both LOOSEN authentication. Secure by default when unset: every data
+  # endpoint requires a JWT, reads included.
+  public_reads:        # MNEMOS_PUBLIC_READS (bool, default false — allow anonymous GET/HEAD/OPTIONS)
+  metrics_public:      # MNEMOS_METRICS_PUBLIC (bool, default false — unauthenticate /internal/metrics)
 
 # Point a CLIENT (e.g. the recall/brief/capture hooks) at a remote hosted brain.
 # Written by `mnemos init --url <endpoint> [--token]`. When server.url is set, the
