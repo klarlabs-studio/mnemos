@@ -1,0 +1,163 @@
+# Prometheus alerting rules for a mnemos deployment (ADR 0022).
+#
+# Thresholds are COPIED FROM the BrainHealth grader (ADR 0019) so a firing alert
+# means the same thing as the `mnemos health` CLI verdict and the
+# `mnemos_brain_health_status` gauge (0 healthy / 1 degraded / 2 unhealthy).
+# Keep them in sync if the grader changes — the drift test only guards metric
+# NAMES, not threshold values.
+#
+# `for:` durations are chosen so transient blips don't page; tune to taste.
+
+groups:
+  # --- Availability & scrape health ----------------------------------------
+  - name: mnemos-availability
+    rules:
+      - alert: MnemosDown
+        expr: up{job="mnemos"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mnemos serve is not scrapeable"
+          description: "Prometheus cannot scrape mnemos ({{ $labels.instance }}) for 2m — the service is down or /internal/metrics is unreachable/unauthorized."
+
+      - alert: MnemosMetricsSampleStale
+        # The sampler advances this timestamp only on a fully clean sample.
+        # Default sample interval is 60s; alert if no clean sample for 5m.
+        expr: time() - mnemos_metrics_sample_timestamp_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos metrics sampler is stale"
+          description: "No successful product-metrics sample for >5m on {{ $labels.instance }} — the gauges below are last-good, not current. Sampler stalled or every sample is erroring."
+
+      - alert: MnemosMetricsSampleErrors
+        expr: increase(mnemos_metrics_sample_errors_total[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos metrics sampling is erroring"
+          description: "{{ $value | printf \"%.0f\" }} sampling error(s) in the last 15m on {{ $labels.instance }} — a store/BrainHealth read is failing; product gauges may be stale."
+
+  # --- Brain health (the primary SLI) --------------------------------------
+  - name: mnemos-brain-health
+    rules:
+      - alert: MnemosBrainHealthDegraded
+        expr: mnemos_brain_health_status == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos brain health is DEGRADED"
+          description: "mnemos_brain_health_status == 1 (degraded) for 15m on {{ $labels.instance }}. Check the cognitive-vitals panels and the `mnemos: brain health degraded` log line for the failing signal."
+
+      - alert: MnemosBrainHealthUnhealthy
+        expr: mnemos_brain_health_status >= 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mnemos brain health is UNHEALTHY"
+          description: "mnemos_brain_health_status >= 2 (unhealthy) for 5m on {{ $labels.instance }}. A vital crossed its critical threshold or an integrity pathology is present."
+
+      - alert: MnemosDanglingAssociations
+        # Any dangling edge is referential corruption → BrainHealth calls this unhealthy.
+        expr: mnemos_dangling_associations > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mnemos has dangling associations (referential corruption)"
+          description: "{{ $value | printf \"%.0f\" }} association(s) point at a missing endpoint belief on {{ $labels.instance }}. Investigate store integrity."
+
+      - alert: MnemosOrphanBeliefs
+        # Any orphan (belief with zero evidence) → degraded.
+        expr: mnemos_orphan_beliefs > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos has orphan beliefs (no evidence)"
+          description: "{{ $value | printf \"%.0f\" }} valid belief(s) have zero evidence on {{ $labels.instance }}."
+
+      - alert: MnemosStaleExpectationsHigh
+        # BrainHealth: >=25 open-past-horizon predictions is critical.
+        expr: mnemos_stale_expectations >= 25
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos has many stale expectations"
+          description: "{{ $value | printf \"%.0f\" }} open predictions are past their horizon on {{ $labels.instance }} (>=25 is the BrainHealth critical threshold)."
+
+  # --- Cognitive vitals (explain WHY the brain is degraded/unhealthy) -------
+  # Thresholds are the ADR-0019 critical (crit) grades — crossing these is what
+  # tips brain_health_status to unhealthy. Kept as warnings so they annotate the
+  # status alert rather than double-paging.
+  - name: mnemos-cognitive-vitals
+    rules:
+      - alert: MnemosFreeEnergyHigh
+        expr: mnemos_free_energy >= 0.70
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos free-energy is high"
+          description: "mnemos_free_energy = {{ $value | printf \"%.2f\" }} (>= 0.70 crit) on {{ $labels.instance }} — prediction error is accumulating faster than it is resolved."
+
+      - alert: MnemosCalibrationPoor
+        expr: mnemos_calibration_ece >= 0.30
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos calibration is poor"
+          description: "mnemos_calibration_ece = {{ $value | printf \"%.2f\" }} (>= 0.30 crit) on {{ $labels.instance }} — stated confidence no longer tracks reality."
+
+      - alert: MnemosDissonanceHigh
+        expr: mnemos_dissonance_rate >= 0.15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos dissonance is high"
+          description: "mnemos_dissonance_rate = {{ $value | printf \"%.2f\" }} (>= 0.15 crit) on {{ $labels.instance }} — many beliefs are under active hypercorrection."
+
+      - alert: MnemosStalenessHigh
+        expr: mnemos_staleness_rate >= 0.70
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos knowledge is going stale"
+          description: "mnemos_staleness_rate = {{ $value | printf \"%.2f\" }} (>= 0.70 crit) on {{ $labels.instance }} — most valid beliefs are past the staleness horizon."
+
+  # --- HTTP API SLO (RED metrics) ------------------------------------------
+  - name: mnemos-api-slo
+    rules:
+      - alert: MnemosHighHTTPErrorRate
+        expr: |
+          sum(rate(mnemos_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(mnemos_http_requests_total[5m])), 1)
+            > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos HTTP 5xx rate is high"
+          description: "5xx responses are >5% of requests over 5m on {{ $labels.instance }}."
+
+      - alert: MnemosHighHTTPLatencyP99
+        # SLO buckets target 250ms read / 500ms write p99; page above 500ms.
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(mnemos_http_request_duration_seconds_bucket[5m]))
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mnemos HTTP p99 latency is high"
+          description: "p99 request latency > 500ms over 5m on {{ $labels.instance }} (SLO is 250ms read / 500ms write)."

@@ -1,0 +1,59 @@
+# Prometheus scrape config for a mnemos deployment (ADR 0022).
+#
+# Drop this into your Prometheus (or merge the `mnemos` job + `rule_files` entry
+# into an existing prometheus.yml) to collect the product + cognitive metrics
+# emitted by `mnemos serve` (ADR 0020) and evaluate the shipped alert rules.
+#
+# The metrics live at /internal/metrics. That endpoint is AUTHENTICATED BY
+# DEFAULT (v0.85.1+) and is deliberately NOT covered by `--public-reads`, so
+# pick one of the two auth postures below.
+
+global:
+  scrape_interval: 15s # a scrape reads last-sampled gauges, so 15s is cheap
+  evaluation_interval: 30s
+
+# Evaluate the shipped alert rules (see alerts.yml).
+rule_files:
+  - alerts.yml
+
+# Point this at your Alertmanager if you have one. Without it the rules still
+# evaluate and show as "firing" in the Prometheus UI; they just don't page.
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: mnemos
+    metrics_path: /internal/metrics
+    # OpenMetrics exposition is enabled server-side; Prometheus negotiates it.
+
+    # --- Auth posture A (default): authenticated scrape -----------------------
+    # `/internal/metrics` requires a bearer token. Mint one and write it to a
+    # 0600 file that Prometheus can read:
+    #
+    #   mnemos token issue --user prometheus            # single-tenant (Mode C)
+    #   mnemos token issue --user prometheus --tenant m  # under --require-tenant
+    #
+    # The metrics are a single process-wide registry (not tenant-partitioned);
+    # any validly-signed token passes. Under --require-tenant the token still
+    # must carry a tenant to satisfy the bearer check, hence --tenant above.
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/mnemos-token # <-- your 0600 token file
+
+    # --- Auth posture B: trusted internal network -----------------------------
+    # If you instead run `mnemos serve --metrics-public` on a network where
+    # /internal/metrics is unreachable from outside the perimeter, delete the
+    # `authorization:` block above — no credentials needed.
+
+    static_configs:
+      - targets: ["mnemos:8080"] # host:port of your mnemos serve instance
+        labels:
+          service: mnemos
+
+    # If mnemos is behind TLS, uncomment and adjust:
+    # scheme: https
+    # tls_config:
+    #   ca_file: /etc/prometheus/mnemos-ca.crt
+    #   # insecure_skip_verify: true   # dev only
