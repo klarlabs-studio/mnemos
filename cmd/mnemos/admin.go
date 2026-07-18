@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/embedding"
@@ -347,14 +348,41 @@ func printResetSummary(c resetCounts, keepEvents bool) {
 	}
 }
 
+// stdinReader is shared by every interactive prompt in the CLI.
+//
+// It must be a single reader: bufio reads ahead in chunks, so a prompt that
+// makes its own reader can pull the NEXT prompt's answer into a buffer that is
+// then discarded. Two prompts in one command (init asks about capture, then
+// confirms) would leave the second reading EOF and silently taking the "no"
+// branch — the command aborts having consumed the user's answer.
+var (
+	stdinReaderOnce sync.Once
+	stdinReaderVal  *bufio.Reader
+)
+
+func stdinReader() *bufio.Reader {
+	stdinReaderOnce.Do(func() { stdinReaderVal = bufio.NewReader(os.Stdin) })
+	return stdinReaderVal
+}
+
+// promptLine writes a prompt and reads one answer, reporting whether a line
+// was actually read (false on EOF, so callers can distinguish "declined" from
+// "nobody there").
+func promptLine(prompt string) (string, bool) {
+	fmt.Print(prompt)
+	line, err := stdinReader().ReadString('\n')
+	if err != nil && strings.TrimSpace(line) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(line), true
+}
+
 func confirm(prompt string) bool {
-	fmt.Printf("%s [y/N]: ", prompt)
-	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
-	if err != nil {
+	line, ok := promptLine(fmt.Sprintf("%s [y/N]: ", prompt))
+	if !ok {
 		return false
 	}
-	line = strings.TrimSpace(strings.ToLower(line))
+	line = strings.ToLower(line)
 	return line == "y" || line == "yes"
 }
 

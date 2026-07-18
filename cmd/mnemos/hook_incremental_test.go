@@ -239,29 +239,73 @@ func TestIncrementalHookNoOpsWhenStrategyIsEnd(t *testing.T) {
 	}
 }
 
-// openai-compat fronts local runtimes (LM Studio, llama.cpp, vLLM) and cloud
-// gateways alike, so the provider cannot settle it and the model name decides.
-// Unsure means `end`: degrading extraction is visible and fixable, whereas
-// capturing per turn against a hosted model silently costs money.
-func TestAutoStrategyForAmbiguousProvider(t *testing.T) {
-	cases := map[string]string{
-		"qwen2.5:14b":              captureIncremental,
-		"llama3.2:latest":          captureIncremental,
-		"mistral-small":            captureIncremental,
-		"gemma3:12b":               captureIncremental,
-		"claude-sonnet-4-20250514": captureAtEnd,
-		"gpt-4o-mini":              captureAtEnd,
-		"some-new-hosted-model":    captureAtEnd,
-		"":                         captureAtEnd,
+// Configuration cannot tell you how fast extraction will be, so `auto`
+// resolves only the case it actually knows and defaults the rest to `end`.
+//
+// The aggregators are why: OpenRouter, Together, Fireworks, Groq and DeepInfra
+// all serve open-weight models fast over an OpenAI-compatible API. "llama"
+// under ollama is slow; the same name under OpenRouter is fast. Any heuristic
+// over provider or model name gets one of them wrong, and gets wrong again
+// with each new service.
+func TestAutoStrategyDoesNotGuessBeyondOllama(t *testing.T) {
+	cases := []struct {
+		name     string
+		provider string
+		baseURL  string
+		model    string
+		want     string
+	}{
+		{"ollama is definitionally local", "ollama", "", "qwen2.5:14b", captureIncremental},
+
+		// Aggregators: open-weight names, hosted speed. Must not be incremental.
+		{"openrouter llama", "openai-compat", "https://openrouter.ai/api/v1", "meta-llama/llama-3.3-70b-instruct", captureAtEnd},
+		{"openrouter claude", "openai-compat", "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4", captureAtEnd},
+		{"together mixtral", "openai-compat", "https://api.together.xyz/v1", "mistralai/Mixtral-8x7B", captureAtEnd},
+		{"groq llama", "openai-compat", "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile", captureAtEnd},
+
+		// Hosted providers stay hosted behind a local gateway.
+		{"anthropic via localhost proxy", "anthropic", "http://localhost:4000", "claude-sonnet-4", captureAtEnd},
+
+		// A slow local runtime behind openai-compat defaults to end; the user
+		// sets capture.strategy explicitly. Safe, not correct — and that is the
+		// deliberate trade, since the opposite error costs money silently.
+		{"lm studio local", "openai-compat", "http://localhost:1234/v1", "qwen2.5-14b-instruct", captureAtEnd},
 	}
-	for model, want := range cases {
-		t.Run(model, func(t *testing.T) {
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("MNEMOS_CAPTURE_STRATEGY", "")
-			t.Setenv("MNEMOS_LLM_PROVIDER", "openai-compat")
-			t.Setenv("MNEMOS_LLM_BASE_URL", "http://localhost:1234/v1")
-			t.Setenv("MNEMOS_LLM_MODEL", model)
-			if got := captureStrategy(); got != want {
-				t.Errorf("model %q -> %q, want %q", model, got, want)
+			t.Setenv("MNEMOS_LLM_PROVIDER", tc.provider)
+			t.Setenv("MNEMOS_LLM_BASE_URL", tc.baseURL)
+			t.Setenv("MNEMOS_LLM_MODEL", tc.model)
+			if got := captureStrategy(); got != tc.want {
+				t.Errorf("%s -> %q, want %q", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+// The strategy is a question for the user, not something to infer. init asks
+// and records the answer; --capture answers it non-interactively; and with no
+// one to ask, nothing is written so the documented default applies rather than
+// a guess being baked into the user's config.
+func TestResolveCaptureStrategyFromInitOptions(t *testing.T) {
+	cases := []struct {
+		name string
+		opts initOptions
+		want string
+	}{
+		{"explicit flag", initOptions{hooks: defaultHookSet(), capture: "incremental"}, captureIncremental},
+		{"explicit flag end", initOptions{hooks: defaultHookSet(), capture: "end"}, captureAtEnd},
+		{"flag is case-insensitive", initOptions{hooks: defaultHookSet(), capture: " END "}, captureAtEnd},
+		{"--yes writes nothing", initOptions{hooks: defaultHookSet(), yes: true}, ""},
+		{"--dry-run writes nothing", initOptions{hooks: defaultHookSet(), dryRun: true}, ""},
+		{"no capture hook, nothing to choose", initOptions{hooks: map[string]bool{"recall": true}}, ""},
+		{"--no-hooks", initOptions{hooks: defaultHookSet(), noHooks: true}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveCaptureStrategy(tc.opts); got != tc.want {
+				t.Errorf("resolveCaptureStrategy = %q, want %q", got, tc.want)
 			}
 		})
 	}

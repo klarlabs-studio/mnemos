@@ -255,56 +255,27 @@ func captureStrategy() string {
 	return autoStrategy()
 }
 
-// autoStrategy guesses a strategy from the configured provider and model.
+// autoStrategy picks a default. It resolves exactly one case from
+// configuration and refuses to guess at the rest.
 //
-// The axis that matters is extraction LATENCY, not where the socket points. An
-// earlier version keyed on a loopback base URL, which gets the common cases
-// right and the interesting one wrong: a hosted model behind a local gateway
-// (Sonnet via a proxy on localhost) is a loopback URL with cloud speed, and
-// would have been billed per turn for no reason.
+// The property that decides the right strategy is extraction LATENCY, and
+// configuration does not carry it. Two earlier attempts here both failed on
+// ordinary setups: keying on a loopback base URL misread a hosted model behind
+// a local gateway, and keying on the model name misreads every aggregator —
+// OpenRouter, Together, Fireworks, Groq and DeepInfra all serve open-weight
+// models fast over an OpenAI-compatible API, so "llama" means slow under
+// ollama and fast under OpenRouter. Chasing that with a provider list is a
+// maintenance burden that is wrong again with each new service.
 //
-// So: decide on the provider where the provider settles it, fall back to the
-// model name where it does not, and prefer `end` when genuinely unsure —
-// guessing `end` wrongly degrades extraction on a slow model (visible, and
-// fixable by setting the strategy), while guessing `incremental` wrongly
-// spends real money per turn.
+// ollama is the one case configuration settles: it is a local daemon, so it is
+// always inference on this machine. Everything else defaults to `end`, which
+// is the historical behavior and cannot surprise anyone with per-turn API
+// spend. Users on a slow local runtime behind openai-compat set
+// capture.strategy explicitly — see docs/integrations.md for the symptom that
+// says they should.
 func autoStrategy() string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER"))) {
-	case "ollama":
-		// Always inference on this machine.
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")), "ollama") {
 		return captureIncremental
-	case "anthropic", "openai", "gemini":
-		// Always hosted, regardless of any base-URL override.
-		return captureAtEnd
-	case "":
-		// No LLM: rule-based extraction is instant, so one pass at the end.
-		return captureAtEnd
-	}
-	// openai-compat is genuinely ambiguous — it fronts LM Studio, llama.cpp and
-	// vLLM as readily as it fronts a cloud gateway. The model name is the best
-	// remaining signal: open-weight names indicate local inference.
-	return strategyForModel(os.Getenv("MNEMOS_LLM_MODEL"))
-}
-
-// openWeightModels are name fragments of models that are run locally. Matching
-// on names is a heuristic and will age; it only ever selects between two
-// working modes, and capture.strategy overrides it outright.
-var openWeightModels = []string{
-	"llama", "qwen", "mistral", "mixtral", "gemma", "phi",
-	"deepseek", "codestral", "starcoder", "granite", "olmo", "smollm",
-}
-
-// strategyForModel infers from the model name, defaulting to `end` for
-// anything unrecognised.
-func strategyForModel(model string) string {
-	m := strings.ToLower(strings.TrimSpace(model))
-	if m == "" {
-		return captureAtEnd
-	}
-	for _, frag := range openWeightModels {
-		if strings.Contains(m, frag) {
-			return captureIncremental
-		}
 	}
 	return captureAtEnd
 }
