@@ -451,17 +451,40 @@ func renderBrief(claims, runs, contradictions, repoClaims int64, policy query.Pr
 	return b.String()
 }
 
-// captureBudget bounds the whole SessionEnd capture. It has to fit a real
-// worst case, not an optimistic one: a full 20KiB transcript extracted by a
-// local model (qwen2.5:14b via ollama) measured ~165s end to end. The old 90s
-// was never enforced — extraction and the job runner both detached from the
-// caller's context — so it went unnoticed until those leaks were closed. Too
-// small a budget is not a graceful degradation here: the pipeline persists at
-// the end, so a mid-flight cancel drops the entire session's knowledge.
+// defaultCaptureBudget bounds the whole SessionEnd capture when nothing
+// overrides it. It has to fit a real worst case, not an optimistic one: a full
+// 20KiB transcript extracted by a local model (qwen2.5:14b via ollama)
+// measured ~165s end to end. The old 90s was never enforced — extraction and
+// the job runner both detached from the caller's context — so it went
+// unnoticed until those leaks were closed. Too small a budget is not a
+// graceful degradation here: the pipeline persists at the end, so a mid-flight
+// cancel drops the entire session's knowledge.
 //
-// Keep captureHookTimeout (the Claude Code hook timeout in hooks_install.go)
-// above this, so this budget is what actually governs.
-const captureBudget = 240 * time.Second
+// This is a ceiling, not a reservation: a fast provider returns as soon as it
+// is done. Hosted brains and cloud LLMs can safely set this much lower.
+const defaultCaptureBudget = 240 * time.Second
+
+// captureBudget returns the SessionEnd capture budget, honoring
+// MNEMOS_CAPTURE_TIMEOUT (`capture.timeout` in mnemos.yaml). Invalid or
+// non-positive values fall back to the default with a warning, matching
+// jobTimeout's behavior.
+//
+// Raising this past captureHookTimeout (the Claude Code hook timeout in
+// hooks_install.go) means Claude Code kills the hook before this budget
+// applies, so re-run `mnemos init` after raising it to widen the hook timeout
+// to match.
+func captureBudget() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("MNEMOS_CAPTURE_TIMEOUT"))
+	if raw == "" {
+		return defaultCaptureBudget
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		fmt.Fprintf(os.Stderr, "warning: invalid MNEMOS_CAPTURE_TIMEOUT=%q (want 60s, 4m, etc.); using %s\n", raw, defaultCaptureBudget)
+		return defaultCaptureBudget
+	}
+	return d
+}
 
 // hookCapture (SessionEnd) distills the session transcript into the brain.
 // SessionEnd ignores hook stdout, so this is pure side effect. It reads the
@@ -476,7 +499,7 @@ func hookCapture(ev hookEvent) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), captureBudget)
+	ctx, cancel := context.WithTimeout(context.Background(), captureBudget())
 	defer cancel()
 
 	if hostedConfigured() {

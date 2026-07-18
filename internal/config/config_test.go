@@ -59,6 +59,21 @@ federation:
 	}
 }
 
+func TestCaptureBlockEnvOverrides(t *testing.T) {
+	dir := t.TempDir()
+	path := writeConfig(t, dir, `
+capture:
+  timeout: 5m
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.EnvOverrides()["MNEMOS_CAPTURE_TIMEOUT"]; got != "5m" {
+		t.Errorf("MNEMOS_CAPTURE_TIMEOUT = %q, want %q", got, "5m")
+	}
+}
+
 func TestServerBlockEnvOverrides(t *testing.T) {
 	dir := t.TempDir()
 	path := writeConfig(t, dir, `

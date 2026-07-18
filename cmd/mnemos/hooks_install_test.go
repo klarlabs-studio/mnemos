@@ -118,9 +118,9 @@ func TestInstallHooksSetsTimeouts(t *testing.T) {
 
 	// event -> the hook's own internal context budget, in seconds.
 	internalBudget := map[string]int{
-		"UserPromptSubmit": 12,                                  // hookRecall
-		"SessionStart":     18,                                  // hookBrief: 10s + 8s doc sync-back
-		"SessionEnd":       int(captureBudget/time.Second) + 20, // hookCapture: captureBudget + float-back
+		"UserPromptSubmit": 12,                                         // hookRecall
+		"SessionStart":     18,                                         // hookBrief: 10s + 8s doc sync-back
+		"SessionEnd":       int(defaultCaptureBudget/time.Second) + 20, // hookCapture: captureBudget + float-back
 	}
 	hooks := readHooksMap(t, path)
 	for event, budget := range internalBudget {

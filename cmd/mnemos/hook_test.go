@@ -5,10 +5,44 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/query"
 )
+
+func TestCaptureBudget(t *testing.T) {
+	cases := []struct {
+		name string
+		env  string
+		want time.Duration
+	}{
+		{"unset uses default", "", defaultCaptureBudget},
+		{"override is honored", "90s", 90 * time.Second},
+		{"minutes parse", "5m", 5 * time.Minute},
+		{"malformed falls back", "not-a-duration", defaultCaptureBudget},
+		{"zero falls back", "0s", defaultCaptureBudget},
+		{"negative falls back", "-30s", defaultCaptureBudget},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("MNEMOS_CAPTURE_TIMEOUT", tc.env)
+			if got := captureBudget(); got != tc.want {
+				t.Errorf("captureBudget() = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// The default budget must stay under the hook timeout `mnemos init` installs,
+// or Claude Code kills capture before its own budget applies — the original
+// "Hook cancelled" failure.
+func TestDefaultCaptureBudgetFitsHookTimeout(t *testing.T) {
+	if defaultCaptureBudget >= captureHookTimeout*time.Second {
+		t.Errorf("defaultCaptureBudget %s >= captureHookTimeout %ds; Claude Code would cancel capture mid-pipeline",
+			defaultCaptureBudget, captureHookTimeout)
+	}
+}
 
 func TestReadHookEvent(t *testing.T) {
 	ev := readHookEvent(strings.NewReader(`{"hook_event_name":"UserPromptSubmit","prompt":"hello","session_id":"s1"}`))
