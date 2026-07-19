@@ -200,3 +200,51 @@ func TestExistingGitCommitSHAs_LoadsFromMetadata(t *testing.T) {
 		t.Errorf("missing def456")
 	}
 }
+
+// The dedupe query was SQLite-only. On Postgres it errored every run and the
+// caller fell back to an empty seen-set, re-extracting the whole git/PR
+// history at full LLM cost; on MySQL, JSON_EXTRACT returned quoted values that
+// never matched a raw SHA, so dedupe silently did nothing there too.
+func TestJSONFieldQuery_PerBackend(t *testing.T) {
+	tests := []struct {
+		backend  string
+		mustHave []string
+		mustNot  []string
+	}{
+		{"postgres", []string{"->>", "'git_commit_sha'"}, []string{"json_extract", "JSON_EXTRACT"}},
+		{"mysql", []string{"JSON_UNQUOTE", "JSON_EXTRACT", "$.git_commit_sha"}, []string{"->>"}},
+		{"sqlite", []string{"json_extract", "$.git_commit_sha"}, []string{"->>", "JSON_UNQUOTE"}},
+		{"libsql", []string{"json_extract", "$.git_commit_sha"}, []string{"->>", "JSON_UNQUOTE"}},
+		// An unrecognised backend must not produce empty or broken SQL.
+		{"other", []string{"json_extract"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.backend, func(t *testing.T) {
+			q := jsonFieldQuery(tt.backend, "git_commit_sha")
+			if !strings.HasPrefix(q, "SELECT DISTINCT ") {
+				t.Fatalf("not a SELECT DISTINCT: %s", q)
+			}
+			for _, want := range tt.mustHave {
+				if !strings.Contains(q, want) {
+					t.Errorf("missing %q: %s", want, q)
+				}
+			}
+			for _, bad := range tt.mustNot {
+				if strings.Contains(q, bad) {
+					t.Errorf("contains %q, wrong dialect: %s", bad, q)
+				}
+			}
+		})
+	}
+}
+
+// Both dedupe call sites must go through the portable builder.
+func TestJSONFieldQuery_FieldIsSubstituted(t *testing.T) {
+	for _, field := range []string{"git_commit_sha", "github_pr_number"} {
+		for _, backend := range []string{"postgres", "mysql", "sqlite"} {
+			if q := jsonFieldQuery(backend, field); !strings.Contains(q, field) {
+				t.Errorf("%s/%s: field not substituted: %s", backend, field, q)
+			}
+		}
+	}
+}

@@ -91,8 +91,11 @@ func runGhPRs(ctx context.Context, repoRoot string, limit int) ([]prRecord, erro
 // existingGitPRNumbers returns the set of PR numbers already ingested into
 // db (extracted from event metadata via JSON1).
 func existingGitPRNumbers(ctx context.Context, db *sql.DB) (map[string]struct{}, error) {
-	const q = `SELECT DISTINCT json_extract(metadata_json, '$.github_pr_number') FROM events WHERE json_extract(metadata_json, '$.github_pr_number') IS NOT NULL`
-	rows, err := db.QueryContext(ctx, q)
+	// Portable across sqlite/postgres/mysql — see jsonFieldQuery. The literal
+	// json_extract this used to hold errored on Postgres and returned quoted
+	// values on MySQL, so dedupe silently failed and every PR was re-extracted
+	// at full LLM cost on every run.
+	rows, err := db.QueryContext(ctx, jsonFieldQuery(dsnBackend(resolveDSN()), "github_pr_number"))
 	if err != nil {
 		return nil, fmt.Errorf("query PR numbers: %w", err)
 	}
