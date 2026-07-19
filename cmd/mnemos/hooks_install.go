@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Claude Code settings.json hook installation. We merge Mnemos hook entries
@@ -42,14 +43,39 @@ type hookSpec struct {
 // hook's own graceful, fail-open timeout is what actually governs; Claude
 // Code's kill is only a last-resort backstop.
 const (
-	recallHookTimeout  = 15  // hookRecall budgets 12s
-	briefHookTimeout   = 25  // hookBrief budgets 10s + 8s doc sync-back
-	captureHookTimeout = 300 // hookCapture budgets captureBudget (240s) + 20s float-back
+	recallHookTimeout = 15 // hookRecall budgets 12s
+	briefHookTimeout  = 25 // hookBrief budgets 10s + 8s doc sync-back
+	// captureHookTimeout is the DEFAULT SessionEnd hook timeout: the default
+	// capture budget (240s) plus the 20s float-back and a little slack. It is
+	// the floor, not the value — captureHookTimeoutFor() raises it to track a
+	// configured MNEMOS_CAPTURE_TIMEOUT.
+	captureHookTimeout = 300
+	// captureHookHeadroom is what the hook needs beyond the extraction budget
+	// itself: the 20s opt-in float-back plus slack for process startup.
+	captureHookHeadroom = 60 * time.Second
 	// Stop/PreCompact only fork a detached worker and exit, so this bounds a
 	// spawn rather than extraction. It fires after every assistant response,
 	// so it must never be something the user can feel.
 	incrementalHookTimeout = 5
 )
+
+// captureHookTimeoutFor returns the Claude Code hook timeout to install for
+// SessionEnd capture, sized to the budget capture will actually use.
+//
+// This has to track the configuration rather than be a constant. The docs tell
+// users raising MNEMOS_CAPTURE_TIMEOUT (capture.timeout) for a slow local model
+// to re-run `mnemos init` so the hook timeout widens to match — but the timeout
+// was hardcoded at 300s, so re-running init changed nothing and Claude Code
+// still SIGKILLed capture at 300s, mid-pipeline, losing the whole session. That
+// is the exact "Hook cancelled" regression this file was written to fix,
+// reachable again through configuration.
+func captureHookTimeoutFor(budget time.Duration) int {
+	needed := int((budget + captureHookHeadroom).Seconds())
+	if needed < captureHookTimeout {
+		return captureHookTimeout
+	}
+	return needed
+}
 
 // hookSpecsFor returns the hook specs for the selected behaviors.
 // behaviors is a set of "recall" | "brief" | "capture".
@@ -73,14 +99,14 @@ func hookSpecsFor(behaviors map[string]bool) []hookSpec {
 			// no capture hooks
 		case captureIncremental:
 			specs = append(specs,
-				hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeout},
+				hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeoutFor(captureBudget())},
 				// Both only spawn a detached worker and return, so their
 				// timeout covers a fork, not extraction.
 				hookSpec{Event: "Stop", Sub: "capture-incremental", Timeout: incrementalHookTimeout},
 				hookSpec{Event: "PreCompact", Sub: "capture-incremental", Timeout: incrementalHookTimeout},
 			)
 		default: // captureAtEnd
-			specs = append(specs, hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeout})
+			specs = append(specs, hookSpec{Event: "SessionEnd", Sub: "capture", Timeout: captureHookTimeoutFor(captureBudget())})
 		}
 	}
 	return specs
