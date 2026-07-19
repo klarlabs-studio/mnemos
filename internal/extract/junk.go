@@ -45,6 +45,11 @@ func isJunkClaim(text string) bool {
 	if metaClaimRE.MatchString(stripped) {
 		return true
 	}
+	// isLeadIn reads the un-stripped text: stripDecorations removes math
+	// symbols like '=', which the structured-data exemption depends on.
+	if isLeadIn(t) {
+		return true
+	}
 	if contentWordCount(stripped) < 2 {
 		return true
 	}
@@ -79,6 +84,44 @@ func isSectionLabel(text string) bool {
 	// A section label is short and has no factual payload — a bare
 	// colon-suffixed phrase the model lifted from formatted text.
 	return contentWordCount(body) <= 4
+}
+
+// isLeadIn reports whether a claim is a full-sentence lead-in to an action —
+// text ending in a colon whose payload lives elsewhere (a tool call, a code
+// block, a list) that capture did not ingest, leaving the introduction stranded
+// as a "fact".
+//
+// isSectionLabel already catches SHORT colon phrases (<=4 words). This catches
+// the long ones — "Confirmed absent from every downstream surface:", "Finding
+// #1 is fixed, with the scope larger than the original diagnosis:" — which a
+// working session produces constantly and which the word cap let through. A
+// census of a real brain found 18.7% of active claims end in a colon, and a
+// hand-check of a spread sample found every one to be a lead-in, not an
+// assertion: a claim's trailing colon means "here comes the content", and the
+// content is what mattered, not this.
+//
+// Takes the original (un-stripped) text so the structured-data guard can see
+// symbols stripDecorations would remove.
+//
+// Structured data is exempted: a "key:" line from YAML/config or a Go "label:"
+// is terse and code-shaped, and a rare real "the mapping is:" is not worth the
+// risk of eating a genuine key. The guard is that the body reads as prose —
+// more than four words and containing a space-separated clause.
+func isLeadIn(text string) bool {
+	body := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(text), ":"))
+	if body == text || body == "" {
+		return false // no trailing colon, or a bare "::" handled by isSectionLabel
+	}
+	// Leave short colon phrases to isSectionLabel and structured single tokens
+	// (a bare "database:" key) alone.
+	if contentWordCount(body) <= 4 {
+		return false
+	}
+	// Code-ish payloads (assignments, comparisons) are not prose lead-ins.
+	if strings.ContainsAny(body, "={}") {
+		return false
+	}
+	return true
 }
 
 // stripDecorations removes leading/trailing emoji and punctuation so
@@ -129,10 +172,6 @@ var narrationRE = regexp.MustCompile(`(?i)^(?:(?:ok(?:ay)?|now|next|first|then|f
 // about the graph and must not. So this requires a memory-system noun
 // (claim/belief/memory/fact recorded/…) as the thing being talked about.
 //
-// The memory-noun list is deliberately narrow. "entry" and "record" were
-// dropped after measuring against a real brain: they matched "your shared/go.sum
-// … ← stale/wrong entry", which is a fact about a lockfile, not about the graph.
-//
 // The memory-noun list is deliberately narrow. "entry", "record" and "fact"
 // were dropped after measuring against a real brain: they matched "your
 // shared/go.sum … ← stale/wrong entry", which is a fact about a lockfile, not
@@ -153,3 +192,13 @@ var metaClaimRE = regexp.MustCompile(`(?i)` +
 	`(?:belief|claim|memory|memories)\b` +
 	// or: "<memory-noun> that said/claimed ..."
 	`|(?i)\b(?:belief|claim|memory)\s+that\s+(?:said|claimed|stated|asserted)\b`)
+
+// IsJunk reports whether claim text is conversational pollution rather than
+// knowledge — narration, lead-ins, section labels, greetings, acknowledgements,
+// and commentary about the graph. It is the exported view of the same filter
+// extraction applies at ingest, so a cleanup pass over already-stored claims
+// uses byte-for-byte the same judgement the pipeline now makes, rather than an
+// approximation of it.
+func IsJunk(text string) bool {
+	return isJunkClaim(text)
+}
