@@ -174,27 +174,68 @@ func detectTemporalDivergence(aText, bText string, aTokens, bTokens map[string]s
 	// Require a shared subject anchor after stop-word removal. Without
 	// this guard, "deploy completed" and "rollback still running" would
 	// flag despite being about different operations.
-	overlap := contentOverlap(aTokens, bTokens)
+	//
+	// The anchor is measured as a PROPORTION of the shorter claim's topical
+	// surface, not an absolute token count, and it excludes the aspect markers
+	// themselves.
+	//
+	// An absolute count cannot work here. Requiring "at least two shared
+	// tokens" is trivially met by any two long claims drawn from the same
+	// corpus — generic words like "all", "three", "still" recur everywhere —
+	// so a single claim containing "done" was flagged against dozens of
+	// unrelated ones about Docker startup, UI screens and CI failures. That one
+	// path produced 31,411 of 52,254 contradiction edges in a production brain.
+	// Counting the aspect markers toward the anchor made it circular on top of
+	// that: the very tokens creating the aspect conflict were also being taken
+	// as proof the claims shared a subject.
+	//
+	// The canonical short case still passes: "migration completed Tuesday" vs
+	// "migration is still running" anchors on {migration} out of {migration,
+	// tuesday} — a ratio of 0.5 — once "completed"/"still"/"running" are
+	// removed.
+	aAnchor := anchorTokens(aTokens)
+	bAnchor := anchorTokens(bTokens)
+	overlap := contentOverlap(aAnchor, bAnchor)
 	if overlap < 1 {
 		return false
 	}
-	// For long claims, a single shared token is usually coincidental —
-	// most often a brand/entity name that appears in every claim of a
-	// corpus (e.g. "CartLens forecasts revenue" vs "CartLens tracks cart
-	// abandonment" share only "cartlens"). One token out of seven or
-	// eight is not a shared subject, so require at least two before
-	// trusting an aspect mismatch. Short claims (the canonical "migration
-	// completed" vs "migration is still running") legitimately pivot on a
-	// single subject token, so the stricter rule applies only when both
-	// claims are long.
-	shorter := min(len(aTokens), len(bTokens))
-	if shorter >= longClaimTokenCount && overlap < 2 {
+	shorter := min(len(aAnchor), len(bAnchor))
+	if shorter == 0 {
 		return false
 	}
-	return true
+	return float64(overlap)/float64(shorter) >= temporalAnchorRatio
 }
 
-// longClaimTokenCount is the content-token count at or above which a claim
-// is "long" for the temporal-anchor guard: long claims must share more than
-// one token to count as being about the same subject.
-const longClaimTokenCount = 5
+// temporalAnchorRatio is the share of the shorter claim's topical tokens that
+// must be common to both before an aspect mismatch counts as a contradiction.
+// Matches the numeric path's threshold: both are asking the same question —
+// "are these two claims about the same thing?".
+const temporalAnchorRatio = 0.5
+
+// anchorTokens reduces a token set to the words that can serve as a shared
+// subject: real words (not numerals or symbols), minus the aspect markers that
+// the conflict is being read from.
+func anchorTokens(tokens map[string]struct{}) map[string]struct{} {
+	out := make(map[string]struct{}, len(tokens))
+	for tok := range wordTokens(tokens) {
+		if isAspectMarker(tok) {
+			continue
+		}
+		out[tok] = struct{}{}
+	}
+	return out
+}
+
+// isAspectMarker reports whether a token is one of the lexical aspect signals
+// classifyAspect reads. Such a token is evidence of an aspect, never evidence
+// that two claims share a subject.
+func isAspectMarker(tok string) bool {
+	for _, set := range []map[string]struct{}{
+		completedMarkers, ongoingMarkers, plannedMarkers, neverMarkers,
+	} {
+		if _, ok := set[tok]; ok {
+			return true
+		}
+	}
+	return false
+}

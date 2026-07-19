@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // numericValue is one number-with-optional-unit extracted from claim text.
@@ -166,14 +167,21 @@ func detectNumericDivergence(aText, bText string, aTokens, bTokens map[string]st
 
 	// Require non-numeric topical overlap so we don't flag every pair
 	// of sentences that happen to contain different numbers.
-	overlap := contentOverlap(aTokens, bTokens)
+	//
+	// This has to be measured on WORD tokens only. The tokenizer keeps
+	// numerals and bare symbols ("9", "269", "→") as content tokens, so
+	// measuring overlap over the raw sets let the numbers themselves stand in
+	// for topical agreement — the exact thing this guard exists to prevent.
+	// "269 → 9" tokenizes to [9, 269, →]; against a compose-file claim
+	// containing "9 → 6" it shared {9, →}, scoring 0.67 and clearing the 0.5
+	// bar on nothing but a digit and an arrow.
+	aWords := wordTokens(aTokens)
+	bWords := wordTokens(bTokens)
+	overlap := contentOverlap(aWords, bWords)
 	if overlap < 1 {
 		return false
 	}
-	shorter := len(aTokens)
-	if len(bTokens) < shorter {
-		shorter = len(bTokens)
-	}
+	shorter := min(len(aWords), len(bWords))
 	if shorter == 0 {
 		return false
 	}
@@ -186,4 +194,23 @@ func detectNumericDivergence(aText, bText string, aTokens, bTokens map[string]st
 	}
 
 	return !numericValuesAgree(aNums, bNums)
+}
+
+// wordTokens returns the subset of tokens that contain at least one letter.
+//
+// The tokenizer treats numerals and bare symbols as content tokens, which is
+// right for most purposes but wrong when the question is "are these two claims
+// about the same thing?". A shared "9" or "→" says nothing about topic, so any
+// same-topic guard must measure agreement over words alone.
+func wordTokens(tokens map[string]struct{}) map[string]struct{} {
+	out := make(map[string]struct{}, len(tokens))
+	for tok := range tokens {
+		for _, r := range tok {
+			if unicode.IsLetter(r) {
+				out[tok] = struct{}{}
+				break
+			}
+		}
+	}
+	return out
 }

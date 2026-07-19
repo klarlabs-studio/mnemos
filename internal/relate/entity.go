@@ -73,19 +73,41 @@ func detectEntityRoleDivergence(aText, bText string, aTokens, bTokens map[string
 // properNounTokens returns the lowercased + stemmed forms of tokens
 // that look like proper nouns in the source text. Heuristic:
 //   - capitalized first letter, alphabetic only
-//   - not a stop-word once lowercased (this also handles
-//     sentence-initial "The"/"A" without dropping legitimate
-//     sentence-initial proper nouns like "Alice")
+//   - not a stop-word once lowercased
+//   - sentence-initial words count ONLY when followed by a copula. The first
+//     word of a sentence is capitalized by orthography, so on its own that
+//     says nothing about whether it is a name — but "Alice is …" makes it the
+//     subject of a copular claim, which is exactly the shape this detector
+//     targets.
+//
+// That distinction is what the stop-word list alone could not draw, despite
+// this function's test name ("SkipsSentenceInitialAndStopWords"): any
+// capitalized non-stop-word opening a sentence was read as a proper noun. In
+// production that made ordinary fragments look like competing named entities —
+// "Now the overlay" vs "Clear picture now" was recorded as a contradiction
+// because "Now" and "Clear" were taken for names diverging over the shared
+// token "now". Neither is followed by a copula; "Alice is the CEO" is.
 func properNounTokens(text string) map[string]struct{} {
 	out := map[string]struct{}{}
 	words := strings.Fields(text)
-	for _, w := range words {
+	sentenceStart := true
+	for i, w := range words {
 		trimmed := strings.Trim(w, ",.;:!?()[]{}\"'")
+		// Whether the NEXT word opens a sentence is decided by this word's
+		// original trailing punctuation, so compute it before continuing.
+		initial := sentenceStart
+		sentenceStart = strings.HasSuffix(w, ".") || strings.HasSuffix(w, "!") || strings.HasSuffix(w, "?")
+
 		if trimmed == "" {
 			continue
 		}
 		runes := []rune(trimmed)
 		if !unicode.IsUpper(runes[0]) {
+			continue
+		}
+		// Sentence-initial capitals are orthography unless the word is the
+		// subject of a copular claim ("Alice is the CEO").
+		if initial && !followedByCopula(words, i) {
 			continue
 		}
 		// All remaining runes must be letters; mixed alpha-numeric
@@ -132,4 +154,21 @@ func hasProperNounDivergence(a, b map[string]struct{}) bool {
 		}
 	}
 	return uniqueA && uniqueB
+}
+
+// copulas are the linking verbs that mark a copular claim ("X is Y"). A
+// sentence-initial capitalized word followed by one of these is the subject of
+// such a claim, and therefore a genuine name candidate rather than orthography.
+var copulas = map[string]struct{}{
+	"is": {}, "are": {}, "was": {}, "were": {}, "'s": {},
+}
+
+// followedByCopula reports whether the word after index i is a copula.
+func followedByCopula(words []string, i int) bool {
+	if i+1 >= len(words) {
+		return false
+	}
+	next := strings.ToLower(strings.Trim(words[i+1], ",.;:!?()[]{}\"'"))
+	_, ok := copulas[next]
+	return ok
 }
