@@ -462,3 +462,65 @@ func TestWriter_NilConn(t *testing.T) {
 		t.Fatal("Wrap(nil) should error")
 	}
 }
+
+func TestWriter_PruneRelationships(t *testing.T) {
+	t.Parallel()
+	w := newWriter(t)
+	ctx := context.Background()
+
+	seed := []domain.Relationship{
+		{ID: "rel_keep", Type: domain.RelationshipTypeSupports, FromClaimID: "cl_a", ToClaimID: "cl_b", CreatedAt: time.Now().UTC(), CreatedBy: "tester"},
+		{ID: "rel_drop", Type: domain.RelationshipTypeContradicts, FromClaimID: "cl_c", ToClaimID: "cl_d", CreatedAt: time.Now().UTC(), CreatedBy: "tester"},
+	}
+	if _, err := w.Relationships(ctx, seed); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Keep only the first; the executor replaces the whole set.
+	n, err := w.PruneRelationships(ctx, seed[:1], 1)
+	if err != nil {
+		t.Fatalf("PruneRelationships: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("retained = %d, want 1", n)
+	}
+	// Dropping edges is a real mutation and must leave an audit trail.
+	assertEvidence(t, w, "mnemos.write.relationships.prune")
+
+	got, err := w.Conn().Relationships.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "rel_keep" {
+		t.Fatalf("after prune got %d edges (%v), want just rel_keep", len(got), got)
+	}
+}
+
+// Pruning to nothing must be allowed — a brain whose every edge is stale is a
+// legitimate state — and must not error on the empty Upsert.
+func TestWriter_PruneRelationships_ToEmpty(t *testing.T) {
+	t.Parallel()
+	w := newWriter(t)
+	ctx := context.Background()
+
+	if _, err := w.Relationships(ctx, []domain.Relationship{
+		{ID: "rel_1", Type: domain.RelationshipTypeContradicts, FromClaimID: "cl_a", ToClaimID: "cl_b", CreatedAt: time.Now().UTC(), CreatedBy: "tester"},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	n, err := w.PruneRelationships(ctx, nil, 1)
+	if err != nil {
+		t.Fatalf("PruneRelationships: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("retained = %d, want 0", n)
+	}
+	got, err := w.Conn().Relationships.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d edges after pruning everything, want 0", len(got))
+	}
+}
