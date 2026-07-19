@@ -437,8 +437,27 @@ func (r ClaimRepository) SetLifecycle(_ context.Context, claimID string, lifecyc
 func (r ClaimRepository) RecomputeTrust(_ context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
+	return r.recomputeTrustLocked(r.state.claimOrder, score), nil
+}
+
+// RecomputeTrustForClaims implements [ports.ScopedTrustScorer]: the same
+// recomputation bounded to claimIDs, so a write's cost tracks what it touched
+// rather than the size of the store.
+func (r ClaimRepository) RecomputeTrustForClaims(_ context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+	if len(claimIDs) == 0 {
+		return 0, nil
+	}
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	return r.recomputeTrustLocked(claimIDs, score), nil
+}
+
+// recomputeTrustLocked rescores the given claim ids. Callers hold state.mu.
+// Unknown ids are skipped, so a caller may pass ids for claims that were
+// deleted between the write and the rescore.
+func (r ClaimRepository) recomputeTrustLocked(ids []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) int {
 	count := 0
-	for _, id := range r.state.claimOrder {
+	for _, id := range ids {
 		c, ok := r.state.claims[id]
 		if !ok {
 			continue
@@ -460,7 +479,7 @@ func (r ClaimRepository) RecomputeTrust(_ context.Context, score func(confidence
 		r.state.claims[id] = c
 		count++
 	}
-	return count, nil
+	return count
 }
 
 // ApplyBeliefCredit implements [ports.BeliefCreditWriter]: it overwrites a

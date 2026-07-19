@@ -44,15 +44,24 @@ type ListRelationshipsByClaimParams struct {
 	ToClaimID   string `json:"to_claim_id"`
 }
 
-func (q *Queries) ListRelationshipsByClaim(ctx context.Context, arg ListRelationshipsByClaimParams) ([]Relationship, error) {
+type ListRelationshipsByClaimRow struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	FromClaimID string `json:"from_claim_id"`
+	ToClaimID   string `json:"to_claim_id"`
+	CreatedAt   string `json:"created_at"`
+	CreatedBy   string `json:"created_by"`
+}
+
+func (q *Queries) ListRelationshipsByClaim(ctx context.Context, arg ListRelationshipsByClaimParams) ([]ListRelationshipsByClaimRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRelationshipsByClaim, arg.FromClaimID, arg.ToClaimID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Relationship
+	var items []ListRelationshipsByClaimRow
 	for rows.Next() {
-		var i Relationship
+		var i ListRelationshipsByClaimRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Type,
