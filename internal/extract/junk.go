@@ -42,6 +42,9 @@ func isJunkClaim(text string) bool {
 	if narrationRE.MatchString(stripped) {
 		return true
 	}
+	if metaClaimRE.MatchString(stripped) {
+		return true
+	}
 	if contentWordCount(stripped) < 2 {
 		return true
 	}
@@ -109,3 +112,44 @@ var narrationRE = regexp.MustCompile(`(?i)^(?:(?:ok(?:ay)?|now|next|first|then|f
 	`replace|run|see|start|survey|take|test|try|update|use|verify|view|wire|write|examine|` +
 	`confirm|continue|dig|drop|find|finish|get|give|keep|land|list|move|note|pick|put|remove|` +
 	`rename|report|review|scan|search|set|show|split|switch|trace|walk)\b`)
+
+// metaClaimRE matches commentary ABOUT the knowledge graph rather than about
+// the world: "that's the fourth stale belief this session", "correcting the
+// memory that said briefkasten was HTTP-only", "this claim is out of date".
+//
+// Correcting a belief in conversation used to add a SECOND claim discussing
+// the first, at comparable confidence and indistinguishable in shape. The
+// correction never retired anything; it buried the original under
+// meta-commentary that then recalled as though it were evidence.
+//
+// The discriminator is the SUBJECT, not the opener. Matching on "actually" or
+// "correcting" would drop the most valuable claims in the brain — real
+// corrections. "Actually, the retry budget is 3 attempts, not 5" is a fact
+// about the world and must survive; "actually that belief is stale" is a fact
+// about the graph and must not. So this requires a memory-system noun
+// (claim/belief/memory/fact recorded/…) as the thing being talked about.
+//
+// The memory-noun list is deliberately narrow. "entry" and "record" were
+// dropped after measuring against a real brain: they matched "your shared/go.sum
+// … ← stale/wrong entry", which is a fact about a lockfile, not about the graph.
+//
+// The memory-noun list is deliberately narrow. "entry", "record" and "fact"
+// were dropped after measuring against a real brain: they matched "your
+// shared/go.sum … ← stale/wrong entry", which is a fact about a lockfile, not
+// about the graph.
+//
+// Retiring a claim is what `forget`, `update` and `memory_deprecate` are for;
+// saying so in prose should not become a claim of its own.
+var metaClaimRE = regexp.MustCompile(`(?i)` +
+	// "<optional lead-in> that/this <memory-noun> is stale/wrong/outdated"
+	`(?:^|\b)(?:that'?s|thats|this\s+is|that\s+is|it'?s)?\s*` +
+	`(?:the\s+|a\s+|another\s+|\w+(?:st|nd|rd|th)\s+)?` +
+	`(?:stale|outdated|obsolete|superseded|deprecated|incorrect|wrong)\s+` +
+	`(?:belief|claim|memory|memories)\b` +
+	// or: "<verb> the belief/claim/memory that ..."
+	`|(?i)\b(?:correct(?:ing|ed)?|deprecat(?:e|ing|ed)|supersed(?:e|ing|ed)|retir(?:e|ing|ed)|forget(?:ting)?|updat(?:e|ing|ed))\s+` +
+	`(?:the\s+|that\s+|this\s+|a\s+)?` +
+	`(?:stale\s+|old\s+|previous\s+|existing\s+)?` +
+	`(?:belief|claim|memory|memories)\b` +
+	// or: "<memory-noun> that said/claimed ..."
+	`|(?i)\b(?:belief|claim|memory)\s+that\s+(?:said|claimed|stated|asserted)\b`)
