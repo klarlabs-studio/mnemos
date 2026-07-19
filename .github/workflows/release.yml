@@ -101,11 +101,36 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
+      # GoReleaser publishes the GitHub release BEFORE it updates the Homebrew
+      # tap, so when the tap step fails the archives are already built and
+      # published — but goreleaser exits non-zero and every later step in this
+      # job is skipped. On v0.102.0 that meant an expired HOMEBREW_TAP_TOKEN
+      # cost the release its build-provenance attestation: the least critical
+      # publish step silently took out the security-relevant one.
+      #
+      # The steps below therefore run on `always()`, gated on the archives
+      # actually existing. A genuine early failure (build, sign) leaves dist/
+      # empty and they skip cleanly rather than turning one clear failure into
+      # three confusing ones. The job still reports failure — a broken tap is a
+      # real problem and should stay visible — it just no longer takes
+      # provenance down with it.
+      - name: Check for built archives
+        id: archives
+        if: always()
+        run: |
+          if ls dist/*.tar.gz dist/*.zip >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "no archives in dist/ — skipping attestation (GoReleaser failed before building)"
+          fi
+
       # Extract base64-encoded sha256 hashes from goreleaser's
       # artifacts manifest. slsa-github-generator's generator-generic
       # workflow ingests this list.
       - name: Compute artifact hashes for SLSA
         id: hashes
+        if: ${{ always() && steps.archives.outputs.present == 'true' }}
         run: |
           hashes=$(jq -r '.[] | select(.type=="Archive") | "\(.extra.Checksum | sub("sha256:"; "")) \(.name)"' dist/artifacts.json \
             | sha256sum | awk '{print $1}' \
@@ -121,6 +146,7 @@ jobs:
       # (gives `gh attestation verify` UX without requiring cosign on
       # the verifier side).
       - name: Attest release archives
+        if: ${{ always() && steps.archives.outputs.present == 'true' }}
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: 'dist/*.tar.gz,dist/*.zip'
