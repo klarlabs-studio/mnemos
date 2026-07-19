@@ -204,12 +204,55 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 	// Trust scoring is optional on a ClaimRepository — backends that
 	// don't track trust skip silently. SQLite implements TrustScorer;
 	// memory:// also does (added in Phase 2a) so this engages there too.
+	//
+	// Prefer the scoped recompute. Trust is a function of a claim's own
+	// confidence, its evidence count and its most recent evidence, so only the
+	// claims this write touched can have changed. Rescoring the whole store
+	// made a write cost grow with the brain: on an 11k-claim store every
+	// capture rewrote every row, and under -race that eventually exceeded the
+	// governed-write budget and failed the write outright.
+	if scoped, ok := conn.Claims.(ports.ScopedTrustScorer); ok {
+		if _, err := scoped.RecomputeTrustForClaims(ctx, trustAffectedClaimIDs(enriched, links), defaultTrustScorer()); err != nil {
+			return fmt.Errorf("recompute trust: %w", err)
+		}
+		return nil
+	}
 	if scorer, ok := conn.Claims.(ports.TrustScorer); ok {
 		if _, err := scorer.RecomputeTrust(ctx, defaultTrustScorer()); err != nil {
 			return fmt.Errorf("recompute trust: %w", err)
 		}
 	}
 	return nil
+}
+
+// trustAffectedClaimIDs returns the claims whose trust inputs this write could
+// have changed: the claims written (their confidence may be new) plus every
+// claim the batch attached evidence to (its evidence count and recency moved).
+//
+// The evidence side matters and is easy to miss — a batch often links new
+// events to claims that already existed and are not in `claims`. Omitting them
+// would leave their trust stale at the value it had before the corroboration
+// arrived.
+func trustAffectedClaimIDs(claims []domain.Claim, links []domain.ClaimEvidence) []string {
+	seen := make(map[string]struct{}, len(claims)+len(links))
+	ids := make([]string, 0, len(claims)+len(links))
+	add := func(id string) {
+		if id == "" {
+			return
+		}
+		if _, dup := seen[id]; dup {
+			return
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	for _, c := range claims {
+		add(c.ID)
+	}
+	for _, l := range links {
+		add(l.ClaimID)
+	}
+	return ids
 }
 
 // groupClaimsByCreatedBy buckets claims by their CreatedBy actor so

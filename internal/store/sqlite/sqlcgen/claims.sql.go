@@ -8,6 +8,7 @@ package sqlcgen
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const averageTrust = `-- name: AverageTrust :one
@@ -192,6 +193,74 @@ func (q *Queries) ListClaimTrustInputs(ctx context.Context) ([]ListClaimTrustInp
 	var items []ListClaimTrustInputsRow
 	for rows.Next() {
 		var i ListClaimTrustInputsRow
+		if err := rows.Scan(
+			&i.ClaimID,
+			&i.Confidence,
+			&i.DistinctSources,
+			&i.TotalEvents,
+			&i.LatestEvidenceAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClaimTrustInputsForClaims = `-- name: ListClaimTrustInputsForClaims :many
+SELECT
+  c.id              AS claim_id,
+  c.confidence      AS confidence,
+  COUNT(DISTINCT e.created_by) AS distinct_sources,
+  COUNT(DISTINCT ce.event_id)  AS total_events,
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+FROM claims c
+LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
+LEFT JOIN events e          ON e.id = ce.event_id
+WHERE c.id IN (/*SLICE:claim_ids*/?)
+GROUP BY c.id, c.confidence
+`
+
+type ListClaimTrustInputsForClaimsRow struct {
+	ClaimID          string  `json:"claim_id"`
+	Confidence       float64 `json:"confidence"`
+	DistinctSources  int64   `json:"distinct_sources"`
+	TotalEvents      int64   `json:"total_events"`
+	LatestEvidenceAt string  `json:"latest_evidence_at"`
+}
+
+// Same inputs as ListClaimTrustInputs, bounded to the given claims.
+//
+// Trust is a function of a claim's own confidence, its evidence count and its
+// most recent evidence, so only claims a write actually touched can change.
+// Recomputing every claim on every write made ingest cost grow with the size
+// of the brain: a single capture rewrote all ~11k rows, and under -race that
+// eventually exceeded the write budget outright.
+func (q *Queries) ListClaimTrustInputsForClaims(ctx context.Context, claimIds []string) ([]ListClaimTrustInputsForClaimsRow, error) {
+	query := listClaimTrustInputsForClaims
+	var queryParams []interface{}
+	if len(claimIds) > 0 {
+		for _, v := range claimIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:claim_ids*/?", strings.Repeat(",?", len(claimIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:claim_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClaimTrustInputsForClaimsRow
+	for rows.Next() {
+		var i ListClaimTrustInputsForClaimsRow
 		if err := rows.Scan(
 			&i.ClaimID,
 			&i.Confidence,

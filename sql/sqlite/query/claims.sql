@@ -107,6 +107,26 @@ LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
 GROUP BY c.id, c.confidence;
 
+-- name: ListClaimTrustInputsForClaims :many
+-- Same inputs as ListClaimTrustInputs, bounded to the given claims.
+--
+-- Trust is a function of a claim's own confidence, its evidence count and its
+-- most recent evidence, so only claims a write actually touched can change.
+-- Recomputing every claim on every write made ingest cost grow with the size
+-- of the brain: a single capture rewrote all ~11k rows, and under -race that
+-- eventually exceeded the write budget outright.
+SELECT
+  c.id              AS claim_id,
+  c.confidence      AS confidence,
+  COUNT(DISTINCT e.created_by) AS distinct_sources,
+  COUNT(DISTINCT ce.event_id)  AS total_events,
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+FROM claims c
+LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
+LEFT JOIN events e          ON e.id = ce.event_id
+WHERE c.id IN (sqlc.slice('claim_ids'))
+GROUP BY c.id, c.confidence;
+
 -- name: AverageTrust :one
 SELECT CAST(COALESCE(AVG(trust_score), 0) AS REAL) AS avg_trust FROM claims;
 

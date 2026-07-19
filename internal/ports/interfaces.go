@@ -137,6 +137,22 @@ type TrustScorer interface {
 	CountClaimsBelowTrust(ctx context.Context, threshold float64) (int64, error)
 }
 
+// ScopedTrustScorer is the optional capability to recompute trust for a
+// bounded set of claims rather than the whole store.
+//
+// Trust is a function of a claim's own confidence, its evidence count and its
+// most recent evidence, so a write can only change the trust of claims it
+// touched: the claims it wrote, plus any claim it attached evidence to.
+// Recomputing everything on every write made the cost of a write grow with the
+// size of the brain — on an 11k-claim store every capture rewrote every row,
+// and under -race that eventually blew the governed-write budget outright.
+//
+// Optional so a backend that cannot scope the query keeps working: callers
+// fall back to the full [TrustScorer.RecomputeTrust].
+type ScopedTrustScorer interface {
+	RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error)
+}
+
 // BeliefCreditWriter is the optional capability to persist an attributed
 // belief-credit update produced by credit assignment (ADR 0014): a claim's
 // confidence_components audit map plus the resulting trust_score, written

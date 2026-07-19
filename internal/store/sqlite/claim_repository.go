@@ -430,6 +430,50 @@ func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confiden
 	if err != nil {
 		return 0, fmt.Errorf("list trust inputs: %w", err)
 	}
+	return r.applyTrustRows(ctx, toTrustRows(rows), score)
+}
+
+// RecomputeTrustForClaims implements [ports.ScopedTrustScorer]: the same
+// recomputation bounded to claimIDs, so the cost of a write tracks what the
+// write touched instead of the size of the store.
+func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+	if len(claimIDs) == 0 {
+		return 0, nil
+	}
+	rows, err := r.q.ListClaimTrustInputsForClaims(ctx, claimIDs)
+	if err != nil {
+		return 0, fmt.Errorf("list trust inputs for claims: %w", err)
+	}
+	return r.applyTrustRows(ctx, toTrustRowsScoped(rows), score)
+}
+
+// trustRow is the backend-agnostic shape both trust queries produce, so the
+// scoring + write loop below is written once.
+type trustRow struct {
+	claimID          string
+	confidence       float64
+	distinctSources  int64
+	totalEvents      int64
+	latestEvidenceAt string
+}
+
+func toTrustRows(rows []sqlcgen.ListClaimTrustInputsRow) []trustRow {
+	out := make([]trustRow, len(rows))
+	for i, r := range rows {
+		out[i] = trustRow{r.ClaimID, r.Confidence, r.DistinctSources, r.TotalEvents, r.LatestEvidenceAt}
+	}
+	return out
+}
+
+func toTrustRowsScoped(rows []sqlcgen.ListClaimTrustInputsForClaimsRow) []trustRow {
+	out := make([]trustRow, len(rows))
+	for i, r := range rows {
+		out[i] = trustRow{r.ClaimID, r.Confidence, r.DistinctSources, r.TotalEvents, r.LatestEvidenceAt}
+	}
+	return out
+}
+
+func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin tx: %w", err)
@@ -438,20 +482,20 @@ func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confiden
 	qtx := r.q.WithTx(tx)
 	for _, row := range rows {
 		var latest time.Time
-		if row.LatestEvidenceAt != "" {
-			if t, perr := time.Parse(time.RFC3339Nano, row.LatestEvidenceAt); perr == nil {
+		if row.latestEvidenceAt != "" {
+			if t, perr := time.Parse(time.RFC3339Nano, row.latestEvidenceAt); perr == nil {
 				latest = t
 			}
 		}
 		// Corroboration graded by independence (echo-chamber guard): distinct
 		// evidence-event authors count fully, same-source repeats are discounted.
-		evidenceCount := domain.EffectiveEvidenceCount(int(row.DistinctSources), int(row.TotalEvents))
-		s := score(row.Confidence, evidenceCount, latest)
+		evidenceCount := domain.EffectiveEvidenceCount(int(row.distinctSources), int(row.totalEvents))
+		s := score(row.confidence, evidenceCount, latest)
 		if err := qtx.UpdateClaimTrust(ctx, sqlcgen.UpdateClaimTrustParams{
 			TrustScore: s,
-			ID:         row.ClaimID,
+			ID:         row.claimID,
 		}); err != nil {
-			return 0, fmt.Errorf("update trust for %s: %w", row.ClaimID, err)
+			return 0, fmt.Errorf("update trust for %s: %w", row.claimID, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {

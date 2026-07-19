@@ -88,6 +88,15 @@ type ClaimStatusHistory struct {
 	ChangedBy  string `json:"changed_by"`
 }
 
+type CognitiveJournal struct {
+	ID        string `json:"id"`
+	At        string `json:"at"`
+	RunID     string `json:"run_id"`
+	Kind      string `json:"kind"`
+	SubjectID string `json:"subject_id"`
+	Data      string `json:"data"`
+}
+
 type CompilationJob struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
@@ -234,12 +243,13 @@ type PlaybookVersion struct {
 }
 
 type Relationship struct {
-	ID          string `json:"id"`
-	Type        string `json:"type"`
-	FromClaimID string `json:"from_claim_id"`
-	ToClaimID   string `json:"to_claim_id"`
-	CreatedAt   string `json:"created_at"`
-	CreatedBy   string `json:"created_by"`
+	ID          string  `json:"id"`
+	Type        string  `json:"type"`
+	FromClaimID string  `json:"from_claim_id"`
+	ToClaimID   string  `json:"to_claim_id"`
+	CreatedAt   string  `json:"created_at"`
+	CreatedBy   string  `json:"created_by"`
+	Strength    float64 `json:"strength"`
 }
 
 type RevokedToken struct {
