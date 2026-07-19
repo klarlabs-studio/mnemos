@@ -90,3 +90,38 @@ func TestHalfLifeFor_EmptyAndUnknown(t *testing.T) {
 		t.Errorf("unclassifiable claim = %v, want 0 (default)", got)
 	}
 }
+
+// Typography must not defeat classification. These are the exact stored forms
+// from a real brain that went unclassified — and then recalled at 90-day
+// freshness while false — purely because of a curly apostrophe or backticks.
+func TestHalfLifeFor_TypographyRobust(t *testing.T) {
+	cases := []string{
+		"Mnemos doesn’t work",                        // U+2019 right single quote
+		"the build doesn’t compile",                  // same
+		"No `warden` anywhere in the repo installed", // backtick-wrapped identifier
+		"`postgres` is running on port 5432",         // backticks + state
+	}
+	for _, s := range cases {
+		if got := HalfLifeFor("fact", s); got != VolatileHalfLifeDays {
+			t.Errorf("typography defeated classification: HalfLifeFor(%q) = %v, want %v", s, got, VolatileHalfLifeDays)
+		}
+	}
+	// The ASCII form and the curly form must agree.
+	if HalfLifeFor("fact", "it doesn't work") != HalfLifeFor("fact", "it doesn’t work") {
+		t.Error("ASCII and curly apostrophe classified differently")
+	}
+}
+
+// Normalization must not turn a durable claim volatile. A backtick-quoted
+// identifier inside a decision is still a decision.
+func TestHalfLifeFor_NormalizationKeepsDurableDurable(t *testing.T) {
+	durable := []string{
+		"we chose `postgres` because the write volume outgrew `sqlite`",
+		"the retry budget is 3 attempts by design",
+	}
+	for _, s := range durable {
+		if got := HalfLifeFor("fact", s); got != 0 {
+			t.Errorf("normalization decayed a durable claim: HalfLifeFor(%q) = %v, want 0", s, got)
+		}
+	}
+}

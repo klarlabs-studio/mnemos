@@ -73,6 +73,7 @@ func HalfLifeFor(claimType, text string) float64 {
 	if t == "" {
 		return 0
 	}
+	t = normalizeForMatch(t)
 	if durableRE.MatchString(t) {
 		return 0
 	}
@@ -81,3 +82,33 @@ func HalfLifeFor(claimType, text string) float64 {
 	}
 	return 0
 }
+
+// normalizeForMatch folds away typography that otherwise defeats the lexicons.
+//
+// The classifiers key on words, but claim text carries the punctuation of real
+// prose and code — curly apostrophes from editors, backticks around
+// identifiers. Measured against a real brain, this fragility was most of the
+// classifier's misses: "Mnemos doesn't work" (curly apostrophe) and
+// "No `warden` anywhere" (backticks) both went unclassified, then recalled at
+// 90-day freshness while being false. Same meaning, different bytes.
+//
+// This is deliberately ONLY typography. It does not widen what counts as a
+// state claim: phrasings like "not using X" or "is an HTTP MCP server" are left
+// unmatched on purpose, because "using" and "is a/an X" appear just as often in
+// durable claims ("we're using Postgres", "mnemos is a local-first evidence
+// layer"), and mis-classifying a durable claim as volatile decays real
+// knowledge out of recall invisibly. Under-catching keeps the store default;
+// over-catching loses knowledge silently.
+func normalizeForMatch(text string) string {
+	return matchNormalizer.Replace(text)
+}
+
+// matchNormalizer maps typographic variants to the ASCII the lexicons expect.
+// Backticks become spaces so `warden` reads as a bare word rather than one
+// fused to its quotes.
+var matchNormalizer = strings.NewReplacer(
+	"\u2019", "'", // right single quote
+	"\u2018", "'", // left single quote
+	"\u02bc", "'", // modifier letter apostrophe
+	"`", " ",
+)
