@@ -193,7 +193,11 @@ func probeJWTSecret() healthCheck {
 // the doctor output is honest about what it actually probed once
 // non-SQLite backends are wired in.
 func probeDoctorDB(ctx context.Context) (healthCheck, *store.Conn) {
-	dsn := resolveDSN()
+	// Redacted: `mnemos doctor` (and especially `doctor --json`) is what users
+	// paste into bug reports and CI logs, so a networked DSN's password must
+	// never appear here. displayDSN keeps the host/database visible, which is
+	// all the diagnostic needs.
+	dsn := displayDSN()
 	conn, err := openConn(ctx)
 	if err != nil {
 		return healthCheck{Name: "store_open", Status: "failed", Detail: fmt.Sprintf("dsn=%s: %s", dsn, err.Error())}, nil

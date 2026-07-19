@@ -135,11 +135,39 @@ func splitOnNul(data []byte, atEOF bool) (advance int, token []byte, err error) 
 	return 0, nil, nil
 }
 
+// jsonFieldQuery renders a portable "SELECT DISTINCT <json field> FROM events"
+// for the active backend.
+//
+// The dedupe query was SQLite-only (`json_extract`). Postgres has no such
+// function, so on Postgres it errored on every run, the caller logged to stderr
+// and continued with an EMPTY seen-set — meaning the entire git/PR history was
+// re-extracted, at full LLM cost, on every single ingest. MySQL has
+// JSON_EXTRACT but returns JSON-quoted strings ("abc") which never match a raw
+// SHA, so dedupe silently failed there too.
+func jsonFieldQuery(backend, field string) string {
+	switch backend {
+	case "postgres":
+		// metadata_json is jsonb; ->> yields the unquoted text.
+		return fmt.Sprintf(
+			`SELECT DISTINCT metadata_json ->> '%s' FROM events WHERE metadata_json ->> '%s' IS NOT NULL`,
+			field, field)
+	case "mysql":
+		// JSON_EXTRACT alone returns a quoted JSON scalar; UNQUOTE it so the
+		// value compares equal to the raw id.
+		return fmt.Sprintf(
+			`SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.%s')) FROM events WHERE JSON_EXTRACT(metadata_json, '$.%s') IS NOT NULL`,
+			field, field)
+	default: // sqlite, libsql (SQLite-compatible)
+		return fmt.Sprintf(
+			`SELECT DISTINCT json_extract(metadata_json, '$.%s') FROM events WHERE json_extract(metadata_json, '$.%s') IS NOT NULL`,
+			field, field)
+	}
+}
+
 // existingGitCommitSHAs returns the set of commit SHAs already ingested into
-// db (extracted from event metadata via JSON1).
+// db, read from event metadata.
 func existingGitCommitSHAs(ctx context.Context, db *sql.DB) (map[string]struct{}, error) {
-	const q = `SELECT DISTINCT json_extract(metadata_json, '$.git_commit_sha') FROM events WHERE json_extract(metadata_json, '$.git_commit_sha') IS NOT NULL`
-	rows, err := db.QueryContext(ctx, q)
+	rows, err := db.QueryContext(ctx, jsonFieldQuery(dsnBackend(resolveDSN()), "git_commit_sha"))
 	if err != nil {
 		return nil, fmt.Errorf("query commit SHAs: %w", err)
 	}

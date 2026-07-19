@@ -397,11 +397,16 @@ func GenerateEmbeddings(ctx context.Context, conn *store.Conn, events []domain.E
 		return 0, fmt.Errorf("embed events: %w", err)
 	}
 
+	// The provider contract is one vector per text (enforced in the embedding
+	// clients). Silently storing a short prefix and returning its length as a
+	// success count is how events end up unembedded while the CLI prints
+	// "N embeddings created" and exits 0.
+	if len(vectors) != len(events) {
+		return 0, fmt.Errorf("embed events: got %d vectors for %d events", len(vectors), len(events))
+	}
+
 	model := cfg.Model
 	for i, ev := range events {
-		if i >= len(vectors) {
-			break
-		}
 		if err := conn.Embeddings.Upsert(ctx, ev.ID, "event", vectors[i], model, ""); err != nil {
 			return 0, fmt.Errorf("store embedding for event %s: %w", ev.ID, err)
 		}
@@ -452,11 +457,12 @@ func GenerateClaimEmbeddings(ctx context.Context, conn *store.Conn, claims []dom
 		return 0, fmt.Errorf("embed claims: %w", err)
 	}
 
+	if len(vectors) != len(claims) {
+		return 0, fmt.Errorf("embed claims: got %d vectors for %d claims", len(vectors), len(claims))
+	}
+
 	model := cfg.Model
 	for i, cl := range claims {
-		if i >= len(vectors) {
-			break
-		}
 		if err := conn.Embeddings.Upsert(ctx, cl.ID, "claim", vectors[i], model, ""); err != nil {
 			return 0, fmt.Errorf("store embedding for claim %s: %w", cl.ID, err)
 		}

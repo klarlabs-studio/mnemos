@@ -95,6 +95,21 @@ type memory struct {
 	// concurrent writers account safely.
 	tokenBudget int64
 	tokensSpent atomic.Int64
+
+	// embedWG tracks in-flight embedAsync goroutines and embedCancel stops
+	// them, so [Close] can drain rather than pull the connection out from
+	// under them.
+	//
+	// Both are required for correctness, not tidiness. embedAsync re-read
+	// m.conn *inside* its goroutine while Close set that field to nil with no
+	// synchronisation: a data race, and a nil dereference that panics the whole
+	// process — on a long-lived `mnemos mcp` server that is every other
+	// in-flight tool call, not just this one. Draining also stops a short-lived
+	// CLI (`mnemos claim add`) from exiting before the embedding lands, which
+	// silently persisted claims that semantic recall could never reach.
+	embedWG     sync.WaitGroup
+	embedCtx    context.Context
+	embedCancel context.CancelFunc
 }
 
 var _ Memory = (*memory)(nil)
@@ -696,17 +711,35 @@ func (m *memory) embedAsync(entityID, entityType, text string) {
 	if entityID == "" || strings.TrimSpace(text) == "" {
 		return
 	}
+	// Capture the repository NOW, on the caller's goroutine. Re-reading m.conn
+	// inside the goroutine races with Close (which nils it) and dereferences
+	// nil if Close wins — a panic, not a returned error. The captured handle
+	// stays valid: a closed connection makes Upsert return an error, which the
+	// path below already logs.
+	embeddings := m.conn.Embeddings
+	embedder := m.embedder
+
+	m.embedWG.Add(1)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer m.embedWG.Done()
+		// Derived from embedCtx so Close cancels in-flight work instead of
+		// waiting out the full 30s timeout. Fall back to Background for a
+		// memory built by some path that skipped the constructor — nil here
+		// would panic in WithTimeout.
+		parent := m.embedCtx
+		if parent == nil {
+			parent = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 		defer cancel()
-		vectors, err := m.embedder.Embed(ctx, []string{text})
+		vectors, err := embedder.Embed(ctx, []string{text})
 		if err != nil || len(vectors) == 0 || len(vectors[0]) == 0 {
 			if m.logger != nil {
 				m.logger.Ctx(ctx).Warn().Err(err).Str("entity_id", entityID).Str("entity_type", entityType).Msg("mnemos: async embed skipped")
 			}
 			return
 		}
-		if err := m.conn.Embeddings.Upsert(ctx, entityID, entityType, vectors[0], embedding.ModelIDOf(m.embedder), m.actorID); err != nil {
+		if err := embeddings.Upsert(ctx, entityID, entityType, vectors[0], embedding.ModelIDOf(embedder), m.actorID); err != nil {
 			if m.logger != nil {
 				m.logger.Ctx(ctx).Warn().Err(err).Str("entity_id", entityID).Str("entity_type", entityType).Msg("mnemos: async embed upsert failed")
 			}
@@ -2365,7 +2398,16 @@ func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
 }
 
 // Close implements [Memory.Close].
+//
+// It drains background embedding work first. Without the drain, a handler that
+// does `defer mem.Close()` (the remember_episode MCP tool, every short-lived
+// CLI write) tore the connection away from a goroutine still mid-request.
 func (m *memory) Close() error {
+	if m.embedCancel != nil {
+		m.embedCancel()
+	}
+	m.embedWG.Wait()
+
 	var firstErr error
 	if m.conn != nil {
 		if err := m.conn.Close(); err != nil {

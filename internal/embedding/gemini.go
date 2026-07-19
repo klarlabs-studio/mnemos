@@ -120,5 +120,8 @@ func (c *GeminiEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 	for _, e := range result.Embeddings {
 		vectors = append(vectors, e.Values)
 	}
+	if err := validateVectors(vectors, len(texts), "gemini"); err != nil {
+		return nil, err
+	}
 	return vectors, nil
 }

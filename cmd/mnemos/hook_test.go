@@ -134,3 +134,60 @@ func TestExtractTranscriptTextMissingFile(t *testing.T) {
 		t.Errorf("missing file should yield empty string, got %q", got)
 	}
 }
+
+// The installed hook timeout must track a configured capture budget. It was a
+// hardcoded 300s, so a user following the documented advice — raise
+// MNEMOS_CAPTURE_TIMEOUT for a slow local model, re-run `mnemos init` — got a
+// budget Claude Code would SIGKILL before it ever applied, silently losing the
+// session. Exactly the "Hook cancelled" regression, reachable via config.
+func TestCaptureHookTimeoutTracksBudget(t *testing.T) {
+	tests := []struct {
+		name   string
+		budget time.Duration
+		want   func(int) bool
+		desc   string
+	}{
+		{"default stays at the documented floor", defaultCaptureBudget,
+			func(got int) bool { return got == captureHookTimeout }, "300"},
+		{"a small budget does not shrink the timeout", 30 * time.Second,
+			func(got int) bool { return got == captureHookTimeout }, "300"},
+		{"a raised budget widens the timeout", 10 * time.Minute,
+			func(got int) bool { return got > int((10 * time.Minute).Seconds()) }, ">600"},
+		{"a very large budget still leaves headroom", 30 * time.Minute,
+			func(got int) bool { return got > int((30 * time.Minute).Seconds()) }, ">1800"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := captureHookTimeoutFor(tt.budget)
+			if !tt.want(got) {
+				t.Errorf("captureHookTimeoutFor(%s) = %d, want %s", tt.budget, got, tt.desc)
+			}
+			if time.Duration(got)*time.Second <= tt.budget {
+				t.Errorf("hook timeout %ds does not exceed the %s budget; Claude Code would kill capture mid-pipeline",
+					got, tt.budget)
+			}
+		})
+	}
+}
+
+// The spec builder must use the derived value, not the constant — the wiring is
+// the part that was broken.
+func TestHookSpecsUseDerivedCaptureTimeout(t *testing.T) {
+	t.Setenv("MNEMOS_CAPTURE_TIMEOUT", "10m")
+	t.Setenv("MNEMOS_CAPTURE_STRATEGY", captureAtEnd)
+
+	specs := hookSpecsFor(map[string]bool{"capture": true})
+	var found bool
+	for _, s := range specs {
+		if s.Event != "SessionEnd" || s.Sub != "capture" {
+			continue
+		}
+		found = true
+		if time.Duration(s.Timeout)*time.Second <= 10*time.Minute {
+			t.Errorf("SessionEnd hook timeout %ds does not cover the configured 10m budget", s.Timeout)
+		}
+	}
+	if !found {
+		t.Fatal("no SessionEnd capture hook was produced")
+	}
+}

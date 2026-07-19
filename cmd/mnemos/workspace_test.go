@@ -1,7 +1,9 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -106,7 +108,10 @@ func TestWorkspaceExportImport_RoundTrip(t *testing.T) {
 	dstFolder := filepath.Join(t.TempDir(), "dst")
 	handleWorkspaceImport([]string{def, "--folder", dstFolder}, Flags{})
 
-	got := loadWorkspaceRegistry()
+	got, err := loadWorkspaceRegistry()
+	if err != nil {
+		t.Fatalf("load registry: %v", err)
+	}
 	ws := got.Workspaces["acme"]
 	if ws == nil {
 		t.Fatal("acme not imported")
@@ -127,11 +132,96 @@ func TestWorkspaceExportImport_RoundTrip(t *testing.T) {
 
 func TestWorkspaceRegistry_EmptyWhenNoFile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	reg := loadWorkspaceRegistry()
+	reg, err := loadWorkspaceRegistry()
+	if err != nil {
+		t.Fatalf("a missing registry file is not an error: %v", err)
+	}
 	if len(reg.Workspaces) != 0 {
 		t.Errorf("no file → empty registry, got %+v", reg.Workspaces)
 	}
 	if dsn, _, _ := resolveWorkspaceBrain("/anywhere"); dsn != "" {
 		t.Error("no registry → no workspace")
+	}
+}
+
+// A malformed registry must be reported, never silently read as empty. Every
+// mutator does load → mutate → save, and save rewrites the file wholesale, so
+// swallowing the parse error turned the next `workspace create` into "delete
+// every registered workspace" with no warning.
+func TestWorkspaceRegistry_MalformedFileIsAnError(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	path := workspaceRegistryPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("workspaces: {this is: [not valid yaml\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := loadWorkspaceRegistry(); err == nil {
+		t.Fatal("malformed registry parsed as valid; a mutation would now erase every workspace")
+	}
+}
+
+// The hook path must fail open (a broken registry cannot block a session) but
+// must not pretend the workspace simply does not exist without saying so.
+func TestResolveWorkspaceBrain_FailsOpenOnMalformedRegistry(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	path := workspaceRegistryPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(":\n  bad\n\tmixed indent"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dsn, name, folder := resolveWorkspaceBrain(t.TempDir())
+	if dsn != "" || name != "" || folder != "" {
+		t.Errorf("expected a clean fail-open, got dsn=%q name=%q folder=%q", dsn, name, folder)
+	}
+}
+
+// The registry can hold a credentialed DSN (workspace DB comes from the global
+// --db flag), so it must not be world-readable, and it must be replaced
+// atomically rather than truncated in place.
+func TestSaveWorkspaceRegistry_ModeAndAtomicity(t *testing.T) {
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+
+	reg := workspaceRegistry{Workspaces: map[string]*workspace{
+		"acme": {Folders: []string{"/tmp/acme"}, DB: "postgres://u:secret@db/mnemos"},
+	}}
+	if err := saveWorkspaceRegistry(reg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	path := workspaceRegistryPath()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+		t.Errorf("registry mode %o is group/world readable; it can carry a DSN password", perm)
+	}
+
+	// No stray temp files left behind by the atomic write.
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".workspaces-") {
+			t.Errorf("atomic write left a temp file behind: %s", e.Name())
+		}
+	}
+
+	back, err := loadWorkspaceRegistry()
+	if err != nil {
+		t.Fatalf("round-trip load: %v", err)
+	}
+	if back.Workspaces["acme"] == nil {
+		t.Error("round-trip lost the workspace")
 	}
 }

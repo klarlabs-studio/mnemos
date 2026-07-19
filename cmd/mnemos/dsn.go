@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -169,8 +170,9 @@ func openBaseConn(ctx context.Context) (*store.Conn, error) {
 // concurrent, long-lived server (the MCP transport) point ONE request at a
 // second brain (e.g. the repo overlay for `scope=repo`) without mutating the
 // process-wide MNEMOS_DB_URL — the env-swap the one-shot hooks use is unsafe
-// under concurrency. Highest precedence: it bypasses tenant scoping (a full,
-// explicit local DSN).
+// under concurrency. Highest precedence in single-tenant mode; REFUSED in
+// multi-tenant mode, where an un-tenanted explicit DSN would cross the
+// isolation boundary (see resolveDSNForContext).
 type dsnOverrideKey struct{}
 
 func withDSNOverride(ctx context.Context, dsn string) context.Context {
@@ -197,9 +199,22 @@ func dsnOverrideFromContext(ctx context.Context) (string, bool) {
 //   - anything else (memory, remote libSQL): fail closed rather than silently
 //     sharing data across tenants.
 //
-// A per-request dsnOverride (above) takes precedence over all of this.
+// A per-request dsnOverride (above) takes precedence over all of this — EXCEPT
+// in multi-tenant mode, where it is refused outright.
 func resolveDSNForContext(ctx context.Context) (string, error) {
 	if o, ok := dsnOverrideFromContext(ctx); ok {
+		// Fail closed. The override names a concrete brain and is by
+		// construction un-tenanted (its only source is the repo overlay, which
+		// resolves from the SERVER's working directory — the same file for
+		// every tenant). Returning it here skipped the tenant scoping below
+		// entirely, so on a `--require-tenant` server launched inside a
+		// directory holding a .mnemos/mnemos.db, every tenant's default-scope
+		// query federated that one shared brain. mcpRepoBrainDSN also refuses
+		// to produce an override in this mode; this is the backstop that keeps
+		// any future override source from reopening the hole.
+		if tenantRequired {
+			return "", errors.New("multi-tenant mode: a per-request brain override cannot be tenant-scoped; refusing")
+		}
 		return o, nil // explicit per-request brain; concurrency-safe, no env swap
 	}
 	dsn := resolveDSN()

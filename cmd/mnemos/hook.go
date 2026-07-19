@@ -517,16 +517,51 @@ func hookCapture(ev hookEvent) {
 	// take. When they kept up there is nothing left and this is a no-op, which
 	// is what keeps a session's end fast; when they failed or never ran, this
 	// captures the whole transcript exactly as it always did.
-	captureRange(ev, 20*1024)
+	//
+	// This is the LAST chance to capture the session — nothing runs after it —
+	// so it drains in a loop rather than taking a single chunk. A long session
+	// carries far more than one chunk of backlog, and a single pass would leave
+	// the remainder permanently uncaptured.
+	captureDrain(ev, sessionEndChunkBytes)
 }
 
-// captureText runs one chunk of session text through the standard
-// ingest→extract→relate pipeline. Reports whether it was persisted, so the
-// incremental caller only advances its offset on success.
-func captureText(ev hookEvent, text string) bool {
+// sessionEndChunkBytes caps one chunk of the SessionEnd sweep. The sweep loops,
+// so this bounds a single extraction request (what a slow local model can chew
+// through at once), not the total the session may capture.
+const sessionEndChunkBytes = 20 * 1024
+
+// captureDrain repeatedly captures chunks until the transcript is drained, the
+// shared budget is spent, or a chunk fails. Every chunk shares ONE context, so
+// the whole drain is bounded by captureBudget() exactly as a single capture was
+// — the Claude Code hook timeout math in hooks_install.go is unchanged.
+func captureDrain(ev hookEvent, maxBytes int) {
 	ctx, cancel := context.WithTimeout(context.Background(), captureBudget())
 	defer cancel()
 
+	for chunks := 0; ; chunks++ {
+		if ctx.Err() != nil {
+			// Out of budget with backlog left. The offset still points at the
+			// first uncaptured byte, so nothing is falsely marked done — but
+			// this session ends without it, which is worth saying out loud.
+			fmt.Fprintf(os.Stderr,
+				"mnemos: capture budget (%s) spent after %d chunk(s); transcript remainder not captured\n",
+				captureBudget(), chunks)
+			return
+		}
+		if !captureRangeCtx(ctx, ev, maxBytes) {
+			return // drained, or the chunk failed and left the offset for a retry
+		}
+	}
+}
+
+// captureTextCtx runs one chunk of session text through the standard
+// ingest→extract→relate pipeline. Reports whether it was persisted, so the
+// incremental caller only advances its offset on success.
+//
+// It takes the caller's context so a multi-chunk drain can hold ONE budget
+// across every chunk instead of granting each chunk a fresh one (which would
+// let a drain run N × the budget and blow past the Claude Code hook timeout).
+func captureTextCtx(ctx context.Context, ev hookEvent, text string) bool {
 	if hostedConfigured() {
 		// Repo-first routing, hosted edition: a session inside a workspace/repo
 		// captures to that tenant (keeping its knowledge scoped), otherwise the
@@ -590,7 +625,7 @@ type transcriptLine struct {
 }
 
 // extractTranscriptText pulls user prompts and assistant text out of a JSONL
-// transcript, newest content first, stopping once maxBytes is reached.
+// transcript, oldest first, stopping once maxBytes is reached.
 func extractTranscriptText(path string, maxBytes int) string {
 	f, err := os.Open(path) //nolint:gosec // path supplied by Claude Code hook payload
 	if err != nil {
@@ -602,44 +637,75 @@ func extractTranscriptText(path string, maxBytes int) string {
 	if err != nil {
 		return ""
 	}
-	return transcriptTextFromLines(string(data), maxBytes)
+	text, _ := transcriptTextFromLines(string(data), maxBytes)
+	return text
 }
 
 // transcriptTextFromLines pulls user prompts and assistant text out of raw
-// JSONL transcript lines, stopping once maxBytes is reached. Shared by the
-// whole-file and incremental (offset-based) readers so both see identical
-// content rules.
-func transcriptTextFromLines(data string, maxBytes int) string {
+// JSONL transcript lines, oldest first, stopping once maxBytes is reached.
+// Shared by the whole-file and incremental (offset-based) readers so both see
+// identical content rules.
+//
+// It returns the extracted text AND the number of bytes of data it actually
+// consumed to produce that text. The second value is what makes incremental
+// capture correct: the reader's window (4 MiB) is far larger than maxBytes
+// (8–20 KiB), so stopping at the cap leaves most of the window unread. An
+// offset advanced by the window rather than by what was consumed silently
+// skips everything past the cap — the whole point of the incremental strategy
+// is that the *next* run picks up exactly where this one stopped.
+func transcriptTextFromLines(data string, maxBytes int) (text string, consumed int) {
 	var b strings.Builder
-	for raw := range strings.SplitSeq(data, "\n") {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
+	pos := 0
+	for pos < len(data) {
+		// Slice one line without allocating, tracking where it ends so the
+		// caller can resume from exactly there.
+		raw := data[pos:]
+		next := len(data)
+		if idx := strings.IndexByte(raw, '\n'); idx >= 0 {
+			raw = raw[:idx]
+			next = pos + idx + 1
 		}
-		var line transcriptLine
-		if err := json.Unmarshal([]byte(raw), &line); err != nil {
-			continue
-		}
-		role := line.Role
-		if role == "" {
-			role = line.Type
-		}
-		if role != "user" && role != "assistant" {
-			continue
-		}
-		body := line.Message
-		if len(body) == 0 {
-			body = line.Content
-		}
-		if txt := extractMessageText(body, line.Content); txt != "" {
-			b.WriteString(txt)
+		pos = next
+
+		if line, ok := parseTranscriptLine(raw); ok {
+			b.WriteString(line)
 			b.WriteByte('\n')
+			// Break *after* advancing pos, so the line that filled the budget
+			// counts as consumed and is not re-ingested next run.
 			if b.Len() >= maxBytes {
 				break
 			}
 		}
 	}
-	return b.String()
+	return b.String(), pos
+}
+
+// parseTranscriptLine extracts the conversational text from one raw JSONL
+// line, reporting whether the line carried any. Non-JSON, non-conversational,
+// and empty-text lines are skipped — a transcript legitimately contains all
+// three, so they are not errors.
+func parseTranscriptLine(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false
+	}
+	var line transcriptLine
+	if err := json.Unmarshal([]byte(raw), &line); err != nil {
+		return "", false
+	}
+	role := line.Role
+	if role == "" {
+		role = line.Type
+	}
+	if role != "user" && role != "assistant" {
+		return "", false
+	}
+	body := line.Message
+	if len(body) == 0 {
+		body = line.Content
+	}
+	txt := extractMessageText(body, line.Content)
+	return txt, txt != ""
 }
 
 // extractMessageText coaxes plain text out of a message payload that may be a

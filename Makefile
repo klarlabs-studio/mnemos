@@ -29,6 +29,14 @@ lint:
 test:
 	$(GO) test ./...
 
+# test-race mirrors what CI actually runs (.github/workflows/ci.yml).
+# `make check` deliberately omits -race — it is ~10x slower and would make the
+# inner loop painful — but that gap meant a local "all green" did not imply a
+# green CI, and it hid an intermittent failure for some time. Run this before
+# pushing anything touching concurrency, storage, or the write path.
+test-race:
+	$(GO) test -race -count=1 ./...
+
 # test-integration spins up ephemeral postgres + mysql containers,
 # runs the gated integration suites against them, and tears the
 # containers down. Skips the run with a clear message if Docker

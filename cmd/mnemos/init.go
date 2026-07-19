@@ -23,19 +23,20 @@ import (
 // Claude can finish setup from inside a session.
 
 type initOptions struct {
-	project bool            // scope to ./.mnemos instead of the global brain
-	dsn     string          // explicit DB DSN override
-	url     string          // hosted MCP endpoint (HTTP transport) instead of a local brain
-	token   string          // bearer token for the hosted endpoint
-	hooks   map[string]bool // which hooks to install: recall|brief|capture
-	noHooks bool            // install no hooks
-	noMCP   bool            // skip MCP registration (already registered)
-	capture string          // capture strategy: incremental|end|off ("" = ask, or auto when non-interactive)
-	service bool            // scaffold a hosted `mnemos serve` deployment instead
-	out     string          // output directory for --service scaffolding (default ".")
-	force   bool
-	dryRun  bool
-	yes     bool
+	project  bool            // scope to ./.mnemos instead of the global brain
+	dsn      string          // explicit DB DSN override
+	url      string          // hosted MCP endpoint (HTTP transport) instead of a local brain
+	token    string          // bearer token for the hosted endpoint
+	hooks    map[string]bool // which hooks to install: recall|brief|capture
+	noHooks  bool            // install no hooks
+	noSkills bool            // skip the /mnemos-brief + /mnemos-capture skills
+	noMCP    bool            // skip MCP registration (already registered)
+	capture  string          // capture strategy: incremental|end|off ("" = ask, or auto when non-interactive)
+	service  bool            // scaffold a hosted `mnemos serve` deployment instead
+	out      string          // output directory for --service scaffolding (default ".")
+	force    bool
+	dryRun   bool
+	yes      bool
 }
 
 func defaultHookSet() map[string]bool {
@@ -53,6 +54,8 @@ func parseInitArgs(args []string, globalDSN string) (initOptions, error) {
 			opts.project = true
 		case "--no-hooks":
 			opts.noHooks = true
+		case "--no-skills":
+			opts.noSkills = true
 		case "--no-mcp":
 			opts.noMCP = true
 		case "--url":
@@ -191,6 +194,21 @@ type initPlan struct {
 	registerMCP  bool
 	settingsPath string
 	specs        []hookSpec
+	// skillsPath is the Claude Code skills/ directory to install the manual
+	// /mnemos-brief + /mnemos-capture skills into; "" when --no-skills. It is
+	// resolved independently of settingsPath because skills are useful even
+	// with --no-hooks — that combination is exactly the "no unattended writes,
+	// I'll ask when I want it" setup.
+	skillsPath string
+}
+
+// planSkillsPath returns the skills directory for these options, or "" when
+// the user opted out.
+func planSkillsPath(opts initOptions) string {
+	if opts.noSkills {
+		return ""
+	}
+	return skillsDir(claudeSettingsPath(opts.project))
 }
 
 func buildInitPlan(opts initOptions) initPlan {
@@ -216,6 +234,7 @@ func buildInitPlan(opts initOptions) initPlan {
 			registerMCP: !opts.noMCP,
 			inlineDSN:   false, // never inline a secret; hooks read it from config
 			specs:       hookSpecsFor(opts.hooks),
+			skillsPath:  planSkillsPath(opts),
 		}
 		// The hosted URL (and token, if any) live in the 0600 config file, never
 		// inlined into Claude Code's settings. The token is a bearer credential.
@@ -256,6 +275,7 @@ func buildInitPlan(opts initOptions) initPlan {
 		brainDir:    brainDir,
 		registerMCP: !opts.noMCP,
 		specs:       hookSpecsFor(opts.hooks),
+		skillsPath:  planSkillsPath(opts),
 	}
 
 	// Compose the config file the server/hooks discover at runtime.
@@ -340,6 +360,7 @@ func renderInitPlan(p initPlan) {
 		} else {
 			fmt.Println("  • hooks:     none (MCP tools only)")
 		}
+		renderSkillsPlan(p)
 		return
 	}
 
@@ -362,6 +383,16 @@ func renderInitPlan(p initPlan) {
 	} else {
 		fmt.Println("  • hooks:     none (MCP tools only)")
 	}
+	renderSkillsPlan(p)
+}
+
+// renderSkillsPlan previews the manual-skill install line.
+func renderSkillsPlan(p initPlan) {
+	if p.skillsPath == "" {
+		fmt.Println("  • skills:    none (--no-skills)")
+		return
+	}
+	fmt.Printf("  • skills:    %s → %s  (run on demand)\n", skillSlashCommands(), p.skillsPath)
 }
 
 // initResult records what actually happened, step by step.
@@ -471,6 +502,37 @@ func applyInitPlan(p initPlan) initResult {
 			r.ok("installed %d hook(s) in %s", len(p.specs), p.settingsPath)
 		}
 	}
+
+	// 6. Skills — the manual counterpart to the brief/capture hooks. Plain
+	// markdown, no DSN or token inside, so this step is safe in every mode
+	// (local, hosted, --no-hooks) and needs no credential handling.
+	if p.skillsPath != "" {
+		results, err := installSkills(p.skillsPath)
+		if err != nil {
+			// Non-fatal: skills are a convenience, and a half-set-up brain is
+			// still a working brain. Report and keep going.
+			r.skip("skills not installed in %s: %s", p.skillsPath, err)
+		} else {
+			written, backups := 0, 0
+			for _, res := range results {
+				if res.Changed {
+					written++
+				}
+				if res.Backup != "" {
+					backups++
+				}
+			}
+			switch {
+			case written == 0:
+				r.ok("skills already current in %s (%s)", p.skillsPath, skillSlashCommands())
+			case backups > 0:
+				r.ok("installed %d skill(s) in %s (%s; %d prior version(s) backed up as .bak-mnemos)",
+					written, p.skillsPath, skillSlashCommands(), backups)
+			default:
+				r.ok("installed %d skill(s) in %s (%s)", written, p.skillsPath, skillSlashCommands())
+			}
+		}
+	}
 	return r
 }
 
@@ -527,6 +589,7 @@ func printInitNextSteps(p initPlan) {
 			fmt.Println("  3. Ask Claude to \"remember\" things or \"what do we know about …\" — the hosted")
 			fmt.Println("     brain answers over HTTP via the MCP tools.")
 		}
+		printSkillsNextStep(p)
 		// Project-scoped hosted setup (ADR 0009 Phase 3): the .mnemos marker just
 		// written opts this repo into federated reads — the hooks scope one request
 		// to the repo tenant below (personal ∪ repo). Print it so the operator can
@@ -556,10 +619,22 @@ func printInitNextSteps(p initPlan) {
 	} else {
 		fmt.Println("  3. Ask Claude to \"remember\" things or \"what do we know about …\" to use the MCP tools.")
 	}
+	printSkillsNextStep(p)
 	if p.env.LLM.Source == "none" {
 		fmt.Println("\nRunning zero-config (rule-based). For LLM extraction + semantic search, install Ollama")
 		fmt.Println("or set MNEMOS_LLM_PROVIDER / MNEMOS_LLM_API_KEY (see mnemos.example.yaml).")
 	}
+}
+
+// printSkillsNextStep tells the user how to reach the manual counterparts to
+// the brief/capture hooks. Worth its own line: unlike hooks, a skill only ever
+// runs when asked for by name, so an uninvoked skill is invisible.
+func printSkillsNextStep(p initPlan) {
+	if p.skillsPath == "" {
+		return
+	}
+	fmt.Printf("  4. Type  %s  any time to run brief/capture on demand —\n", skillSlashCommands())
+	fmt.Println("     mid-session, after a /clear, or before a compaction.")
 }
 
 // runInitService scaffolds a hosted `mnemos serve` deployment (compose + config
@@ -729,9 +804,10 @@ func dsnBackend(dsn string) string {
 // ---- MCP-triggered configuration (configure_environment tool) ----
 
 type mcpConfigureInput struct {
-	Hooks   string `json:"hooks,omitempty" jsonschema:"description=Comma list of hooks to install: recall,brief,capture (default: all three)"`
-	Project bool   `json:"project,omitempty" jsonschema:"description=Install into the project .claude/settings.json instead of the user-global file"`
-	Force   bool   `json:"force,omitempty" jsonschema:"description=Overwrite an existing starter config and replace prior hook entries"`
+	Hooks    string `json:"hooks,omitempty" jsonschema:"description=Comma list of hooks to install: recall,brief,capture (default: all three)"`
+	Project  bool   `json:"project,omitempty" jsonschema:"description=Install into the project .claude/settings.json instead of the user-global file"`
+	Force    bool   `json:"force,omitempty" jsonschema:"description=Overwrite an existing starter config and replace prior hook entries"`
+	NoSkills bool   `json:"noSkills,omitempty" jsonschema:"description=Skip installing the on-demand /mnemos-brief and /mnemos-capture skills"`
 }
 
 type mcpConfigureOutput struct {
@@ -748,12 +824,13 @@ type mcpConfigureOutput struct {
 // DSN this server is serving, so hooks and server always agree.
 func mcpRunConfigure(input mcpConfigureInput) (mcpConfigureOutput, error) {
 	opts := initOptions{
-		project: input.Project,
-		force:   input.Force,
-		noMCP:   true,
-		yes:     true,
-		hooks:   defaultHookSet(),
-		dsn:     resolveDSN(),
+		project:  input.Project,
+		force:    input.Force,
+		noSkills: input.NoSkills,
+		noMCP:    true,
+		yes:      true,
+		hooks:    defaultHookSet(),
+		dsn:      resolveDSN(),
 	}
 	if strings.TrimSpace(input.Hooks) != "" {
 		opts.hooks = parseHookSelection(input.Hooks)
@@ -765,7 +842,7 @@ func mcpRunConfigure(input mcpConfigureInput) (mcpConfigureOutput, error) {
 		Applied:     res.lines,
 		DetectedOS:  plan.env.OS + "/" + plan.env.Arch,
 		DetectedLLM: llmDetail(plan.env.LLM),
-		NextSteps:   "Restart Claude Code (or it may pick hooks up live), then run /hooks and /mcp to confirm. Recall/brief/capture now fire automatically.",
+		NextSteps:   "Restart Claude Code (or it may pick hooks up live), then run /hooks and /mcp to confirm. Recall/brief/capture now fire automatically; " + skillSlashCommands() + " run the same brief/capture on demand.",
 	}, nil
 }
 

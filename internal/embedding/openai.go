@@ -116,6 +116,12 @@ func (c *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 		if err := json.Unmarshal(respBody, &result); err != nil {
 			return nil, fmt.Errorf("unmarshal ollama embedding response: %w", err)
 		}
+		// Ollama truncates a batch that overflows its context window, returning
+		// fewer vectors than requested with a 200. Unchecked, the caller stores
+		// the prefix and reports success for the whole batch.
+		if err := validateVectors(result.Embeddings, len(texts), "ollama"); err != nil {
+			return nil, err
+		}
 		return result.Embeddings, nil
 	}
 
@@ -127,11 +133,26 @@ func (c *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 		return nil, fmt.Errorf("embedding API error: %s: %s", result.Error.Type, result.Error.Message)
 	}
 
-	vectors := make([][]float32, len(result.Data))
+	// Index is decoded straight from provider JSON and is signed, so it must be
+	// bounded at BOTH ends: an unchecked negative index is an immediate panic,
+	// which on a hosted `mnemos mcp --http` / `mnemos serve` takes down the
+	// daemon serving every tenant. Size by the request, not by the response, so
+	// a short answer leaves detectable holes rather than a silently shorter
+	// slice that still looks well-formed.
+	vectors := make([][]float32, len(texts))
 	for _, d := range result.Data {
-		if d.Index < len(vectors) {
-			vectors[d.Index] = d.Embedding
+		if d.Index < 0 || d.Index >= len(vectors) {
+			return nil, fmt.Errorf("%w: openai returned index %d for a %d-input request",
+				ErrIncompleteResponse, d.Index, len(texts))
 		}
+		if vectors[d.Index] != nil {
+			return nil, fmt.Errorf("%w: openai returned duplicate index %d",
+				ErrIncompleteResponse, d.Index)
+		}
+		vectors[d.Index] = d.Embedding
+	}
+	if err := validateVectors(vectors, len(texts), "openai"); err != nil {
+		return nil, err
 	}
 	return vectors, nil
 }

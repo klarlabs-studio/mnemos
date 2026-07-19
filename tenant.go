@@ -37,7 +37,15 @@ func (m *memory) Tenant(id string) (Memory, error) {
 	cfg := m.cfg
 	switch store.TenancyModeForDSN(m.dsn) {
 	case store.TenancyRowLevel:
-		cfg.storageDSN = withDSNParam(m.dsn, "tenant", id)
+		// setDSNParam, not withDSNParam: re-scoping an already-scoped Memory
+		// must REPLACE the tenant, not append a second one. Appending yields
+		// `?tenant=a&tenant=b`, and both postgres.ParseDSN and tenantFromDSN
+		// read it with Query().Get, which returns the FIRST value — so
+		// m.Tenant("a").Tenant("b") stayed pinned to tenant a while every
+		// caller, including Info(), believed it was b. A silent isolation
+		// failure with no error anywhere. The namespace branch below always
+		// replaced correctly; this one was the outlier.
+		cfg.storageDSN = setDSNParam(m.dsn, "tenant", id)
 	case store.TenancyNamespace:
 		cfg.storageDSN = setDSNParam(m.dsn, "namespace", store.TenantNamespace(id))
 	default:
@@ -45,16 +53,6 @@ func (m *memory) Tenant(id string) (Memory, error) {
 		return nil, fmt.Errorf("mnemos: tenant scoping is not supported on this backend (%q); use postgres, sqlite, mysql, or local libsql", backend)
 	}
 	return newFromCfg(cfg)
-}
-
-// withDSNParam appends a query parameter to a storage DSN, respecting any
-// existing query string.
-func withDSNParam(dsn, key, value string) string {
-	sep := "?"
-	if strings.Contains(dsn, "?") {
-		sep = "&"
-	}
-	return dsn + sep + key + "=" + value
 }
 
 // setDSNParam sets a query parameter, removing any existing occurrence first so

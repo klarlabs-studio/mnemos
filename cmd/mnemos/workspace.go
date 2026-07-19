@@ -44,15 +44,45 @@ func workspaceRegistryPath() string {
 	return filepath.Join(base, "mnemos", "workspaces.yaml")
 }
 
-func loadWorkspaceRegistry() workspaceRegistry {
+// loadWorkspaceRegistry reads the registry, reporting a malformed file rather
+// than silently yielding an empty one.
+//
+// The error return is load-bearing. Every mutator does load → mutate → save,
+// and save rewrites the file wholesale — so a discarded parse error meant one
+// typo in workspaces.yaml (or a truncated write) turned the next
+// `workspace create` into "delete every registered workspace", with no
+// warning. It also made resolveWorkspaceBrain miss, so hooks fell through to
+// the global brain and a session's knowledge landed in the wrong one while
+// appearing to work.
+//
+// A missing file is not an error: an empty registry is the correct starting
+// state.
+func loadWorkspaceRegistry() (workspaceRegistry, error) {
 	reg := workspaceRegistry{Workspaces: map[string]*workspace{}}
-	data, err := os.ReadFile(workspaceRegistryPath()) //nolint:gosec // config-dir path
+	path := workspaceRegistryPath()
+	data, err := os.ReadFile(path) //nolint:gosec // config-dir path
 	if err != nil {
-		return reg
+		if os.IsNotExist(err) {
+			return reg, nil
+		}
+		return reg, fmt.Errorf("read %s: %w", path, err)
 	}
-	_ = yaml.Unmarshal(data, &reg)
+	if err := yaml.Unmarshal(data, &reg); err != nil {
+		return reg, fmt.Errorf("parse %s: %w (fix it or move it aside; refusing to overwrite it)", path, err)
+	}
 	if reg.Workspaces == nil {
 		reg.Workspaces = map[string]*workspace{}
+	}
+	return reg, nil
+}
+
+// mustLoadWorkspaceRegistry is the entry point for commands that go on to
+// rewrite the registry. It refuses to continue on a malformed file so a
+// mutation can never silently discard the user's workspaces.
+func mustLoadWorkspaceRegistry(verbose bool) workspaceRegistry {
+	reg, err := loadWorkspaceRegistry()
+	if err != nil {
+		exitWithMnemosError(verbose, NewSystemError(err, "load workspace registry"))
 	}
 	return reg
 }
@@ -66,7 +96,31 @@ func saveWorkspaceRegistry(reg workspaceRegistry) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644) //nolint:gosec // non-secret registry
+	// Write via a temp file + rename so the registry is replaced atomically. A
+	// plain WriteFile truncates first, so a crash or a full disk mid-write left
+	// a half-written file — which the loader above now refuses to parse, but
+	// which previously read back as an empty registry.
+	//
+	// 0600, not 0644: a workspace's DB is whatever the global --db flag named,
+	// which can be a Postgres DSN carrying a password.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".workspaces-*.yaml")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeds
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // defaultWorkspaceDB is the central brain path for a named workspace (a workspace
@@ -88,7 +142,14 @@ func defaultWorkspaceDB(name string) string {
 // nearest ancestor of it (most specific path wins). Empty when none matches.
 // The hooks/MCP consult this first, then fall back to the .mnemos walk-up.
 func resolveWorkspaceBrain(cwd string) (dsn, name, folder string) {
-	reg := loadWorkspaceRegistry()
+	reg, err := loadWorkspaceRegistry()
+	if err != nil {
+		// Hooks call this and must fail open — but not silently. Falling
+		// through to the global brain is a degradation the user needs to know
+		// about, because their session's knowledge lands somewhere else.
+		fmt.Fprintf(os.Stderr, "mnemos: workspace registry unreadable, ignoring workspaces: %v\n", err)
+		return "", "", ""
+	}
 	// An explicit pin (`workspace use`) overrides folder resolution: the session
 	// uses this workspace regardless of cwd. Its first folder is the AGENTS.md root.
 	if p := strings.TrimSpace(reg.Active); p != "" {
@@ -205,7 +266,7 @@ func handleWorkspaceCreate(args []string, f Flags) {
 		db = defaultWorkspaceDB(name)
 	}
 
-	reg := loadWorkspaceRegistry()
+	reg := mustLoadWorkspaceRegistry(f.Verbose)
 	if _, exists := reg.Workspaces[name]; exists && !f.Force {
 		exitWithMnemosError(f.Verbose, NewUserError("workspace %q already exists (use --force to replace)", name))
 		return
@@ -229,7 +290,7 @@ func handleWorkspaceList(args []string, f Flags) {
 		exitWithMnemosError(f.Verbose, NewUserError("workspace list takes no flags (got %q)", a))
 		return
 	}
-	reg := loadWorkspaceRegistry()
+	reg := mustLoadWorkspaceRegistry(f.Verbose)
 	names := make([]string, 0, len(reg.Workspaces))
 	for n := range reg.Workspaces {
 		names = append(names, n)
@@ -264,7 +325,7 @@ func handleWorkspaceList(args []string, f Flags) {
 // regardless of cwd — useful when working from a folder outside its folder list.
 // `use` with no arg prints the current pin; `use --none` (or --clear) removes it.
 func handleWorkspaceUse(args []string, f Flags) {
-	reg := loadWorkspaceRegistry()
+	reg := mustLoadWorkspaceRegistry(f.Verbose)
 	if len(args) == 0 {
 		if strings.TrimSpace(reg.Active) == "" {
 			fmt.Println("No workspace pinned (activation is by folder). Pin one with: mnemos workspace use <name>")
@@ -345,7 +406,7 @@ func handleWorkspaceExport(args []string, f Flags) {
 		exitWithMnemosError(f.Verbose, NewUserError("workspace export <name> [--out <file>]"))
 		return
 	}
-	reg := loadWorkspaceRegistry()
+	reg := mustLoadWorkspaceRegistry(f.Verbose)
 	ws := reg.Workspaces[name]
 	if ws == nil {
 		exitWithMnemosError(f.Verbose, NewUserError("no workspace named %q", name))
@@ -434,7 +495,7 @@ func handleWorkspaceImport(args []string, f Flags) {
 	if db == "" {
 		db = defaultWorkspaceDB(name)
 	}
-	reg := loadWorkspaceRegistry()
+	reg := mustLoadWorkspaceRegistry(f.Verbose)
 	if _, exists := reg.Workspaces[name]; exists && !f.Force {
 		exitWithMnemosError(f.Verbose, NewUserError("workspace %q already exists (use --force to replace)", name))
 		return
@@ -460,7 +521,7 @@ func handleWorkspaceRemove(args []string, f Flags) {
 		return
 	}
 	name := strings.TrimSpace(args[0])
-	reg := loadWorkspaceRegistry()
+	reg := mustLoadWorkspaceRegistry(f.Verbose)
 	if _, ok := reg.Workspaces[name]; !ok {
 		exitWithMnemosError(f.Verbose, NewUserError("no workspace named %q", name))
 		return
