@@ -2,6 +2,7 @@ package embedding
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 )
@@ -48,4 +49,34 @@ func CosineSimilarity(a, b []float32) (float32, error) {
 		return 0, nil
 	}
 	return dot / (float32(math.Sqrt(float64(normA))) * float32(math.Sqrt(float64(normB)))), nil
+}
+
+// ErrIncompleteResponse reports an embedding provider response that does not
+// carry exactly one usable vector per input text.
+var ErrIncompleteResponse = errors.New("incomplete embedding response")
+
+// validateVectors checks a provider's response before it reaches storage.
+//
+// This is a load-bearing check, not defensive padding. Storage accepts an
+// empty vector without complaint — EncodeVector(nil) yields a zero-length blob
+// and the row commits with dimensions=0 — and the pipeline reports the number
+// of vectors returned as the number of embeddings created. So a provider that
+// answers short, out of order, or with a hole produces claims that look
+// embedded to every consumer and are permanently invisible to semantic recall,
+// with a success message and exit code 0.
+//
+// Catching it here means the caller's existing retry/error path handles it,
+// instead of silent corruption spreading into the store.
+func validateVectors(vectors [][]float32, want int, provider string) error {
+	if len(vectors) != want {
+		return fmt.Errorf("%w: %s returned %d vectors for %d input(s)",
+			ErrIncompleteResponse, provider, len(vectors), want)
+	}
+	for i, v := range vectors {
+		if len(v) == 0 {
+			return fmt.Errorf("%w: %s returned an empty vector at index %d",
+				ErrIncompleteResponse, provider, i)
+		}
+	}
+	return nil
 }
