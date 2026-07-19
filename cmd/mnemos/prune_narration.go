@@ -46,18 +46,7 @@ func pruneNarration(dryRun bool, f Flags) {
 				return NewSystemError(err, "load claims")
 			}
 
-			// Only active claims are candidates: a contested or already
-			// deprecated claim is either under review or already retired, and
-			// re-deprecating it would churn its history for no gain.
-			var junk []domain.Claim
-			for _, c := range claims {
-				if c.Status != domain.ClaimStatusActive {
-					continue
-				}
-				if extract.IsJunk(c.Text) {
-					junk = append(junk, c)
-				}
-			}
+			junk := selectNarrationClaims(claims)
 
 			fmt.Printf("active claims:   %d\n", countActive(claims))
 			fmt.Printf("narration/junk:  %d (%.1f%% of active)\n", len(junk), pct(len(junk), countActive(claims)))
@@ -99,6 +88,26 @@ func pruneNarration(dryRun bool, f Flags) {
 	if err != nil {
 		exitWithMnemosError(f.Verbose, err)
 	}
+}
+
+// selectNarrationClaims returns the ACTIVE claims that the extraction filter
+// classifies as conversational pollution. Only active claims are candidates: a
+// contested or already-deprecated claim is either under review or already
+// retired, and re-deprecating it would churn its history for no gain.
+//
+// Pure so the prune's core selection is testable without the store, the
+// governed writer, or the CLI plumbing around it.
+func selectNarrationClaims(claims []domain.Claim) []domain.Claim {
+	var junk []domain.Claim
+	for _, c := range claims {
+		if c.Status != domain.ClaimStatusActive {
+			continue
+		}
+		if extract.IsJunk(c.Text) {
+			junk = append(junk, c)
+		}
+	}
+	return junk
 }
 
 func countActive(claims []domain.Claim) int {
