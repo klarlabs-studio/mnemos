@@ -1350,6 +1350,7 @@ func printUsage() {
 	fmt.Println("  init --yes                           Apply without the confirmation prompt")
 	fmt.Println("  init --project                       Scope the brain + hooks to this project instead of global")
 	fmt.Println("  init --no-hooks                      Register the MCP server + config without installing hooks")
+	fmt.Println("  init --no-skills                     Skip the on-demand /mnemos-brief and /mnemos-capture skills")
 	fmt.Println("  init --hooks recall,capture          Install only the named hooks (of recall,brief,capture)")
 	fmt.Println("  init --db <dsn>                      Use a specific backend (sqlite/postgres/mysql/libsql)")
 	fmt.Println("  init --url <url> [--token <jwt>]     Connect Claude Code to a hosted mnemos (HTTP MCP endpoint)")

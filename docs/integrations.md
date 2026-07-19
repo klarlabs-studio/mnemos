@@ -473,7 +473,7 @@ Mnemos includes an MCP server (`mnemos mcp`) that exposes three tools over stdio
 | `query_knowledge` | Query the knowledge base with evidence-backed results | `question` (required), `runId` (optional) |
 | `process_text` | Ingest raw text, extract claims, detect relationships | `text` (required), `useLlm` (optional), `useEmbeddings` (optional) |
 | `knowledge_metrics` | Return counts and statistics about the knowledge base | (none) |
-| `configure_environment` | Finish wiring Mnemos into Claude Code (install recall/brief/capture hooks + starter config) from inside a session | `hooks` (optional), `project` (optional), `force` (optional) |
+| `configure_environment` | Finish wiring Mnemos into Claude Code (install recall/brief/capture hooks + the /mnemos-brief and /mnemos-capture skills + starter config) from inside a session | `hooks` (optional), `project` (optional), `force` (optional), `noSkills` (optional) |
 
 ### Claude Desktop
 
@@ -528,6 +528,11 @@ mnemos init
   - **recall** (`UserPromptSubmit`) — injects claims relevant to your prompt before Claude answers,
   - **brief** (`SessionStart`) — injects a one-line brain summary at session start,
   - **capture** (`SessionEnd`) — distills the finished session into the brain.
+- installs two **skills** into `~/.claude/skills/` so the same two jobs can also be run on demand:
+  - **`/mnemos-brief`** — the deep version of the brief hook: totals, what the brain knows about your current work, open contradictions, recent decisions.
+  - **`/mnemos-capture`** — distils the session into the brain *now*, while the agent still holds it in context, instead of waiting for `SessionEnd`.
+
+**Hooks vs. skills.** The hooks are unattended and fire on Claude Code lifecycle events; the skills only run when you ask for them by name. The pairing matters most in two places: mid-session, where the `SessionStart` brief has long scrolled out of context, and before a `/clear` or a compaction, where `SessionEnd` has not fired yet and the session's knowledge would otherwise be lost. Because the agent runs the skill with the conversation in context, `/mnemos-capture` can distil what actually mattered rather than mining it back out of a transcript. Both prefer the MCP tools and fall back to the CLI only when the MCP server is not connected; both are plain markdown carrying no DSN and no token, so they install identically in local and hosted mode. Skip them with `--no-skills`; they install even with `--no-hooks`, which is exactly the "no unattended writes, I'll ask when I want it" setup.
 
 It asks before writing (skip with `--yes`), previews with `--dry-run`, and backs up `settings.json` before editing. It is idempotent and preserves any hooks you already have.
 
@@ -550,6 +555,7 @@ Other variants:
 mnemos init --dry-run              # preview only, write nothing
 mnemos init --project              # scope brain + hooks to ./.mnemos and ./.claude
 mnemos init --no-hooks             # register the MCP server + config, no hooks
+mnemos init --no-skills            # skip /mnemos-brief and /mnemos-capture
 mnemos init --hooks recall,capture # install only the named hooks
 mnemos setup                       # minimal: register only the MCP server
 ```
