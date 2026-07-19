@@ -181,6 +181,23 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 	// the right changed_by — the original implementation attributed
 	// per-claim, and most pipelines do produce homogeneous batches
 	// (one user, one agent), so this is usually a single group.
+	// Stamp a freshness half-life on claims that assert mutable system state.
+	//
+	// HalfLifeDays is honoured by trust scoring, staleness, curiosity and
+	// query, but nothing set it at ingest — so every captured claim inherited
+	// the 90-day default, and an assertion about what is installed or running
+	// recalled as confidently a month later as the day it was written. That is
+	// the mechanism behind stale beliefs like "we're not using warden" or
+	// "mnemos doesn't work": each was true when written and none expired.
+	//
+	// Only set when unset, so an explicit half-life (human verification via
+	// MarkVerified) always wins.
+	for i := range enriched {
+		if enriched[i].HalfLifeDays == 0 {
+			enriched[i].HalfLifeDays = extract.HalfLifeFor(string(enriched[i].Type), enriched[i].Text)
+		}
+	}
+
 	groups := groupClaimsByCreatedBy(enriched)
 	for actor, group := range groups {
 		if err := conn.Claims.UpsertWithReasonAs(ctx, group, "pipeline", actor); err != nil {

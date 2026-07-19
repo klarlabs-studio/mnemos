@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/client"
+	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/query"
 )
 
@@ -146,6 +147,16 @@ type recallClaim struct {
 	Text       string
 	TrustScore float64
 	Source     string // "global" | "workspace" (blank = untagged)
+	// Contested marks a claim whose own status is contested — i.e. mnemos has
+	// recorded a direct conflict about it. Distinct from Conflicted below,
+	// which is about global-vs-workspace disagreement.
+	//
+	// Contested was previously counted and then ignored at recall, so a claim
+	// under active dispute was surfaced with the same weight and the same
+	// trust figure as an uncontested one. "Contested" is a holding state, not
+	// a resolution, and it should cost something to be in it.
+	Contested bool
+
 	// Conflicted marks a claim that a surface-dissonance read (ADR 0011 Phase C)
 	// found to disagree with the other tier on the same topic. Both sides of the
 	// disagreement are kept and flagged so the renderer can warn.
@@ -275,7 +286,10 @@ func recallLocal(ctx context.Context, q, source string) ([]recallClaim, int) {
 	}
 	claims := make([]recallClaim, 0, len(out.Claims))
 	for _, c := range out.Claims {
-		claims = append(claims, recallClaim{Type: string(c.Type), Text: c.Text, TrustScore: c.TrustScore, Source: source})
+		claims = append(claims, recallClaim{
+			Type: string(c.Type), Text: c.Text, TrustScore: c.TrustScore, Source: source,
+			Contested: c.Status == domain.ClaimStatusContested,
+		})
 	}
 	return claims, len(out.Contradictions)
 }
@@ -324,7 +338,31 @@ func mergeRecall(repo []recallClaim, repoContra int, global []recallClaim, globa
 	if policy == query.PrecedenceSurfaceDissonance {
 		flagRecallDissonance(out, repo, global)
 	}
-	return out, repoContra + globalContra
+	return demoteContested(out), repoContra + globalContra
+}
+
+// demoteContested moves claims whose status is contested below uncontested
+// ones, preserving relative order within each group.
+//
+// renderRecall shows only the top six, so ordering decides what the reader
+// actually sees. A contested claim is one mnemos has recorded a direct
+// conflict about; it should not displace a settled claim from that window.
+//
+// A stable partition rather than a re-sort on penalised trust: tier precedence
+// (ADR 0011 repo-wins) is a deliberate ordering that a global sort by score
+// would quietly discard. This demotes only on contested-ness and leaves every
+// other ordering decision exactly as the query engine made it.
+func demoteContested(claims []recallClaim) []recallClaim {
+	settled := make([]recallClaim, 0, len(claims))
+	contested := make([]recallClaim, 0)
+	for _, c := range claims {
+		if c.Contested {
+			contested = append(contested, c)
+			continue
+		}
+		settled = append(settled, c)
+	}
+	return append(settled, contested...)
 }
 
 // flagRecallDissonance marks, in place, every merged claim that participates in
@@ -365,6 +403,14 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 		}
 	}
 	var b strings.Builder
+	// A heavily contested topic is the single most useful thing in this block,
+	// and it used to be a footnote under six high-trust claims. Readers took
+	// the claims at face value and skimmed past the warning — which is exactly
+	// backwards, because the warning is what prompts the verification that
+	// catches a stale claim. Above the threshold it leads.
+	if contradictions >= leadWithContradictionsAt {
+		fmt.Fprintf(&b, "⚠ This topic is heavily contested — %d contradiction(s) recorded. Verify against the source before relying on anything below.\n", contradictions)
+	}
 	b.WriteString("Relevant knowledge from Mnemos (your long-term memory):\n")
 	const maxClaims = 6
 	for i, c := range claims {
@@ -376,9 +422,15 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 		if hasRepo && c.Source != "" {
 			tier = "{" + c.Source + "} "
 		}
-		fmt.Fprintf(&b, "  - %s[%s] %s (trust %.2f)\n", tier, c.Type, strings.TrimSpace(c.Text), c.TrustScore)
+		// Mark the individual claims under dispute, so a contested claim is
+		// identifiable rather than merely counted in an aggregate.
+		mark := ""
+		if c.Contested {
+			mark = " ⚠contested"
+		}
+		fmt.Fprintf(&b, "  - %s[%s] %s (trust %.2f%s)\n", tier, c.Type, strings.TrimSpace(c.Text), c.TrustScore, mark)
 	}
-	if contradictions > 0 {
+	if contradictions > 0 && contradictions < leadWithContradictionsAt {
 		fmt.Fprintf(&b, "  ⚠ %d contradiction(s) recorded on this topic — verify before relying.\n", contradictions)
 	}
 	if hasDissonance {
@@ -390,6 +442,14 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 	b.WriteString("If this contradicts newer information, prefer the newer and note the conflict.")
 	return b.String()
 }
+
+// leadWithContradictionsAt is the contradiction count at or above which the
+// warning moves above the claims instead of below them.
+//
+// Chosen from observed recall blocks: real sessions carried counts of 107, 157
+// and 485 on contested topics, while an ordinary topic carries a handful. 25
+// sits well clear of normal disagreement without waiting for the extremes.
+const leadWithContradictionsAt = 25
 
 // hookBrief (SessionStart) injects a short brain summary at session start.
 func hookBrief(ev hookEvent) {
