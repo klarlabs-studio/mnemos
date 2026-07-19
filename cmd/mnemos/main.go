@@ -917,6 +917,21 @@ func handleExtract(args []string, f Flags) {
 }
 
 func handleRelate(args []string, f Flags) {
+	// --prune-stale re-derives existing edges against the current detectors and
+	// drops what they no longer produce. Relationships are derived state, but
+	// nothing re-derived them when a detector changed, so brains accumulate
+	// residue from every superseded heuristic.
+	for i, a := range args {
+		if a == "--prune-stale" {
+			args = append(args[:i], args[i+1:]...)
+			if len(args) > 0 {
+				exitWithMnemosError(f.Verbose, NewUserError("relate --prune-stale takes no event ids (got %q)", args[0]))
+				return
+			}
+			pruneStaleRelationships(f.DryRun, f)
+			return
+		}
+	}
 	err := runJob("relate", map[string]string{"event_ids": strings.Join(args, ",")}, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
 		conn := w.Conn()
 		actor, actorErr := resolveActor(ctx, conn.Users, f.Actor)
@@ -1373,7 +1388,7 @@ func printUsage() {
 	fmt.Println("  ingest --text <content>              Ingest raw text as events")
 	fmt.Println("  extract <event-id> [event-id ...]    Extract claims from events")
 	fmt.Println("  extract --run <run-id>               Extract claims from all events in a run")
-	fmt.Println("  relate [event-id ...]                Detect relationships between claims")
+	fmt.Println("  relate [event-id ...]                Detect relationships between claims\n  relate --prune-stale [--dry-run]     Drop stored edges the current detectors no longer produce")
 	fmt.Println("")
 	fmt.Println("All-in-One:")
 	fmt.Println("  process <path>                       Ingest + extract + relate in one step")

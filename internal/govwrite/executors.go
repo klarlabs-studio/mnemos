@@ -568,3 +568,50 @@ func (w *Writer) ResolveIncident(ctx context.Context, incidentID string, resolve
 	})
 	return err
 }
+
+// --- Relationship pruning ---
+
+type pruneRelationshipsInput struct {
+	Keep    []domain.Relationship
+	Dropped int
+}
+
+type pruneRelationshipsExecutor struct{ conn *store.Conn }
+
+// Execute replaces the whole relationship set with Keep.
+//
+// Relationships are derived state, but "derived" does not mean "unaudited":
+// dropping tens of thousands of edges is exactly the kind of write the kernel
+// exists to record, so this routes through it like every other mutation rather
+// than reaching past it to the repository. The architectural fitness test
+// (TestNoBypass_DeliveryAdaptersDoNotReachStorage) enforces that.
+func (e pruneRelationshipsExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
+	in, ok := payload[pruneRelationshipsInput](input)
+	if !ok {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("prune_relationships: unexpected input %T", input)
+	}
+	if err := e.conn.Relationships.DeleteAll(ctx); err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("clear relationships: %w", err)
+	}
+	if len(in.Keep) > 0 {
+		if err := e.conn.Relationships.Upsert(ctx, in.Keep); err != nil {
+			// The set is now empty and the restore failed. Say so loudly: the
+			// caller's backup is the recovery path.
+			return axidomain.ExecutionResult{}, nil, fmt.Errorf(
+				"restore surviving relationships (the relationship table is now EMPTY; restore from backup): %w", err)
+		}
+	}
+	return axidomain.ExecutionResult{
+			Data:    writeCount{Accepted: len(in.Keep)},
+			Summary: fmt.Sprintf("pruned %d relationship(s), retained %d", in.Dropped, len(in.Keep)),
+		}, ev("mnemos.write.relationships.prune", map[string]any{
+			"dropped": in.Dropped, "retained": len(in.Keep),
+		}), nil
+}
+
+// PruneRelationships replaces the stored relationship set with keep, dropping
+// everything else. dropped is recorded on the evidence row for the audit trail.
+func (w *Writer) PruneRelationships(ctx context.Context, keep []domain.Relationship, dropped int) (int, error) {
+	out, err := dispatch[writeCount](ctx, w, actionPruneRelationships, pruneRelationshipsInput{Keep: keep, Dropped: dropped})
+	return out.Accepted, err
+}
