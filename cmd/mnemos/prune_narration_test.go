@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"go.klarlabs.de/mnemos/internal/domain"
+)
 
 // The prune's classification correctness is covered by internal/extract (it
 // calls extract.IsJunk directly). This guards the command's flag contract: a
@@ -28,5 +32,38 @@ func TestParsePruneArgs(t *testing.T) {
 				t.Errorf("target = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// selectNarrationClaims is the prune's only novel logic: filter to ACTIVE and
+// classify via the shared extraction filter. Classification precision/recall
+// is covered in internal/extract; this pins the selection contract.
+func TestSelectNarrationClaims(t *testing.T) {
+	claims := []domain.Claim{
+		{ID: "real", Text: "We chose Postgres because write volume outgrew SQLite", Status: domain.ClaimStatusActive},
+		{ID: "leadin", Text: "Now wiring the handler into core:", Status: domain.ClaimStatusActive},
+		{ID: "narration", Text: "Let me check the config", Status: domain.ClaimStatusActive},
+		// A junk claim that is already deprecated must NOT be re-selected.
+		{ID: "already-dep", Text: "Getting the detail:", Status: domain.ClaimStatusDeprecated},
+		// A junk claim that is contested is under review — leave it.
+		{ID: "contested", Text: "Verifying the impact:", Status: domain.ClaimStatusContested},
+	}
+	got := selectNarrationClaims(claims)
+
+	gotIDs := map[string]bool{}
+	for _, c := range got {
+		gotIDs[c.ID] = true
+	}
+	if !gotIDs["leadin"] || !gotIDs["narration"] {
+		t.Errorf("missed active junk claims: got %v", gotIDs)
+	}
+	if gotIDs["real"] {
+		t.Error("selected a real knowledge claim for deprecation")
+	}
+	if gotIDs["already-dep"] {
+		t.Error("re-selected an already-deprecated claim, churning its history")
+	}
+	if gotIDs["contested"] {
+		t.Error("selected a contested (under-review) claim")
 	}
 }
