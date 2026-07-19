@@ -121,3 +121,65 @@ func TestIsJunkClaimFiltersAgentNarration(t *testing.T) {
 		}
 	}
 }
+
+// Long lead-ins — full sentences ending in a colon whose payload lives
+// elsewhere — are the largest narration class the census exposed, and the
+// <=4-word section-label cap let them through. Every colon-ender in a spread
+// sample of a real brain was a lead-in, not an assertion.
+func TestIsJunkClaim_LongLeadIns(t *testing.T) {
+	leadIns := []string{
+		"Confirmed absent from every downstream surface:",
+		"Finding #1 is fixed, with the scope somewhat larger than the original diagnosis:",
+		"Now the two read paths (LoadRollout and ListRollouts):",
+		"What shipped (3 atomic commits on main):",
+		"Two things I've stopped on rather than guess:",
+		"The documented fix is to await router.isReady() before mounting:",
+	}
+	for _, s := range leadIns {
+		if !isJunkClaim(s) {
+			t.Errorf("kept a lead-in as a claim: %q", s)
+		}
+	}
+}
+
+// The colon is the signal, but it must not eat real knowledge. A claim that
+// asserts something and merely happens to end in a colon-free clause, or is
+// structured data, must survive.
+func TestIsLeadIn_KeepsKnowledgeAndData(t *testing.T) {
+	// A bare trailing colon IS the junk signal — real structured knowledge
+	// ("MNEMOS_CAPTURE_TIMEOUT = 4m") does not end in one. The safety property
+	// that matters is that isLeadIn never fires on a claim WITHOUT a trailing
+	// colon, so ordinary assertions are untouchable by this rule.
+	nonColon := []string{
+		"we chose Postgres because the write volume outgrew SQLite",
+		"the retry budget is 3 attempts, not 5",
+		"config precedence: env var overrides file", // colon mid-sentence, payload present
+		"the three environments are dev, staging, and prod",
+		"MNEMOS_CAPTURE_TIMEOUT = 4m by default",
+	}
+	for _, s := range nonColon {
+		if isLeadIn(s) {
+			t.Errorf("isLeadIn fired on a non-lead-in claim: %q", s)
+		}
+		if isJunkClaim(s) {
+			t.Errorf("dropped real content: %q", s)
+		}
+	}
+	// A colon-ending claim that carries structured payload is exempted so a
+	// genuine "the mapping is: {..." style is not eaten by the prose rule.
+	if isLeadIn("the resulting config is: {timeout=4m}:") {
+		t.Error("isLeadIn ate a structured-payload colon claim")
+	}
+}
+
+// Short colon phrases stay with isSectionLabel; the two rules must not disagree
+// about the same input.
+func TestIsLeadIn_DefersShortToSectionLabel(t *testing.T) {
+	if isLeadIn("Getting the detail:") {
+		t.Error("isLeadIn claimed a short phrase that belongs to isSectionLabel")
+	}
+	// But it's still junk overall, via isSectionLabel.
+	if !isJunkClaim("Getting the detail:") {
+		t.Error("short colon phrase not caught by either rule")
+	}
+}
