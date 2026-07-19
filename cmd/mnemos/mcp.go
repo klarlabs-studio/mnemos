@@ -870,7 +870,7 @@ func handleMCP(args []string) {
 		closeConnCache()
 	}()
 
-	mw := mcp.WithMiddleware(mcp.DefaultMiddlewareWithTimeout(mcpBoltLogger{logger: logger}, 30*time.Second)...)
+	mw := mcp.WithMiddleware(mcpMiddlewareStack(logger)...)
 	if serveCfg.httpAddr != "" {
 		// Multi-tenant scoping isolates per token tenant: Postgres by RLS,
 		// sqlite/mysql/local libSQL by a separate namespace per tenant. Refuse to
