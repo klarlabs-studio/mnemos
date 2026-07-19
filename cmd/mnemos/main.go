@@ -246,6 +246,8 @@ func main() {
 		handleRecomputeTrust(args, flags)
 	case "dedup":
 		handleDedupe(args, flags)
+	case "prune":
+		handlePrune(args, flags)
 	case "entities":
 		handleEntities(args, flags)
 	case "extract-entities":
@@ -1475,6 +1477,7 @@ func printUsage() {
 	fmt.Println("  reembed [--force] [--dry-run]        (Re)generate claim embeddings under the current embed config")
 	fmt.Println("  recompute-trust [--all]              Rebuild trust_score for every claim under the current policy")
 	fmt.Println("  dedup [--threshold T] [--force]      Merge near-duplicate claims by embedding similarity (dry-run by default)")
+	fmt.Println("  prune --narration [--dry-run]        Deprecate stored conversational pollution the extraction filter now catches")
 	fmt.Println("  consolidate [--dry-run] [--forget-below-trust T]  The cognitive \"sleep\" pass: dedupe + refresh trust,")
 	fmt.Println("    [--forget-refuted] [--synthesize]  and optionally forget/reinforce/synthesize/replay. Deterministic.")
 	fmt.Println("  sync-docs [--claude] [--file <name>] Write this repo's learnings into AGENTS.md (or CLAUDE.md) so")
