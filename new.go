@@ -151,6 +151,9 @@ func newFromCfg(cfg config) (Memory, error) {
 		// a caller-supplied sink.
 		logger: cfg.logger,
 	}
+	// Root context for background embedding work, cancelled by Close so
+	// in-flight goroutines stop before the connection goes away.
+	m.embedCtx, m.embedCancel = context.WithCancel(context.Background())
 
 	// The cumulative token budget (WithTokenBudget) is enforced at the
 	// Mnemos layer across writes: a pre-execution gate rejects writes once
