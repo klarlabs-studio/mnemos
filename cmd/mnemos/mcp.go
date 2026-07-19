@@ -1047,6 +1047,15 @@ func resolveMCPActor() string {
 // directory (the project Claude Code spawned it in). Empty when the server isn't
 // inside an opted-in repo, or in hosted mode.
 func mcpRepoBrainDSN() string {
+	// The repo overlay resolves from the SERVER's working directory, so on a
+	// multi-tenant server it is the same un-tenanted SQLite file for every
+	// tenant — federating it into a query would hand each tenant data from
+	// outside its isolation boundary. repoBrain only bails on
+	// hostedConfigured(), which tests MNEMOS_URL: a *client* setting that is
+	// never present on the server. Refuse here instead, as watch_file does.
+	if tenantRequired {
+		return ""
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return ""

@@ -199,3 +199,48 @@ func TestDisplayDSNLeavesCredentialFreeDSNIntact(t *testing.T) {
 		t.Errorf("displayDSN rewrote a credential-free DSN: %s", got)
 	}
 }
+
+// The repo overlay resolves from the SERVER's working directory, so on a
+// multi-tenant server it is one un-tenanted SQLite file shared by every
+// tenant. resolveDSNForContext returned a context override BEFORE consulting
+// the tenant, so a --require-tenant server started inside a directory holding
+// a .mnemos/mnemos.db federated that shared brain into every tenant's
+// default-scope query — a cross-tenant read.
+func TestResolveDSNForContext_RefusesOverrideInMultiTenantMode(t *testing.T) {
+	tenantRequired = true
+	t.Cleanup(func() { tenantRequired = false })
+
+	ctx := withDSNOverride(context.Background(), "sqlite:///tmp/some-repo/.mnemos/mnemos.db")
+	got, err := resolveDSNForContext(ctx)
+	if err == nil {
+		t.Fatalf("multi-tenant request accepted an un-tenanted brain override: %s", got)
+	}
+	if got != "" {
+		t.Errorf("returned a DSN alongside the error: %s", got)
+	}
+}
+
+// Single-tenant is the normal local setup and must be untouched: the repo
+// overlay is the whole point of the override.
+func TestResolveDSNForContext_OverrideHonouredSingleTenant(t *testing.T) {
+	tenantRequired = false
+	const repo = "sqlite:///tmp/some-repo/.mnemos/mnemos.db"
+
+	got, err := resolveDSNForContext(withDSNOverride(context.Background(), repo))
+	if err != nil {
+		t.Fatalf("single-tenant override refused: %v", err)
+	}
+	if got != repo {
+		t.Errorf("resolved %q, want the override %q", got, repo)
+	}
+}
+
+// Belt and braces: the override must not even be produced in multi-tenant mode.
+func TestMCPRepoBrainDSN_EmptyInMultiTenantMode(t *testing.T) {
+	tenantRequired = true
+	t.Cleanup(func() { tenantRequired = false })
+
+	if got := mcpRepoBrainDSN(); got != "" {
+		t.Errorf("multi-tenant server produced a repo overlay DSN: %s", got)
+	}
+}
