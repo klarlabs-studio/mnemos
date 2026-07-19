@@ -714,7 +714,14 @@ func parseTranscriptLine(raw string) (string, bool) {
 func extractMessageText(message, content json.RawMessage) string {
 	for _, raw := range []json.RawMessage{message, content} {
 		if t := textFromAny(raw); t != "" {
-			return t
+			// Strip harness-injected content (system reminders, task
+			// notifications, loaded skill files, resume preambles). It arrives
+			// in user-role messages, so without this capture reads it as
+			// conversation and extraction turns it into claims — 98 of 525
+			// junk claims removed from one production brain came from exactly
+			// this. Returns "" when the message was nothing else, and the
+			// caller then skips the line.
+			return stripHarnessText(t)
 		}
 	}
 	return ""
