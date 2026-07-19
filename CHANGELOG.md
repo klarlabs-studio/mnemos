@@ -8,6 +8,104 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.102.0] — 2026-07-19
+
+A correctness release. An audit of the capture, MCP, tenancy and embedding paths
+turned up eleven confirmed defects — several of them silently losing knowledge
+or silently widening access — plus two systemic problems found while verifying
+the fixes: the test suite was writing to the developer's real brain, and the
+contradiction detectors were manufacturing false positives at scale.
+
+### Fixed — silent knowledge loss
+
+- **Incremental capture advanced its offset past text it never captured.** The
+  reader consumed up to 4 MiB but the extractor stopped at `maxBytes` (8/20 KiB),
+  and only the raw span was recorded — so everything past the cap was marked
+  captured without being read, unreachable by any later Stop, PreCompact or
+  SessionEnd sweep. Measured on a 31 KB transcript: 8,230 bytes captured, offset
+  jumped to EOF, **74% lost with no error**. It fired hardest on exactly the
+  backlog PreCompact exists to drain. SessionEnd now also drains in a loop under
+  one shared budget instead of taking a single terminal chunk.
+- **`MNEMOS_CAPTURE_TIMEOUT` above 300s silently reintroduced the SIGKILL bug.**
+  The docs told users to re-run `mnemos init` to widen the hook timeout; nothing
+  read the budget, so it did nothing and Claude Code killed capture mid-pipeline.
+  The installed timeout is now derived from the configured budget.
+- **Provider embedding responses were never validated.** An unbounded signed
+  `Index` from provider JSON could panic the process (taking down a multi-tenant
+  daemon); holes left `nil` vectors that stored as `dimensions=0` — claims that
+  looked embedded and were invisible to semantic recall; and a short response was
+  silently truncated and reported as success.
+- **`embedAsync` outlived `Close()`**, re-reading a nil'd connection from its own
+  goroutine — a data race and a nil-deref panic. `remember_episode` does
+  `defer mem.Close()` and returns mid-embed, so on a long-lived MCP server that
+  took down every other in-flight call.
+- **A corrupt workspace registry was silently replaced by an empty one**, so the
+  next `workspace create` erased every registered workspace. Writes are now
+  atomic and `0600` (the file can hold a DSN password).
+
+### Fixed — security
+
+- **The MCP HTTP surface authenticated but never checked token scopes.** A token
+  minted `--scope claims:read` was refused `POST /v1/beliefs` by REST and then
+  allowed to call `process_text`, `remember`, `forget` and every other write tool
+  over `mcp --http --auth`. Enforced now in one middleware over `tools/call`;
+  an unclassified new tool fails the build.
+- **`Memory.Tenant()` appended `?tenant=` instead of replacing it**, so
+  re-scoping left the Memory pinned to the *first* tenant while callers believed
+  otherwise.
+- **The repo-brain override bypassed the tenant check**, so a `--require-tenant`
+  server started in a directory containing `.mnemos/mnemos.db` federated that
+  shared brain into every tenant's query.
+- **Credentialed DSNs were printed in cleartext** by `doctor` and `audit`.
+
+### Fixed — contradiction detection
+
+- **Three detectors were manufacturing contradictions from incidental token
+  overlap.** A production brain held 52,738 `contradicts` edges across 11,254
+  claims — 97.9% of them linking claims from different sessions, months apart, in
+  unrelated projects. At that volume the recall warning is noise, which trains
+  the reader to ignore it and destroys the signal when a contradiction is real.
+  The temporal path (60% of edges) required only two shared tokens for long
+  claims and counted the aspect markers themselves toward that anchor; the
+  numeric path measured "non-numeric overlap" over a token set that included the
+  numerals; the entity path read sentence-initial capitals as proper nouns.
+  **67.9% of stored edges are no longer produced.**
+- **Git/PR dedupe was broken on Postgres and MySQL** — verified against real
+  containers. Postgres errored (`json_extract` does not exist) so the entire
+  history was re-extracted at full LLM cost on every run; MySQL returned quoted
+  values that never matched.
+
+### Added
+
+- **`/mnemos-brief` and `/mnemos-capture` skills**, installed by `mnemos init`
+  as on-demand counterparts to the unattended hooks — useful mid-session and
+  before a `/clear`, when the agent still holds the conversation in context.
+  Opt out with `mnemos init --no-skills`.
+- **`mnemos relate --prune-stale [--dry-run]`** re-derives stored relationship
+  edges against the current detectors and drops what they would no longer
+  produce. Relationships are derived state, but nothing re-derived them when a
+  detector changed, so brains accumulate residue from every superseded
+  heuristic.
+- **`make test-race`**, mirroring what CI actually runs. `make check` omits
+  `-race`, and that gap meant a local "all green" did not imply a green CI.
+
+### Changed
+
+- **Trust is rescored only for the claims a write touched** (`ScopedTrustScorer`),
+  rather than every claim in the store on every write. The old behaviour made a
+  write's cost grow with the size of the brain — on an 11k-claim store every
+  capture rewrote every row, and under `-race` that eventually exceeded the
+  governed-write budget and failed the write outright.
+- **Harness-injected text is stripped before capture extracts claims from it.**
+  System reminders, task notifications, loaded `SKILL.md` contents and resume
+  preambles all arrive in user-role transcript messages, so capture read them as
+  conversation. Measured on a real 7 MB transcript: 90.9% of text kept.
+- **The test suite no longer reads or writes the developer's real brain.**
+  `resolveDSN()` falls back to `~/.local/share/mnemos/mnemos.db`, so tests that
+  let the kernel open a store lazily ran against production data — one test run
+  added 2 claims to a live 118 MB brain. This was also the mechanism behind an
+  intermittent `-race` CI failure that looked like flakiness and was not.
+
 ## [0.100.0] — 2026-07-18
 
 ### Added
