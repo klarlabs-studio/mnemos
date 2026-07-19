@@ -73,7 +73,9 @@ func handleAudit(args []string, flags Flags) {
 	}
 	defer closeConn(conn)
 
-	export, err := buildAuditExport(ctx, conn, resolveDSN(), includeEmbeddings)
+	// Redacted: the export is written to a file and archived, so it must not
+	// carry the DSN's password (see displayDSN).
+	export, err := buildAuditExport(ctx, conn, displayDSN(), includeEmbeddings)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "build audit export"))
 		return

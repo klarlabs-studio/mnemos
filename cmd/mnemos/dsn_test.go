@@ -172,3 +172,30 @@ func TestResolveDSNForContext_NamespaceReplacesBase(t *testing.T) {
 		t.Errorf("derived namespace not present in %q", got)
 	}
 }
+
+// doctor output and audit exports get pasted into bug reports and archived, so
+// neither may carry a DSN password. Both used the raw resolveDSN() while
+// displayDSN() — already used by the destructive-confirm paths — sat unused.
+func TestDiagnosticOutputRedactsDSNPassword(t *testing.T) {
+	t.Setenv("MNEMOS_DB_URL", "postgres://mnemos:hunter2@db.internal:5432/mnemos")
+
+	got := displayDSN()
+	if strings.Contains(got, "hunter2") {
+		t.Fatalf("displayDSN leaked the password: %s", got)
+	}
+	// The redaction must stay useful as a diagnostic.
+	for _, want := range []string{"db.internal", "mnemos", "redacted"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("displayDSN dropped %q, leaving too little to diagnose with: %s", want, got)
+		}
+	}
+}
+
+// A credential-free local DSN must pass through untouched — redaction should
+// not make the common case unreadable.
+func TestDisplayDSNLeavesCredentialFreeDSNIntact(t *testing.T) {
+	t.Setenv("MNEMOS_DB_URL", "sqlite:///tmp/brain.db")
+	if got := displayDSN(); got != "sqlite:///tmp/brain.db" {
+		t.Errorf("displayDSN rewrote a credential-free DSN: %s", got)
+	}
+}
