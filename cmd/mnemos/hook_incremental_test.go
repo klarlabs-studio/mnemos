@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -330,5 +332,98 @@ func TestAutoStrategyIgnoresLocalProviderWhenHosted(t *testing.T) {
 	t.Setenv("MNEMOS_CAPTURE_STRATEGY", "incremental")
 	if got := captureStrategy(); got != captureIncremental {
 		t.Errorf("explicit strategy overridden in hosted mode: %q", got)
+	}
+}
+
+// The reader's window (4 MiB) is far larger than the text cap (8–20 KiB), so a
+// busy session routinely fills the cap partway through the window. The offset
+// must then reflect only what was captured — advancing past the cap marks
+// unread text as done and loses it permanently, with no error anywhere.
+//
+// This is the regression that made PreCompact drop ~97% of exactly the backlog
+// it exists to drain.
+func TestExtractTranscriptTextFrom_OffsetStopsAtCap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	line := func(s string) string {
+		return `{"type":"user","message":{"role":"user","content":"` + s + `"}}` + "\n"
+	}
+
+	// ~200 turns of ~120 bytes of text each, well past an 8 KiB cap.
+	var buf strings.Builder
+	for i := range 200 {
+		buf.WriteString(line(strings.Repeat("x", 100) + strconv.Itoa(i)))
+	}
+	if err := os.WriteFile(path, []byte(buf.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	total := int64(buf.Len())
+
+	const cap8 = 8 * 1024
+	text, off := extractTranscriptTextFrom(path, 0, cap8)
+	if text == "" {
+		t.Fatal("first pass captured nothing")
+	}
+	if off >= total {
+		t.Fatalf("offset jumped to %d of %d bytes after capturing only %d bytes of text: "+
+			"the uncaptured remainder is now unreachable", off, total, len(text))
+	}
+
+	// Draining the rest must eventually reach EOF and see every turn — nothing
+	// may be skipped along the way.
+	seen := text
+	for range 100 {
+		if off >= total {
+			break
+		}
+		next, nextOff := extractTranscriptTextFrom(path, off, cap8)
+		if nextOff <= off {
+			t.Fatalf("offset stalled at %d; drain cannot progress", off)
+		}
+		seen += next
+		off = nextOff
+	}
+	if off != total {
+		t.Fatalf("drain ended at offset %d, want EOF %d", off, total)
+	}
+	for _, want := range []string{"x0\n", "x99\n", "x199\n"} {
+		if !strings.Contains(seen, want) {
+			t.Errorf("turn %q never captured across the full drain", strings.TrimSuffix(want, "\n"))
+		}
+	}
+}
+
+// captureRangeCtx must report *offset progress*, not merely "the chunk was
+// persisted". storeCaptureOffset is a no-op for an empty session id, so a
+// drain loop keyed on chunk success re-reads the same span forever and burns
+// the entire capture budget on one chunk.
+func TestCaptureRangeCtx_NoProgressWithoutSessionID(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	body := `{"type":"user","message":{"role":"user","content":"a decision was made"}}` + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// An already-cancelled context makes captureTextCtx fail fast, so this
+	// asserts the control flow without running the extraction pipeline.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if captureRangeCtx(ctx, hookEvent{TranscriptPath: path}, 8*1024) {
+		t.Fatal("reported progress with no session id; captureDrain would spin until the budget expired")
+	}
+}
+
+// A drained transcript must terminate the loop rather than re-reporting the
+// tail.
+func TestCaptureRangeCtx_NoProgressWhenDrained(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "t.jsonl")
+	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if captureRangeCtx(context.Background(), hookEvent{SessionID: "s1", TranscriptPath: path}, 8*1024) {
+		t.Fatal("reported progress on an empty transcript")
 	}
 }

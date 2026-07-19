@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -117,15 +118,17 @@ func extractTranscriptTextFrom(path string, offset int64, maxBytes int) (string,
 		return "", offset
 	}
 	// A partial trailing line (the writer may be mid-append) is left for the
-	// next run: rewind the offset to the last newline so nothing is lost or
-	// half-parsed.
-	consumed := len(data)
+	// next run: rewind to the last newline so nothing is lost or half-parsed.
 	if idx := strings.LastIndexByte(string(data), '\n'); idx >= 0 {
-		consumed = idx + 1
-		data = data[:consumed]
+		data = data[:idx+1]
 	}
 
-	return transcriptTextFromLines(string(data), maxBytes), offset + int64(consumed)
+	// Advance by what was actually consumed, not by the size of the window we
+	// read. The window is 4 MiB; maxBytes is 8–20 KiB, so the extractor
+	// routinely stops long before the window ends. Advancing by the window
+	// would mark the unread remainder as captured and skip it permanently.
+	text, consumed := transcriptTextFromLines(string(data), maxBytes)
+	return text, offset + int64(consumed)
 }
 
 // spawnDetachedCapture re-execs this binary as a background worker for the
@@ -204,17 +207,40 @@ const incrementalChunkBytes = 8 * 1024
 // captureRange captures the not-yet-seen span of the session's transcript and
 // advances the offset only after the pipeline reports success.
 func captureRange(ev hookEvent, maxBytes int) {
+	ctx, cancel := context.WithTimeout(context.Background(), captureBudget())
+	defer cancel()
+	captureRangeCtx(ctx, ev, maxBytes)
+}
+
+// captureRangeCtx is captureRange under a caller-supplied budget. It reports
+// whether it captured and committed a chunk, so a drain loop knows whether to
+// continue: false means either nothing was left or the chunk failed — and in
+// both cases continuing would spin, since the offset has not moved.
+func captureRangeCtx(ctx context.Context, ev hookEvent, maxBytes int) bool {
 	offset := loadCaptureOffset(ev.SessionID)
 	text, newOffset := extractTranscriptTextFrom(ev.TranscriptPath, offset, maxBytes)
 	if strings.TrimSpace(text) == "" {
-		return
+		return false
 	}
-	if !captureText(ev, text) {
-		return // leave the offset alone so the next run retries this span
+	if !captureTextCtx(ctx, ev, text) {
+		return false // leave the offset alone so the next run retries this span
+	}
+	// No session id means no offset can be persisted (storeCaptureOffset is a
+	// no-op for one), so a further pass would re-read this exact span. Capture
+	// it once and report no progress.
+	if strings.TrimSpace(ev.SessionID) == "" {
+		return false
 	}
 	if err := storeCaptureOffset(ev.SessionID, newOffset); err != nil {
 		fmt.Fprintf(os.Stderr, "mnemos: capture offset not saved: %v\n", err)
+		// The chunk IS persisted but the high-water mark is not, so a further
+		// pass would re-ingest this same span forever. Stop the drain here.
+		return false
 	}
+	// Report actual progress, never merely "a chunk succeeded". A drain loop
+	// keyed on anything weaker spins for the whole budget the moment the
+	// offset stops moving.
+	return newOffset > offset
 }
 
 // Capture strategies. Which one is right depends on the provider, and the
