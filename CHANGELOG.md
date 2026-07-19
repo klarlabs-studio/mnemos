@@ -8,6 +8,53 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.104.0] — 2026-07-19
+
+Extraction quality, driven by a census of a real 5,210-claim brain that found
+nearly half of active claims were conversational narration rather than
+knowledge — the shipped filter was catching only about a fifth of it.
+
+### Added
+
+- **`mnemos prune --narration [--dry-run]`** deprecates already-stored claims
+  the extraction filter now classifies as conversational pollution. The filters
+  only run at ingest, so every claim captured before a filter existed is still
+  stored and still recalls; this re-runs the exact same filter (`extract.IsJunk`)
+  over stored claims so the cleanup cannot diverge from what ingest would do.
+  Dry-run by default, governed writer (audited `claim_status_history` row),
+  and it **deprecates rather than deletes** — a mis-classified claim stays
+  queryable with `--include-history`. A bare `prune` is an error, never a
+  default, so it cannot guess at a destructive operation. Measured against a
+  real brain: 20.1% of active claims would be deprecated.
+
+### Fixed
+
+- **Long lead-in claims are dropped at extraction.** Full sentences ending in a
+  colon whose payload — a tool call, a code block, a list — was never captured
+  left the introduction stranded as a "fact" ("Confirmed absent from every
+  downstream surface:", "Finding #1 is fixed, with the scope larger than the
+  original diagnosis:"). `isSectionLabel` caught short colon phrases; the word
+  cap let full sentences through. 18.7% of active claims end in a colon, and
+  every one in a hand-checked sample was a lead-in. The rule only ever fires on
+  a claim ending in a colon, so no ordinary assertion is reachable, and
+  structured payloads (`=`, braces) are exempted.
+
+- **The volatility classifier is robust to typography.** Curly apostrophes and
+  backticks were defeating the lexicon — "Mnemos doesn't work" (U+2019) and
+  "No `warden` anywhere" both went unclassified and then recalled at the 90-day
+  default while false. Recall on a set of real corrections went 1/6 → 3/6.
+  Deliberately typography only: phrasings like "not using X" are left unmatched
+  because "using" appears in durable claims too, and mis-classifying a durable
+  claim as volatile decays real knowledge out of recall invisibly.
+
+### Notes
+
+The census also found ~26% of claims are volatile *observations* (system-state
+snapshots that flip rather than decay). Routing those out of the belief graph
+is sketched but not built: it needs a decision on whether mnemos should hold
+operational state at all, and a re-measure on a non-mnemos corpus, since this
+brain's narration rate is inflated by sessions about mnemos itself.
+
 ## [0.103.0] — 2026-07-19
 
 Recall quality. Four changes from a user report after four stale beliefs
