@@ -11,10 +11,11 @@ Pipeline: `ingest → extract → relate → query`
 ## Build & Development Commands
 
 ```bash
-make check          # fmt + lint + test + build (CI equivalent)
+make check          # fmt + lint + test + build (NOT -race; see make test-race)
 make build          # Build bin/mnemos
 make install        # Install mnemos to $GOPATH/bin
 make test           # Run all tests (includes 133 eval cases across 13 suites under data/eval/*.yaml)
+make test-race      # What CI actually runs (-race). `make check` omits it, so green locally != green in CI.
 make fmt            # go fmt ./...
 make lint           # go vet + golangci-lint
 make sqlc           # Regenerate sqlc query code from sql/sqlite/

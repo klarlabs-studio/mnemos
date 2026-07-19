@@ -436,10 +436,17 @@ func (g *recordingTextGen) GenerateText(
 }
 
 // clearMnemosEnv ensures Mnemos env vars don't leak between tests.
+//
+// MNEMOS_DB_URL is deliberately NOT cleared. It is set once by TestMain to a
+// throwaway brain, and these os.Unsetenv calls are process-wide with no
+// restore — so clearing it here would strip that isolation for every test that
+// runs afterwards, leaving any test that forgets an explicit storage option to
+// fall back to the developer's real brain. Every test passes storage
+// explicitly, so nothing here needs the variable unset; tests that specifically
+// exercise DSN resolution set it themselves.
 func clearMnemosEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
-		"MNEMOS_DB_URL",
 		"MNEMOS_LLM_PROVIDER",
 		"MNEMOS_LLM_API_KEY",
 		"MNEMOS_LLM_MODEL",
