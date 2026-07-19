@@ -8,6 +8,67 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.103.0] — 2026-07-19
+
+Recall quality. Four changes from a user report after four stale beliefs
+surfaced at full confidence in a single session. Each of those beliefs was
+**true when written** — the problem was never accuracy at write time, it was
+that nothing distinguished a settled claim from an old or disputed one.
+
+### Changed
+
+- **Claims about mutable system state now decay on a 14-day freshness
+  half-life** instead of the 90-day default. `HalfLifeDays` was read by trust
+  scoring, staleness, curiosity and query, and written *only* by explicit human
+  verification — so every captured claim inherited the default and "we're not
+  using warden", "briefkasten is HTTP-only" and "mnemos doesn't work" all kept
+  recalling at full confidence long after the system moved. Claims about what
+  is installed, wired, running or deployed are now classified at ingest.
+
+  The classifier only ever *shortens*, and only on a confident signal: a missed
+  volatile claim leaves prior behaviour, while a durable claim wrongly marked
+  volatile decays real knowledge out of recall invisibly. Decisions are never
+  volatile — a decision's value is its reasoning, which survives the thing it
+  decided about changing.
+
+- **The contradiction count leads the recall block when a topic is heavily
+  contested** (25+), instead of printing as a footnote beneath six high-trust
+  claims. Observed sessions carried counts of 107, 157 and 485 while the reader
+  took the claims at face value; that warning is what prompts the verification
+  which catches a stale belief. Below the threshold it stays a footnote.
+
+- **Contested claims are marked and demoted at recall.** Contested status was
+  counted and then ignored, so a claim under active dispute surfaced with the
+  same weight and trust figure as a settled one. Only six claims are shown, so
+  a contested claim no longer displaces a settled one from that window. Tier
+  precedence (ADR 0011 repo-wins) is preserved — this is a stable partition,
+  not a re-sort.
+
+### Fixed
+
+- **Commentary about the knowledge graph is no longer ingested as knowledge.**
+  Correcting a belief in conversation added a *second* claim discussing the
+  first, at comparable confidence and indistinguishable in shape, so the
+  correction retired nothing and buried the original under meta-commentary that
+  then recalled as evidence. The filter keys on the sentence's **subject**, not
+  its opener: "actually, the retry budget is 3 attempts, not 5" is a fact about
+  the world and survives; "actually that belief is stale" is a fact about the
+  graph and does not.
+
+### Notes
+
+Auto-deprecation on direct negation was requested and deliberately **not**
+implemented. The same class of heuristic produced 68% false-positive
+contradictions across 52,738 edges (0.102.0); wiring automatic destructive
+state changes to it would silently retire true claims, invisibly. Making
+contested cost something at recall addresses the reported problem without that
+risk.
+
+Both classifiers were measured against a real 12,811-claim brain before
+shipping: 4.0% of claims classify as volatile system state, 0.1% as
+meta-commentary. Existing claims are **not** backfilled — half-life is stamped
+at ingest, so claims already stored keep the 90-day default.
+
 ## [0.102.0] — 2026-07-19
 
 A correctness release. An audit of the capture, MCP, tenancy and embedding paths
