@@ -165,6 +165,7 @@ MNEMOS_CAPTURE_TIMEOUT      # SessionEnd capture budget (Go duration, default 4m
 MNEMOS_DB_MAX_CONNS         # Postgres/MySQL pool MaxOpenConns (default 25)
 MNEMOS_DB_MAX_IDLE_CONNS    # Postgres/MySQL pool MaxIdleConns (default 5)
 MNEMOS_DB_CONN_MAX_LIFETIME # Pool ConnMaxLifetime, e.g. "30m" (default 30m)
+MNEMOS_EPISODIC_EVENTS      # Truthy to enable additive episodic event typing (ADR 0023 pt2): tags source events of operational-event claims (deploy/release/merge/incident) with event_type for timeline_query. Default off; ~78% precise, purely additive (never drops a belief).
 MNEMOS_TELEMETRY_OPTIN      # Truthy ("1"/"true"/"yes") to opt in to anonymized usage payload (default off)
 MNEMOS_TELEMETRY_ENDPOINT   # POST destination for `mnemos metrics --workspace --telemetry-send` (default unset = no send)
 ```
