@@ -136,6 +136,18 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 		return fmt.Errorf("persist artifacts: nil conn")
 	}
 
+	// Episodic event typing (ADR 0023 part 2, additive form). When enabled,
+	// tag the source events of operational-event claims (deploys, releases,
+	// merges, incidents) with an event_type, so timeline_query can surface and
+	// filter them as typed episodes. Purely additive: the belief claims are
+	// still persisted unchanged, so a mis-classification adds a spurious tag to
+	// a timeline entry — never drops knowledge. This is why it does NOT route
+	// (drop) the belief: a rule-based classifier is ~78% precise, which is fine
+	// for a low-cost tag but unsafe for a destructive route.
+	if EnableEpisodicTagging {
+		tagEventEpisodes(events, claims, links)
+	}
+
 	for _, event := range events {
 		if err := conn.Events.Append(ctx, event); err != nil {
 			return fmt.Errorf("append event %s: %w", event.ID, err)
@@ -529,4 +541,51 @@ func GenerateClaimEmbeddings(ctx context.Context, conn *store.Conn, claims []dom
 	}
 
 	return len(vectors), nil
+}
+
+// EnableEpisodicTagging turns on additive operational-event typing in
+// PersistArtifacts (ADR 0023 part 2). Off by default: the classifier is
+// rule-based (~78% precision), which is safe for an additive tag but not
+// something to impose on every install without opt-in. cmd/mnemos sets it from
+// MNEMOS_EPISODIC_EVENTS.
+var EnableEpisodicTagging bool
+
+// tagEventEpisodes sets event_type on the source events of claims classified as
+// operational events, so timeline_query surfaces them as typed episodes. It
+// mutates event Metadata in place and never touches claims — additive only.
+//
+// An event grounding several claims takes the kind of the first event-claim
+// linked to it; a chunk that records both a release and an incident is rare and
+// either label is a reasonable timeline entry.
+func tagEventEpisodes(events []domain.Event, claims []domain.Claim, links []domain.ClaimEvidence) {
+	kindByClaim := make(map[string]extract.EventKind, len(claims))
+	for _, c := range claims {
+		if k := extract.ClassifyEventObservation(string(c.Type), c.Text); k != extract.EventNone {
+			kindByClaim[c.ID] = k
+		}
+	}
+	if len(kindByClaim) == 0 {
+		return
+	}
+	kindByEvent := make(map[string]extract.EventKind, len(links))
+	for _, l := range links {
+		if k, ok := kindByClaim[l.ClaimID]; ok {
+			if _, already := kindByEvent[l.EventID]; !already {
+				kindByEvent[l.EventID] = k
+			}
+		}
+	}
+	for i := range events {
+		k, ok := kindByEvent[events[i].ID]
+		if !ok {
+			continue
+		}
+		if events[i].Metadata == nil {
+			events[i].Metadata = map[string]string{}
+		}
+		// Never overwrite an event_type an ingester set deliberately.
+		if events[i].Metadata["event_type"] == "" {
+			events[i].Metadata["event_type"] = string(k)
+		}
+	}
 }

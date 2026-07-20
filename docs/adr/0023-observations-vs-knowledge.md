@@ -1,6 +1,7 @@
 # ADR 0023: Observations are not beliefs — route operational events to the episodic layer
 
-- **Status:** Proposed (part 1 shipped; part 2 awaiting decision).
+- **Status:** Accepted. Part 1 shipped. Part 2 implemented in its **additive** form
+  (event typing) after measurement ruled out the destructive **routing** form.
 - **Date:** 2026-07-19
 - **Deciders:** Felix Geelhaar
 - **Scope:** What extraction does with a claim that asserts *current system state*
@@ -50,7 +51,33 @@ durable claim — "the retry logic is working by design" — is never caught). `
 --narration` cleans already-stored chatter through the same filter. This is the cheap,
 high-precision, larger share.
 
-### Part 2 — route operational events to the episodic layer (PROPOSED)
+### Part 2 — RESOLVED: additive event typing, not destructive routing
+
+The routing form below was **investigated and rejected on evidence.** A
+rule-based `ClassifyEventObservation` (`internal/extract/event_observation.go`)
+was built and measured against a real brain: it caught ~1.9% of active claims,
+but **~45% of matches were false positives** — decisions ("I'd hold on cutting
+v0.101.1"), questions ("want me to cut a release?"), and durable facts ("the
+excludes stay correct until a release ships"). Tightening the veto (questions,
+offers, first-person deliberation, incident-occurrence gating) lifted precision
+to ~78%, still far from what destructive routing requires: dropping a belief on
+a false positive is an invisible loss of real knowledge, and distinguishing
+"released v0.101.1" (event) from "I'd hold on cutting v0.101.1" (decision) needs
+the sentence's illocutionary force, which regex cannot reliably read.
+
+So Part 2 ships in **additive** form: `PersistArtifacts` tags the *source
+events* of event-classified claims with an `event_type` (deployment / release /
+change / incident) so `timeline_query` can surface and filter them as typed
+episodes — while the belief claim is **kept** (with its volatility half-life).
+A misclassification therefore adds a spurious `event_type` to a timeline entry,
+never drops knowledge. Opt-in via `MNEMOS_EPISODIC_EVENTS` (default off),
+because at ~78% precision the typing is useful but noisy, and it should be a
+deliberate choice rather than imposed.
+
+The LLM-classification path (higher precision, enabling true routing) remains
+open as a future option if the typed-timeline value proves worth it.
+
+#### Original routing sketch (NOT built — kept for the record)
 
 An operational event carries an actor, an action, and a time. Mnemos already has the
 episodic/temporal layer for exactly this: `remember_episode`, `timeline_query`,
