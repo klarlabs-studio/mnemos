@@ -66,9 +66,28 @@ var unitFamily = map[string]struct {
 // of numerics are usually data dumps where contradiction detection isn't
 // useful anyway.
 func extractNumerics(text string) []numericValue {
-	matches := numericTokenRE.FindAllStringSubmatch(text, -1)
+	matches := numericTokenRE.FindAllStringSubmatchIndex(text, -1)
 	out := make([]numericValue, 0, len(matches))
-	for _, m := range matches {
+	for _, loc := range matches {
+		m := make([]string, 0, 4)
+		for g := 0; g < 4; g++ {
+			if loc[2*g] < 0 {
+				m = append(m, "")
+				continue
+			}
+			m = append(m, text[loc[2*g]:loc[2*g+1]])
+		}
+		// An identifier is not a measurement. "PR #225" and "PR #257" name two
+		// different things; they do not disagree about a quantity. Without this,
+		// every pair of issue/PR references on a shared topic was filed as a
+		// numeric contradiction — the single largest source of false numeric
+		// edges on a production brain.
+		if idx := loc[0]; idx >= 0 {
+			seg := text[idx:loc[1]]
+			if strings.Contains(seg, "#") {
+				continue
+			}
+		}
 		raw := m[0]
 		currency := strings.ToLower(strings.TrimSpace(m[1]))
 		numStr := strings.ReplaceAll(m[2], ",", "")
@@ -183,6 +202,13 @@ func detectNumericDivergence(aText, bText string, aTokens, bTokens map[string]st
 	}
 	shorter := min(len(aWords), len(bWords))
 	if shorter == 0 {
+		return false
+	}
+	// Same short-claim blind spot the polarity path had: a two-token claim
+	// trivially scores 1.0 against the shorter length. Require the overlap to
+	// also be a real share of the LONGER claim.
+	longer := max(len(aWords), len(bWords))
+	if longer == 0 || float64(overlap)/float64(longer) < minContradictionCoverage {
 		return false
 	}
 	ratio := float64(overlap) / float64(shorter)

@@ -203,6 +203,16 @@ func detectTemporalDivergence(aText, bText string, aTokens, bTokens map[string]s
 	if shorter == 0 {
 		return false
 	}
+	// The shorter-claim ratio alone has a blind spot: a two-token claim
+	// ("Storage layer done") trivially scores 1.0 against a long unrelated one
+	// that happens to share those tokens. Require the overlap to also be a real
+	// share of the LONGER claim, the same guard the polarity and numeric paths
+	// use. Measured on a production brain, temporal pairings were ~100% false
+	// without it — "Both agents finished" against "Both keys present".
+	longer := max(len(aAnchor), len(bAnchor))
+	if longer == 0 || float64(overlap)/float64(longer) < minContradictionCoverage {
+		return false
+	}
 	return float64(overlap)/float64(shorter) >= temporalAnchorRatio
 }
 

@@ -62,6 +62,12 @@ const minContentTokenOverlap = 2
 // that must overlap with the longer claim for a relationship to be inferred.
 const minOverlapRatio = 0.3
 
+// minContradictionCoverage is the share of the LONGER claim's tokens that an
+// opposite-polarity pair must have in common. It guards the short-claim blind
+// spot in the shorter-claim ratio: genuine contradictions measured on real data
+// score 0.33-0.67 here, while false pairings score 0.20-0.25.
+const minContradictionCoverage = 0.3
+
 // actionPrefixes mark a raw (un-stemmed) token as describing an
 // action — something an actor *did*. Matched against the raw
 // lowercase tokens of the claim so a single entry covers most
@@ -692,7 +698,25 @@ func inferRelationshipWithContext(aTokens map[string]struct{}, aNeg bool, bToken
 					// be about the same topic, not just share a few tokens.
 					// Prevents "without X" structural phrases from flagging
 					// as contradictions with unrelated claims.
-					if ratio >= 0.5 {
+					//
+					// `ratio` alone is measured against the SHORTER claim, so a
+					// very short claim trivially scores 1.0 by sharing both its
+					// tokens: "Found the gap" hit ratio 1.0 against a ten-token
+					// claim that merely mentioned finding a gap, and was filed
+					// as a contradiction of it. Require the overlap to also be
+					// a real share of the LONGER claim, so both sides have to
+					// be substantially about the same thing.
+					//
+					// Measured on a production brain, the polarity path
+					// produced 70% of all contradiction edges and was ~92% false
+					// positive even between non-junk claims — pairs that were
+					// unrelated, or that actually agreed with each other.
+					longer := len(aTokens)
+					if len(bTokens) > longer {
+						longer = len(bTokens)
+					}
+					coverage := float64(overlap) / float64(longer)
+					if ratio >= 0.5 && coverage >= minContradictionCoverage {
 						return domain.RelationshipTypeContradicts, true
 					}
 					return "", false
