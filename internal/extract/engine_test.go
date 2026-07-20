@@ -179,3 +179,38 @@ func seqClaimIDs() func() (string, error) {
 		return id, nil
 	}
 }
+
+// Opposite polarity only means disagreement when the claims are about the same
+// thing. The bar was a flat "share >= 2 tokens" with no subject anchor, so
+// bulk-ingesting a document of technical bullets — which all draw on the same
+// vocabulary — marked 53% of claims contested (70% in the worst project),
+// pairing entirely unrelated lines. Measured on a real 3,013-claim corpus, the
+// anchor cut false contested by 76% (2,110 -> 504) without losing the genuine
+// case below.
+func TestMarkContested_UnrelatedClaimsNotContested(t *testing.T) {
+	claims := []domain.Claim{
+		{ID: "c1", Text: "Frame: nonce LE, supp-size includes size-byte and marker, magic bytes"},
+		{ID: "c2", Text: "Next session should not start the M1 remainder before approval flows"},
+		{ID: "c3", Text: "Postgres tsvector and pgvector are auto-wired by capability"},
+	}
+	markContestedClaims(claims)
+	for _, c := range claims {
+		if c.Status == domain.ClaimStatusContested {
+			t.Errorf("unrelated claim marked contested: %q", c.Text)
+		}
+	}
+}
+
+// The genuine case must survive: same subject, opposite polarity.
+func TestMarkContested_SameSubjectOppositePolarityStillContests(t *testing.T) {
+	claims := []domain.Claim{
+		{ID: "c1", Text: "Revenue decreased after launch"},
+		{ID: "c2", Text: "Revenue did not decrease after launch"},
+	}
+	markContestedClaims(claims)
+	for _, c := range claims {
+		if c.Status != domain.ClaimStatusContested {
+			t.Errorf("genuine polarity contradiction not contested: %q (status %q)", c.Text, c.Status)
+		}
+	}
+}
