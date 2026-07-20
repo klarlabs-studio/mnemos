@@ -2,12 +2,16 @@ package mnemos_test
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/store"
 
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
+	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
 // TestHypercorrection_SurfacesContradictionOfPromoted is the flagship C3 case:
@@ -175,5 +179,78 @@ func TestHypercorrection_EmptyStore(t *testing.T) {
 	}
 	if len(hcs) != 0 {
 		t.Fatalf("empty store must yield no alerts, got %d", len(hcs))
+	}
+}
+
+// TestHypercorrection_DeprecatedBeliefClearsAlert proves the deprecation
+// escape hatch. Deprecating is the other way a belief is retired: unlike
+// forgetting (which closes valid-time) it closes STATUS and leaves valid_to
+// open, so the valid-time check above never saw it. That gap was real — in a
+// production brain all 3,378 deprecated claims had valid_to NULL, and 1,984 of
+// 4,864 contradiction edges had a deprecated endpoint still counting as live
+// dissonance. Pruning junk beliefs could therefore never improve brain health.
+func TestHypercorrection_DeprecatedBeliefClearsAlert(t *testing.T) {
+	clearMnemosEnv(t)
+	// File-backed sqlite, not memory://: the deprecation below is applied
+	// through a second handle on the same store, and memory:// gives each
+	// Open its own isolated namespace.
+	path := filepath.Join(t.TempDir(), "hyper.db")
+	dsn := "sqlite://" + path
+	mem, err := mnemos.New(mnemos.WithSQLite(path), mnemos.WithPassiveMode())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = mem.Close() })
+	ctx := context.Background()
+	now := time.Now()
+
+	for _, id := range []string{"ev-1", "ev-2"} {
+		if err := mem.RememberEvent(ctx, mnemos.Event{ID: id, At: now, Type: "deploy", Content: id}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	established, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
+		Text: "The service deployment succeeded in production", Confidence: 0.9,
+		EventIDs: []string{"ev-1"}, Lifecycle: mnemos.ClaimLifecyclePromoted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
+		Text: "The service deployment didn't succeed in production", Confidence: 0.8,
+		EventIDs: []string{"ev-2"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if hcs, err := mem.Hypercorrections(ctx); err != nil || len(hcs) != 1 {
+		t.Fatalf("precondition: want 1 alert, got %d (err=%v)", len(hcs), err)
+	}
+
+	// Retire the established belief the way `prune --narration` and the
+	// memory_deprecate tool do: status only, valid-time left open.
+	conn, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	claims, err := conn.Claims.ListByIDs(ctx, []string{established})
+	if err != nil || len(claims) != 1 {
+		t.Fatalf("load claim: %v (%d)", err, len(claims))
+	}
+	if !claims[0].ValidTo.IsZero() {
+		t.Fatalf("precondition: deprecation must not close valid-time, got %v", claims[0].ValidTo)
+	}
+	claims[0].Status = domain.ClaimStatusDeprecated
+	if err := conn.Claims.UpsertWithReason(ctx, claims, "test: retired as junk"); err != nil {
+		t.Fatalf("deprecate: %v", err)
+	}
+
+	hcs, err := mem.Hypercorrections(ctx)
+	if err != nil {
+		t.Fatalf("Hypercorrections after deprecate: %v", err)
+	}
+	if len(hcs) != 0 {
+		t.Fatalf("a deprecated belief's contradictions are history, want 0 alerts, got %d: %+v", len(hcs), hcs)
 	}
 }
