@@ -8,6 +8,57 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.106.0] — 2026-07-21
+
+### Fixed
+
+- **Opposite-polarity contested detection now requires a shared subject.**
+  `markContestedClaims` marked two claims contested whenever they had opposite
+  polarity and shared **two tokens** — a flat bar with no same-subject check. A
+  negation is real evidence of disagreement, but only when the claims are about
+  the same thing; otherwise any negated sentence contests every other sentence
+  sharing a couple of words. Since contested claims are demoted at recall
+  (0.103.0), a majority-contested brain has a degraded tier.
+
+  Found by dogfooding: migrating 23 projects of curated markdown into workspace
+  brains marked **53% of all claims contested** (70% in the worst project),
+  pairing unrelated bullets like "Frame: nonce LE, supp-size includes
+  size-byte+marker" with "Next Session Should: M1 remainder". Same failure shape
+  as the relate-detector fixes in 0.102.0 — an overlap heuristic with no subject
+  anchor — and notably the same-polarity branch directly above already required
+  near-total overlap; the opposite-polarity path never got the same treatment.
+
+  The fix requires the shared tokens to be a real share of the shorter claim
+  (half; permissive, since opposite polarity is genuine evidence). Measured
+  across 23 real workspace brains: **contested fell from 4,677 to 1,063 of the
+  same 8,281 claims (56% → 13%)** — nothing lost, just correctly un-flagged.
+  The canonical case ("revenue decreased after launch" vs "revenue did not
+  decrease after launch") still contests, pinned by test.
+
+  Not addressed: the residual comes from the *same*-polarity value-divergence
+  branch firing on append-only status logs, where repeated "Next Session Should:
+  …" entries read as competing values. Separating a time series from a
+  disagreement needs temporal context the extractor lacks there.
+
+- **Stale MCP tool name in the docs** — the tool is `list_dissonances`;
+  `list_contradictions` never existed.
+
+### Changed
+
+- **CI runs the required checks on docs-only PRs.** `ci.yml` had
+  `paths-ignore: ["**.md", "docs/**", "LICENSE"]`, but the four required checks
+  (`ci / Lint`, `Test`, `Build`, `Security`) come from the shared reusable
+  workflow — so a docs-only PR never ran them, never reported, and stayed
+  BLOCKED forever. Every changelog PR needed an admin merge. The required
+  contexts are composed by the reusable workflow and can't be reproduced by a
+  shim, so the real `ci` job now runs on every PR; full CI on a rare docs change
+  is the accepted cost of normal merges.
+
+- **CLAUDE.md documents the test-isolation failure mode**: `resolveDSN()` falls
+  back to the developer's real brain when `MNEMOS_DB_URL` is unset, so any new
+  test binary must pin a throwaway DSN in `TestMain` — and this manifests as a
+  load-dependent `-race` failure that looks like flakiness but is not.
+
 ## [0.105.0] — 2026-07-20
 
 More extraction-quality cleanup, and the resolution of ADR 0023 part 2.
