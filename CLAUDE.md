@@ -177,3 +177,15 @@ Note: Anthropic has no embedding API — use a separate provider for embeddings.
 GitHub Actions (`.github/workflows/ci.yml`): format check → vet → golangci-lint v2.1 → `go test -race -count=1 ./...` → `make build` → `goreleaser check`. Runs on push/PR to main.
 
 Releases via GoReleaser (`.goreleaser.yaml`): builds both binaries for darwin/linux/windows × amd64/arm64.
+
+### Known failure mode — tests must not touch the developer's real brain
+
+`resolveDSN()` falls back to `~/.local/share/mnemos/mnemos.db` (the developer's global brain) when `MNEMOS_DB_URL` is unset. **Any new test binary MUST pin a throwaway DSN in `TestMain`** — as `cmd/mnemos` and the root package now do — or a test that opens a store lazily (rather than using the temp store its helper hands it) will read and WRITE production data. This once added claims to a live 118 MB brain, one per run.
+
+It also manifests as a **load-dependent `-race` failure that looks like flakiness and is not**: `PersistArtifacts` calls the trust rescore on every write, and against a brain that grows with each polluted test run it eventually exceeds the kernel budget — surfacing as `recompute trust: list trust inputs: context deadline exceeded`. If a `-race ./...` failure reproduces under load but not in a single package, suspect a real cost that grows (data volume, unbounded work), not a flaky test.
+
+Corollary: **`make check` omits `-race`, so a local green does not imply a green CI.** Run `make test-race` before pushing anything touching concurrency, storage, or the write path.
+
+### Docs-only PRs and required checks
+
+Branch protection requires four checks — `ci / Lint`, `ci / Test (ubuntu-latest)`, `ci / Build`, `ci / Security (nox)` — all produced by the shared reusable workflow (`jobs.ci` → `klarlabs-studio/.github/.../go-ci.yml`). `ci.yml` therefore does **not** `paths-ignore` markdown/docs: a `paths-ignore` there meant a docs-only PR never ran those checks, so the required checks could never report and the PR stayed BLOCKED forever (changelog PRs had to be `--admin`-merged). Because the required contexts are composed by the reusable workflow, a standalone "shim" workflow can't reproduce them — so the real `ci` job must run on every PR, docs included. The cost is running full CI on a docs-only change; docs PRs are rare (mostly changelogs), so this is accepted in exchange for normal, non-admin merges. If a required check is ever renamed, update it in branch protection, not here.

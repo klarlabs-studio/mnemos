@@ -9,13 +9,16 @@
 # (multi-arch docker / goreleaser / SLSA).
 name: CI
 
+# No paths-ignore: the four required checks (ci / Lint, Test, Build, Security)
+# come from the shared reusable workflow, so they must run on EVERY PR —
+# including docs-only ones — or a docs PR can never satisfy them and stays
+# BLOCKED (changelog PRs previously needed --admin). Running full CI on a rare
+# docs change is the accepted cost. See CLAUDE.md "Docs-only PRs".
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "docs/**", "LICENSE"]
   pull_request:
     branches: [main]
-    paths-ignore: ["**.md", "docs/**", "LICENSE"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
