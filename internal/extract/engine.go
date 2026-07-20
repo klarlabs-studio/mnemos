@@ -386,6 +386,13 @@ func normalizeForDedupe(text string) string {
 	return normalized
 }
 
+// contestedAnchorRatio is the share of the shorter claim's tokens that two
+// opposite-polarity claims must have in common before the negation counts as a
+// disagreement rather than a coincidence. Half is deliberately permissive —
+// opposite polarity is genuine evidence — while still excluding the
+// two-stray-tokens pairings that dominated bulk document ingestion.
+const contestedAnchorRatio = 0.5
+
 func markContestedClaims(claims []domain.Claim) {
 	cores := make([]string, len(claims))
 	negs := make([]bool, len(claims))
@@ -423,7 +430,30 @@ func markContestedClaims(claims []domain.Claim) {
 				}
 				continue
 			}
-			if tokenOverlap(cores[i], cores[j]) < 2 {
+			// Opposite polarity. A negation is a real disagreement signal, but
+			// it only means anything when the two claims are about the SAME
+			// thing — otherwise any negated sentence contests every other
+			// sentence that happens to share a couple of words.
+			//
+			// The bar used to be a flat "share >= 2 tokens", with no
+			// same-subject check at all. Bulk-ingesting structured documents
+			// (a decisions.md of terse technical bullets, all drawing on the
+			// same vocabulary) marked 53% of claims contested — 70% in the
+			// worst project — pairing unrelated bullets like "Frame: nonce LE,
+			// supp-size includes size-byte+marker" with "Next Session Should:
+			// M1 remainder". Same failure shape as the relate detectors: an
+			// overlap heuristic with no subject anchor.
+			//
+			// Require the shared tokens to be a real share of the shorter
+			// claim, mirroring the same-polarity branch above. The canonical
+			// case still fires: "revenue decreased after launch" vs "revenue
+			// (not) decrease after launch" overlap on most of their tokens.
+			overlap := tokenOverlap(cores[i], cores[j])
+			if overlap < 2 {
+				continue
+			}
+			minLen := min(len(strings.Fields(cores[i])), len(strings.Fields(cores[j])))
+			if minLen == 0 || float64(overlap)/float64(minLen) < contestedAnchorRatio {
 				continue
 			}
 			claims[i].Status = domain.ClaimStatusContested
