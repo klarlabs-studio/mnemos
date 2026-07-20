@@ -551,3 +551,30 @@ func newClaimID() (string, error) {
 	}
 	return "cl_" + hex.EncodeToString(buf), nil
 }
+
+// ContestedIDs reports which of the given claims the CURRENT contested
+// heuristic would mark, ignoring whatever status they already carry.
+//
+// This is the contested analogue of re-running relationship detection: it lets
+// a maintenance pass ask "would today's rules still flag this?" over claims
+// that were marked by an older, looser rule. The claims are copied and reset to
+// active first, so a stored contested status can't influence the answer.
+//
+// Callers must pass a batch that mirrors how the claims were originally
+// extracted (the heuristic is pairwise within a batch), otherwise the result is
+// not comparable to what extraction produced.
+func ContestedIDs(claims []domain.Claim) map[string]struct{} {
+	work := make([]domain.Claim, len(claims))
+	copy(work, claims)
+	for i := range work {
+		work[i].Status = domain.ClaimStatusActive
+	}
+	markContestedClaims(work)
+	out := make(map[string]struct{})
+	for _, c := range work {
+		if c.Status == domain.ClaimStatusContested {
+			out[c.ID] = struct{}{}
+		}
+	}
+	return out
+}

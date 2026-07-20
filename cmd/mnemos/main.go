@@ -251,6 +251,12 @@ func main() {
 		handleReembed(args, flags)
 	case "recompute-trust":
 		handleRecomputeTrust(args, flags)
+	case "recompute-contested":
+		for _, a := range args {
+			exitWithMnemosError(flags.Verbose, NewUserError("recompute-contested takes no arguments (got %q)", a))
+			return
+		}
+		recomputeContested(flags.DryRun, flags)
 	case "dedup":
 		handleDedupe(args, flags)
 	case "prune":
@@ -1483,6 +1489,7 @@ func printUsage() {
 	fmt.Println("  delete-event <id> [<id>...] [--yes]  Delete events and cascade to derived claims")
 	fmt.Println("  reembed [--force] [--dry-run]        (Re)generate claim embeddings under the current embed config")
 	fmt.Println("  recompute-trust [--all]              Rebuild trust_score for every claim under the current policy")
+	fmt.Println("  recompute-contested [--dry-run]      Clear contested status the current heuristic no longer assigns")
 	fmt.Println("  dedup [--threshold T] [--force]      Merge near-duplicate claims by embedding similarity (dry-run by default)")
 	fmt.Println("  prune --narration [--dry-run]        Deprecate stored conversational pollution the extraction filter now catches")
 	fmt.Println("  consolidate [--dry-run] [--forget-below-trust T]  The cognitive \"sleep\" pass: dedupe + refresh trust,")
