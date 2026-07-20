@@ -8,6 +8,50 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.105.0] — 2026-07-20
+
+More extraction-quality cleanup, and the resolution of ADR 0023 part 2.
+
+### Added
+
+- **`mnemos prune --narration` now also cleans contested-at-ingest junk.** 17% of
+  the contested pile in a real brain was narration auto-contested against other
+  narration (a `pipeline` reason), never human-flagged — noise kept recallable
+  and inflating the dissonance metric. A genuine contested claim (real disputed
+  content) is left alone. The report now splits the count into active vs
+  contested.
+- **Additive episodic event typing (ADR 0023 part 2, opt-in).** When
+  `MNEMOS_EPISODIC_EVENTS` is set, `PersistArtifacts` tags the source events of
+  operational-event claims (deploy / release / merge / incident) with an
+  `event_type`, so `timeline_query` can surface and filter them as typed
+  episodes. Purely additive — the belief claim is kept unchanged, so a
+  misclassification adds a spurious timeline tag, never drops knowledge. Off by
+  default because the rule-based classifier is ~78% precise.
+
+### Fixed
+
+- **Extraction drops more narration.** The verb list gained common agent-action
+  verbs (`rewrite`, `extend`, `compose`, `import`, `refactor`, …) that let
+  "Now let me rewrite …" slip through; the agent-subject anchor keeps precision.
+- **`<local-command-caveat>` / `<local-command-stdout>` harness blocks are
+  stripped at capture.** The output of a user's `!`-run local command was
+  reaching extraction and becoming claims; the bare "Caveat:" line was already
+  dropped, but the wrapping tags and stdout between them were not.
+
+### Notes
+
+ADR 0023 part 2 was **resolved by measurement**: the original plan to *route*
+operational events out of the belief graph was rejected because a rule-based
+classifier was ~45% false-positive (decisions, questions and durable facts
+misread as events), and dropping a belief on a false positive is an invisible
+loss. Tightening reached ~78% — fine for an additive tag, not for destructive
+routing. True routing awaits an LLM-precision classifier; the ADR records where
+to resume.
+
+Brain hygiene this cycle (operator-run, audited, reversible): the narration
+prune deprecated ~2,700 conversational-pollution claims across two rounds,
+taking contested from ~9,000 to ~7,400.
+
 ## [0.104.0] — 2026-07-19
 
 Extraction quality, driven by a census of a real 5,210-claim brain that found
