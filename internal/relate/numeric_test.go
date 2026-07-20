@@ -117,3 +117,57 @@ func TestDetectNumericDivergence_RejectsUnrelatedClaims(t *testing.T) {
 		t.Errorf("unrelated claims must not be flagged on numeric difference alone")
 	}
 }
+
+// TestNumericValuesAgree_SilenceIsNotDisagreement pins the rule that a claim
+// which says nothing about a quantity is not contradicting one that does.
+// Treating an unmatched value as a conflict meant a claim listing several
+// figures contradicted a shorter one simply for being longer.
+func TestNumericValuesAgree_SilenceIsNotDisagreement(t *testing.T) {
+	a := extractNumerics("the image is 8721074 bytes after 12 builds")
+	b := extractNumerics("the image is 8721074 bytes")
+	if !numericValuesAgree(a, b) {
+		t.Errorf("b is silent about builds, not in disagreement about them: %v vs %v", a, b)
+	}
+}
+
+// TestNumericValuesAgree_SharedFamilyStillDisagrees proves the silence rule
+// did not disarm the detector: when both claims assert a value for the SAME
+// quantity and they differ, that is still a disagreement.
+func TestNumericValuesAgree_SharedFamilyStillDisagrees(t *testing.T) {
+	a := extractNumerics("the image is 8721074 bytes after 12 builds")
+	b := extractNumerics("the image is 9000000 bytes after 12 builds")
+	if numericValuesAgree(a, b) {
+		t.Errorf("both assert a byte size and they differ: %v vs %v", a, b)
+	}
+}
+
+// TestExtractNumerics_UnitEndsAtWordBoundary pins the invariant the doc
+// comment always claimed but the pattern did not enforce: a longer
+// neighbouring word must not be truncated into a bogus unit family.
+func TestExtractNumerics_UnitEndsAtWordBoundary(t *testing.T) {
+	for _, tc := range []struct{ text, bogus string }{
+		{"2 versions were cut", "raw:versio"},
+		{"4 unpushed commits", "raw:unpush"},
+		{"396 frontend routes", "raw:fronte"},
+	} {
+		for _, v := range extractNumerics(tc.text) {
+			if v.unit == tc.bogus {
+				t.Errorf("%q: truncated %q into a unit family", tc.text, tc.bogus)
+			}
+		}
+	}
+}
+
+// TestExtractNumerics_LocatorsAreNotQuantities pins that numbers bound to an
+// identifier by punctuation name a place, not a measurement.
+func TestExtractNumerics_LocatorsAreNotQuantities(t *testing.T) {
+	for _, text := range []string{"render.go:133 writes the header", "listening on imap.example.org:993"} {
+		if got := extractNumerics(text); len(got) != 0 {
+			t.Errorf("%q: locators are not quantities, got %v", text, got)
+		}
+	}
+	// A unit suffix vetoes the exclusion — `timeout:30s` is a measurement.
+	if got := extractNumerics("timeout:30s"); len(got) != 1 || got[0].unit != "time" {
+		t.Errorf("timeout:30s must stay a measurement, got %v", got)
+	}
+}

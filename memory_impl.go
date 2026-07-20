@@ -1880,6 +1880,16 @@ func (m *memory) Hypercorrections(ctx context.Context) ([]Hypercorrection, error
 		if !a.ValidTo.IsZero() || !b.ValidTo.IsZero() {
 			continue
 		}
+		// Deprecated is the other way a belief is retired. It closes status
+		// rather than valid-time, so it was missed here: deprecating a claim —
+		// via `prune --narration`, `forget`, or a human call — left its
+		// contradictions counting as live dissonance forever, and the
+		// brain-health vital could never be improved by retiring bad beliefs.
+		// A retired belief's disagreements are history by the same reasoning
+		// the valid-time check above already applies.
+		if a.Status == domain.ClaimStatusDeprecated || b.Status == domain.ClaimStatusDeprecated {
+			continue
+		}
 		// Superseding either side RESOLVES the conflict: a reviewer retires the
 		// stale belief (or dismisses the bad challenger) by transitioning it to
 		// superseded, and the alert clears. This is the resolution hook — a
