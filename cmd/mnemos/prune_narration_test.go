@@ -45,8 +45,11 @@ func TestSelectNarrationClaims(t *testing.T) {
 		{ID: "narration", Text: "Let me check the config", Status: domain.ClaimStatusActive},
 		// A junk claim that is already deprecated must NOT be re-selected.
 		{ID: "already-dep", Text: "Getting the detail:", Status: domain.ClaimStatusDeprecated},
-		// A junk claim that is contested is under review — leave it.
-		{ID: "contested", Text: "Verifying the impact:", Status: domain.ClaimStatusContested},
+		// A junk claim that is CONTESTED is now included: it was auto-contested
+		// at ingest against other junk, not human-flagged, so it is still noise.
+		{ID: "contested-junk", Text: "Verifying the impact:", Status: domain.ClaimStatusContested},
+		// A REAL contested claim (genuine dispute) must be left alone.
+		{ID: "contested-real", Text: "The write path must never bypass the governed kernel", Status: domain.ClaimStatusContested},
 	}
 	got := selectNarrationClaims(claims)
 
@@ -63,7 +66,10 @@ func TestSelectNarrationClaims(t *testing.T) {
 	if gotIDs["already-dep"] {
 		t.Error("re-selected an already-deprecated claim, churning its history")
 	}
-	if gotIDs["contested"] {
-		t.Error("selected a contested (under-review) claim")
+	if !gotIDs["contested-junk"] {
+		t.Error("did not select a contested JUNK claim (it is noise, not under review)")
+	}
+	if gotIDs["contested-real"] {
+		t.Error("selected a contested REAL claim — genuine disputes must be left alone")
 	}
 }

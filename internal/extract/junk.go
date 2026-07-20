@@ -157,7 +157,8 @@ var narrationRE = regexp.MustCompile(`(?i)^(?:(?:ok(?:ay)?|now|next|first|then|f
 	`(?:add|build|check|create|do|explore|fix|go|handle|implement|inspect|look|make|open|read|` +
 	`replace|run|see|start|survey|take|test|try|update|use|verify|view|wire|write|examine|` +
 	`confirm|continue|dig|drop|find|finish|get|give|keep|land|list|move|note|pick|put|remove|` +
-	`rename|report|review|scan|search|set|show|split|switch|trace|walk)\b`)
+	`rename|report|review|scan|search|set|show|split|switch|trace|walk|` +
+	`rewrite|extend|compose|import|refactor|apply|thread|ground|adjust|swap|delete|generate)\b`)
 
 // metaClaimRE matches commentary ABOUT the knowledge graph rather than about
 // the world: "that's the fourth stale belief this session", "correcting the

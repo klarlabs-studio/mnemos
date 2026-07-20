@@ -47,9 +47,20 @@ func pruneNarration(dryRun bool, f Flags) {
 			}
 
 			junk := selectNarrationClaims(claims)
+			candidates := countPrunable(claims)
+			var fromActive, fromContested int
+			for _, c := range junk {
+				switch c.Status {
+				case domain.ClaimStatusActive:
+					fromActive++
+				case domain.ClaimStatusContested:
+					fromContested++
+				}
+			}
 
-			fmt.Printf("active claims:   %d\n", countActive(claims))
-			fmt.Printf("narration/junk:  %d (%.1f%% of active)\n", len(junk), pct(len(junk), countActive(claims)))
+			fmt.Printf("prunable claims: %d (active + contested)\n", candidates)
+			fmt.Printf("narration/junk:  %d (%.1f%%) — %d active, %d contested\n",
+				len(junk), pct(len(junk), candidates), fromActive, fromContested)
 			for i, c := range junk {
 				if i >= 8 {
 					fmt.Printf("  … and %d more\n", len(junk)-8)
@@ -90,17 +101,16 @@ func pruneNarration(dryRun bool, f Flags) {
 	}
 }
 
-// selectNarrationClaims returns the ACTIVE claims that the extraction filter
-// classifies as conversational pollution. Only active claims are candidates: a
-// contested or already-deprecated claim is either under review or already
-// retired, and re-deprecating it would churn its history for no gain.
+// selectNarrationClaims returns the active-or-contested claims that the
+// extraction filter classifies as conversational pollution (see
+// isPrunableStatus for why contested is included).
 //
 // Pure so the prune's core selection is testable without the store, the
 // governed writer, or the CLI plumbing around it.
 func selectNarrationClaims(claims []domain.Claim) []domain.Claim {
 	var junk []domain.Claim
 	for _, c := range claims {
-		if c.Status != domain.ClaimStatusActive {
+		if !isPrunableStatus(c.Status) {
 			continue
 		}
 		if extract.IsJunk(c.Text) {
@@ -110,10 +120,26 @@ func selectNarrationClaims(claims []domain.Claim) []domain.Claim {
 	return junk
 }
 
-func countActive(claims []domain.Claim) int {
+// isPrunableStatus reports whether a claim in this status is a prune candidate.
+//
+// Active and contested both qualify. Contested is included deliberately: these
+// claims were auto-contested at INGEST by the extraction overlap check (a
+// pipeline reason), not flagged by a human — junk narration contested against
+// other junk narration. A census of a real brain found 17% of the contested
+// pile is junk by this same filter. "Contested" there means "looks like
+// something else the model also captured", not "under genuine review", so
+// leaving junk in that state just keeps noise recallable. Already-deprecated
+// and resolved claims are skipped: re-deprecating churns history for no gain.
+func isPrunableStatus(s domain.ClaimStatus) bool {
+	return s == domain.ClaimStatusActive || s == domain.ClaimStatusContested
+}
+
+// countPrunable counts claims eligible for the narration prune (active +
+// contested), for the denominator in the report.
+func countPrunable(claims []domain.Claim) int {
 	n := 0
 	for _, c := range claims {
-		if c.Status == domain.ClaimStatusActive {
+		if isPrunableStatus(c.Status) {
 			n++
 		}
 	}
