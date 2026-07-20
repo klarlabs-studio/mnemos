@@ -183,3 +183,61 @@ func TestIsLeadIn_DefersShortToSectionLabel(t *testing.T) {
 		t.Error("short colon phrase not caught by either rule")
 	}
 }
+
+// Transient CI/build/wiring status — "the suite is green", "all tests pass",
+// "all five surfaces are wired". After the narration prune, these dominated the
+// residual observation class in a real brain (42 claims, ~100% precision on
+// inspection). Not knowledge, not history worth keeping — the state of a build
+// at one moment, and a generator of false contested pairs across sessions.
+func TestIsJunkClaim_StatusChatter(t *testing.T) {
+	chatter := []string{
+		"Full suite is green",
+		"Build is clean",
+		"All five surfaces are wired and tested",
+		"All CI green on both",
+		"the test suite is passing",
+		"build is failing",
+		"All tests green, lint clean, tree clean",
+		"Engine is green, including the anti-drift test",
+	}
+	for _, s := range chatter {
+		if !isJunkClaim(s) {
+			t.Errorf("kept status chatter as a claim: %q", s)
+		}
+	}
+}
+
+// Subject-gating is what keeps precision high: the state word alone is common
+// in durable claims, so a match requires a build/test/CI/wiring subject. These
+// contain a state word but no such subject and must survive.
+func TestStatusChatter_KeepsDurableClaimsWithStateWords(t *testing.T) {
+	keep := []string{
+		"the retry logic is working correctly by design",
+		"the API is a green-field project",
+		"we chose Postgres because writes outgrew SQLite",
+		"all users are active in the system",
+		"the engine room is on deck three",       // "engine" but not CI state
+		"the design is sound and ready to build", // "ready"/"build" but not a suite/CI subject
+	}
+	for _, s := range keep {
+		if statusChatterRE.MatchString(s) {
+			t.Errorf("status-chatter rule fired on durable content: %q", s)
+		}
+	}
+}
+
+// Genuine timestamped operational EVENTS are a different, keep-worthy class
+// (destined for episodic routing, not the drop filter) and must not be caught
+// as chatter.
+func TestStatusChatter_LeavesOperationalEvents(t *testing.T) {
+	events := []string{
+		"deployed v1.2.3 to production at 14:00",
+		"released v0.104.0 with 15 signed assets",
+		"the incident started at 09:15 when the pool exhausted",
+	}
+	for _, s := range events {
+		if statusChatterRE.MatchString(s) {
+			t.Errorf("chatter rule ate an operational event (should be episodic): %q", s)
+		}
+	}
+}

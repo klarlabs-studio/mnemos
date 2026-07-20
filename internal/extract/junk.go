@@ -50,6 +50,9 @@ func isJunkClaim(text string) bool {
 	if isLeadIn(t) {
 		return true
 	}
+	if statusChatterRE.MatchString(stripped) {
+		return true
+	}
 	if contentWordCount(stripped) < 2 {
 		return true
 	}
@@ -202,3 +205,27 @@ var metaClaimRE = regexp.MustCompile(`(?i)` +
 func IsJunk(text string) bool {
 	return isJunkClaim(text)
 }
+
+// statusChatterRE matches transient CI/build/wiring status reports — "the full
+// suite is green", "all five surfaces are wired and tested", "build passing".
+//
+// A census of a real brain (after the narration prune) found these dominate the
+// residual "observation" class: they are not durable knowledge and not history
+// worth keeping episodically, just the state of a build at one moment, true
+// until the next commit. They also generate false contested pairs against each
+// other ("suite is green" vs "suite is failing" across unrelated sessions).
+//
+// Subject-gated for precision: the state word alone ("green", "working") is far
+// too common in durable claims ("the retry logic is working by design", "the
+// API is green-field"), so a match REQUIRES a build/test/CI/wiring subject. The
+// pattern was validated against a real brain to catch chatter without touching
+// knowledge. Timestamped operational EVENTS ("deployed v1.2.3", "released at
+// 14:00") are a different, keep-worthy class and are deliberately not matched
+// here.
+var statusChatterRE = regexp.MustCompile(`(?i)` +
+	// "<build/test/CI subject> ... is/are ... <pass/fail/ready state>"
+	`\b(?:suites?|tests?|build|builds|ci|pipeline|engine|surfaces?|everything)\b` +
+	`.{0,30}?\b(?:is|are|now|still)\b.{0,20}?` +
+	`\b(?:green|red|passing|failing|passes|pass|broken|wired|working|clean|ready)\b` +
+	// or terse "all <noun(s)> {wired|green|passing|tested|building}"
+	`|\ball\s+\w+(?:\s+\w+){0,2}?\s+(?:are\s+)?(?:wired|green|passing|tested|building|pass|passes)\b`)
