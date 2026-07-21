@@ -8,6 +8,49 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.113.0] — 2026-07-21
+
+**Contains a SQLite schema migration** (user_version 22 → 23). It runs
+automatically on first open and adds one defaulted column, so no action is
+needed. It is also downgrade-safe: 0.112.1 never references the new column, and
+the column has a DEFAULT, so an older binary keeps working against a migrated
+brain.
+
+### Added
+
+- **Beliefs record their durability** — `durable`, `session`, or unknown
+  (ADR 0023). Capture admits far more than it should, and the scale only became
+  visible once incremental capture actually worked: intake went from roughly two
+  claims a day to several thousand, and on a real brain 31% of everything it
+  knew had been created in one working day. A hand-labelled sample put ~58% of
+  that at session-local narration — progress reports, status snapshots,
+  completion announcements.
+
+  That material is not wrong, and real knowledge is mixed into it, so it is
+  MARKED rather than dropped. Nothing is lost; session-local beliefs simply stop
+  competing with knowledge.
+
+  **Unknown is treated as durable everywhere.** The entire back catalogue
+  predates the column, so absence of a verdict never demotes a belief, and an
+  unrecognised value folds to unknown rather than to session-local.
+
+- **Contradiction detection ignores narration arguing with itself.** `relate` no
+  longer records a contradiction when *both* beliefs are session-local: two
+  progress reports from different sessions ("both PRs are open" against "PR #23
+  squash-merged") are lexically a conflict and semantically nothing. Only
+  contradictions are suppressed — a conversation corroborating itself is real
+  evidence — and only when both sides are marked, since narration bumping into a
+  durable belief is the case most worth surfacing.
+
+  This replaces cleanup with prevention: edges never created cost nothing to
+  remove.
+
+- **`prune --session-noise` persists its verdicts** onto the beliefs, so
+  detection has something to read. Previously the judgement lived only in an
+  on-disk cache and every future session regenerated exactly the edges the pass
+  had just removed. Only beliefs whose verdict changed are rewritten, since a
+  claim write triggers a trust rescore.
+
 ## [0.112.1] — 2026-07-21
 
 ### Fixed
