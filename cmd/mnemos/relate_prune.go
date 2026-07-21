@@ -7,6 +7,7 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/relate"
 	"go.klarlabs.de/mnemos/internal/workflow"
 )
@@ -48,11 +49,23 @@ func pruneStaleRelationships(dryRun bool, f Flags) {
 			if err != nil {
 				return NewSystemError(err, "load relationships")
 			}
+			// Same-session edges are part of what the current pipeline would
+			// NOT produce, so the pass has to know about them too — otherwise
+			// it retains edges ingest would never create today.
+			links, err := conn.Claims.ListAllEvidence(ctx)
+			if err != nil {
+				return NewSystemError(err, "load claim evidence")
+			}
+			events, err := conn.Events.ListAll(ctx)
+			if err != nil {
+				return NewSystemError(err, "load events")
+			}
+			sessionOf := pipeline.SessionOfClaims(links, events)
 
 			if err := job.SetStatus("relating", ""); err != nil {
 				return err
 			}
-			keep, dropped, orphaned := partitionStaleContradictions(rels, byID)
+			keep, dropped, orphaned := partitionStaleContradictions(rels, byID, sessionOf)
 
 			fmt.Printf("relationships:      %d total\n", len(rels))
 			fmt.Printf("stale contradicts:  %d (no longer produced by the current detectors)\n", len(dropped))
@@ -101,7 +114,7 @@ func pruneStaleRelationships(dryRun bool, f Flags) {
 // Re-evaluation runs each pair back through relate.Engine.Detect — the same
 // entry point production uses — so this can never drift from the real
 // detection logic the way a reimplementation would.
-func partitionStaleContradictions(rels []domain.Relationship, byID map[string]domain.Claim) (keep, dropped []domain.Relationship, orphaned int) {
+func partitionStaleContradictions(rels []domain.Relationship, byID map[string]domain.Claim, sessionOf map[string]string) (keep, dropped []domain.Relationship, orphaned int) {
 	engine := relate.NewEngine()
 	keep = make([]domain.Relationship, 0, len(rels))
 
@@ -114,6 +127,14 @@ func partitionStaleContradictions(rels []domain.Relationship, byID map[string]do
 		}
 		if r.Type != domain.RelationshipTypeContradicts {
 			keep = append(keep, r)
+			continue
+		}
+		// A conversation arguing with itself is not a contradiction, and the
+		// ingest path stopped recording those. Claims with no session — every
+		// ingestion predating session tagging — are untouched: absence of a
+		// tag is not evidence they shared one.
+		if sa, sb := sessionOf[r.FromClaimID], sessionOf[r.ToClaimID]; sa != "" && sa == sb {
+			dropped = append(dropped, r)
 			continue
 		}
 		if stillContradicts(engine, from, to) {
