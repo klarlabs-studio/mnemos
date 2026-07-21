@@ -8,6 +8,41 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.111.0] — 2026-07-21
+
+### Added
+
+- **`mnemos prune --session-noise [--dry-run]`** drops contradiction edges where
+  an LLM judges *both* claims to be session-local rather than durable knowledge.
+
+  It exists for the backlog session tagging cannot reach: capture began stamping
+  events with their session in 0.108.0 and the ingest path drops intra-session
+  contradictions from that point on, but nothing captured earlier carries a
+  session and one cannot be inferred after the fact. That legacy pile is
+  dominated by progress reports arguing across sessions — "both PRs are open"
+  against "PR #23 squash-merged" — of which the rule-based junk filter catches
+  3%.
+
+  **It removes edges only, never claims**, which is the whole reason an LLM is
+  allowed near the decision. ADR 0023 rejected LLM *routing* of observations
+  because dropping a belief on a false positive is an invisible loss of real
+  knowledge; here a false positive costs one contradiction alert, which is
+  visible, cheap and re-derivable with `mnemos relate`.
+
+  The classifier was measured against 40 hand-labelled claims from a real brain
+  before being wired up: it over-calls Durable (8 of 17 Durable verdicts were
+  session-local) but never once called a durable claim session-local (18
+  verdicts, 0 errors). Since suppression keys on session-local, its real failure
+  mode leaves edges alone rather than deleting them. Anything it cannot answer
+  for stays Unknown and is inert.
+
+  Requiring *both* endpoints keeps the case worth surfacing: one session-local
+  claim contradicting a durable one is a conversation bumping into something the
+  brain actually believes.
+
+  A pass that runs out of its job budget reports how far it got and prunes on
+  the verdicts it earned; re-run to continue, or raise `MNEMOS_JOB_TIMEOUT`.
+
 ## [0.110.0] — 2026-07-21
 
 ### Fixed
