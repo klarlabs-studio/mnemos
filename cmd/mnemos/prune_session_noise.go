@@ -96,24 +96,16 @@ func pruneSessionNoise(dryRun bool, f Flags) {
 			if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 				return NewSystemError(err, "classify durability")
 			}
-			classified := 0
-			for _, v := range verdicts {
-				if v != extract.DurabilityUnknown {
-					classified++
-				}
-			}
+			classified := len(verdicts) - countDurability(verdicts, extract.DurabilityUnknown)
 			if classified < len(texts) {
 				fmt.Printf("classified %d of %d claim(s) before the budget ran out; re-run to continue (raise MNEMOS_JOB_TIMEOUT to cover more per pass)\n",
 					classified, len(texts))
 			}
 			durability := make(map[string]extract.Durability, len(subjects))
-			sessionLocal := 0
 			for i, id := range subjects {
 				durability[id] = verdicts[i]
-				if verdicts[i] == extract.DurabilitySessionLocal {
-					sessionLocal++
-				}
 			}
+			sessionLocal := countDurability(verdicts, extract.DurabilitySessionLocal)
 
 			var drop []domain.Relationship
 			for _, r := range live {
@@ -123,7 +115,13 @@ func pruneSessionNoise(dryRun bool, f Flags) {
 				}
 			}
 
-			fmt.Printf("session-local claims:    %d (%.1f%%)\n", sessionLocal, pct(sessionLocal, len(subjects)))
+			// Rate over what was CLASSIFIED, not over every claim on an edge.
+			// Dividing by the full set silently counts claims the budget never
+			// reached as "not session-local": a pass covering 1,125 of 2,448
+			// reported 27.9% where the measured rate among classified claims was
+			// 60.7%, understating it by more than half.
+			fmt.Printf("session-local claims:    %d of %d classified (%.1f%%)\n",
+				sessionLocal, classified, pct(sessionLocal, classified))
 			fmt.Printf("edges with BOTH sides session-local: %d (%.1f%%)\n", len(drop), pct(len(drop), len(live)))
 			for i, r := range drop {
 				if i >= 5 {
@@ -209,4 +207,20 @@ func contradictionEndpoints(rels []domain.Relationship, byID map[string]domain.C
 		}
 	}
 	return out
+}
+
+// countDurability counts verdicts of one kind.
+//
+// Split out because the two counts it feeds are easy to divide by the wrong
+// thing: the session-local RATE must be measured over classified claims, never
+// over every claim on an edge, or a budget-limited pass reports claims it never
+// looked at as though they had been judged durable.
+func countDurability(verdicts []extract.Durability, want extract.Durability) int {
+	n := 0
+	for _, v := range verdicts {
+		if v == want {
+			n++
+		}
+	}
+	return n
 }
