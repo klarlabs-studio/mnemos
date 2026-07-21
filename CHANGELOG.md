@@ -8,6 +8,23 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.111.1] — 2026-07-21
+
+### Fixed
+
+- **`prune --session-noise` now really resumes after running out of budget.**
+  0.111.0 told you to "re-run to continue"; that was not true. Claims are
+  classified in a stable order, so a re-run started from the same place and
+  paid for the same prefix again, reaching barely further — on a brain whose
+  backlog needs about an hour of local-model time the pass could never finish.
+
+  Verdicts are now cached on disk beside the extraction cache, keyed by prompt
+  version, provider, model and claim text, so changing any of them
+  re-classifies rather than serving a verdict the current configuration would
+  not produce. `Unknown` is never cached: it means "we got no answer", not a
+  judgement, and caching it would make a transient outage permanent for that
+  claim.
+
 ## [0.111.0] — 2026-07-21
 
 ### Added
@@ -41,7 +58,8 @@ notable changes.
   brain actually believes.
 
   A pass that runs out of its job budget reports how far it got and prunes on
-  the verdicts it earned; re-run to continue, or raise `MNEMOS_JOB_TIMEOUT`.
+  the verdicts it earned. (As shipped in 0.111.0 a re-run redid the same prefix
+  rather than continuing; fixed in 0.111.1.)
 
 ## [0.110.0] — 2026-07-21
 
