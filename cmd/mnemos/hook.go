@@ -457,6 +457,11 @@ func hookBrief(ev hookEvent) {
 	if ev.Source == "clear" || ev.Source == "compact" {
 		return
 	}
+	// Collect a health data point at most once a day, detached so this
+	// latency-sensitive path never waits on a full scan. Without this the
+	// ADR-0019 vitals have no time series and their thresholds can never be
+	// calibrated (see health_snapshot.go).
+	maybeSnapshotHealth(time.Now())
 	if hostedConfigured() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

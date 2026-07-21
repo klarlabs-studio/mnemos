@@ -3,6 +3,7 @@ package extract
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -209,5 +210,41 @@ func TestClassifyDurabilityCached_DoesNotCacheUnknown(t *testing.T) {
 	}
 	if recovered.calls != 1 || got[0] != DurabilityDurable {
 		t.Fatalf("a failed claim must be retried, calls=%d got=%q", recovered.calls, got[0])
+	}
+}
+
+// TestClassifyDurabilityCached_PersistsBeforeInterruption is the guarantee the
+// resume story actually rests on. Deferring cache writes to the end of the pass
+// meant they only ever happened on a clean exit — and the failure that
+// motivated caching was a long pass being killed, which would have discarded
+// every verdict it had already paid for.
+func TestClassifyDurabilityCached_PersistsBeforeInterruption(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MNEMOS_LLM_PROVIDER", "test")
+	t.Setenv("MNEMOS_LLM_MODEL", "test")
+
+	texts := make([]string, durabilityBatchSize*3)
+	for i := range texts {
+		texts[i] = fmt.Sprintf("claim %d", i)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel after the first batch, standing in for a kill mid-pass.
+	c := &cancellingLLM{reply: `[{"i":0,"c":"SESSION"}]`, cancelAfter: 1, cancel: cancel}
+	if _, err := ClassifyDurabilityCached(ctx, c, texts, dir); !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+
+	// The verdict from the completed batch must already be on disk.
+	if v, ok := readDurability(dir, texts[0]); !ok || v != DurabilitySessionLocal {
+		t.Fatalf("a completed batch must be persisted before the interruption; got %q ok=%v", v, ok)
+	}
+	// And a later pass must not re-ask for it.
+	resumed := &stubLLM{reply: `[{"i":0,"c":"DURABLE"}]`}
+	got, err := ClassifyDurabilityCached(context.Background(), resumed, texts[:1], dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0] != DurabilitySessionLocal || resumed.calls != 0 {
+		t.Fatalf("resume re-asked: got=%q calls=%d", got[0], resumed.calls)
 	}
 }

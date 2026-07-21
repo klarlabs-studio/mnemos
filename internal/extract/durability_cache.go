@@ -57,15 +57,25 @@ func ClassifyDurabilityCached(ctx context.Context, client llm.Client, texts []st
 	if len(missTexts) == 0 {
 		return out, nil
 	}
-	verdicts, err := ClassifyDurability(ctx, client, missTexts)
-	for j, v := range verdicts {
-		if v == DurabilityUnknown {
-			continue // never cache "we didn't get an answer"
+	// Persist each batch as it lands, rather than the whole pass at the end.
+	// Deferring the writes meant the cache only ever materialised on a clean
+	// exit — and the failure that motivated caching in the first place was a
+	// long pass being KILLED, which would have thrown away every verdict it had
+	// already paid for.
+	for start := 0; start < len(missTexts); start += durabilityBatchSize {
+		if err := ctx.Err(); err != nil {
+			return out, err
 		}
-		out[missIdx[j]] = v
-		writeDurability(cacheDir, missTexts[j], v)
+		end := min(start+durabilityBatchSize, len(missTexts))
+		for j, v := range classifyDurabilityBatch(ctx, client, missTexts[start:end]) {
+			if v == DurabilityUnknown {
+				continue // never cache "we didn't get an answer"
+			}
+			out[missIdx[start+j]] = v
+			writeDurability(cacheDir, missTexts[start+j], v)
+		}
 	}
-	return out, err
+	return out, nil
 }
 
 func durabilityCacheKey(text string) string {
