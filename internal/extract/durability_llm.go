@@ -40,6 +40,32 @@ const (
 	DurabilitySessionLocal Durability = "session"
 )
 
+// Attempts to improve the durable side, and why the prompt still looks like
+// this (measured 2026-07-21, qwen2.5:14b, against hand-labelled samples from a
+// real brain):
+//
+//   - Rewriting the prompt around a "does it stand alone?" test plus explicit
+//     few-shots for the observed failure modes scored 92% agreement (durable
+//     precision 48% -> 89%) on the sample it was written against, and 60-70%
+//     on a HELD-OUT sample where the original scored 57-63%. Durable precision
+//     held out at 47%, against 43-50% for this prompt. The distributions
+//     overlap: the gain was overfitting to the tuning sample, so the rewrite
+//     was discarded rather than shipped.
+//   - qwen2.5:32b was degenerate on the same task, labelling all 30 held-out
+//     claims SESSION (which would demote real knowledge), and exceeded ten
+//     minutes for thirty claims.
+//
+// Two things that make such measurements easy to misread, both hit here:
+// run-to-run agreement varies by 5-10 points on an identical prompt and input,
+// and it degrades further when anything else is using the same model — the
+// recall fill-in worker was competing for it during the first comparison. A
+// single run cannot separate two prompts.
+//
+// The practical consequence is that the DURABLE verdict should not be trusted
+// on its own, and the design already assumes that: suppression keys on
+// SessionLocal (the reliable direction), and an unknown or wrong durable
+// verdict simply leaves a belief where it was.
+//
 // durabilityPrompt leans on the mechanism-vs-report distinction, which is what
 // separates "the tests assert forget sets the status, and it does" (a durable
 // statement about coverage) from "CI passed in 1m59s" (a snapshot).
