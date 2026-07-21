@@ -642,6 +642,7 @@ func captureTextCtx(ctx context.Context, ev hookEvent, text string) bool {
 			Text:          text,
 			UseLLM:        useLLM,
 			UseEmbeddings: useLLM,
+			SessionID:     ev.SessionID,
 		})
 		ok = err == nil
 	}

@@ -81,6 +81,11 @@ type mcpProcessTextInput struct {
 	Text          string `json:"text" jsonschema:"required,description=Raw text to ingest and process"`
 	UseLLM        bool   `json:"useLlm,omitempty" jsonschema:"description=Use configured LLM extraction provider"`
 	UseEmbeddings bool   `json:"useEmbeddings,omitempty" jsonschema:"description=Generate embeddings after processing"`
+	// SessionID tags the resulting events with the agent session that produced
+	// them, so contradiction detection can tell a conversation arguing with
+	// itself from two sessions genuinely disagreeing. Optional; empty means
+	// the ingestion is not session-scoped and nothing is suppressed.
+	SessionID string `json:"sessionId,omitempty" jsonschema:"description=Agent session id; suppresses contradictions between claims from the same session"`
 }
 
 type mcpProcessTextOutput struct {
@@ -1289,6 +1294,12 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 		}
 		for i := range events {
 			events[i].RunID = job.ID()
+			if input.SessionID != "" {
+				if events[i].Metadata == nil {
+					events[i].Metadata = map[string]string{}
+				}
+				events[i].Metadata[pipeline.SessionMetadataKey] = input.SessionID
+			}
 		}
 
 		ext, err := pipeline.NewExtractor(input.UseLLM)
@@ -1324,6 +1335,18 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 				return err
 			}
 			rels = append(rels, incrementalRels...)
+		}
+		if input.SessionID != "" {
+			newIDs := make(map[string]struct{}, len(claims))
+			for i := range claims {
+				newIDs[claims[i].ID] = struct{}{}
+			}
+			filtered, _, ferr := pipeline.DropIntraSessionContradictions(
+				ctx, conn.Events, conn.Claims, rels, input.SessionID, newIDs)
+			if ferr != nil {
+				return ferr
+			}
+			rels = filtered
 		}
 		_ = progress.Report(3, &total)
 
