@@ -261,6 +261,8 @@ func main() {
 		handleDedupe(args, flags)
 	case "prune":
 		handlePrune(args, flags)
+	case "classify-durability":
+		handleClassifyDurability(args, flags)
 	case "entities":
 		handleEntities(args, flags)
 	case "extract-entities":
@@ -1493,6 +1495,7 @@ func printUsage() {
 	fmt.Println("  dedup [--threshold T] [--force]      Merge near-duplicate claims by embedding similarity (dry-run by default)")
 	fmt.Println("  prune --narration [--dry-run]        Deprecate stored conversational pollution the extraction filter now catches")
 	fmt.Println("  prune --session-noise [--dry-run]    Drop contradiction edges where an LLM judges both claims session-local (edges only)")
+	fmt.Println("  classify-durability [--limit N]      Record whether a belief outlives its session; targets the highest-trust unclassified ones")
 	fmt.Println("  consolidate [--dry-run] [--forget-below-trust T]  The cognitive \"sleep\" pass: dedupe + refresh trust,")
 	fmt.Println("    [--forget-refuted] [--synthesize]  and optionally forget/reinforce/synthesize/replay. Deterministic.")
 	fmt.Println("  sync-docs [--claude] [--file <name>] Write this repo's learnings into AGENTS.md (or CLAUDE.md) so")
