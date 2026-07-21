@@ -8,6 +8,27 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.108.0] — 2026-07-21
+
+### Added
+
+- **Session-scoped contradiction suppression.** Capture tags each event with the
+  agent session that produced it, and contradiction edges between two claims
+  from the *same* session are dropped. A conversation is a narrative that
+  moves, so its beginning routinely conflicts with its end — "starting item 2"
+  then "item 2 is complete", "key suspicion forming: the timeout is 90s" then
+  "root cause confirmed: the field is unset". Sampled on a production brain
+  those pairs overwhelmingly agree or refine one another rather than compete.
+
+  This is deliberately not supersession: 84% of live contradiction edges sat
+  less than a day apart and exactly one pair was more than a week apart, so
+  there is no old-belief-vs-new-belief population to retire by age.
+
+  Scoped narrowly — only `contradicts` is dropped (a conversation corroborating
+  itself is real evidence), cross-session contradictions survive, a claim whose
+  session is unknown is never dropped, and an ingestion with no session id is a
+  complete no-op, so the CLI, git ingest and the MCP tool are unchanged.
+
 ## [0.107.0] — 2026-07-21
 
 This release is one line of work: the brain-health `dissonance` vital was pinned
