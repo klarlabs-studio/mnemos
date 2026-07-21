@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/extract"
 )
 
 // The prune's classification correctness is covered by internal/extract (it
@@ -123,5 +124,30 @@ func TestLiveContradictions_MatchesTheVital(t *testing.T) {
 	}
 	if ids := contradictionEndpoints(got, byID); len(ids) != 2 {
 		t.Fatalf("want 2 distinct endpoints, got %v", ids)
+	}
+}
+
+// TestCountDurability_RateIsOverClassified pins the denominator. A pass that
+// runs out of budget leaves most claims Unknown; measuring the session-local
+// rate over ALL of them counts claims never looked at as though they had been
+// judged durable. On a real pass that understated 60.7% as 27.9%.
+func TestCountDurability_RateIsOverClassified(t *testing.T) {
+	// 3 session-local, 2 durable, 5 never reached.
+	verdicts := []extract.Durability{
+		extract.DurabilitySessionLocal, extract.DurabilitySessionLocal, extract.DurabilitySessionLocal,
+		extract.DurabilityDurable, extract.DurabilityDurable,
+		extract.DurabilityUnknown, extract.DurabilityUnknown, extract.DurabilityUnknown,
+		extract.DurabilityUnknown, extract.DurabilityUnknown,
+	}
+	sessionLocal := countDurability(verdicts, extract.DurabilitySessionLocal)
+	classified := len(verdicts) - countDurability(verdicts, extract.DurabilityUnknown)
+	if sessionLocal != 3 || classified != 5 {
+		t.Fatalf("sessionLocal=%d classified=%d", sessionLocal, classified)
+	}
+	if got := pct(sessionLocal, classified); got != 60 {
+		t.Fatalf("rate must be over classified claims: got %.1f%%, want 60%%", got)
+	}
+	if over := pct(sessionLocal, len(verdicts)); over != 30 {
+		t.Fatalf("sanity: dividing by everything gives the misleading %.1f%%", over)
 	}
 }
