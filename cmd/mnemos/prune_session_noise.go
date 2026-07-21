@@ -40,6 +40,10 @@ func pruneSessionNoise(dryRun bool, f Flags) {
 	err := runJob("prune-session-noise", map[string]string{"dry_run": fmt.Sprint(dryRun)}, f.Verbose,
 		func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
 			conn := w.Conn()
+			actor, actorErr := resolveActor(ctx, conn.Users, f.Actor)
+			if actorErr != nil {
+				return actorErr
+			}
 			if err := job.SetStatus("loading", ""); err != nil {
 				return err
 			}
@@ -145,15 +149,50 @@ func pruneSessionNoise(dryRun bool, f Flags) {
 				fmt.Println("\n(dry run — nothing written; re-run without --dry-run to apply)")
 				return nil
 			}
-			if len(drop) == 0 {
-				fmt.Println("\nnothing to prune.")
-				return nil
-			}
 			if err := job.SetStatus("saving", ""); err != nil {
 				return err
 			}
+			// Persist the verdicts onto the beliefs themselves, not just the
+			// on-disk classifier cache. Stored durability is what lets `relate`
+			// stop CREATING these edges (ADR 0023); without it every future
+			// session regenerates exactly what this pass just removed, and the
+			// cleanup has to be re-run forever.
+			//
+			// Only beliefs whose verdict actually changed are rewritten: a
+			// claim write triggers a trust rescore, so rewriting all of them
+			// would make this pass cost more the larger the brain gets.
+			var marked []domain.Claim
+			for _, id := range subjects {
+				v := durability[id]
+				if v == extract.DurabilityUnknown {
+					continue
+				}
+				c, ok := byID[id]
+				if !ok {
+					continue
+				}
+				want := domain.Durability(v)
+				if c.Durability == want {
+					continue
+				}
+				c.Durability = want
+				marked = append(marked, c)
+			}
+			if len(marked) > 0 {
+				if _, err := w.Claims(ctx, marked, govwrite.ClaimReason{
+					Reason:    "Durability classified (prune --session-noise)",
+					ChangedBy: actor,
+				}); err != nil {
+					return NewSystemError(err, "record durability")
+				}
+				fmt.Printf("marked %d belief(s) with a durability verdict.\n", len(marked))
+			}
 			// Through the governed writer, like `relate --prune-stale`: the
 			// writer takes the surviving set, so build it by difference.
+			if len(drop) == 0 {
+				fmt.Println("\nno edges to prune.")
+				return nil
+			}
 			dropIDs := make(map[string]struct{}, len(drop))
 			for _, r := range drop {
 				dropIDs[r.ID] = struct{}{}
@@ -167,7 +206,10 @@ func pruneSessionNoise(dryRun bool, f Flags) {
 			if _, err := w.PruneRelationships(ctx, keep, len(drop)); err != nil {
 				return NewSystemError(err, "prune relationships")
 			}
-			fmt.Printf("\npruned %d edge(s). Claims are untouched; `mnemos relate` can re-derive edges.\n", len(drop))
+			// Precise about what was and was not changed: durability verdicts
+			// ARE written to beliefs now, so "claims are untouched" would be
+			// false. What holds is that no belief is deprecated or deleted.
+			fmt.Printf("\npruned %d edge(s). No belief was deprecated or deleted; `mnemos relate` can re-derive edges.\n", len(drop))
 			return nil
 		})
 	if err != nil {

@@ -128,3 +128,61 @@ func TestMigrate_IsIdempotentOnFreshDB(t *testing.T) {
 		}
 	}
 }
+
+// TestMigrate_AddsDurabilityToExistingBrain reproduces the upgrade a real user
+// hits: a brain created before claims.durability existed. CREATE TABLE IF NOT
+// EXISTS does not add columns to a table that is already there, so without a
+// migration entry the first read fails with "no such column: durability" —
+// which is exactly what happened against a live 21k-claim brain before this
+// test existed.
+func TestMigrate_AddsDurabilityToExistingBrain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pre-durability.db")
+
+	// Open once at the current schema, then drop the column back out to stand
+	// in for a brain written by an older binary.
+	db, err := open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if _, err := db.Exec(`ALTER TABLE claims DROP COLUMN durability`); err != nil {
+		t.Fatalf("simulate legacy shape: %v", err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 22`); err != nil {
+		t.Fatalf("rewind user_version: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Re-opening must migrate in place rather than fail.
+	db2, err := open(path)
+	if err != nil {
+		t.Fatalf("reopen must migrate, got: %v", err)
+	}
+	defer func() { _ = db2.Close() }()
+
+	if !columnExistsOrFail(t, db2, "claims", "durability") {
+		t.Fatal("durability column was not added by migrate()")
+	}
+	// And the column must be usable, defaulting to unknown for legacy rows.
+	if _, err := db2.Exec(`INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from)
+		VALUES ('c1','legacy belief','fact',0.9,'active','2026-01-01T00:00:00Z','tester','2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatalf("insert on migrated table: %v", err)
+	}
+	var got string
+	if err := db2.QueryRow(`SELECT durability FROM claims WHERE id='c1'`).Scan(&got); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("a legacy row must default to unknown, got %q", got)
+	}
+}
+
+func columnExistsOrFail(t *testing.T, db *sql.DB, table, column string) bool {
+	t.Helper()
+	has, err := columnExists(db, table, column)
+	if err != nil {
+		t.Fatalf("inspect %s.%s: %v", table, column, err)
+	}
+	return has
+}
