@@ -191,3 +191,61 @@ func TestHookSpecsUseDerivedCaptureTimeout(t *testing.T) {
 		t.Fatal("no SessionEnd capture hook was produced")
 	}
 }
+
+// TestDemoteSessionLocal covers the ordering a brief actually shows: narration
+// sinks below durable knowledge, and everything unclassified stays exactly
+// where the query engine put it.
+func TestDemoteSessionLocal(t *testing.T) {
+	in := []recallClaim{
+		{Text: "narration-1", SessionLocal: true},
+		{Text: "durable-1"},
+		{Text: "narration-2", SessionLocal: true},
+		{Text: "durable-2"},
+	}
+	got := demoteSessionLocal(in)
+	want := []string{"durable-1", "durable-2", "narration-1", "narration-2"}
+	for i, w := range want {
+		if got[i].Text != w {
+			t.Fatalf("position %d = %q, want %q (full: %v)", i, got[i].Text, w, texts(got))
+		}
+	}
+}
+
+// The back catalogue is entirely unclassified. If absence of a verdict demoted
+// a belief, a brain's worth of knowledge would silently sink.
+func TestDemoteSessionLocal_UnclassifiedKeepsItsPlace(t *testing.T) {
+	in := []recallClaim{{Text: "a"}, {Text: "b"}, {Text: "c"}}
+	got := demoteSessionLocal(in)
+	for i, w := range []string{"a", "b", "c"} {
+		if got[i].Text != w {
+			t.Fatalf("unclassified order changed: %v", texts(got))
+		}
+	}
+}
+
+// Chained with demoteContested, as recall does: narration below everything,
+// contested below settled within what remains. Tier order inside each group
+// must survive, since repo-wins precedence is deliberate.
+func TestDemoteSessionLocal_ChainsWithContested(t *testing.T) {
+	in := []recallClaim{
+		{Text: "narration", SessionLocal: true},
+		{Text: "contested", Contested: true},
+		{Text: "repo-settled", Source: "workspace"},
+		{Text: "global-settled", Source: "global"},
+	}
+	got := demoteSessionLocal(demoteContested(in))
+	want := []string{"repo-settled", "global-settled", "contested", "narration"}
+	for i, w := range want {
+		if got[i].Text != w {
+			t.Fatalf("position %d = %q, want %q (full: %v)", i, got[i].Text, w, texts(got))
+		}
+	}
+}
+
+func texts(cs []recallClaim) []string {
+	out := make([]string, len(cs))
+	for i, c := range cs {
+		out[i] = c.Text
+	}
+	return out
+}
