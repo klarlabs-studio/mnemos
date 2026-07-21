@@ -96,9 +96,8 @@ func sessionsForClaims(
 	claims ports.ClaimRepository,
 	claimIDs map[string]struct{},
 ) (map[string]string, error) {
-	out := make(map[string]string, len(claimIDs))
 	if len(claimIDs) == 0 {
-		return out, nil
+		return map[string]string{}, nil
 	}
 	ids := make([]string, 0, len(claimIDs))
 	for id := range claimIDs {
@@ -109,7 +108,7 @@ func sessionsForClaims(
 		return nil, fmt.Errorf("mnemos: session scope: list evidence: %w", err)
 	}
 	if len(links) == 0 {
-		return out, nil
+		return map[string]string{}, nil
 	}
 
 	eventIDs := make([]string, 0, len(links))
@@ -125,12 +124,23 @@ func sessionsForClaims(
 	if err != nil {
 		return nil, fmt.Errorf("mnemos: session scope: list events: %w", err)
 	}
-	sessionOfEvent := make(map[string]string, len(evs))
-	for _, e := range evs {
+	return SessionOfClaims(links, evs), nil
+}
+
+// SessionOfClaims maps each claim to the session of its source events, given
+// evidence links and the events they point at.
+//
+// Shared with `relate --prune-stale` so the maintenance pass and the ingest
+// path agree on what "same session" means — a prune that used a different rule
+// would either retain edges ingest would never create or drop ones it would.
+func SessionOfClaims(links []domain.ClaimEvidence, events []domain.Event) map[string]string {
+	sessionOfEvent := make(map[string]string, len(events))
+	for _, e := range events {
 		if s := e.Metadata[SessionMetadataKey]; s != "" {
 			sessionOfEvent[e.ID] = s
 		}
 	}
+	out := make(map[string]string)
 	for _, l := range links {
 		if out[l.ClaimID] != "" {
 			continue
@@ -139,5 +149,5 @@ func sessionsForClaims(
 			out[l.ClaimID] = s
 		}
 	}
-	return out, nil
+	return out
 }
