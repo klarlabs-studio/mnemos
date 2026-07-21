@@ -8,6 +8,69 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.107.0] — 2026-07-21
+
+This release is one line of work: the brain-health `dissonance` vital was pinned
+at CRIT on a production brain, and every fix below came from re-running the
+detectors over all live contradiction edges rather than sampling them. Measured
+end to end, dissonance fell from 0.237 (CRIT, unhealthy) to 0.102 (warn,
+degraded).
+
+### Fixed
+
+- **Deprecating a belief now clears its contradictions.** `Hypercorrections`
+  skipped beliefs retired by a closed valid-time or by supersession, but not
+  ones marked **deprecated** — which is how `prune --narration`, `forget` and
+  `memory_deprecate` actually retire a belief, since those close *status* and
+  leave `valid_to` open. The consequence was that the dissonance vital could
+  not be improved by retiring bad beliefs at all: on a production brain all
+  3,378 deprecated claims had `valid_to` NULL, and 1,984 of 4,864 contradiction
+  edges had a deprecated endpoint still counted as an *active* high-stakes
+  contradiction. The one remedy the tooling offers moved the number by zero.
+
+- **Silence is no longer numeric disagreement.** `numericValuesAgree` required
+  every value in one claim to be matched in the other, so a quantity the
+  counterpart never mentioned counted as a conflict — a claim listing four
+  figures nearly always names one its counterpart does not, so a longer claim
+  contradicted a shorter one for being longer. Disagreement now requires both
+  claims to assert a value in the same unit family and for those values to
+  differ. Single-vs-single keeps the strict comparison, so "the limit is 5
+  minutes" vs "the limit is 5 GB" still conflicts.
+
+- **The numeric unit suffix now ends at a word boundary**, as its doc comment
+  had always claimed. Without it the class truncated any longer neighbouring
+  word into a bogus unit family (`versions`→`versio`, `released`→`releas`,
+  `unpushed`→`unpush`), comparing two claims under a unit that does not exist.
+
+- **Locator exclusion actually fires, and covers more shapes.** The `#225`-style
+  identifier exclusion read one character to the left of the match — which
+  starts at the separator, not the digit — so it never triggered. It now also
+  covers numbers bound to an identifier by punctuation (`render.go:133`,
+  `imap.example.org:993`, `76-77`): those name a place, not a quantity. Only a
+  *recognized* unit vetoes it, so `timeout:30s` stays a measurement.
+
+- **A contrastive negation no longer makes a claim negative.** Polarity was
+  "any negation word anywhere in the text", so "this is a bug in an existing
+  pattern, **not merely** a missing one" read as a negative claim when it in
+  fact asserts the bug. Because the contradiction path pairs opposite
+  polarities, such claims collided with claims asserting much the same thing.
+  A clause break before the negation ("real work, not already-done") or a hedge
+  after it ("not merely") marks the contrastive shape; genuine denials — "no
+  admin bypass needed", "it is not dead code" — are untouched and still
+  detected. Live polarity edges fell 1,457 → 1,068.
+
+- **All three divergence paths require overlap coverage on the longer claim.**
+  The polarity, numeric and temporal paths each measured overlap against the
+  *shorter* claim, so a two-token claim trivially scored 1.0 against a long one.
+  Live edges produced by these paths fell 38,198 → 4,063.
+
+### Added
+
+- **`mnemos recompute-contested [--dry-run]`** clears contested status from
+  claims the current heuristic would no longer flag. Contested is assigned at
+  extraction time, so a claim marked by an older, looser rule kept that status
+  forever while being demoted at recall. It only ever clears, never adds.
+
 ## [0.106.0] — 2026-07-21
 
 ### Fixed
