@@ -108,7 +108,10 @@ CREATE TABLE IF NOT EXISTS claims (
 	test_last_run_at TEXT NOT NULL DEFAULT '',
 	test_pass_count INTEGER NOT NULL DEFAULT 0,
 	test_fail_count INTEGER NOT NULL DEFAULT 0,
-	subject_class TEXT NOT NULL DEFAULT ''
+	subject_class TEXT NOT NULL DEFAULT '',
+	-- durability (ADR 0023): 'durable' | 'session' | '' (unknown). Unknown is
+	-- treated as durable: the whole back catalogue predates the column.
+	durability TEXT NOT NULL DEFAULT ''
 );
 -- idx_claims_trust_score and idx_claims_valid_to are created by
 -- migrate() after the v1→v2 / v2→v3 ALTER TABLEs add the columns on

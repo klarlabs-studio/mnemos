@@ -3,8 +3,8 @@
 -- separately via UpdateClaimTrust and SetClaimValidity), but does
 -- refresh valid_from: re-extracting a claim with newer evidence is
 -- a legitimate "this fact is observed again from <ts>" signal.
-INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   text = excluded.text,
   type = excluded.type,
@@ -33,7 +33,8 @@ ON CONFLICT(id) DO UPDATE SET
   visibility = excluded.visibility,
   confidence_components = excluded.confidence_components,
   lifecycle = excluded.lifecycle,
-  subject_class = excluded.subject_class;
+  subject_class = excluded.subject_class,
+  durability = excluded.durability;
 
 -- name: SetClaimValidity :exec
 -- Atomic supersession primitive: mark a claim as no longer valid as
@@ -65,7 +66,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle, subject_class
+       visibility, confidence_components, lifecycle, subject_class, durability
 FROM claims
 ORDER BY created_at ASC;
 
@@ -81,7 +82,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle, subject_class
+       visibility, confidence_components, lifecycle, subject_class, durability
 FROM claims
 WHERE type = 'test_result'
   AND test_requirement_ref = ?

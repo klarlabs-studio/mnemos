@@ -286,6 +286,12 @@ type Belief struct {
 	// the shared global brain; individual and unknown are kept private.
 	SubjectClass SubjectClass
 
+	// Durability says whether this belief's value outlives the conversation it
+	// came from (ADR 0023). Empty (DurabilityUnknown) means unclassified and is
+	// treated as durable everywhere — the entire back catalogue predates the
+	// field, so absence of a verdict must never demote a belief.
+	Durability Durability
+
 	// --- Epistemic Provenance Fields ---
 
 	// SourceDocument is the original source (URL, file path, doc ID)

@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS claims (
   scope_env      VARCHAR(64)      NOT NULL DEFAULT '',
   scope_team     VARCHAR(190)     NOT NULL DEFAULT '',
   subject_class  VARCHAR(32)      NOT NULL DEFAULT '',
+  durability     VARCHAR(32)      NOT NULL DEFAULT '',
   confidence_components JSON      NULL,
   PRIMARY KEY (id),
   KEY idx_claims_trust_score   (trust_score),
@@ -74,6 +75,10 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS lifecycle VARCHAR(32) NOT NULL DEFAU
 -- to '' (unknown). Persists domain.Claim.SubjectClass so the claim-derived
 -- knowledge promotion path reads it back instead of always seeing 'unknown'.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS subject_class VARCHAR(32) NOT NULL DEFAULT '';
+-- durability (ADR 0023): 'durable' | 'session' | '' (unknown). Unknown is
+-- treated as durable: the whole back catalogue predates the column, so absence
+-- of a verdict must never demote a belief.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS durability VARCHAR(32) NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS entities (
   id              VARCHAR(190) NOT NULL,

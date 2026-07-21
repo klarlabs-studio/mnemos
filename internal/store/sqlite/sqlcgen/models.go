@@ -65,6 +65,7 @@ type Claim struct {
 	ConfidenceComponents string         `json:"confidence_components"`
 	Lifecycle            string         `json:"lifecycle"`
 	SubjectClass         string         `json:"subject_class"`
+	Durability           string         `json:"durability"`
 }
 
 type ClaimEntity struct {

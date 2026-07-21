@@ -68,6 +68,10 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS lifecycle text NOT NULL DEFAULT '';
 -- to '' (unknown). Persists domain.Claim.SubjectClass so the claim-derived
 -- knowledge promotion path reads it back instead of always seeing 'unknown'.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS subject_class text NOT NULL DEFAULT '';
+-- durability (ADR 0023): 'durable' | 'session' | '' (unknown). Unknown is
+-- treated as durable: the whole back catalogue predates the column, so absence
+-- of a verdict must never demote a belief.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS durability text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);
 CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 
