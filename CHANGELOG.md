@@ -8,6 +8,45 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.114.0] — 2026-07-21
+
+This release makes belief durability (0.113.0) actually affect what you see, and
+adds the passes that fill it in. It builds on the measured finding that once
+incremental capture began working, ~58% of new beliefs were session-local
+narration rather than durable knowledge.
+
+### Added
+
+- **Recall demotes session-local beliefs below durable knowledge.** A brief
+  shows only a handful of lines, so ordering decides what you read; narration
+  now sinks beneath knowledge, chained after the existing contested demotion.
+  Demoted, not dropped — still true, still recalled, just lower. Unknown
+  durability is treated as durable, so the pre-0.113.0 back catalogue keeps its
+  place.
+
+- **Recall fills in verdicts for the beliefs it just showed.** The demotion can
+  only act on classified beliefs, and no static ordering over the brain reaches
+  what recall surfaces — recall ranks by relevance to the question. So recall
+  hands the ids of what it displayed to a detached, throttled classifier
+  (one spawn / 5 min, capped at 20 ids, entirely off the critical path).
+  Coverage grows along the path you actually walk, and converges — a topic once
+  judged spawns nothing on re-recall.
+
+- **`mnemos classify-durability [--limit N] [--ids a,b] [--dry-run]`** records
+  verdicts in bulk (newest-first) or for specific beliefs. Newest-first is a
+  deliberate choice, not targeting: measured, neither trust nor recency predicts
+  which beliefs are narration, so this keeps pace with intake rather than
+  pretending to aim.
+
+### Notes
+
+- The session-local verdict is reliable; the durable verdict is not (it
+  over-calls durable). A prompt rewrite that looked like a large improvement was
+  measured to be overfitting and was not shipped; the evidence and a scoring
+  harness (`TestDurabilityProbe`) are in the tree. Because suppression and
+  demotion both key on the reliable direction, a wrong durable verdict only ever
+  leaves a belief where it was.
+
 ## [0.113.0] — 2026-07-21
 
 **Contains a SQLite schema migration** (user_version 22 → 23). It runs
