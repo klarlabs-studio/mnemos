@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
@@ -43,7 +44,7 @@ import (
 // by any static ordering, because recall ranks by relevance to a question. It
 // needs the verdicts to be filled in as beliefs are returned, which is a
 // separate change to the recall path.
-func classifyDurability(limit int, dryRun bool, f Flags) {
+func classifyDurability(limit int, only []string, dryRun bool, f Flags) {
 	err := runJob("classify-durability", map[string]string{
 		"dry_run": fmt.Sprint(dryRun),
 		"limit":   fmt.Sprint(limit),
@@ -70,7 +71,12 @@ func classifyDurability(limit int, dryRun bool, f Flags) {
 		if err != nil {
 			return NewSystemError(err, "load claims")
 		}
-		targets := unclassifiedNewestFirst(claims, limit)
+		var targets []domain.Claim
+		if len(only) > 0 {
+			targets = unclassifiedAmong(claims, only)
+		} else {
+			targets = unclassifiedNewestFirst(claims, limit)
+		}
 		if len(targets) == 0 {
 			fmt.Println("every recallable belief already has a durability verdict.")
 			return nil
@@ -79,8 +85,12 @@ func classifyDurability(limit int, dryRun bool, f Flags) {
 		if err := job.SetStatus("extracting", ""); err != nil {
 			return err
 		}
-		fmt.Printf("unclassified recallable beliefs: %d; classifying %d, newest first\n",
-			countUnclassifiedRecallable(claims), len(targets))
+		if len(only) > 0 {
+			fmt.Printf("classifying %d of %d requested belief(s) that lack a verdict\n", len(targets), len(only))
+		} else {
+			fmt.Printf("unclassified recallable beliefs: %d; classifying %d, newest first\n",
+				countUnclassifiedRecallable(claims), len(targets))
+		}
 
 		texts := make([]string, len(targets))
 		for i, c := range targets {
@@ -188,8 +198,20 @@ func unclassifiedNewestFirst(claims []domain.Claim, limit int) []domain.Claim {
 // work instead of appearing to hang.
 func handleClassifyDurability(args []string, f Flags) {
 	limit := defaultDurabilityLimit
+	var only []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--ids":
+			if i+1 >= len(args) {
+				exitWithMnemosError(f.Verbose, NewUserError("--ids requires a comma-separated list"))
+				return
+			}
+			for _, id := range strings.Split(args[i+1], ",") {
+				if id = strings.TrimSpace(id); id != "" {
+					only = append(only, id)
+				}
+			}
+			i++
 		case "--limit":
 			if i+1 >= len(args) {
 				exitWithMnemosError(f.Verbose, NewUserError("--limit requires a value"))
@@ -206,14 +228,43 @@ func handleClassifyDurability(args []string, f Flags) {
 			// parsed globally into Flags.DryRun; accepted here so it is not
 			// rejected as unknown.
 		default:
-			exitWithMnemosError(f.Verbose, NewUserError("unknown argument %q (want --limit N [--dry-run])", args[i]))
+			exitWithMnemosError(f.Verbose, NewUserError("unknown argument %q (want --limit N | --ids a,b [--dry-run])", args[i]))
 			return
 		}
 	}
-	classifyDurability(limit, f.DryRun, f)
+	classifyDurability(limit, only, f.DryRun, f)
 }
 
 // defaultDurabilityLimit is a bounded default: roughly what one job budget
 // covers on a local model, so a bare `classify-durability` finishes rather than
 // appearing to hang against a brain with thousands of unclassified beliefs.
 const defaultDurabilityLimit = 300
+
+// unclassifiedAmong returns the recallable, still-unclassified beliefs from an
+// explicit id list, preserving the caller's order.
+//
+// This is the recall-driven path: the ids are the beliefs a brief just showed
+// the reader, which is the only way to reach "what recall surfaces" — no static
+// ordering can, because recall ranks by relevance to a question. Ids that are
+// already classified, deprecated, or unknown to this brain are simply dropped,
+// so a stale id list costs nothing.
+func unclassifiedAmong(claims []domain.Claim, ids []string) []domain.Claim {
+	byID := make(map[string]domain.Claim, len(claims))
+	for _, c := range claims {
+		byID[c.ID] = c
+	}
+	seen := make(map[string]struct{}, len(ids))
+	var out []domain.Claim
+	for _, id := range ids {
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		c, ok := byID[id]
+		if !ok || !recallable(c) || c.Durability.Normalized() != domain.DurabilityUnknown {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
