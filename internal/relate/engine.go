@@ -646,13 +646,19 @@ func contentTokensAndPolarity(text string) (map[string]struct{}, bool) {
 	words := strings.Fields(strings.ToLower(text))
 	tokens := make(map[string]struct{}, len(words))
 	neg := false
-	for _, w := range words {
+	for i, w := range words {
 		w = strings.Trim(w, ",.;:!?()[]{}\"'")
 		if w == "" {
 			continue
 		}
 		if _, ok := negationWords[w]; ok {
-			neg = true
+			// A contrastive negation does not make the claim negative:
+			// "it is a bug in an existing pattern, not merely a missing one"
+			// ASSERTS the bug. Flipping polarity for it made such claims
+			// collide with every claim that asserted something similar.
+			if !isContrastiveNegation(words, i) {
+				neg = true
+			}
 			continue
 		}
 		if _, ok := stopWords[w]; ok {
@@ -661,6 +667,45 @@ func contentTokensAndPolarity(text string) (map[string]struct{}, bool) {
 		tokens[stemWord(w)] = struct{}{}
 	}
 	return tokens, neg
+}
+
+// contrastiveHedges are the words that, following a negation, mark it as
+// contrastive rather than a denial: "not merely X", "not just X".
+var contrastiveHedges = map[string]struct{}{
+	"merely": {}, "just": {}, "only": {}, "simply": {}, "solely": {},
+}
+
+// isContrastiveNegation reports whether the negation word at index i is
+// contrasting two alternatives rather than denying the claim.
+//
+// English marks this two ways, and both are cheap to read positionally:
+// a preceding clause break ("real work, not already-done" — the assertion is
+// "real work"), or a following hedge ("not merely a missing one"). In both
+// shapes the sentence asserts something POSITIVE and names the rejected
+// alternative for contrast.
+//
+// A sentence-initial or mid-clause negation is left alone, so genuine denials
+// ("no admin bypass needed", "it is not dead code") keep negative polarity —
+// those are exactly the pairs the contradiction detector should still catch.
+func isContrastiveNegation(words []string, i int) bool {
+	if i > 0 {
+		// A clause break immediately before the negation.
+		prev := words[i-1]
+		if strings.HasSuffix(prev, ",") || strings.HasSuffix(prev, ";") ||
+			strings.HasSuffix(prev, "—") || strings.HasSuffix(prev, "–") {
+			return true
+		}
+		if prev == "-" || prev == "—" || prev == "–" {
+			return true
+		}
+	}
+	if i+1 < len(words) {
+		next := strings.Trim(words[i+1], ",.;:!?()[]{}\"'")
+		if _, ok := contrastiveHedges[next]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // stemWord applies minimal suffix stripping to reduce inflection noise.

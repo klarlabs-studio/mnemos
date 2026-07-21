@@ -508,3 +508,48 @@ func seqRelationshipIDs() func() (string, error) {
 		return id, nil
 	}
 }
+
+// TestContrastiveNegation_DoesNotFlipPolarity pins that "A, not B" and
+// "not merely B" assert A. Treating them as negative claims made them collide
+// with every claim asserting something similar.
+func TestContrastiveNegation_DoesNotFlipPolarity(t *testing.T) {
+	for _, text := range []string{
+		"This is a bug in an existing pattern, not merely a missing one",
+		"So this was real work, not already-done",
+		"It belongs with the feature that needs it, not in a fix PR",
+	} {
+		if _, neg := contentTokensAndPolarity(text); neg {
+			t.Errorf("contrastive negation must not flip polarity: %q", text)
+		}
+	}
+}
+
+// TestGenuineNegation_StillFlipsPolarity is the other half: a real denial has
+// to stay negative, or the contradiction detector goes blind to the pairs it
+// exists to catch.
+func TestGenuineNegation_StillFlipsPolarity(t *testing.T) {
+	for _, text := range []string{
+		"No admin bypass needed after all",
+		"It is not dead code",
+		"`nox cache clear` still doesn't clear the registry cache",
+		"Nova could not hear anything",
+	} {
+		if _, neg := contentTokensAndPolarity(text); !neg {
+			t.Errorf("genuine denial must stay negative: %q", text)
+		}
+	}
+}
+
+// TestContrastiveNegation_RealContradictionSurvives proves the end-to-end
+// case: "it is not dead code" vs "Engine.Verify is dead code" is a genuine
+// contradiction and must still be detected.
+func TestContrastiveNegation_RealContradictionSurvives(t *testing.T) {
+	aText := "It is not dead code in the verify engine"
+	bText := "The verify engine is dead code"
+	aTok, aNeg := contentTokensAndPolarity(aText)
+	bTok, bNeg := contentTokensAndPolarity(bText)
+	rel, ok := inferRelationshipWithContext(aTok, aNeg, bTok, bNeg, false)
+	if !ok || rel != domain.RelationshipTypeContradicts {
+		t.Errorf("genuine denial pair must still contradict, got %q ok=%v", rel, ok)
+	}
+}
