@@ -118,3 +118,44 @@ func TestClassifyDurability_NoClientIsAnError(t *testing.T) {
 		t.Fatal("a missing client must be an error, not silent Unknowns")
 	}
 }
+
+// TestClassifyDurability_PartialOnDeadline pins the contract the maintenance
+// pass depends on: when the budget runs out, verdicts already earned are
+// returned alongside the error, and everything unreached stays Unknown. A
+// brain of any size outlasts a fixed budget on a local model, so a partial
+// result has to be usable rather than discarded.
+func TestClassifyDurability_PartialOnDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &cancellingLLM{reply: `[{"i":0,"c":"SESSION"}]`, cancelAfter: 1, cancel: cancel}
+	texts := make([]string, durabilityBatchSize*3)
+	for i := range texts {
+		texts[i] = "claim"
+	}
+	got, err := ClassifyDurability(ctx, c, texts)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled so the caller can tell partial from broken, got %v", err)
+	}
+	if got[0] != DurabilitySessionLocal {
+		t.Fatalf("verdicts earned before the cutoff must survive: %v", got[:3])
+	}
+	for i := durabilityBatchSize; i < len(got); i++ {
+		if got[i] != DurabilityUnknown {
+			t.Fatalf("index %d past the cutoff must stay Unknown, got %q", i, got[i])
+		}
+	}
+}
+
+type cancellingLLM struct {
+	reply       string
+	calls       int
+	cancelAfter int
+	cancel      context.CancelFunc
+}
+
+func (s *cancellingLLM) Complete(_ context.Context, _ []llm.Message) (llm.Response, error) {
+	s.calls++
+	if s.calls >= s.cancelAfter {
+		s.cancel()
+	}
+	return llm.Response{Content: s.reply}, nil
+}

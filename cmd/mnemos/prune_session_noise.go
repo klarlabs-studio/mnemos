@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.klarlabs.de/mnemos/internal/domain"
@@ -84,9 +85,24 @@ func pruneSessionNoise(dryRun bool, f Flags) {
 			for i, id := range subjects {
 				texts[i] = byID[id].Text
 			}
+			// A brain of any size will outlast a fixed job budget on a local
+			// model, so running out of time is a normal outcome, not a failure:
+			// keep the verdicts already earned and say how far the pass got.
+			// Unclassified claims stay Unknown, which suppresses nothing, so a
+			// partial run is safe and each re-run makes further progress.
 			verdicts, err := extract.ClassifyDurability(ctx, client, texts)
-			if err != nil {
+			if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 				return NewSystemError(err, "classify durability")
+			}
+			classified := 0
+			for _, v := range verdicts {
+				if v != extract.DurabilityUnknown {
+					classified++
+				}
+			}
+			if classified < len(texts) {
+				fmt.Printf("classified %d of %d claim(s) before the budget ran out; re-run to continue (raise MNEMOS_JOB_TIMEOUT to cover more per pass)\n",
+					classified, len(texts))
 			}
 			durability := make(map[string]extract.Durability, len(subjects))
 			sessionLocal := 0
