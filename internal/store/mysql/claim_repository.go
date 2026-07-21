@@ -45,8 +45,8 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 
 	now := time.Now().UTC()
 	upsert := `
-INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, subject_class, confidence_components)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)
+INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, subject_class, durability, confidence_components)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
   text = VALUES(text),
   type = VALUES(type),
@@ -54,6 +54,7 @@ ON DUPLICATE KEY UPDATE
   status = VALUES(status),
   valid_from = VALUES(valid_from),
   subject_class = VALUES(subject_class),
+  durability = VALUES(durability),
   confidence_components = VALUES(confidence_components)`
 	historyInsert := `
 INSERT INTO claim_status_history (claim_id, from_status, to_status, changed_at, reason, changed_by)
@@ -77,7 +78,8 @@ VALUES (?, ?, ?, ?, ?, ?)`
 		if _, err := tx.ExecContext(ctx, upsert,
 			claim.ID, claim.Text, string(claim.Type), claim.Confidence,
 			string(claim.Status), claim.CreatedAt.UTC(), actorOr(claim.CreatedBy),
-			validFrom.UTC(), string(claim.SubjectClass), encodeConfidenceComponents(claim.ConfidenceComponents),
+			validFrom.UTC(), string(claim.SubjectClass),
+			string(claim.Durability.Normalized()), encodeConfidenceComponents(claim.ConfidenceComponents),
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
 		}
@@ -134,7 +136,7 @@ func (r ClaimRepository) ListByEventIDs(ctx context.Context, eventIDs []string) 
 	placeholders, args := inPlaceholders(eventIDs)
 	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
 	q := `
-SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.subject_class, c.confidence_components
+SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.subject_class, c.durability, c.confidence_components
 FROM claims c
 JOIN claim_evidence ce ON ce.claim_id = c.id
 WHERE ce.event_id IN (` + placeholders + `)
@@ -178,7 +180,7 @@ func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]do
 	placeholders, args := inPlaceholders(claimIDs)
 	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
 	rows, err := r.db.QueryContext(ctx, `
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, subject_class, confidence_components
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, subject_class, durability, confidence_components
 FROM claims WHERE id IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list claims by ids: %w", err)
@@ -236,7 +238,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 // ListAll returns every claim ordered by created_at.
 func (r ClaimRepository) ListAll(ctx context.Context) ([]domain.Claim, error) {
 	rows, err := r.db.QueryContext(ctx, `
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, subject_class, confidence_components
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, subject_class, durability, confidence_components
 FROM claims ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list all claims: %w", err)
@@ -254,7 +256,7 @@ func (r ClaimRepository) ListByTestRequirementRef(ctx context.Context, ref strin
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx, `
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, subject_class, confidence_components
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, subject_class, durability, confidence_components
 FROM claims
 WHERE type = 'test_result' AND test_requirement_ref = ?
 ORDER BY test_last_run_at DESC, created_at DESC`, ref)
@@ -552,18 +554,19 @@ func collectClaimRows(rows *sql.Rows) ([]domain.Claim, error) {
 
 func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	var c domain.Claim
-	var typ, status, subjectClass, confidenceComponents string
+	var typ, status, subjectClass, durability, confidenceComponents string
 	var validFrom sql.NullTime
 	var validTo sql.NullTime
 	if err := rows.Scan(
 		&c.ID, &c.Text, &typ, &c.Confidence, &status,
-		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &subjectClass, &confidenceComponents,
+		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &subjectClass, &durability, &confidenceComponents,
 	); err != nil {
 		return domain.Claim{}, fmt.Errorf("scan claim row: %w", err)
 	}
 	c.Type = domain.ClaimType(typ)
 	c.Status = domain.ClaimStatus(status)
 	c.SubjectClass = domain.SubjectClass(subjectClass)
+	c.Durability = domain.Durability(durability)
 	c.ConfidenceComponents = decodeConfidenceComponents(confidenceComponents)
 	if validFrom.Valid {
 		c.ValidFrom = validFrom.Time

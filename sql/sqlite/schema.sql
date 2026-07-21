@@ -50,7 +50,11 @@ CREATE TABLE IF NOT EXISTS claims (
   lifecycle TEXT NOT NULL DEFAULT '',
   -- subject_class (ADR 0012): 'individual' | 'class' | '' (unknown). Only
   -- class-level claims may ever promote to the shared global brain.
-  subject_class TEXT NOT NULL DEFAULT ''
+  subject_class TEXT NOT NULL DEFAULT '',
+  -- durability (ADR 0023): 'durable' | 'session' | '' (unknown). Unknown is
+  -- treated as durable: the whole back catalogue predates the column, so
+  -- absence of a verdict must never demote a belief.
+  durability TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);
