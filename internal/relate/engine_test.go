@@ -553,3 +553,112 @@ func TestContrastiveNegation_RealContradictionSurvives(t *testing.T) {
 		t.Errorf("genuine denial pair must still contradict, got %q ok=%v", rel, ok)
 	}
 }
+
+// session and durable claims that WOULD contradict on text alone, used to prove
+// the durability guard is the only thing changing the outcome.
+func durabilityPair(t *testing.T, aDur, bDur domain.Durability) []domain.Relationship {
+	t.Helper()
+	claims := []domain.Claim{
+		{ID: "a", Text: "The verify engine is dead code", Durability: aDur},
+		{ID: "b", Text: "The verify engine is not dead code", Durability: bDur},
+	}
+	rels, err := NewEngine().Detect(claims)
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	var out []domain.Relationship
+	for _, r := range rels {
+		if r.Type == domain.RelationshipTypeContradicts {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// TestSuppressAsSessionNoise covers the whole truth table through the real
+// engine, not the helper: only two positively-identified session-local beliefs
+// are suppressed.
+func TestSuppressAsSessionNoise(t *testing.T) {
+	S, D, U := domain.DurabilitySessionLocal, domain.DurabilityDurable, domain.DurabilityUnknown
+
+	tests := []struct {
+		name       string
+		a, b       domain.Durability
+		wantEdges  int
+		wantReason string
+	}{
+		{"both session-local", S, S, 0, "two progress reports are not a conflict"},
+		{"session vs durable", S, D, 1, "narration bumping into a real belief is worth surfacing"},
+		{"durable vs session", D, S, 1, "order must not matter"},
+		{"both durable", D, D, 1, "a real disagreement"},
+		// The entire back catalogue is unclassified; it must behave exactly as
+		// it did before the field existed.
+		{"both unknown (legacy)", U, U, 1, "unclassified must not be suppressed"},
+		{"session vs unknown", S, U, 1, "absence of a verdict is not evidence of narration"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := len(durabilityPair(t, tc.a, tc.b)); got != tc.wantEdges {
+				t.Fatalf("got %d contradiction(s), want %d — %s", got, tc.wantEdges, tc.wantReason)
+			}
+		})
+	}
+}
+
+// A conversation corroborating itself is real evidence, so supports edges
+// between two session-local beliefs must survive.
+func TestSuppressAsSessionNoise_LeavesSupportsAlone(t *testing.T) {
+	s := domain.DurabilitySessionLocal
+	claims := []domain.Claim{
+		{ID: "a", Text: "the migration finished and the checksums matched", Durability: s},
+		{ID: "b", Text: "the migration finished and the checksums matched cleanly", Durability: s},
+	}
+	rels, err := NewEngine().Detect(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range rels {
+		if r.Type == domain.RelationshipTypeSupports {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("supports between session-local beliefs must still be recorded")
+	}
+}
+
+// DetectIncremental is the path capture actually uses, so the guard has to hold
+// there too — not just in the batch Detect.
+func TestSuppressAsSessionNoise_AppliesToIncremental(t *testing.T) {
+	s := domain.DurabilitySessionLocal
+	newClaims := []domain.Claim{{ID: "n", Text: "The verify engine is dead code", Durability: s}}
+	existing := []domain.Claim{{ID: "e", Text: "The verify engine is not dead code", Durability: s}}
+
+	rels, err := NewEngine().DetectIncremental(newClaims, existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rels {
+		if r.Type == domain.RelationshipTypeContradicts {
+			t.Fatal("incremental detection must suppress session-local contradictions too")
+		}
+	}
+	// Precondition: without the marking, this pair DOES contradict — otherwise
+	// the assertion above passes for the wrong reason.
+	plain := []domain.Claim{{ID: "n", Text: "The verify engine is dead code"}}
+	plainExisting := []domain.Claim{{ID: "e", Text: "The verify engine is not dead code"}}
+	base, err := NewEngine().DetectIncremental(plain, plainExisting)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := 0
+	for _, r := range base {
+		if r.Type == domain.RelationshipTypeContradicts {
+			got++
+		}
+	}
+	if got == 0 {
+		t.Fatal("precondition failed: unmarked pair must contradict, or the test proves nothing")
+	}
+}

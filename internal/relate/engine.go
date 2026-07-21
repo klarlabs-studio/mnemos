@@ -193,6 +193,9 @@ func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 			if !ok {
 				continue
 			}
+			if suppressAsSessionNoise(relType, claims[i], claims[j]) {
+				continue
+			}
 
 			id, err := e.nextID()
 			if err != nil {
@@ -284,6 +287,9 @@ func (e Engine) DetectIncremental(newClaims []domain.Claim, existingClaims []dom
 				ok = true
 			}
 			if !ok {
+				continue
+			}
+			if suppressAsSessionNoise(relType, newClaims[i], existingClaims[j]) {
 				continue
 			}
 
@@ -879,4 +885,32 @@ func mergeRelationships(base, additions []domain.Relationship) []domain.Relation
 		base = append(base, r)
 	}
 	return base
+}
+
+// suppressAsSessionNoise reports whether a detected relationship between two
+// beliefs should not be recorded because both are session-local narration
+// (ADR 0023).
+//
+// Two progress reports from different sessions — "both PRs are open" against
+// "PR #23 squash-merged" — are lexically a contradiction and semantically
+// nothing at all. Suppressing them here means they are never created, rather
+// than pruned back out afterwards by `prune --session-noise`.
+//
+// Only contradictions are suppressed. A conversation corroborating itself is
+// real evidence, so `supports` between two session-local beliefs still stands,
+// exactly as in the session-scope filter.
+//
+// BOTH sides must be session-local. A session-local belief contradicting a
+// durable one is the case most worth surfacing: a conversation bumping into
+// something the brain actually believes.
+//
+// Unknown durability is not session-local (domain.Durability.IsSessionLocal),
+// so every belief captured before the field existed keeps behaving exactly as
+// it does today. This can only ever suppress edges between beliefs positively
+// identified as narration.
+func suppressAsSessionNoise(relType domain.RelationshipType, a, b domain.Claim) bool {
+	if relType != domain.RelationshipTypeContradicts {
+		return false
+	}
+	return a.Durability.IsSessionLocal() && b.Durability.IsSessionLocal()
 }
