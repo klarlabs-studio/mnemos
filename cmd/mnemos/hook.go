@@ -167,6 +167,13 @@ type recallClaim struct {
 	// and still recalled, but it should not displace durable knowledge from the
 	// handful of lines a brief actually shows.
 	SessionLocal bool
+
+	// ID and Judged drive the recall-driven fill-in: the beliefs a brief just
+	// showed are exactly the ones worth a durability verdict, and Judged says
+	// which of them already have one. Unjudged is not the same as
+	// SessionLocal=false — the latter is also true for a belief judged durable.
+	ID     string
+	Judged bool
 }
 
 // repoBrain resolves the opt-in repo brain for a session working directory: the
@@ -281,6 +288,14 @@ func hookRecall(ev hookEvent) {
 
 	claims, contra := mergeRecall(repoClaims, repoContra, globalClaims, globalContra, query.PrecedenceOrDefault())
 	emitContext("UserPromptSubmit", renderRecall(claims, contra))
+
+	// Fill in durability verdicts for what this brief just showed. The reader's
+	// own path is the only thing that predicts which beliefs surface — recall
+	// ranks by relevance to the question, so no static ordering over the brain
+	// can (measured: trust is blind to durability and clustered; recency barely
+	// discriminates). Detached, throttled, and after the context is emitted, so
+	// a brief never waits on it.
+	maybeClassifyRecalled(unjudgedIDs(claims, maxRecallClassifyIDs), time.Now())
 }
 
 // recallLocal queries the currently-resolved local brain, tagging each claim
@@ -296,6 +311,8 @@ func recallLocal(ctx context.Context, q, source string) ([]recallClaim, int) {
 			Type: string(c.Type), Text: c.Text, TrustScore: c.TrustScore, Source: source,
 			Contested:    c.Status == domain.ClaimStatusContested,
 			SessionLocal: c.Durability.IsSessionLocal(),
+			ID:           c.ID,
+			Judged:       c.Durability.Normalized() != domain.DurabilityUnknown,
 		})
 	}
 	return claims, len(out.Contradictions)
