@@ -1,0 +1,210 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/extract"
+	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/llm"
+	"go.klarlabs.de/mnemos/internal/workflow"
+)
+
+// `mnemos prune --session-noise [--dry-run]` drops contradiction edges where an
+// LLM judges BOTH claims to be session-local rather than durable knowledge.
+//
+// It exists for the backlog that session tagging cannot reach. Capture began
+// stamping events with their session in v0.108.0, and the ingest path drops
+// intra-session contradictions from that point on — but nothing ingested
+// earlier carries a session, and a session cannot be inferred after the fact.
+// That legacy pile is dominated by conversational progress reports arguing with
+// each other across sessions ("both PRs are open" against "PR #23 merged"),
+// which no rule-based detector distinguishes from real disagreement.
+//
+// It removes EDGES ONLY, never claims. That is the whole reason an LLM is
+// allowed near this decision. ADR 0023 rejected LLM ROUTING of observations
+// because dropping a belief on a false positive is an invisible loss of real
+// knowledge; here a false positive costs one contradiction alert, which is
+// visible, cheap, and re-derivable by `relate` at any time. The classifier's
+// measured error profile fits that bet: on a hand-labelled sample it never
+// called a durable claim session-local (18 verdicts, 0 errors) while
+// over-calling durable, so it under-suppresses rather than over-suppresses.
+//
+// Both endpoints must be session-local. One session-local claim contradicting
+// a durable one is exactly the case worth keeping — that is a conversation
+// bumping into something the brain actually believes.
+func pruneSessionNoise(dryRun bool, f Flags) {
+	err := runJob("prune-session-noise", map[string]string{"dry_run": fmt.Sprint(dryRun)}, f.Verbose,
+		func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+			conn := w.Conn()
+			if err := job.SetStatus("loading", ""); err != nil {
+				return err
+			}
+
+			cfg, cfgErr := llm.ConfigFromEnv()
+			if cfgErr != nil {
+				return NewUserError("this pass needs an LLM; set MNEMOS_LLM_PROVIDER (and its key/model): %v", cfgErr)
+			}
+			client, clientErr := llm.NewClient(cfg)
+			if clientErr != nil {
+				return NewUserError("build LLM client: %v", clientErr)
+			}
+
+			claims, err := conn.Claims.ListAll(ctx)
+			if err != nil {
+				return NewSystemError(err, "load claims")
+			}
+			byID := make(map[string]domain.Claim, len(claims))
+			for _, c := range claims {
+				byID[c.ID] = c
+			}
+			rels, err := conn.Relationships.ListAll(ctx)
+			if err != nil {
+				return NewSystemError(err, "load relationships")
+			}
+
+			// Only claims sitting on a live contradiction edge are worth an LLM
+			// call — classifying the whole brain would cost orders of magnitude
+			// more for no additional decision.
+			live := liveContradictions(rels, byID)
+			subjects := contradictionEndpoints(live, byID)
+			if len(subjects) == 0 {
+				fmt.Println("no live contradiction edges; nothing to classify.")
+				return nil
+			}
+
+			// "extracting" in the job state machine's vocabulary: this is an LLM
+			// pass over claim text, and the machine has no classification state.
+			if err := job.SetStatus("extracting", ""); err != nil {
+				return err
+			}
+			fmt.Printf("live contradiction edges: %d over %d claim(s)\n", len(live), len(subjects))
+			texts := make([]string, len(subjects))
+			for i, id := range subjects {
+				texts[i] = byID[id].Text
+			}
+			// A brain of any size will outlast a fixed job budget on a local
+			// model, so running out of time is a normal outcome, not a failure:
+			// keep the verdicts already earned and say how far the pass got.
+			// Unclassified claims stay Unknown, which suppresses nothing, so a
+			// partial run is safe and each re-run makes further progress.
+			verdicts, err := extract.ClassifyDurability(ctx, client, texts)
+			if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+				return NewSystemError(err, "classify durability")
+			}
+			classified := 0
+			for _, v := range verdicts {
+				if v != extract.DurabilityUnknown {
+					classified++
+				}
+			}
+			if classified < len(texts) {
+				fmt.Printf("classified %d of %d claim(s) before the budget ran out; re-run to continue (raise MNEMOS_JOB_TIMEOUT to cover more per pass)\n",
+					classified, len(texts))
+			}
+			durability := make(map[string]extract.Durability, len(subjects))
+			sessionLocal := 0
+			for i, id := range subjects {
+				durability[id] = verdicts[i]
+				if verdicts[i] == extract.DurabilitySessionLocal {
+					sessionLocal++
+				}
+			}
+
+			var drop []domain.Relationship
+			for _, r := range live {
+				if durability[r.FromClaimID] == extract.DurabilitySessionLocal &&
+					durability[r.ToClaimID] == extract.DurabilitySessionLocal {
+					drop = append(drop, r)
+				}
+			}
+
+			fmt.Printf("session-local claims:    %d (%.1f%%)\n", sessionLocal, pct(sessionLocal, len(subjects)))
+			fmt.Printf("edges with BOTH sides session-local: %d (%.1f%%)\n", len(drop), pct(len(drop), len(live)))
+			for i, r := range drop {
+				if i >= 5 {
+					fmt.Printf("  … and %d more\n", len(drop)-5)
+					break
+				}
+				fmt.Printf("  - %s ⇎ %s\n",
+					truncateClaim(byID[r.FromClaimID].Text), truncateClaim(byID[r.ToClaimID].Text))
+			}
+
+			if dryRun {
+				fmt.Println("\n(dry run — nothing written; re-run without --dry-run to apply)")
+				return nil
+			}
+			if len(drop) == 0 {
+				fmt.Println("\nnothing to prune.")
+				return nil
+			}
+			if err := job.SetStatus("saving", ""); err != nil {
+				return err
+			}
+			// Through the governed writer, like `relate --prune-stale`: the
+			// writer takes the surviving set, so build it by difference.
+			dropIDs := make(map[string]struct{}, len(drop))
+			for _, r := range drop {
+				dropIDs[r.ID] = struct{}{}
+			}
+			keep := make([]domain.Relationship, 0, len(rels)-len(drop))
+			for _, r := range rels {
+				if _, gone := dropIDs[r.ID]; !gone {
+					keep = append(keep, r)
+				}
+			}
+			if _, err := w.PruneRelationships(ctx, keep, len(drop)); err != nil {
+				return NewSystemError(err, "prune relationships")
+			}
+			fmt.Printf("\npruned %d edge(s). Claims are untouched; `mnemos relate` can re-derive edges.\n", len(drop))
+			return nil
+		})
+	if err != nil {
+		exitWithMnemosError(f.Verbose, err)
+	}
+}
+
+// liveContradictions returns the contradiction edges whose endpoints both still
+// exist and are not deprecated — the same population the dissonance vital
+// counts, so the command's numbers match what `mnemos health` reports.
+func liveContradictions(rels []domain.Relationship, byID map[string]domain.Claim) []domain.Relationship {
+	var out []domain.Relationship
+	for _, r := range rels {
+		if r.Type != domain.RelationshipTypeContradicts {
+			continue
+		}
+		from, okFrom := byID[r.FromClaimID]
+		to, okTo := byID[r.ToClaimID]
+		if !okFrom || !okTo {
+			continue
+		}
+		if from.Status == domain.ClaimStatusDeprecated || to.Status == domain.ClaimStatusDeprecated {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// contradictionEndpoints lists the distinct claims appearing on the given
+// edges, in a stable order so a dry run and the apply that follows classify the
+// same batches and reach the same verdicts.
+func contradictionEndpoints(rels []domain.Relationship, byID map[string]domain.Claim) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, r := range rels {
+		for _, id := range []string{r.FromClaimID, r.ToClaimID} {
+			if _, dup := seen[id]; dup {
+				continue
+			}
+			if _, ok := byID[id]; !ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out
+}

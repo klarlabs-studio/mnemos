@@ -153,9 +153,9 @@ func pct(n, total int) float64 {
 	return 100 * float64(n) / float64(total)
 }
 
-// handlePrune routes `mnemos prune <--narration> [--dry-run]`. The kind is a
-// required flag rather than a default so a bare `prune` never guesses at a
-// destructive operation.
+// handlePrune routes `mnemos prune <--narration|--session-noise> [--dry-run]`.
+// The kind is a required flag rather than a default so a bare `prune` never
+// guesses at a destructive operation.
 func handlePrune(args []string, f Flags) {
 	target, err := parsePruneArgs(args)
 	if err != nil {
@@ -165,6 +165,8 @@ func handlePrune(args []string, f Flags) {
 	switch target {
 	case "narration":
 		pruneNarration(f.DryRun, f)
+	case "session-noise":
+		pruneSessionNoise(f.DryRun, f)
 	}
 }
 
@@ -173,17 +175,25 @@ func handlePrune(args []string, f Flags) {
 // path. A bare `prune` is an error, not a default: it must never guess at a
 // destructive operation.
 func parsePruneArgs(args []string) (target string, err error) {
-	narration := false
+	var targets []string
 	for _, a := range args {
 		switch a {
 		case "--narration":
-			narration = true
+			targets = append(targets, "narration")
+		case "--session-noise":
+			targets = append(targets, "session-noise")
 		default:
-			return "", NewUserError("unknown prune flag %q (want --narration [--dry-run])", a)
+			return "", NewUserError("unknown prune flag %q (want --narration|--session-noise [--dry-run])", a)
 		}
 	}
-	if !narration {
-		return "", NewUserError("prune requires a target: --narration (deprecate stored conversational pollution)")
+	switch len(targets) {
+	case 0:
+		return "", NewUserError("prune requires a target: --narration (deprecate stored conversational pollution) or --session-noise (drop contradiction edges between two session-local claims)")
+	case 1:
+		return targets[0], nil
+	default:
+		// They deprecate claims and delete edges respectively; running both in
+		// one pass would report two sets of numbers under one job.
+		return "", NewUserError("prune takes one target at a time, got %d", len(targets))
 	}
-	return "narration", nil
 }

@@ -73,3 +73,55 @@ func TestSelectNarrationClaims(t *testing.T) {
 		t.Error("selected a contested REAL claim — genuine disputes must be left alone")
 	}
 }
+
+// TestParsePruneArgs_SessionNoise covers the second target and the rule that
+// prune never guesses: no target is an error, and two targets is an error
+// rather than a silent pick.
+func TestParsePruneArgs_SessionNoise(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    string
+		wantErr bool
+	}{
+		{"session-noise", []string{"--session-noise"}, "session-noise", false},
+		{"narration still works", []string{"--narration"}, "narration", false},
+		{"both is an error", []string{"--narration", "--session-noise"}, "", true},
+		{"neither is an error", nil, "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parsePruneArgs(tc.args)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err=%v wantErr=%v", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestLiveContradictions_MatchesTheVital pins that the command counts the same
+// population `mnemos health` does, so its numbers can be compared directly:
+// contradiction edges only, both endpoints present and not deprecated.
+func TestLiveContradictions_MatchesTheVital(t *testing.T) {
+	byID := map[string]domain.Claim{
+		"a": {ID: "a"},
+		"b": {ID: "b"},
+		"d": {ID: "d", Status: domain.ClaimStatusDeprecated},
+	}
+	rels := []domain.Relationship{
+		{ID: "live", Type: domain.RelationshipTypeContradicts, FromClaimID: "a", ToClaimID: "b"},
+		{ID: "supports", Type: domain.RelationshipTypeSupports, FromClaimID: "a", ToClaimID: "b"},
+		{ID: "deprecated", Type: domain.RelationshipTypeContradicts, FromClaimID: "a", ToClaimID: "d"},
+		{ID: "dangling", Type: domain.RelationshipTypeContradicts, FromClaimID: "a", ToClaimID: "gone"},
+	}
+	got := liveContradictions(rels, byID)
+	if len(got) != 1 || got[0].ID != "live" {
+		t.Fatalf("want only the live contradiction, got %+v", got)
+	}
+	if ids := contradictionEndpoints(got, byID); len(ids) != 2 {
+		t.Fatalf("want 2 distinct endpoints, got %v", ids)
+	}
+}
