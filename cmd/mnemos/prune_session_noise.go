@@ -89,8 +89,10 @@ func pruneSessionNoise(dryRun bool, f Flags) {
 			// model, so running out of time is a normal outcome, not a failure:
 			// keep the verdicts already earned and say how far the pass got.
 			// Unclassified claims stay Unknown, which suppresses nothing, so a
-			// partial run is safe and each re-run makes further progress.
-			verdicts, err := extract.ClassifyDurability(ctx, client, texts)
+			// partial run is safe. Verdicts are cached, so a re-run skips what
+			// this pass already paid for and genuinely continues rather than
+			// re-classifying the same prefix.
+			verdicts, err := extract.ClassifyDurabilityCached(ctx, client, texts, extract.DurabilityCacheDir)
 			if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 				return NewSystemError(err, "classify durability")
 			}

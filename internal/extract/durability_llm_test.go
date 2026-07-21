@@ -159,3 +159,55 @@ func (s *cancellingLLM) Complete(_ context.Context, _ []llm.Message) (llm.Respon
 	}
 	return llm.Response{Content: s.reply}, nil
 }
+
+// TestClassifyDurabilityCached_ResumesInsteadOfRepeating is the property the
+// maintenance pass depends on for a brain that needs more than one budget: a
+// second run must skip what the first already paid for. Without it, every run
+// re-classifies the same prefix and the pass never reaches the end.
+func TestClassifyDurabilityCached_ResumesInsteadOfRepeating(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MNEMOS_LLM_PROVIDER", "test")
+	t.Setenv("MNEMOS_LLM_MODEL", "test")
+	texts := []string{"CI passed in 1m59s", "the retry is by design"}
+
+	first := &stubLLM{reply: `[{"i":0,"c":"SESSION"},{"i":1,"c":"DURABLE"}]`}
+	got, err := ClassifyDurabilityCached(context.Background(), first, texts, dir)
+	if err != nil || got[0] != DurabilitySessionLocal || got[1] != DurabilityDurable {
+		t.Fatalf("first pass: %v err=%v", got, err)
+	}
+
+	// A client that would answer differently proves the second pass never asked.
+	second := &stubLLM{reply: `[{"i":0,"c":"DURABLE"},{"i":1,"c":"SESSION"}]`}
+	got2, err := ClassifyDurabilityCached(context.Background(), second, texts, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.calls != 0 {
+		t.Fatalf("cached claims must not be re-sent, got %d call(s)", second.calls)
+	}
+	if got2[0] != DurabilitySessionLocal || got2[1] != DurabilityDurable {
+		t.Fatalf("cached verdicts wrong: %v", got2)
+	}
+}
+
+// An Unknown is "we never got an answer", not a verdict. Caching it would make
+// a transient outage permanent for that claim.
+func TestClassifyDurabilityCached_DoesNotCacheUnknown(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MNEMOS_LLM_PROVIDER", "test")
+	t.Setenv("MNEMOS_LLM_MODEL", "test")
+	texts := []string{"something"}
+
+	broken := &stubLLM{err: errors.New("connection refused")}
+	if got, _ := ClassifyDurabilityCached(context.Background(), broken, texts, dir); got[0] != DurabilityUnknown {
+		t.Fatalf("want Unknown, got %q", got[0])
+	}
+	recovered := &stubLLM{reply: `[{"i":0,"c":"DURABLE"}]`}
+	got, err := ClassifyDurabilityCached(context.Background(), recovered, texts, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.calls != 1 || got[0] != DurabilityDurable {
+		t.Fatalf("a failed claim must be retried, calls=%d got=%q", recovered.calls, got[0])
+	}
+}
