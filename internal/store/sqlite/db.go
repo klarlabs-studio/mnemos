@@ -565,8 +565,11 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 // neutral until co-retrieval strengthens them.
 // v22 (ADR 0018) adds the cognitive_journal table (append-only learning log). It is a
 // new table, so it auto-creates via CREATE TABLE IF NOT EXISTS and needs no column-add
+// v23 (ADR 0023) adds claims.durability so a belief can record whether its value
+// outlives the session that produced it. Unknown (” from the DEFAULT) is treated
+// as durable everywhere, so every existing row keeps behaving exactly as before.
 // entry; the bump keeps user_version in step.
-const currentSchemaVersion = 22
+const currentSchemaVersion = 23
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -666,6 +669,11 @@ var expectedColumns = []addMissingColumn{
 	// the base 1.0, so spreading activation is unchanged until StrengthenAssociations
 	// raises an edge from repeated co-retrieval.
 	{"relationships", "strength", "REAL NOT NULL DEFAULT 1"},
+	// v23 - claim durability (ADR 0023): 'durable' | 'session' | '' (unknown).
+	// CREATE TABLE IF NOT EXISTS does not add columns to a table that already
+	// exists, so without this entry every pre-existing brain would fail on the
+	// first read with "no such column: durability".
+	{"claims", "durability", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for
