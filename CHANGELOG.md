@@ -8,6 +8,43 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.112.0] — 2026-07-21
+
+### Added
+
+- **The brain-health vitals now accumulate as a time series.** ADR 0019 shipped
+  five vitals with thresholds it called "conservative defaults", noting that
+  tuning them against real data "is exactly what the journal (ADR 0018) now
+  enables". That tuning was never possible: recording a snapshot required
+  `mnemos health --journal`, nothing ran it on a cadence, and so the journal
+  stayed empty — measured on a real brain after months of daily use it held
+  zero rows of any kind. The thresholds could never be calibrated, which means
+  `degraded` and `unhealthy` have not been grounded verdicts on any brain.
+
+  Session start now collects a data point at most once a day, spawned detached
+  because a snapshot is a full scan (7.5s on a 19,640-claim brain, growing with
+  the brain) and `SessionStart` must not wait on it. Hosted sessions are
+  skipped, since the local store is not the brain in use.
+
+  The stamp is written when a snapshot is *spawned*, not when it succeeds: if
+  the scan is what hangs, stamping on success would respawn it every session
+  forever. An unusable stamp reads as due, so a bad path cannot silence the
+  series permanently.
+
+### Fixed
+
+- **`prune --session-noise` reported the wrong session-local rate.** It divided
+  by every claim on a contradiction edge, including those the budget never
+  reached — counting claims nobody looked at as though they had been judged
+  durable. A pass covering 1,125 of 2,448 claims printed 27.9% where the rate
+  among classified claims was 60.7%. The rate is now stated over what was
+  classified, with coverage alongside it.
+
+- **Durability verdicts are persisted per batch**, not at the end of the pass.
+  Deferring the writes meant the cache only materialised on a clean exit — and
+  the failure that motivated caching was a long pass being *killed*, which
+  discarded every verdict it had already paid for.
+
 ## [0.111.1] — 2026-07-21
 
 ### Fixed
