@@ -161,6 +161,12 @@ type recallClaim struct {
 	// found to disagree with the other tier on the same topic. Both sides of the
 	// disagreement are kept and flagged so the renderer can warn.
 	Conflicted bool
+
+	// SessionLocal marks a belief whose value was tied to the conversation that
+	// produced it — a progress report, a status snapshot (ADR 0023). It is real
+	// and still recalled, but it should not displace durable knowledge from the
+	// handful of lines a brief actually shows.
+	SessionLocal bool
 }
 
 // repoBrain resolves the opt-in repo brain for a session working directory: the
@@ -288,7 +294,8 @@ func recallLocal(ctx context.Context, q, source string) ([]recallClaim, int) {
 	for _, c := range out.Claims {
 		claims = append(claims, recallClaim{
 			Type: string(c.Type), Text: c.Text, TrustScore: c.TrustScore, Source: source,
-			Contested: c.Status == domain.ClaimStatusContested,
+			Contested:    c.Status == domain.ClaimStatusContested,
+			SessionLocal: c.Durability.IsSessionLocal(),
 		})
 	}
 	return claims, len(out.Contradictions)
@@ -338,7 +345,10 @@ func mergeRecall(repo []recallClaim, repoContra int, global []recallClaim, globa
 	if policy == query.PrecedenceSurfaceDissonance {
 		flagRecallDissonance(out, repo, global)
 	}
-	return demoteContested(out), repoContra + globalContra
+	// Narration sinks below everything, then contested sinks within what
+	// remains. Both are stable partitions, so chaining them keeps every other
+	// ordering decision the query engine made.
+	return demoteSessionLocal(demoteContested(out)), repoContra + globalContra
 }
 
 // demoteContested moves claims whose status is contested below uncontested
@@ -363,6 +373,34 @@ func demoteContested(claims []recallClaim) []recallClaim {
 		settled = append(settled, c)
 	}
 	return append(settled, contested...)
+}
+
+// demoteSessionLocal moves beliefs marked session-local below the rest,
+// preserving relative order within each group.
+//
+// A brief shows only a handful of lines, so ordering decides what the reader
+// actually sees. Session-local beliefs are the majority of what capture takes
+// in — measured at ~58% of a real brain's recent intake — and left in place
+// they crowd out the knowledge a session actually needs to start from.
+//
+// They are demoted, not dropped: the text is still true and still recalled,
+// just after anything durable. Unknown durability is NOT session-local, so the
+// entire pre-ADR-0023 back catalogue keeps its existing position.
+//
+// A stable partition rather than a re-sort, for the same reason as
+// demoteContested: tier precedence (ADR 0011 repo-wins) is a deliberate
+// ordering that a global sort would quietly discard.
+func demoteSessionLocal(claims []recallClaim) []recallClaim {
+	durable := make([]recallClaim, 0, len(claims))
+	narration := make([]recallClaim, 0)
+	for _, c := range claims {
+		if c.SessionLocal {
+			narration = append(narration, c)
+			continue
+		}
+		durable = append(durable, c)
+	}
+	return append(durable, narration...)
 }
 
 // flagRecallDissonance marks, in place, every merged claim that participates in
