@@ -8,6 +8,24 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.112.1] — 2026-07-21
+
+### Fixed
+
+- **`prune --session-noise` could not persist its result.** Classification was
+  handed the job's whole context, and the write then used that same context —
+  so the write inherited an already-expired deadline and failed. The pass could
+  only succeed when there was nothing left to classify, discarding all its work
+  in exactly the case where the work mattered: a real run classified 2,226
+  claims, identified 1,084 prunable edges, and died on
+  `error: prune relationships` having written nothing.
+
+  Classification now runs under a deadline 90s earlier than the job's. The
+  reserve is sized for the write rather than for what was pruned, since
+  replacing the surviving relationship set scales with the graph, not with the
+  number of edges removed. A budget too short to split is left unchanged —
+  halving an already tight one would classify nothing at all.
+
 ## [0.112.0] — 2026-07-21
 
 ### Added
