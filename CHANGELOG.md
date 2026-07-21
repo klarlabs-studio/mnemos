@@ -8,6 +8,22 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.110.0] — 2026-07-21
+
+### Fixed
+
+- **`relate --prune-stale` now applies the session rule.** It reports what it
+  removes as "no longer produced by the current detectors", but only re-ran the
+  detectors — so after 0.108.0 taught the ingest path to drop contradictions
+  between two claims from one conversation, the pass retained edges the current
+  pipeline would never create, and its own description was untrue. Both paths
+  now resolve a claim's session through one function, so the maintenance pass
+  cannot drift from what ingest does.
+
+  Claims with no session are untouched: everything ingested before tagging
+  falls in that bucket, and absence of a tag is not evidence two claims shared
+  a session.
+
 ## [0.109.0] — 2026-07-21
 
 ### Changed
