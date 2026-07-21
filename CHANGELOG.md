@@ -8,6 +8,40 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.109.0] — 2026-07-21
+
+### Changed
+
+- **Homebrew now installs mnemos as a cask, not a formula.** GoReleaser hard-
+  deprecated the `brews` config, and Homebrew's own position is that a cask is
+  the right vehicle for a pre-compiled binary — the old path generated a
+  formula that only pretended to build from source. The cask clears the macOS
+  quarantine attribute on install, which a formula never needed.
+
+  **Existing installs need a one-time migration.** Homebrew does not migrate a
+  formula to a cask within the same tap (a same-tap entry in
+  `tap_migrations.json` is a no-op on both loader paths), so `brew upgrade`
+  will not carry you across:
+
+  ```
+  brew uninstall mnemos && brew install --cask klarlabs-studio/tap/mnemos
+  ```
+
+  Your brain is untouched by this — it lives in `~/.local/share/mnemos/`.
+  New installs of `klarlabs-studio/tap/mnemos` resolve the cask automatically.
+
+- **Docker images build via `dockers_v2`.** One buildx invocation now builds
+  every platform and writes the manifest, replacing the per-arch image stanzas
+  and the manifest stanzas that stitched them together. Image names, tags and
+  cosign signing are unchanged. Internally the Dockerfile copies from
+  `$TARGETPLATFORM/` because buildx supplies a per-platform context.
+
+### Fixed
+
+- **`make release-check` passes again.** It had been failing on deprecation
+  warnings, so the gate meant to catch a broken release config was permanently
+  red and carried no signal.
+
 ## [0.108.0] — 2026-07-21
 
 ### Added
