@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
@@ -150,4 +152,50 @@ func TestCountDurability_RateIsOverClassified(t *testing.T) {
 	if over := pct(sessionLocal, len(verdicts)); over != 30 {
 		t.Fatalf("sanity: dividing by everything gives the misleading %.1f%%", over)
 	}
+}
+
+// TestWithWriteReserve pins that classification cannot consume the whole job
+// budget. It once did: a pass that classified 2,226 claims and identified 1,084
+// prunable edges then failed on "prune relationships", because the write
+// inherited the same exhausted context and every verdict was discarded.
+func TestWithWriteReserve(t *testing.T) {
+	t.Run("leaves room to write", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		got, done := withWriteReserve(ctx)
+		defer done()
+
+		outer, _ := ctx.Deadline()
+		inner, ok := got.Deadline()
+		if !ok {
+			t.Fatal("classification must keep a deadline")
+		}
+		if !inner.Before(outer) {
+			t.Fatal("classification must expire before the job does")
+		}
+		if gap := outer.Sub(inner); gap != pruneWriteReserve {
+			t.Fatalf("reserve = %v, want %v", gap, pruneWriteReserve)
+		}
+	})
+
+	t.Run("a budget too short to split is left alone", func(t *testing.T) {
+		// Halving an already-tight budget would classify nothing at all.
+		ctx, cancel := context.WithTimeout(context.Background(), pruneWriteReserve)
+		defer cancel()
+		got, done := withWriteReserve(ctx)
+		defer done()
+		inner, _ := got.Deadline()
+		outer, _ := ctx.Deadline()
+		if !inner.Equal(outer) {
+			t.Fatal("a short budget must be passed through unchanged")
+		}
+	})
+
+	t.Run("no deadline is passed through", func(t *testing.T) {
+		got, done := withWriteReserve(context.Background())
+		defer done()
+		if _, ok := got.Deadline(); ok {
+			t.Fatal("a job without a deadline must not gain one")
+		}
+	})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
@@ -92,7 +93,15 @@ func pruneSessionNoise(dryRun bool, f Flags) {
 			// partial run is safe. Verdicts are cached, so a re-run skips what
 			// this pass already paid for and genuinely continues rather than
 			// re-classifying the same prefix.
-			verdicts, err := extract.ClassifyDurabilityCached(ctx, client, texts, extract.DurabilityCacheDir)
+			// Classification must not spend the ENTIRE job budget, or the write
+			// below inherits an already-expired context and the pass discards
+			// everything it just paid for — which is precisely what happened:
+			// a run that classified 2,226 claims and identified 1,084 edges
+			// died on "prune relationships" with nothing written. Hold back a
+			// slice of the budget so persisting the result is always possible.
+			classifyCtx, cancelClassify := withWriteReserve(ctx)
+			defer cancelClassify()
+			verdicts, err := extract.ClassifyDurabilityCached(classifyCtx, client, texts, extract.DurabilityCacheDir)
 			if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 				return NewSystemError(err, "classify durability")
 			}
@@ -223,4 +232,25 @@ func countDurability(verdicts []extract.Durability, want extract.Durability) int
 		}
 	}
 	return n
+}
+
+// pruneWriteReserve is how much of the job budget is held back for persisting
+// the result. The write replaces the surviving relationship set, so it scales
+// with the size of the graph rather than with what was pruned.
+const pruneWriteReserve = 90 * time.Second
+
+// withWriteReserve returns a context that expires before the job's own
+// deadline, leaving time to write. A job with no deadline, or one too short to
+// split sensibly, is returned unchanged: halving an already-tight budget would
+// mean classifying nothing at all.
+func withWriteReserve(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return ctx, func() {}
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 2*pruneWriteReserve {
+		return ctx, func() {}
+	}
+	return context.WithDeadline(ctx, deadline.Add(-pruneWriteReserve))
 }
