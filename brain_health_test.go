@@ -98,3 +98,41 @@ func TestSnapshotHealth_RecordsToJournal(t *testing.T) {
 		t.Errorf("recorded snapshot = %+v, want status %q with 5 vitals", recorded, got.Status)
 	}
 }
+
+// TestBrainHealth_DeprecatedClaimsAreNotCurrentlyValid pins that a deprecated
+// belief is excluded from the vitals — validCount, low-trust, staleness, and
+// especially the orphan check. Deprecating closes STATUS, not valid-time, so
+// the loop (which keyed only on valid-time) counted a retired belief as
+// currently-valid: an ungrounded deprecated claim kept raising an orphan
+// warning that deprecating it was meant to clear. Same class of bug as the
+// dissonance vital counting contradictions into deprecated beliefs.
+func TestBrainHealth_DeprecatedClaimsAreNotCurrentlyValid(t *testing.T) {
+	m := calibMem(t)
+	ctx := context.Background()
+
+	// An ACTIVE ungrounded claim is an orphan (no evidence).
+	seedClaim(t, m, "orphan-active", 0.8)
+	if h, err := m.BrainHealth(ctx); err != nil {
+		t.Fatal(err)
+	} else if o := pathologyByKind(h, "orphan_claims"); o.Count != 1 {
+		t.Fatalf("precondition: active ungrounded claim must be an orphan, got %d", o.Count)
+	}
+
+	// Deprecate it (status only; valid-time stays open, exactly like the real
+	// deprecation tools).
+	now := time.Now().UTC()
+	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{{
+		ID: "orphan-active", Text: "claim orphan-active", Type: domain.ClaimTypeFact,
+		Confidence: 0.8, Status: domain.ClaimStatusDeprecated, CreatedAt: now, ValidFrom: now,
+	}}); err != nil {
+		t.Fatalf("deprecate: %v", err)
+	}
+
+	h, err := m.BrainHealth(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o := pathologyByKind(h, "orphan_claims"); o.Count != 0 {
+		t.Fatalf("a deprecated belief must not count as a currently-valid orphan, got %d", o.Count)
+	}
+}
