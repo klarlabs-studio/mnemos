@@ -2131,9 +2131,20 @@ func (m *memory) BrainHealth(ctx context.Context) (BrainHealth, error) {
 	claimIDs := make(map[string]struct{}, len(claims))
 	validCount, lowTrust, stale, orphans := 0, 0, 0, 0
 	for _, c := range claims {
-		claimIDs[c.ID] = struct{}{}
+		claimIDs[c.ID] = struct{}{} // every claim, so dangling-edge detection sees them all
 		if !c.ValidTo.IsZero() {
-			continue // only currently-valid beliefs count toward the vitals
+			continue // valid-time closed → forgotten → not a currently-valid belief
+		}
+		if c.Status == domain.ClaimStatusDeprecated {
+			// Deprecated is the other way a belief is retired — it closes STATUS
+			// while leaving valid-time open — so this loop counted a deprecated
+			// belief as "currently-valid" and let it inflate every vital:
+			// validCount (the low-trust/staleness denominator) and, worse, the
+			// orphan check, where a deprecated ungrounded belief kept raising an
+			// integrity warning that deprecating it was supposed to clear. Same
+			// class of bug as the dissonance vital counting contradictions into
+			// deprecated beliefs. A retired belief is not a currently-valid one.
+			continue
 		}
 		validCount++
 		if c.TrustScore < healthLowTrustFloor {
