@@ -108,13 +108,17 @@ func ConfigFromEnv() (Config, error) {
 		model = DefaultEmbeddingModel(p)
 	}
 
+	// Prefer an embed-specific endpoint, then the LLM one (a shared local
+	// server commonly serves both), then the provider default. The LLM
+	// fallback makes the foreign-default guard load-bearing here: an
+	// MNEMOS_LLM_BASE_URL set for a cloud LLM must not silently become the
+	// embedding endpoint for a different embed provider. ResolveBaseURL drops a
+	// base URL that is some other provider's default (see its doc).
 	baseURL := strings.TrimSpace(os.Getenv("MNEMOS_EMBED_BASE_URL"))
 	if baseURL == "" {
 		baseURL = strings.TrimSpace(os.Getenv("MNEMOS_LLM_BASE_URL"))
 	}
-	if baseURL == "" {
-		baseURL = llm.DefaultBaseURL(p)
-	}
+	baseURL = llm.ResolveBaseURL(p, baseURL)
 
 	cfg := Config{
 		Provider: p,

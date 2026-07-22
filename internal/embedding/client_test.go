@@ -115,3 +115,40 @@ func TestGeminiEmbedderEmpty(t *testing.T) {
 		t.Fatalf("expected nil for empty input, got %v", vectors)
 	}
 }
+
+// TestConfigFromEnv_LLMBaseURLDoesNotLeakAcrossProviders pins that a cloud
+// MNEMOS_LLM_BASE_URL does not silently become the embedding endpoint when the
+// embed provider differs. The embed path falls back to the LLM base URL, so
+// without the foreign-default guard an Anthropic LLM URL would be handed to an
+// Ollama embedder and every embedding call would fail silently.
+func TestConfigFromEnv_LLMBaseURLDoesNotLeakAcrossProviders(t *testing.T) {
+	t.Setenv("MNEMOS_EMBED_PROVIDER", "ollama")
+	t.Setenv("MNEMOS_EMBED_BASE_URL", "")
+	t.Setenv("MNEMOS_LLM_BASE_URL", "https://api.anthropic.com") // a cloud LLM endpoint
+	cfg, err := ConfigFromEnv()
+	if err != nil {
+		t.Fatalf("ConfigFromEnv: %v", err)
+	}
+	if cfg.BaseURL == "https://api.anthropic.com" {
+		t.Fatal("a cloud LLM base URL leaked into the ollama embedder")
+	}
+	// It should resolve to Ollama's own endpoint.
+	if cfg.BaseURL != "http://localhost:11434" {
+		t.Fatalf("embed base URL = %q, want the ollama default", cfg.BaseURL)
+	}
+}
+
+// A shared local server is the case the LLM-base-URL fallback exists for: same
+// provider on both sides, one endpoint, and it must be honored.
+func TestConfigFromEnv_SharedLocalEndpointIsHonored(t *testing.T) {
+	t.Setenv("MNEMOS_EMBED_PROVIDER", "ollama")
+	t.Setenv("MNEMOS_EMBED_BASE_URL", "")
+	t.Setenv("MNEMOS_LLM_BASE_URL", "http://localhost:11434")
+	cfg, err := ConfigFromEnv()
+	if err != nil {
+		t.Fatalf("ConfigFromEnv: %v", err)
+	}
+	if cfg.BaseURL != "http://localhost:11434" {
+		t.Fatalf("a same-provider local endpoint must survive, got %q", cfg.BaseURL)
+	}
+}

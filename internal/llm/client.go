@@ -129,9 +129,7 @@ func ConfigFromEnv() (Config, error) {
 	if cfg.Model == "" {
 		cfg.Model = DefaultModel(p)
 	}
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = DefaultBaseURL(p)
-	}
+	cfg.BaseURL = ResolveBaseURL(p, cfg.BaseURL)
 
 	// Validate.
 	switch p {
@@ -149,6 +147,50 @@ func ConfigFromEnv() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// ResolveBaseURL returns the endpoint to use for provider p given an explicit
+// value from config or env (possibly empty).
+//
+// It exists to close a silent failure. Config files pin provider and base_url
+// together, but 12-factor precedence lets an env var override the provider
+// ALONE — e.g. a config with provider=ollama + base_url=localhost:11434, then
+// MNEMOS_LLM_PROVIDER=anthropic exported without a matching base_url. The
+// Anthropic client would then POST to localhost:11434 and every call fails;
+// because extraction folds LLM errors to a safe empty result, it fails
+// SILENTLY (every verdict comes back Unknown, which reads as "the model
+// classified nothing"). So a base URL that is some OTHER provider's default is
+// treated as a stale pairing and dropped in favour of p's own default.
+//
+// A genuine custom endpoint (one that is no built-in provider's default) is
+// always kept, as is openai-compat's endpoint — it is deliberate and may
+// legitimately point at another provider's address, e.g. an OpenAI-compatible
+// gateway in front of Ollama.
+func ResolveBaseURL(p Provider, explicit string) string {
+	explicit = strings.TrimSpace(explicit)
+	if p != ProviderOpenAICompat && explicit != "" && isForeignProviderDefault(p, explicit) {
+		explicit = ""
+	}
+	if explicit == "" {
+		return DefaultBaseURL(p)
+	}
+	return explicit
+}
+
+// isForeignProviderDefault reports whether url is the default endpoint of some
+// provider OTHER than sel — a stale provider pairing rather than a chosen
+// custom endpoint. A URL that matches sel's own default, or that matches no
+// built-in provider's default, returns false.
+func isForeignProviderDefault(sel Provider, url string) bool {
+	for _, p := range []Provider{ProviderAnthropic, ProviderOpenAI, ProviderGemini, ProviderOllama} {
+		if p == sel {
+			continue
+		}
+		if DefaultBaseURL(p) == url {
+			return true
+		}
+	}
+	return false
 }
 
 // NewClient constructs a Client from the given Config.
