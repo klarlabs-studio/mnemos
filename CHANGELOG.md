@@ -8,6 +8,22 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.114.2] — 2026-07-23
+
+### Fixed
+
+- **Brain-health vitals no longer count deprecated beliefs as currently-valid.**
+  The vitals loop decided "currently-valid" purely by valid-time, ignoring
+  status — but deprecating a belief closes its *status* and leaves valid-time
+  open, so every deprecated belief was still counted as current: inflating the
+  `validCount` that low-trust and staleness divide by, and the `orphan_claims`
+  integrity check. An ungrounded belief that was deprecated to retire it kept
+  raising the orphan warning that deprecating it was meant to clear. On a real
+  26,446-claim brain this miscounted 3,379 retired beliefs as current;
+  excluding them takes the reported "valid beliefs" from ~26,446 to ~23,067 and
+  clears the last integrity warning. Same class of bug as 0.107.0's fix to the
+  dissonance vital — a retired belief is history, not current.
+
 ## [0.114.1] — 2026-07-22
 
 ### Fixed
