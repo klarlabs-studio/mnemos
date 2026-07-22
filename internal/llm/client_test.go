@@ -208,3 +208,66 @@ func TestConfigFromEnv(t *testing.T) {
 		}
 	})
 }
+
+// TestConfigFromEnv_DropsForeignProviderBaseURL pins the fix for the silent
+// failure a mixed config/env setup produces: a config file pins
+// provider=ollama + base_url=localhost:11434, then MNEMOS_LLM_PROVIDER is
+// overridden to a cloud provider without a matching base_url. The stale Ollama
+// URL must not be handed to the cloud client, or every call fails silently.
+func TestConfigFromEnv_DropsForeignProviderBaseURL(t *testing.T) {
+	ollama := DefaultBaseURL(ProviderOllama)
+
+	t.Run("cloud provider ignores another provider's default URL", func(t *testing.T) {
+		t.Setenv("MNEMOS_LLM_PROVIDER", "anthropic")
+		t.Setenv("MNEMOS_LLM_API_KEY", "sk-test")
+		t.Setenv("MNEMOS_LLM_BASE_URL", ollama) // stale, from a prior ollama config
+		cfg, err := ConfigFromEnv()
+		if err != nil {
+			t.Fatalf("ConfigFromEnv: %v", err)
+		}
+		if cfg.BaseURL != DefaultBaseURL(ProviderAnthropic) {
+			t.Fatalf("stale ollama URL leaked through: got %q, want %q", cfg.BaseURL, DefaultBaseURL(ProviderAnthropic))
+		}
+	})
+
+	t.Run("a provider's own default URL is kept", func(t *testing.T) {
+		t.Setenv("MNEMOS_LLM_PROVIDER", "ollama")
+		t.Setenv("MNEMOS_LLM_BASE_URL", ollama)
+		cfg, err := ConfigFromEnv()
+		if err != nil {
+			t.Fatalf("ConfigFromEnv: %v", err)
+		}
+		if cfg.BaseURL != ollama {
+			t.Fatalf("a provider's own default must survive, got %q", cfg.BaseURL)
+		}
+	})
+
+	t.Run("a genuine custom endpoint is kept", func(t *testing.T) {
+		const custom = "https://llm-gateway.internal:8443"
+		t.Setenv("MNEMOS_LLM_PROVIDER", "anthropic")
+		t.Setenv("MNEMOS_LLM_API_KEY", "sk-test")
+		t.Setenv("MNEMOS_LLM_BASE_URL", custom)
+		cfg, err := ConfigFromEnv()
+		if err != nil {
+			t.Fatalf("ConfigFromEnv: %v", err)
+		}
+		if cfg.BaseURL != custom {
+			t.Fatalf("a custom endpoint (not any provider's default) must survive, got %q", cfg.BaseURL)
+		}
+	})
+
+	t.Run("openai-compat keeps a provider-default-looking URL", func(t *testing.T) {
+		// openai-compat against a local Ollama's OpenAI endpoint is legitimate,
+		// so its URL is never treated as a stale pairing.
+		t.Setenv("MNEMOS_LLM_PROVIDER", "openai-compat")
+		t.Setenv("MNEMOS_LLM_MODEL", "local-model")
+		t.Setenv("MNEMOS_LLM_BASE_URL", ollama)
+		cfg, err := ConfigFromEnv()
+		if err != nil {
+			t.Fatalf("ConfigFromEnv: %v", err)
+		}
+		if cfg.BaseURL != ollama {
+			t.Fatalf("openai-compat endpoint must be honored verbatim, got %q", cfg.BaseURL)
+		}
+	})
+}
