@@ -8,6 +8,23 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.114.1] — 2026-07-22
+
+### Fixed
+
+- **A base URL from one provider no longer breaks another.** Config files pin
+  provider and `base_url` together, but 12-factor precedence lets an env var
+  override the provider alone — so a config with `provider: ollama` +
+  `base_url: localhost:11434`, then `MNEMOS_LLM_PROVIDER=anthropic` exported
+  without a matching base_url, pointed the Anthropic client at
+  `localhost:11434`. Every call failed, and because extraction folds LLM errors
+  to a safe empty result, it failed *silently* — every result came back
+  "unknown", reading as "the model produced nothing". A base URL that is some
+  other provider's default is now treated as a stale pairing and replaced with
+  the selected provider's own default; a genuine custom endpoint, and
+  openai-compat's endpoint, are always kept. The embedding config, which also
+  falls back to the LLM base URL, is fixed through the same shared resolver.
+
 ## [0.114.0] — 2026-07-21
 
 This release makes belief durability (0.113.0) actually affect what you see, and
