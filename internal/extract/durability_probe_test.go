@@ -35,11 +35,13 @@ func TestDurabilityProbe(t *testing.T) {
 	if err := json.Unmarshal(raw, &texts); err != nil {
 		t.Fatal(err)
 	}
-	client, err := llm.NewClient(llm.Config{
-		Provider: llm.ProviderOllama,
-		Model:    os.Getenv("MNEMOS_LLM_MODEL"),
-		BaseURL:  os.Getenv("MNEMOS_LLM_BASE_URL"),
-	})
+	// Reads MNEMOS_LLM_* from the environment, so the same harness can score the
+	// local model or a hosted one without a code change.
+	cfg, err := llm.ConfigFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := llm.NewClient(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
