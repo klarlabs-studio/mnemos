@@ -101,3 +101,7 @@ spec:
   imagePolicy:
     mode: digest
     allowMutableTags: true
+    # main is protected, so rollopsd cannot push the digest re-pin directly
+    # (GH006). Propose it as an auto-merging PR instead (rollops v0.28.0+).
+    # Needs the rollops GitHub App to have "Pull requests: write".
+    writeback: pull-request
