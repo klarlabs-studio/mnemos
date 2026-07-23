@@ -8,6 +8,28 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.116.0] — 2026-07-23
+
+### Added
+
+- **`mnemos health --explain`.** A plain-language guide to what the report
+  means: each vital (free-energy, calibration, dissonance, low-trust, staleness)
+  and each integrity check (orphan claims, dangling edges, stale expectations)
+  described in one line, plus the worst-wins rollup and the note that the
+  thresholds are conservative defaults still being calibrated. The default view
+  ends with a one-line hint pointing at it.
+
+### Changed
+
+- **`mnemos health` no longer prints an internal ADR reference in its headline.**
+  It read `Brain health: degraded  (ADR 0019)` — leaking a design-doc pointer
+  into user-facing output. The headline is now just the verdict; the ADR pointer
+  moved into `--explain`, once, at the end, for the curious.
+- **README leads with the brain/agent story.** New "Two ways to use it" — the
+  zero-code Claude Code path (`mnemos init`) first, then the HTTP API — the
+  Homebrew tap corrected to the canonical `klarlabs-studio/tap`, and links to the
+  klarlabs.de write-ups (Meet Mnemos, From store to brain, Is the brain healthy?).
+
 ## [0.115.0] — 2026-07-23
 
 ### Added
