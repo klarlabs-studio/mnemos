@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strconv"
 
 	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/llm"
 )
 
 // handleConsolidate routes `mnemos consolidate ...` — the cognitive "sleep" pass
@@ -32,6 +35,21 @@ func handleConsolidate(args []string, f Flags) {
 		}
 	}
 
+	// --clear-session-noise extends the sleep pass with the LLM narration-clearing
+	// that keeps dissonance from ratcheting up (the deterministic organs alone do
+	// not touch it). Stripped before parseConsolidateOpts, which rejects unknown
+	// flags, because it is a command-level step, not a library ConsolidateOption.
+	clearSessionNoise := false
+	kept := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == "--clear-session-noise" {
+			clearSessionNoise = true
+			continue
+		}
+		kept = append(kept, a)
+	}
+	args = kept
+
 	opts, err := parseConsolidateOpts(args, f)
 	if err != nil {
 		exitWithMnemosError(false, err)
@@ -44,10 +62,10 @@ func handleConsolidate(args []string, f Flags) {
 		exitWithMnemosError(false, NewSystemError(err, "open store"))
 		return
 	}
-	defer func() { _ = mem.Close() }()
 
 	res, err := mem.Consolidate(ctx, opts)
 	if err != nil {
+		_ = mem.Close()
 		exitWithMnemosError(false, NewSystemError(err, "consolidate"))
 		return
 	}
@@ -67,6 +85,24 @@ func handleConsolidate(args []string, f Flags) {
 		"playbooks_synthesized": res.PlaybooksSynthesized,
 		"dry_run":               opts.DryRun,
 	})
+	// Release the store before session-noise clearing opens its own governed
+	// writer: SQLite is single-writer, so a still-open library handle would
+	// deadlock the second pass.
+	_ = mem.Close()
+
+	if clearSessionNoise {
+		// The deterministic sleep always runs; narration clearing is the part
+		// that needs a model. Skip it cleanly when none is configured, so a
+		// scheduled sleep on an LLM-less machine still consolidates rather than
+		// erroring the whole pass.
+		if _, cfgErr := llm.ConfigFromEnv(); cfgErr != nil {
+			if f.Verbose {
+				fmt.Fprintln(os.Stderr, "consolidate: no LLM configured; skipping session-noise clearing")
+			}
+			return
+		}
+		pruneSessionNoise(f.DryRun, f)
+	}
 }
 
 // parseConsolidateOpts builds ConsolidateOptions from the sub-flags plus the
