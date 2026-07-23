@@ -1,10 +1,25 @@
 # Mnemos
 
-**Self-hosted memory for AI apps. No vendor cloud, no per-call billing, no SDK to install.**
+**A brain for your AI agents — open-source, local-first, evidence-backed memory.**
 
-The open-source memory layer for AI apps you actually own. Just a Go binary, an HTTP API, and your data. Every claim has evidence, every contradiction surfaces, every decision replays — months later, in your infra.
+AI agents forget everything the moment a session ends. Mnemos gives them a memory that lasts: it stores facts as small, checkable **claims** with evidence back to the source, **surfaces contradictions** instead of silently overwriting, and **consolidates and forgets** on its own. A brain, not a log — a single Go binary, your data in your own storage, no vendor cloud, no per-call billing.
 
-## Add memory to an AI app in 5 lines
+> **New here? Start with the intro:** [**Meet Mnemos**](https://klarlabs.de/writing/meet-mnemos) — what it does and how people use it, in plain language. Then [**Is the brain healthy?**](https://klarlabs.de/writing/is-the-brain-healthy) on how it takes the vitals of its own memory.
+
+## Two ways to use it
+
+### 1. Give your coding agent a memory — zero code
+
+If you use an AI coding assistant like **Claude Code**, one command wires Mnemos in through its hooks: it recalls relevant knowledge before each task, captures what was learned at session end, and consolidates on a nightly "sleep" cycle — with nothing to call.
+
+```bash
+brew install klarlabs-studio/tap/mnemos
+mnemos init
+```
+
+That's it. Your agent now remembers your decisions, the bug you fixed last month, and why you chose Postgres over the alternative — across sessions, projects, and machines, because the brain is yours and lives where you put it.
+
+### 2. Build it into your app — 5 lines, any language
 
 No SDK to install. Any language with an HTTP client works. Below is Python; substitute `curl`, `fetch`, `reqwest`, etc.
 
@@ -44,7 +59,7 @@ That's the whole API for the simple case. For richer memory — typed claims, co
 
 ```bash
 # macOS / Linux (Homebrew)
-brew tap felixgeelhaar/tap && brew install mnemos
+brew install klarlabs-studio/tap/mnemos
 
 # Go (any platform with Go 1.26+)
 go install go.klarlabs.de/mnemos/cmd/mnemos@latest
@@ -172,6 +187,14 @@ node that get you a defensible audit trail. Source:
 | Local-first / private | ❌ | ✅ |
 | Grounded in governed data | ❌ | ✅ |
 | Evolves over time | ❌ | ✅ |
+
+### Further reading
+
+The thinking behind Mnemos, in plain language and in depth:
+
+- [**Meet Mnemos**](https://klarlabs.de/writing/meet-mnemos) — the intro: what it is and how people use it.
+- [**From store to brain**](https://klarlabs.de/writing/from-store-to-brain) — building the cognitive half: consolidation, forgetting, salience, self-correcting recall, with no LLM in the loop.
+- [**Is the brain healthy?**](https://klarlabs.de/writing/is-the-brain-healthy) — how a brain takes its own vitals, and what running one in production taught us about counting the right thing.
 
 ## Key Features
 
