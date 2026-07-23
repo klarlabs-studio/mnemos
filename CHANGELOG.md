@@ -8,6 +8,33 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.115.0] — 2026-07-23
+
+### Added
+
+- **The local brain now sleeps.** Mnemos already had every organ of memory
+  consolidation in `consolidate` — dedupe, trust refresh, forgetting,
+  reinforcement, replay — but nothing ran them on a clock for a local brain, so
+  the day's conversational narration accumulated until someone ran a pass by
+  hand and dissonance only ever fell when poked. A brain that consolidates only
+  when poked has insomnia.
+
+  Two changes give it a cycle. `consolidate --clear-session-noise` extends the
+  sleep pass with the LLM narration-clearing that actually moves dissonance —
+  classify the durability of contradiction endpoints, drop the edges where both
+  sides are session-local — and is LLM-gated and best-effort, so a machine with
+  no model still runs the deterministic consolidation. And a detached, once-a-day
+  trigger on session start (when a session opens after a long enough gap, the
+  equivalent of waking) runs a full consolidation in the background, off the
+  critical path — stamped on spawn so a hung pass cannot respawn, failing open so
+  the brain is never locked into permanent insomnia, and skipped for hosted
+  brains that consolidate server-side.
+
+  The effect is a circadian rhythm rather than a ratchet: dissonance rises
+  through a working day and falls overnight, with no manual pass. The nightly
+  flag set is deliberately conservative — it forgets only what an outcome
+  refuted, and never does aggressive trust-floor forgetting unattended.
+
 ## [0.114.2] — 2026-07-23
 
 ### Fixed
