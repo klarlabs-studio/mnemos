@@ -1498,6 +1498,7 @@ func printUsage() {
 	fmt.Println("  classify-durability [--limit N]      Record whether a belief outlives its session; targets the highest-trust unclassified ones")
 	fmt.Println("  consolidate [--dry-run] [--forget-below-trust T]  The cognitive \"sleep\" pass: dedupe + refresh trust,")
 	fmt.Println("    [--forget-refuted] [--synthesize]  and optionally forget/reinforce/synthesize/replay. Deterministic.")
+	fmt.Println("    [--clear-session-noise]            also classify durability + drop narration contradictions (needs an LLM).")
 	fmt.Println("  sync-docs [--claude] [--file <name>] Write this repo's learnings into AGENTS.md (or CLAUDE.md) so")
 	fmt.Println("                                       agents follow them natively (mnemos-managed block)")
 	fmt.Println("  rebuild [--claude] [--file <name>]   Rebuild the gitignored repo brain from a committed AGENTS.md")

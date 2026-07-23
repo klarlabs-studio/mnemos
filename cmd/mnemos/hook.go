@@ -517,6 +517,10 @@ func hookBrief(ev hookEvent) {
 	// ADR-0019 vitals have no time series and their thresholds can never be
 	// calibrated (see health_snapshot.go).
 	maybeSnapshotHealth(time.Now())
+	// Let the brain sleep: a daily, detached consolidation (including
+	// session-noise clearing) so dissonance follows a circadian rhythm instead
+	// of ratcheting up. Off the critical path; see sleep_schedule.go.
+	maybeSleep(time.Now())
 	if hostedConfigured() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
