@@ -231,7 +231,7 @@ func handleServe(args []string, _ Flags) {
 		if srv.TLSConfig != nil {
 			scheme = "https"
 		}
-		fmt.Printf("mnemos registry serving on %s://localhost:%d (db=%s)\n", scheme, port, dsn)
+		fmt.Printf("mnemos registry serving on %s://localhost:%d (db=%s)\n", scheme, port, store.RedactDSN(dsn))
 		if grpcPort > 0 {
 			fmt.Printf("mnemos gRPC serving on localhost:%d\n", grpcPort)
 		}
