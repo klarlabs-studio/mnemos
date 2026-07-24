@@ -8,6 +8,19 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.116.1] — 2026-07-24
+
+### Fixed
+
+- **`mnemos serve` no longer prints the database password on startup.** The boot
+  line logged its DSN verbatim — `mnemos registry serving on http://localhost:7777
+  (db=postgres://user:PASSWORD@host/db)` — leaking the Postgres/MySQL password to
+  stdout and into any log aggregator. It is now redacted via a new exported
+  `store.RedactDSN` (regex-based, so the `***` placeholder is emitted literally
+  rather than percent-encoded). Credential-free DSNs (sqlite/memory/no-password)
+  are unchanged. Found while upgrading a hosted deployment, where the password was
+  sitting in `kubectl logs`.
+
 ## [0.116.0] — 2026-07-23
 
 ### Added
