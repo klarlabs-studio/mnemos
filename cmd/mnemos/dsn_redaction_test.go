@@ -74,6 +74,32 @@ func TestNoUnredactedDSNInMessages(t *testing.T) {
 		}
 
 		ast.Inspect(file, func(n ast.Node) bool {
+			// A message does not need a rendering call to reach a log. doctor's
+			// project_root line was built with `"… " + override + " …"` and
+			// assigned to a struct field, so a walk that only entered CallExprs
+			// never looked at it — and it printed a live Postgres password into
+			// kubectl logs. Concatenating a DSN into text is the same act as
+			// formatting one into it, so it is checked the same way.
+			if bin, ok := n.(*ast.BinaryExpr); ok && bin.Op == token.ADD {
+				for _, side := range []ast.Expr{bin.X, bin.Y} {
+					ident, ok := side.(*ast.Ident)
+					if !ok || !looksLikeDSN(ident.Name) {
+						continue
+					}
+					pos := fset.Position(ident.Pos())
+					if exempt[pos.Line] {
+						continue
+					}
+					t.Errorf("%s: %s is concatenated into a string without redaction — "+
+						"wrap it in store.RedactDSN. A DSN reaching a message is a password "+
+						"reaching a log, whether it got there via Sprintf or via `+`. If this "+
+						"site must emit the real DSN, add a %q comment on the line with a reason.",
+						pos, ident.Name, exemptMarker)
+				}
+
+				return true
+			}
+
 			call, ok := n.(*ast.CallExpr)
 			if !ok || !rendering[calleeName(call.Fun)] {
 				return true

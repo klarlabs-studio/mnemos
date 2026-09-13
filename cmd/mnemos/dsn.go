@@ -238,7 +238,10 @@ func resolveDSNForContext(ctx context.Context) (string, error) {
 		if strings.Contains(dsn, "?") {
 			sep = "&"
 		}
-		return dsn + sep + "tenant=" + tenant, nil
+		// This builds a DSN to connect with, not a message to show. The result
+		// is handed to the store; redacting it would yield a connection string
+		// whose password is literally "***".
+		return dsn + sep + "tenant=" + tenant, nil // dsn-redaction-ok: connect string, never rendered
 	case store.TenancyNamespace:
 		// The derived namespace REPLACES any base namespace: providers read the
 		// first `namespace=` value, so a duplicate would silently keep the base.

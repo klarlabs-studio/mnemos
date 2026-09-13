@@ -133,7 +133,12 @@ func registerClaudeCode(bin, dsn, scope string, inlineDSN, force, printOnly bool
 	// would otherwise swallow the name as a second KEY=value.
 	addArgs := []string{"mcp", "add", "--scope", scope, "--transport", "stdio", "mnemos"}
 	if inlineDSN {
-		addArgs = append(addArgs, "-e", "MNEMOS_DB_URL="+dsn)
+		// --inline-dsn exists precisely to put the real connection string into
+		// the user's own MCP registration; a redacted value would register a
+		// server that cannot connect. The printOnly branch below echoes these
+		// args, so the DSN does reach the terminal — that is what --print-only
+		// is for, and it is the user's own DSN on their own machine.
+		addArgs = append(addArgs, "-e", "MNEMOS_DB_URL="+dsn) // dsn-redaction-ok: --inline-dsn must emit the real DSN
 	}
 	addArgs = append(addArgs, "--", bin, "mcp")
 

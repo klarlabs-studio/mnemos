@@ -131,11 +131,15 @@ func probeProjectRoot() healthCheck {
 	// MNEMOS_DB_URL (set explicitly or hydrated from a config db.url) overrides
 	// the walked-up project DB. Surface that here so this line never contradicts
 	// store_open, which reports the DSN actually opened.
-	if override := strings.TrimSpace(os.Getenv("MNEMOS_DB_URL")); override != "" {
+	// Named overrideDSN, not override: TestNoUnredactedDSNInMessages matches on
+	// the IDENTIFIER, so a connection string held under a name that does not end
+	// in DSN is invisible to it. This one was called `override` and shipped the
+	// password to a log aggregator for exactly that reason.
+	if overrideDSN := strings.TrimSpace(os.Getenv("MNEMOS_DB_URL")); overrideDSN != "" {
 		if ok {
-			return healthCheck{Name: "project_root", Status: "ok", Detail: fmt.Sprintf("root=%s — MNEMOS_DB_URL overrides project db %s (using %s)", projectRoot, dbPath, override)}
+			return healthCheck{Name: "project_root", Status: "ok", Detail: fmt.Sprintf("root=%s — MNEMOS_DB_URL overrides project db %s (using %s)", projectRoot, dbPath, store.RedactDSN(overrideDSN))}
 		}
-		return healthCheck{Name: "project_root", Status: "skipped", Detail: "MNEMOS_DB_URL set — using " + override + " (no project .mnemos found walking up from CWD)"}
+		return healthCheck{Name: "project_root", Status: "skipped", Detail: "MNEMOS_DB_URL set — using " + store.RedactDSN(overrideDSN) + " (no project .mnemos found walking up from CWD)"}
 	}
 	if !ok {
 		return healthCheck{Name: "project_root", Status: "skipped", Detail: "no .mnemos/ found walking up from CWD (using XDG default)"}

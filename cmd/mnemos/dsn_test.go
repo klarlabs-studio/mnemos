@@ -244,3 +244,30 @@ func TestMCPRepoBrainDSN_EmptyInMultiTenantMode(t *testing.T) {
 		t.Errorf("multi-tenant server produced a repo overlay DSN: %s", got)
 	}
 }
+
+// probeProjectRoot renders the MNEMOS_DB_URL override straight into its Detail.
+// The store_open line directly beneath it in the same doctor report redacts the
+// same DSN, so the report showed the password masked on one line and in clear on
+// the line above — which is worse than either alone, because the masked line is
+// what makes the output look safe to paste.
+//
+// Found in a hosted deployment, where `mnemos doctor` wrote a live Postgres
+// password into the container log and from there into whatever ships logs
+// onward. Two separate guards missed it:
+// TestNoUnredactedDSNInMessages walks the AST but matches on the
+// IDENTIFIER name, and this DSN is held in a variable called `override` — a DSN
+// by value, not by name; and the second call site builds its message with string
+// concatenation rather than a rendering call, so that walk never inspects it.
+// Hence this behavioural test, which cares only about what comes out.
+func TestProbeProjectRootRedactsDSNPassword(t *testing.T) {
+	t.Setenv("MNEMOS_DB_URL", "postgres://mnemos:hunter2@db.internal:5432/mnemos")
+
+	got := probeProjectRoot().Detail
+	if strings.Contains(got, "hunter2") {
+		t.Fatalf("probeProjectRoot leaked the password: %s", got)
+	}
+	// Redaction must not cost the diagnostic its value.
+	if !strings.Contains(got, "db.internal") {
+		t.Errorf("probeProjectRoot dropped the host, leaving too little to diagnose with: %s", got)
+	}
+}
