@@ -8,6 +8,60 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.127.1] — 2026-09-13
+
+A password masked on one line of `mnemos doctor` and printed in clear on the
+line above it.
+
+### Fixed
+
+- **`mnemos doctor` no longer prints the DSN password in its `project_root`
+  line** (#378). The `MNEMOS_DB_URL` override was rendered verbatim, so a hosted
+  deployment wrote a live Postgres password to stdout and onward into whatever
+  collects container logs. The same report redacts the same DSN on the
+  `store_open` line immediately below, which is worse than either alone: the
+  masked line is what makes the output look safe to paste into an issue.
+
+  v0.116.1 fixed this class for `mnemos serve` and added `store.RedactDSN`.
+  `doctor` was never routed through it. Only `doctor` was affected here — the
+  `serve` boot line has been redacted since.
+
+  Two existing guards should have caught it and each had a blind spot:
+
+  - `TestNoUnredactedDSNInMessages` walks the AST but decides what is a DSN from
+    the identifier NAME (suffix `DSN`). This one lived in a variable called
+    `override` — a DSN by value, not by name — so it was invisible.
+  - That walk only descends into rendering calls (`Sprintf`, `Errorf`, …). The
+    second call site builds its message with `+`, which is not a call at all, so
+    nothing ever looked at it.
+
+  Both are closed rather than just the leak: the variable is renamed
+  `overrideDSN` so the name-based detector can see it, and the AST guard now
+  inspects `+` concatenation wherever it appears. Mutation-proven — reverting
+  either call site makes the guard fail, naming file and column. Widening the
+  walk surfaced two further concatenation sites, both legitimate (building a
+  connection string; `--inline-dsn` emitting the real DSN into the user's own
+  MCP registration) and now marked on the line with a reason.
+
+  Added `TestProbeProjectRootRedactsDSNPassword`, a behavioural test that
+  asserts the password is absent from what comes out — which holds however the
+  value is named or assembled. It fails on the code as shipped.
+
+### Security
+
+- grpc v1.82.1 → v1.83.2 for GHSA-vp52-pcj8-j9qc (#376).
+- Build with a patched Go toolchain (#372).
+- Dependency and workflow-action remediation (#369, #371); the SBOM step's nox
+  1.7.0 → 1.30.1 (#373).
+
+### Changed
+
+- The in-cluster `hermes` deployment is retired (#375). mnemos itself is not:
+  a second deployment runs in `pet-medical`, and the brain used day to day is
+  the local SQLite store. Deleting the namespace alone never stuck, because the
+  two RolloutConfigs here were reconciled back every 60s.
+- statekit v1.9.0 → v1.13.2 (#368).
+
 ## [0.127.0] — 2026-08-04
 
 Provenance. Two fields the brain always had and never filled, and the
