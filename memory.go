@@ -947,6 +947,10 @@ type PredictiveError struct {
 	// Hotspot is the highest-error level with data — where the model is most wrong;
 	// empty when no level has data.
 	Hotspot string `json:"hotspot"`
+	// LevelsMeasured is how many levels had data and entered Total. Zero means
+	// Total is unmeasured, not perfect: 0.0 is the best value free energy can
+	// take, so a caller grading Total must check this first.
+	LevelsMeasured int `json:"levels_measured"`
 }
 
 // HealthStatus is a brain-health verdict (ADR 0019), worst-wins across all vitals and

@@ -49,8 +49,14 @@ func TestBrainHealth_EmptyIsHealthy(t *testing.T) {
 	if len(h.Pathologies) != 3 {
 		t.Errorf("want 3 pathologies, got %d", len(h.Pathologies))
 	}
-	if fe := vitalByName(h, "free_energy"); fe.Status != HealthOK {
-		t.Errorf("free_energy vital on empty brain = %+v, want ok", fe)
+	// Nothing is measured on an empty brain, and 0.0 is the BEST free-energy
+	// value, so grading it would report a perfect score that nothing earned.
+	// Unknown ranks below ok, so the overall verdict above stays healthy.
+	if fe := vitalByName(h, "free_energy"); fe.Status != HealthUnknown {
+		t.Errorf("free_energy vital on empty brain = %+v, want unknown", fe)
+	}
+	if d := vitalByName(h, "dissonance"); d.Status != HealthUnknown {
+		t.Errorf("dissonance vital on empty brain = %+v, want unknown", d)
 	}
 }
 
