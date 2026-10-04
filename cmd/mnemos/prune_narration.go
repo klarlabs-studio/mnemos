@@ -93,7 +93,7 @@ func pruneNarration(dryRun bool, f Flags) {
 			}); err != nil {
 				return NewSystemError(err, "deprecate narration claims")
 			}
-			fmt.Printf("\ndeprecated %d narration claim(s); they remain queryable with --include-history.\n", len(junk))
+			fmt.Printf("\ndeprecated %d narration claim(s); recall no longer returns them. Their rows, evidence and status history are kept: see `mnemos audit`.\n", len(junk))
 			return nil
 		})
 	if err != nil {
