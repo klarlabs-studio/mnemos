@@ -23,6 +23,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -198,7 +199,7 @@ func run(p scalebench.Params, batch, queries, ingests int, timeout time.Duration
 	rep.Corpus = lr.Stats
 	rep.Operations = append(rep.Operations, operation{
 		Name: "bulk_load", Samples: 1, TotalMS: ms(lr.Elapsed), P50MS: ms(lr.Elapsed), P95MS: ms(lr.Elapsed), MaxMS: ms(lr.Elapsed),
-		PerSecond: float64(lr.Stats.Claims) / lr.Elapsed.Seconds(), Outcome: "ok", Detail: "beliefs/s",
+		PerSecond: round2(float64(lr.Stats.Claims) / lr.Elapsed.Seconds()), Outcome: "ok", Detail: "beliefs/s",
 	})
 
 	// 3. The full trust recompute (`mnemos recompute-trust --all`), with the
@@ -328,7 +329,7 @@ func timeEach[T any](name string, timeout time.Duration, inputs []T, fn func(con
 		op.P50MS = ms(ds[len(ds)/2])
 		op.P95MS = ms(ds[min(len(ds)-1, len(ds)*95/100)])
 		op.MaxMS = ms(ds[len(ds)-1])
-		op.PerSecond = float64(len(ds)) / total.Seconds()
+		op.PerSecond = round2(float64(len(ds)) / total.Seconds())
 		op.Detail = "ops/s"
 	}
 	return op
@@ -347,6 +348,11 @@ func classify(op *operation, err error) {
 }
 
 func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+
+// round2 keeps throughput at the precision it is meaningful to. Sixteen
+// significant digits of ops/s are noise, and runs of them are long enough to
+// trip secret/PII digit detectors in the committed reports.
+func round2(v float64) float64 { return math.Round(v*100) / 100 }
 
 // sampleHeap tracks peak HeapInuse every 50ms; a single ReadMemStats at the end
 // would only see what survived the last GC.

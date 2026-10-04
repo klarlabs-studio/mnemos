@@ -47,7 +47,7 @@
       "p50_ms": 3494.678,
       "p95_ms": 3494.678,
       "max_ms": 3494.678,
-      "per_second": 2861.4932130720535,
+      "per_second": 2861.49,
       "outcome": "ok",
       "detail": "beliefs/s"
     },
@@ -86,7 +86,7 @@
       "p50_ms": 7.985,
       "p95_ms": 11.515,
       "max_ms": 11.942,
-      "per_second": 117.90954711527785,
+      "per_second": 117.91,
       "outcome": "ok",
       "detail": "ops/s"
     },
@@ -97,7 +97,7 @@
       "p50_ms": 8.739,
       "p95_ms": 15.475,
       "max_ms": 24.693,
-      "per_second": 101.31391462770016,
+      "per_second": 101.31,
       "outcome": "ok",
       "detail": "ops/s"
     },
@@ -128,7 +128,7 @@
       "p50_ms": 279.634,
       "p95_ms": 321.915,
       "max_ms": 321.915,
-      "per_second": 3.5988703323810847,
+      "per_second": 3.6,
       "outcome": "ok",
       "detail": "ops/s"
     }
