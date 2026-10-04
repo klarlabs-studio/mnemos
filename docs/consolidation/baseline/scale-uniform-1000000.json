@@ -1,0 +1,147 @@
+{
+  "schema_version": "scalebench/v1",
+  "params": {
+    "beliefs": 1000000,
+    "seed": 1,
+    "shape": "uniform",
+    "anchor": "2026-10-01T00:00:00Z",
+    "batch": 1000,
+    "queries": 50,
+    "ingests": 20,
+    "backend": "sqlite",
+    "timeout_per_operation": "30m0s"
+  },
+  "environment": {
+    "commit": "2d2e1dc86bbd9316b1f89aa1ce6628b0f70622d9",
+    "dirty": false,
+    "go_version": "go1.27.1",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "num_cpu": 10,
+    "cpu": "Apple M5",
+    "mem_bytes": 25769803776,
+    "started_at": "2026-10-04T17:42:40Z"
+  },
+  "corpus": {
+    "events": 200000,
+    "claims": 1000000,
+    "evidence": 1450561,
+    "relationships": 792720,
+    "contradicts": 118985,
+    "topics": 5000
+  },
+  "operations": [
+    {
+      "name": "open_empty_store",
+      "samples": 1,
+      "total_ms": 21.784,
+      "p50_ms": 21.784,
+      "p95_ms": 21.784,
+      "max_ms": 21.784,
+      "outcome": "ok"
+    },
+    {
+      "name": "bulk_load",
+      "samples": 1,
+      "total_ms": 379106.466,
+      "p50_ms": 379106.466,
+      "p95_ms": 379106.466,
+      "max_ms": 379106.466,
+      "per_second": 2637.7814405307454,
+      "outcome": "ok",
+      "detail": "beliefs/s"
+    },
+    {
+      "name": "recompute_trust_full",
+      "samples": 1,
+      "total_ms": 39668.35,
+      "p50_ms": 39668.35,
+      "p95_ms": 39668.35,
+      "max_ms": 39668.35,
+      "outcome": "ok",
+      "detail": "1000000 beliefs rescored"
+    },
+    {
+      "name": "open_populated_store",
+      "samples": 1,
+      "total_ms": 6.118,
+      "p50_ms": 6.118,
+      "p95_ms": 6.118,
+      "max_ms": 6.118,
+      "outcome": "ok"
+    },
+    {
+      "name": "library_open",
+      "samples": 1,
+      "total_ms": 4.991,
+      "p50_ms": 4.991,
+      "p95_ms": 4.991,
+      "max_ms": 4.991,
+      "outcome": "ok"
+    },
+    {
+      "name": "recall_hops0",
+      "samples": 50,
+      "total_ms": 59977.902,
+      "p50_ms": 985.494,
+      "p95_ms": 2702.395,
+      "max_ms": 3589.449,
+      "per_second": 0.8336403515010843,
+      "outcome": "ok",
+      "detail": "ops/s"
+    },
+    {
+      "name": "recall_hops1",
+      "samples": 50,
+      "total_ms": 33228.996,
+      "p50_ms": 600.623,
+      "p95_ms": 881.666,
+      "max_ms": 1116.467,
+      "per_second": 1.504709907543749,
+      "outcome": "ok",
+      "detail": "ops/s"
+    },
+    {
+      "name": "brain_health",
+      "samples": 1,
+      "total_ms": 12751.882,
+      "p50_ms": 12751.882,
+      "p95_ms": 12751.882,
+      "max_ms": 12751.882,
+      "outcome": "ok",
+      "detail": "status=unhealthy"
+    },
+    {
+      "name": "knowledge_gaps",
+      "samples": 1,
+      "total_ms": 6160.285,
+      "p50_ms": 6160.285,
+      "p95_ms": 6160.285,
+      "max_ms": 6160.285,
+      "outcome": "ok",
+      "detail": "20 gaps"
+    },
+    {
+      "name": "ingest_remember",
+      "samples": 20,
+      "total_ms": 376704.871,
+      "p50_ms": 18835.218,
+      "p95_ms": 23418.837,
+      "max_ms": 23418.837,
+      "per_second": 0.053091960057896195,
+      "outcome": "ok",
+      "detail": "ops/s"
+    }
+  ],
+  "memory": {
+    "peak_heap_inuse_bytes": 4433158144,
+    "max_rss_bytes": 4774445056,
+    "db_bytes": 3573230848
+  },
+  "notes": [
+    "Corpus is generated, not extracted: load time measures the storage write path, not extraction.",
+    "Beliefs carry no embeddings; recall uses the token-overlap path (passive mode).",
+    "ingest = mnemos.Remember in passive mode: rule extraction + incremental relate against the loaded corpus + persist + scoped trust.",
+    "Each operation runs under its own timeout; 'timeout' is a result, not a harness failure."
+  ]
+}
