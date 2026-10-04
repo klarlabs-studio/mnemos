@@ -9,7 +9,9 @@ import (
 	axidomain "go.klarlabs.de/axi/domain"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
+	"go.klarlabs.de/mnemos/internal/trust"
 )
 
 // The executors below carry the claim-lifecycle mutations, entity
@@ -319,15 +321,23 @@ type deleteEventCascadeInput struct{ EventID string }
 
 type deleteEventCascadeExecutor struct{ conn *store.Conn }
 
-// Execute cascades an event delete: every claim whose evidence points at
-// the event is deleted (tombstone + relationships + embedding + claim
-// cascade), then the event's own embedding and the event row go. One governed
+// Execute cascades an event delete. Each claim whose evidence points at the
+// event loses that one evidence link; a claim is deleted (tombstone +
+// relationships + embedding + claim cascade) only when the event was its LAST
+// evidence. Then the event's own embedding and the event row go. One governed
 // entry for the whole destructive sequence.
+//
+// The evidence check is the point. This used to delete every linked claim
+// outright, so removing one of five episodes that corroborated a belief
+// destroyed the belief, its version chain and its status history while four
+// episodes still supported it. Losing support should weaken a belief, not
+// erase it: a claim that keeps evidence is rescored on what remains.
 //
 // Per-claim deletes reuse [cascadeDeleteClaim], so the same tombstone-first
 // guarantee holds here: a failure part-way through leaves deprecated rows, not
 // active un-evidenced beliefs, and the event row is left in place so a re-run
-// can find its remaining claims and resume.
+// can find its remaining claims and resume. Unlinking is idempotent, so a
+// re-run converges for the kept claims too.
 func (e deleteEventCascadeExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[deleteEventCascadeInput](input)
 	if !ok {
@@ -337,8 +347,20 @@ func (e deleteEventCascadeExecutor) Execute(ctx context.Context, input any, _ ax
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("list dependent claims for %s: %w", in.EventID, err)
 	}
+	otherEvidence, err := claimsWithOtherEvidence(ctx, e.conn, dependent, in.EventID)
+	if err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("cascade event %s: %w", in.EventID, err)
+	}
 	cascaded := 0
+	var kept []string
 	for _, c := range dependent {
+		if otherEvidence[c.ID] {
+			if err := e.conn.Claims.UnlinkEvidence(ctx, c.ID, in.EventID); err != nil {
+				return axidomain.ExecutionResult{}, nil, fmt.Errorf("cascade event %s: %w", in.EventID, err)
+			}
+			kept = append(kept, c.ID)
+			continue
+		}
 		removed, err := cascadeDeleteClaim(ctx, e.conn, c.ID)
 		if err != nil {
 			return axidomain.ExecutionResult{}, nil, fmt.Errorf("cascade event %s: %w", in.EventID, err)
@@ -348,6 +370,9 @@ func (e deleteEventCascadeExecutor) Execute(ctx context.Context, input any, _ ax
 		}
 		cascaded++
 	}
+	if err := rescoreKept(ctx, e.conn, kept); err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("cascade event %s: %w", in.EventID, err)
+	}
 	if err := e.conn.Embeddings.Delete(ctx, in.EventID, "event"); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("delete event embedding %s: %w", in.EventID, err)
 	}
@@ -356,15 +381,60 @@ func (e deleteEventCascadeExecutor) Execute(ctx context.Context, input any, _ ax
 	}
 	return axidomain.ExecutionResult{
 		Data:    cascaded,
-		Summary: fmt.Sprintf("deleted event %s; cascaded %d claim(s)", in.EventID, cascaded),
+		Summary: fmt.Sprintf("deleted event %s; cascaded %d claim(s); kept %d claim(s) with other evidence", in.EventID, cascaded, len(kept)),
 	}, ev("mnemos.write.delete_event_cascade", map[string]any{
-		"event_id": in.EventID, "cascaded_claims": cascaded,
+		"event_id": in.EventID, "cascaded_claims": cascaded, "kept_claims": len(kept),
 	}), nil
 }
 
-// DeleteEventCascade deletes an event, its dependent claims (each fully
-// cascaded), and the related embeddings as one governed, audited action.
-// Returns the number of claims cascaded.
+// claimsWithOtherEvidence reports, per claim, whether it has evidence from
+// any event other than eventID.
+func claimsWithOtherEvidence(ctx context.Context, conn *store.Conn, claims []domain.Claim, eventID string) (map[string]bool, error) {
+	out := make(map[string]bool, len(claims))
+	if len(claims) == 0 {
+		return out, nil
+	}
+	ids := make([]string, len(claims))
+	for i, c := range claims {
+		ids[i] = c.ID
+	}
+	links, err := conn.Claims.ListEvidenceByClaimIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list evidence of dependent claims: %w", err)
+	}
+	for _, l := range links {
+		if l.EventID != eventID {
+			out[l.ClaimID] = true
+		}
+	}
+	return out, nil
+}
+
+// rescoreKept recomputes trust for claims that lost an evidence link, with the
+// same scoring the write path uses. A backend without scoped rescoring keeps
+// its stored score until the next full recompute — the claim is still correct
+// to keep, only its cached trust is stale.
+func rescoreKept(ctx context.Context, conn *store.Conn, claimIDs []string) error {
+	if len(claimIDs) == 0 {
+		return nil
+	}
+	scorer, ok := conn.Claims.(ports.ScopedTrustScorer)
+	if !ok {
+		return nil
+	}
+	now := time.Now().UTC()
+	if _, err := scorer.RecomputeTrustForClaims(ctx, claimIDs, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
+		return trust.Score(confidence, evidenceCount, latestEvidence, now)
+	}); err != nil {
+		return fmt.Errorf("rescore claims that kept evidence: %w", err)
+	}
+	return nil
+}
+
+// DeleteEventCascade deletes an event and the related embeddings as one
+// governed, audited action. Claims the event supported lose that evidence
+// link; only claims left with no evidence at all are deleted (each fully
+// cascaded). Returns the number of claims deleted.
 func (w *Writer) DeleteEventCascade(ctx context.Context, eventID string) (int, error) {
 	return dispatch[int](ctx, w, actionDeleteEventCascade, deleteEventCascadeInput{EventID: eventID})
 }

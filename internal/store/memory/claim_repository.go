@@ -240,6 +240,19 @@ func (r ClaimRepository) RepointEvidence(_ context.Context, fromClaimID, toClaim
 	return nil
 }
 
+// UnlinkEvidence implements [ports.ClaimRepository.UnlinkEvidence].
+func (r ClaimRepository) UnlinkEvidence(_ context.Context, claimID, eventID string) error {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	if links, ok := r.state.evidence[claimID]; ok {
+		delete(links, eventID)
+		if len(links) == 0 {
+			delete(r.state.evidence, claimID)
+		}
+	}
+	return nil
+}
+
 // DeleteCascade removes a claim plus every claim-keyed collection it
 // owns: evidence, status history, the version chain, the feedback
 // counters and the forward expectation — the full canonical set from

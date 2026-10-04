@@ -576,6 +576,16 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 	return nil
 }
 
+// UnlinkEvidence implements [ports.ClaimRepository.UnlinkEvidence].
+func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM claim_evidence WHERE claim_id = ? AND event_id = ?`, claimID, eventID,
+	); err != nil {
+		return fmt.Errorf("unlink evidence %s -> %s: %w", claimID, eventID, err)
+	}
+	return nil
+}
+
 // DeleteCascade removes a claim and every claim-keyed row it owns:
 // claim_evidence, claim_status_history, claim_versions,
 // claim_feedback, claim_expectations, then the claim row. That is the
