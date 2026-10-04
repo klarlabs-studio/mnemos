@@ -836,3 +836,13 @@ func suppressAsSessionNoise(relType domain.RelationshipType, a, b domain.Claim) 
 	}
 	return a.Durability.IsSessionLocal() && b.Durability.IsSessionLocal()
 }
+
+// Negated reports whether text asserts a negation, using exactly the polarity
+// rule the contradiction detector applies (contrastive "not merely X" does not
+// count). Exported so other passes that must not fuse a statement with its
+// denial — semantic dedupe — agree with contradiction detection by
+// construction rather than by a second, drifting tokenizer.
+func Negated(text string) bool {
+	_, neg := contentTokensAndPolarity(text)
+	return neg
+}
