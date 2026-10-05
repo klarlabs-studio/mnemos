@@ -57,8 +57,9 @@ There is no third formula.
 ### 1a. Confirmation, not rehearsal
 
 `LastVerified` cannot be the confirmation input. It is written by four things:
-explicit `verify`, a validated outcome, sleep replay rehearsal and every recall
-hit (query reconsolidation). If it fed trust, recalling or rehearsing a belief
+explicit `verify`, a validated outcome, sleep replay rehearsal (in the default
+sleep), and recall when reconsolidation is enabled (`--reconsolidate`, off by
+default). If it fed trust, recalling or rehearsing a belief
 would refresh its own trust. That is a feedback loop, and brainbench measured
 its effect: in `stale_and_superseded`, consolidation retired 0 of 4 stale
 beliefs instead of 4.
