@@ -332,7 +332,8 @@ func TestPostgres_IndependenceAwareCorroboration(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := scorer.RecomputeTrust(ctx, func(_ float64, count int, _ time.Time) float64 {
+	if _, err := scorer.RecomputeTrust(ctx, func(in domain.TrustInput) float64 {
+		count := in.EvidenceCount
 		return float64(count)
 	}); err != nil {
 		t.Fatal(err)
@@ -375,7 +376,8 @@ func TestPostgres_TrustScorerCapability(t *testing.T) {
 		t.Fatalf("UpsertEvidence: %v", err)
 	}
 
-	n, err := scorer.RecomputeTrust(ctx, func(c float64, count int, _ time.Time) float64 {
+	n, err := scorer.RecomputeTrust(ctx, func(in domain.TrustInput) float64 {
+		c, count := in.Confidence, in.EvidenceCount
 		return c * float64(count)
 	})
 	if err != nil {

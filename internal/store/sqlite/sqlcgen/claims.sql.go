@@ -167,25 +167,33 @@ SELECT
   c.confidence      AS confidence,
   COUNT(DISTINCT e.created_by) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
-  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
+  c.last_confirmed  AS last_confirmed,
+  c.half_life_days  AS half_life_days,
+  c.confidence_components AS confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
-GROUP BY c.id, c.confidence
+GROUP BY c.id, c.confidence, c.last_confirmed, c.half_life_days, c.confidence_components
 `
 
 type ListClaimTrustInputsRow struct {
-	ClaimID          string  `json:"claim_id"`
-	Confidence       float64 `json:"confidence"`
-	DistinctSources  int64   `json:"distinct_sources"`
-	TotalEvents      int64   `json:"total_events"`
-	LatestEvidenceAt string  `json:"latest_evidence_at"`
+	ClaimID              string  `json:"claim_id"`
+	Confidence           float64 `json:"confidence"`
+	DistinctSources      int64   `json:"distinct_sources"`
+	TotalEvents          int64   `json:"total_events"`
+	LatestEvidenceAt     string  `json:"latest_evidence_at"`
+	LastConfirmed        string  `json:"last_confirmed"`
+	HalfLifeDays         float64 `json:"half_life_days"`
+	ConfidenceComponents string  `json:"confidence_components"`
 }
 
-// Inputs to recompute trust_score for every claim: confidence, the count of
-// DISTINCT evidence-event authors and of total events (so corroboration can be
-// graded by independence - an echo-chamber guard), and the most-recent evidence
-// timestamp. LEFT JOIN so claims with no evidence still appear; the caller treats
+// Inputs to recompute trust_score for every claim (ADR 0026 trust.At):
+// confidence, the count of DISTINCT evidence-event authors and of total events
+// (so corroboration can be graded by independence - an echo-chamber guard), the
+// most-recent evidence timestamp, and the claim's own last_confirmed,
+// half_life_days and confidence_components (which carries applied credit).
+// LEFT JOIN so claims with no evidence still appear; the caller treats
 // the missing aggregate as 0/empty.
 func (q *Queries) ListClaimTrustInputs(ctx context.Context) ([]ListClaimTrustInputsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listClaimTrustInputs)
@@ -202,6 +210,9 @@ func (q *Queries) ListClaimTrustInputs(ctx context.Context) ([]ListClaimTrustInp
 			&i.DistinctSources,
 			&i.TotalEvents,
 			&i.LatestEvidenceAt,
+			&i.LastConfirmed,
+			&i.HalfLifeDays,
+			&i.ConfidenceComponents,
 		); err != nil {
 			return nil, err
 		}
@@ -222,20 +233,26 @@ SELECT
   c.confidence      AS confidence,
   COUNT(DISTINCT e.created_by) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
-  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
+  c.last_confirmed  AS last_confirmed,
+  c.half_life_days  AS half_life_days,
+  c.confidence_components AS confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
 WHERE c.id IN (/*SLICE:claim_ids*/?)
-GROUP BY c.id, c.confidence
+GROUP BY c.id, c.confidence, c.last_confirmed, c.half_life_days, c.confidence_components
 `
 
 type ListClaimTrustInputsForClaimsRow struct {
-	ClaimID          string  `json:"claim_id"`
-	Confidence       float64 `json:"confidence"`
-	DistinctSources  int64   `json:"distinct_sources"`
-	TotalEvents      int64   `json:"total_events"`
-	LatestEvidenceAt string  `json:"latest_evidence_at"`
+	ClaimID              string  `json:"claim_id"`
+	Confidence           float64 `json:"confidence"`
+	DistinctSources      int64   `json:"distinct_sources"`
+	TotalEvents          int64   `json:"total_events"`
+	LatestEvidenceAt     string  `json:"latest_evidence_at"`
+	LastConfirmed        string  `json:"last_confirmed"`
+	HalfLifeDays         float64 `json:"half_life_days"`
+	ConfidenceComponents string  `json:"confidence_components"`
 }
 
 // Same inputs as ListClaimTrustInputs, bounded to the given claims.
@@ -270,6 +287,9 @@ func (q *Queries) ListClaimTrustInputsForClaims(ctx context.Context, claimIds []
 			&i.DistinctSources,
 			&i.TotalEvents,
 			&i.LatestEvidenceAt,
+			&i.LastConfirmed,
+			&i.HalfLifeDays,
+			&i.ConfidenceComponents,
 		); err != nil {
 			return nil, err
 		}

@@ -445,7 +445,7 @@ func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, conf
 // freshness of the most recent evidence. Returns the number of claims
 // touched. Caller supplies the scoring function (typically
 // trust.Score) so the repository stays free of policy decisions.
-func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(domain.TrustInput) float64) (int, error) {
 	rows, err := r.q.ListClaimTrustInputs(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list trust inputs: %w", err)
@@ -456,7 +456,7 @@ func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confiden
 // RecomputeTrustForClaims implements [ports.ScopedTrustScorer]: the same
 // recomputation bounded to claimIDs, so the cost of a write tracks what the
 // write touched instead of the size of the store.
-func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(domain.TrustInput) float64) (int, error) {
 	if len(claimIDs) == 0 {
 		return 0, nil
 	}
@@ -470,17 +470,20 @@ func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs [
 // trustRow is the backend-agnostic shape both trust queries produce, so the
 // scoring + write loop below is written once.
 type trustRow struct {
-	claimID          string
-	confidence       float64
-	distinctSources  int64
-	totalEvents      int64
-	latestEvidenceAt string
+	claimID              string
+	confidence           float64
+	distinctSources      int64
+	totalEvents          int64
+	latestEvidenceAt     string
+	lastConfirmed        string
+	halfLifeDays         float64
+	confidenceComponents string
 }
 
 func toTrustRows(rows []sqlcgen.ListClaimTrustInputsRow) []trustRow {
 	out := make([]trustRow, len(rows))
 	for i, r := range rows {
-		out[i] = trustRow{r.ClaimID, r.Confidence, r.DistinctSources, r.TotalEvents, r.LatestEvidenceAt}
+		out[i] = trustRow{r.ClaimID, r.Confidence, r.DistinctSources, r.TotalEvents, r.LatestEvidenceAt, r.LastConfirmed, r.HalfLifeDays, r.ConfidenceComponents}
 	}
 	return out
 }
@@ -488,12 +491,12 @@ func toTrustRows(rows []sqlcgen.ListClaimTrustInputsRow) []trustRow {
 func toTrustRowsScoped(rows []sqlcgen.ListClaimTrustInputsForClaimsRow) []trustRow {
 	out := make([]trustRow, len(rows))
 	for i, r := range rows {
-		out[i] = trustRow{r.ClaimID, r.Confidence, r.DistinctSources, r.TotalEvents, r.LatestEvidenceAt}
+		out[i] = trustRow{r.ClaimID, r.Confidence, r.DistinctSources, r.TotalEvents, r.LatestEvidenceAt, r.LastConfirmed, r.HalfLifeDays, r.ConfidenceComponents}
 	}
 	return out
 }
 
-func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, score func(domain.TrustInput) float64) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin tx: %w", err)
@@ -507,10 +510,19 @@ func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, sc
 				latest = t
 			}
 		}
-		// Corroboration graded by independence (echo-chamber guard): distinct
-		// evidence-event authors count fully, same-source repeats are discounted.
-		evidenceCount := domain.EffectiveEvidenceCount(int(row.distinctSources), int(row.totalEvents))
-		s := score(row.confidence, evidenceCount, latest)
+		// last_confirmed is written by MarkConfirmed in this same format; an
+		// unparseable value reads as "never confirmed".
+		lastConfirmed, _ := parseOptionalTime(row.lastConfirmed)
+		s := score(domain.TrustInput{
+			Confidence: row.confidence,
+			// Corroboration graded by independence (echo-chamber guard): distinct
+			// evidence-event authors count fully, same-source repeats are discounted.
+			EvidenceCount:  domain.EffectiveEvidenceCount(int(row.distinctSources), int(row.totalEvents)),
+			LatestEvidence: latest,
+			LastConfirmed:  lastConfirmed,
+			HalfLifeDays:   row.halfLifeDays,
+			Credit:         domain.AppliedCredit(decodeConfidenceComponents(row.confidenceComponents)),
+		})
 		if err := qtx.UpdateClaimTrust(ctx, sqlcgen.UpdateClaimTrustParams{
 			TrustScore: s,
 			ID:         row.claimID,

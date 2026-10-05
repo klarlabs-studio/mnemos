@@ -46,11 +46,11 @@ func TestRecomputeTrustForClaims_OnlyTouchesNamedClaims(t *testing.T) {
 	for _, id := range []string{"a", "b", "c"} {
 		seedClaim(t, ctx, repo, id)
 	}
-	if _, err := repo.RecomputeTrust(ctx, func(float64, int, time.Time) float64 { return 0.10 }); err != nil {
+	if _, err := repo.RecomputeTrust(ctx, func(domain.TrustInput) float64 { return 0.10 }); err != nil {
 		t.Fatalf("baseline recompute: %v", err)
 	}
 
-	n, err := repo.RecomputeTrustForClaims(ctx, []string{"b"}, func(float64, int, time.Time) float64 { return 0.90 })
+	n, err := repo.RecomputeTrustForClaims(ctx, []string{"b"}, func(domain.TrustInput) float64 { return 0.90 })
 	if err != nil {
 		t.Fatalf("scoped recompute: %v", err)
 	}
@@ -73,10 +73,10 @@ func TestRecomputeTrustForClaims_EmptyIsNoOp(t *testing.T) {
 	repo := NewClaimRepository(db)
 
 	seedClaim(t, ctx, repo, "a")
-	if _, err := repo.RecomputeTrust(ctx, func(float64, int, time.Time) float64 { return 0.25 }); err != nil {
+	if _, err := repo.RecomputeTrust(ctx, func(domain.TrustInput) float64 { return 0.25 }); err != nil {
 		t.Fatalf("baseline: %v", err)
 	}
-	n, err := repo.RecomputeTrustForClaims(ctx, nil, func(float64, int, time.Time) float64 { return 0.99 })
+	n, err := repo.RecomputeTrustForClaims(ctx, nil, func(domain.TrustInput) float64 { return 0.99 })
 	if err != nil {
 		t.Fatalf("scoped recompute: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestRecomputeTrustForClaims_UnknownIDsSkipped(t *testing.T) {
 	repo := NewClaimRepository(db)
 
 	seedClaim(t, ctx, repo, "a")
-	n, err := repo.RecomputeTrustForClaims(ctx, []string{"a", "deleted"}, func(float64, int, time.Time) float64 { return 0.5 })
+	n, err := repo.RecomputeTrustForClaims(ctx, []string{"a", "deleted"}, func(domain.TrustInput) float64 { return 0.5 })
 	if err != nil {
 		t.Fatalf("unknown id caused an error: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestRecomputeTrustForClaims_MatchesFullRecompute(t *testing.T) {
 	for _, id := range []string{"a", "b"} {
 		seedClaim(t, ctx, repo, id)
 	}
-	score := func(conf float64, n int, _ time.Time) float64 { return conf/2 + float64(n)/10 }
+	score := func(in domain.TrustInput) float64 { return in.Confidence/2 + float64(in.EvidenceCount)/10 }
 
 	if _, err := repo.RecomputeTrust(ctx, score); err != nil {
 		t.Fatalf("full: %v", err)
@@ -125,7 +125,7 @@ func TestRecomputeTrustForClaims_MatchesFullRecompute(t *testing.T) {
 	full := map[string]float64{"a": trustOf(t, ctx, repo, "a"), "b": trustOf(t, ctx, repo, "b")}
 
 	// Reset, then take the scoped path over the same claims.
-	if _, err := repo.RecomputeTrust(ctx, func(float64, int, time.Time) float64 { return 0 }); err != nil {
+	if _, err := repo.RecomputeTrust(ctx, func(domain.TrustInput) float64 { return 0 }); err != nil {
 		t.Fatalf("reset: %v", err)
 	}
 	if _, err := repo.RecomputeTrustForClaims(ctx, []string{"a", "b"}, score); err != nil {

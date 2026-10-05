@@ -975,15 +975,13 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.Merged = merged
 	}
-	// Recompute trust (confidence × corroboration × freshness) — the
-	// renormalisation half of the sleep pass. Merging changed evidence counts,
-	// and freshness decays with wall-clock time regardless. Best-effort: a
-	// scorer-less backend still consolidated correctly.
+	// Recompute canonical trust (trust.At, ADR 0026) — the renormalisation
+	// half of the sleep pass. Merging changed evidence counts, and freshness
+	// decays with wall-clock time regardless. Stored applied credit is re-added
+	// by trust.At, so this no longer erases what a previous credit pass earned.
+	// Best-effort: a scorer-less backend still consolidated correctly.
 	if scorer, ok := m.conn.Claims.(ports.TrustScorer); ok {
-		now := time.Now().UTC()
-		if n, terr := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-			return trust.Score(confidence, evidenceCount, latestEvidence, now)
-		}); terr == nil {
+		if n, terr := scorer.RecomputeTrust(ctx, trust.Scorer(time.Now().UTC())); terr == nil {
 			res.TrustRefreshed = n
 		}
 	}
@@ -1571,17 +1569,17 @@ func (m *memory) observedSurprises(ctx context.Context) ([]float64, map[string]f
 //
 // Attribution + idempotency. Each contribution is stored in the belief's
 // confidence_components map under a key that encodes the driving decision and
-// prediction — the audit trail the ADR-0011 guardrail requires. The map is
-// rewritten by assignment (credit entries replaced, other components preserved),
-// and the trust delta is applied as base+creditSum where base is the freshly
-// recomputed evidence trust — so re-running produces byte-identical components and
-// the same trust, never a double-credit.
+// prediction — the audit trail the ADR-0011 guardrail requires — and the applied
+// net under domain.CreditAppliedComponentKey. The map is rewritten by assignment
+// (credit entries replaced, other components preserved) and trust is then
+// rescored with trust.At, which adds the applied net to the evidence base. So
+// re-running produces byte-identical components and the same trust, never a
+// double-credit, and the credit survives every later rescore (ADR 0026 §3).
 //
 // Degradation. A no-op when the store lacks decisions or expectations, or when the
 // claim repository does not persist the confidence_components audit map
 // ([ports.BeliefCreditWriter]) — credit is never applied where it could not be
-// attributed. Relies on RecomputeTrust having run first (Consolidate does so
-// immediately before), so each claim's TrustScore is the evidence-based base.
+// attributed.
 func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float64) (int, []beliefTrustChange, error) {
 	if m.conn.Expectations == nil || m.conn.Decisions == nil {
 		return 0, nil, nil
@@ -1619,10 +1617,12 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 		return 0, nil, fmt.Errorf("list claims: %w", err)
 	}
 	credited := 0
-	var changes []beliefTrustChange
+	var touched, creditedIDs []string
+	before := make(map[string]float64)
 	for _, c := range all {
 		fresh := contribs[c.ID]
-		// Preserve non-credit components; replace all credit:* keys with the fresh set.
+		// Preserve non-credit components; replace all credit:* keys (the
+		// per-decision audit entries and the applied net) with the fresh set.
 		merged := make(map[string]float64)
 		hadCredit := false
 		for k, v := range c.ConfidenceComponents {
@@ -1638,27 +1638,67 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 		if len(fresh) == 0 && !hadCredit {
 			continue // no credit now, none before → nothing to write
 		}
-		// base+creditSum: c.TrustScore is the evidence base (RecomputeTrust just ran),
-		// so applying the clamped credit sum each pass is idempotent and self-healing.
-		// Under Plastic (ADR 0015) the sum is modulated by the belief's metaplastic
-		// resistance (crystallization) and the global neuromodulatory gain; with it off
-		// (resistance=1, gain=1) this is exactly credit.SumFor — behaviour unchanged.
-		resistance := 1.0
-		if metaplastic {
-			resistance = credit.ResistanceFor(c, now)
+		// The applied net credit is STORED (ADR 0026 §3) and canonical trust
+		// re-adds it on every recompute. Writing base+credit straight into
+		// trust_score instead, as this used to, lasted only until the next
+		// rescore: any ingest touching the belief reset it to the evidence base
+		// and left the credit:* keys describing a credit no longer applied.
+		// Under Plastic (ADR 0015) the sum is modulated by the belief's
+		// metaplastic resistance and the global gain; with it off (resistance=1,
+		// gain=1) this is exactly credit.SumFor.
+		if len(fresh) > 0 {
+			resistance := 1.0
+			if metaplastic {
+				resistance = credit.ResistanceFor(c, now)
+			}
+			merged[domain.CreditAppliedComponentKey] = credit.SumForModulated(fresh, resistance, gain)
 		}
-		newTrust := clamp01(c.TrustScore + credit.SumForModulated(fresh, resistance, gain))
-		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, newTrust); err != nil {
-			return credited, changes, fmt.Errorf("apply belief credit %s: %w", c.ID, err)
+		// trust_score is rewritten by the rescore below; the current value is
+		// passed so the row never holds a score computed from stale components.
+		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, c.TrustScore); err != nil {
+			return credited, nil, fmt.Errorf("apply belief credit %s: %w", c.ID, err)
 		}
+		touched = append(touched, c.ID)
 		if len(fresh) > 0 {
 			credited++
-			// Record the trust move for the cognitive journal (ADR 0018) — only when a
-			// credit was actually applied this pass.
-			changes = append(changes, beliefTrustChange{ClaimID: c.ID, Before: c.TrustScore, After: newTrust})
+			creditedIDs = append(creditedIDs, c.ID)
+			before[c.ID] = c.TrustScore
+		}
+	}
+	if err := m.rescoreClaims(ctx, touched, now); err != nil {
+		return credited, nil, fmt.Errorf("rescore credited beliefs: %w", err)
+	}
+	// Record each credited belief's trust move for the cognitive journal
+	// (ADR 0018): the stored value before this pass and the canonical value
+	// after it.
+	var changes []beliefTrustChange
+	if len(creditedIDs) > 0 {
+		after, err := m.conn.Claims.ListByIDs(ctx, creditedIDs)
+		if err != nil {
+			return credited, nil, fmt.Errorf("read back credited beliefs: %w", err)
+		}
+		for _, c := range after {
+			changes = append(changes, beliefTrustChange{ClaimID: c.ID, Before: before[c.ID], After: c.TrustScore})
 		}
 	}
 	return credited, changes, nil
+}
+
+// rescoreClaims recomputes canonical trust for ids, scoped when the backend can
+// bound the query and over the whole store otherwise.
+func (m *memory) rescoreClaims(ctx context.Context, ids []string, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if scoped, ok := m.conn.Claims.(ports.ScopedTrustScorer); ok {
+		_, err := scoped.RecomputeTrustForClaims(ctx, ids, trust.Scorer(at))
+		return err
+	}
+	if full, ok := m.conn.Claims.(ports.TrustScorer); ok {
+		_, err := full.RecomputeTrust(ctx, trust.Scorer(at))
+		return err
+	}
+	return nil
 }
 
 // beliefTrustChange is one belief's credit-driven trust move in a consolidation pass,
