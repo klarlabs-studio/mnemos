@@ -93,7 +93,7 @@ func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []dom
 	// represented and hiding it would silently pick a side; resolved is the
 	// winner of one. The evidence and history of a deprecated claim stay
 	// queryable — this governs recall, not retention.
-	out := excludeDeprecated(claims)
+	out := recallPopulation(claims)
 
 	// Drop claims an LLM judged SESSION-LOCAL: conversational narration stored
 	// as a belief, which was never knowledge.
@@ -116,7 +116,9 @@ func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []dom
 	// Unknown/unset durability is deliberately NOT filtered. 80,703 claims are
 	// still unclassified, and treating "not yet judged" as "narration" would
 	// empty the brain. Suppression grows as classification does.
-	out = keepClaims(out, func(c domain.Claim) bool { return !c.Durability.IsSessionLocal() })
+	//
+	// Both filters live in recallPopulation so the Context Block applies the
+	// exact same rule.
 
 	rescoreCredibility(out, now)
 
@@ -207,4 +209,15 @@ func keepClaims(claims []domain.Claim, pred func(domain.Claim) bool) []domain.Cl
 		}
 	}
 	return out
+}
+
+// recallPopulation is the status/durability half of admission: drop deprecated
+// and session-local claims. It is shared with BuildContextBlock so the context
+// an agent is handed and the context recall injects cannot disagree about what
+// counts as a live belief. The Context Block applied only the deprecated half,
+// so narration recall deliberately suppressed reached agents through
+// memory_context and /v1/context.
+func recallPopulation(claims []domain.Claim) []domain.Claim {
+	out := excludeDeprecated(claims)
+	return keepClaims(out, func(c domain.Claim) bool { return !c.Durability.IsSessionLocal() })
 }
