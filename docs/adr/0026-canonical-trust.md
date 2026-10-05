@@ -31,8 +31,8 @@ Two further defects follow from the same gap:
 - **Credit is erased.** `assignCredit` writes stored trust as base + credit, and
   the next scoped recompute triggered by any ingest touching the belief rewrites
   it to the base. The `credit:*` audit keys are left behind.
-- **Verification is ignored.** `verify`, replay freshening and
-  `--reinforce-validated` advance `LastVerified`, but stored trust never reads it.
+- **Confirmation is ignored.** `verify` and `--reinforce-validated` record that
+  a belief is still true, but stored trust never reads it.
 
 ## Decision
 
@@ -45,7 +45,7 @@ base      = clamp01( confidence × (1 + 0.2·ln(max(1, n))) × freshness )
 n         = EffectiveEvidenceCount(distinct sources, total links)   (graded, unchanged)
 freshness = max(0.3, exp(−d / τ))
 τ         = HalfLifeDays if > 0, else 90                            (per belief)
-d         = days from ref to at;  ref = max(latest evidence, LastVerified)
+d         = days from ref to at;  ref = max(latest evidence, LastConfirmed)
             ref zero or in the future → freshness 1                 (unchanged)
 credit    = clamp(stored applied credit, −0.30, +0.30)              (ADR 0014 cap)
 ```
@@ -53,6 +53,20 @@ credit    = clamp(stored applied credit, −0.30, +0.30)              (ADR 0014 
 `trust.At` is pure: no I/O and no wall clock. The instant is a parameter. Every
 subsystem that needs a belief's trust reads the stored value or calls `trust.At`.
 There is no third formula.
+
+### 1a. Confirmation, not rehearsal
+
+`LastVerified` cannot be the confirmation input. It is written by four things:
+explicit `verify`, a validated outcome, sleep replay rehearsal and every recall
+hit (query reconsolidation). If it fed trust, recalling or rehearsing a belief
+would refresh its own trust. That is a feedback loop, and brainbench measured
+its effect: in `stale_and_superseded`, consolidation retired 0 of 4 stale
+beliefs instead of 4.
+
+`claims.last_confirmed` is the confirmation input. It has one writer,
+`MarkConfirmed`, called by the governed `verify` (CLI, MCP `memory_promote`)
+and by validated-outcome reinforcement. Recall and replay keep bumping
+`last_verified` only, which still drives liveness and replay recency.
 
 ### 2. Recall credibility is a ranking signal, not trust
 
@@ -117,7 +131,8 @@ effect of an ordinary write.
 
 Each step is its own PR, in order:
 
-1. `trust.At` and a `TrustInput` port signature. Backends select `last_verified`,
+0. `claims.last_confirmed` with `MarkConfirmed` as its only writer (#403).
+1. `trust.At` and a `TrustInput` port signature (#404). Backends select `last_confirmed`,
    `half_life_days` and the applied-credit component. All four writers
    (pipeline, `Consolidate`, `recompute-trust`, post-dedupe) switch to it.
    `assignCredit` stores the applied credit.
