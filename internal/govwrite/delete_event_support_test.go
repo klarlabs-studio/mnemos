@@ -41,9 +41,7 @@ func TestDeleteEventCascade_KeepsClaimsWithOtherEvidence(t *testing.T) {
 	if !ok {
 		t.Fatal("memory backend lost TrustScorer")
 	}
-	if _, err := scorer.RecomputeTrust(ctx, func(c float64, n int, latest time.Time) float64 {
-		return trust.Score(c, n, latest, now)
-	}); err != nil {
+	if _, err := scorer.RecomputeTrust(ctx, trust.Scorer(now)); err != nil {
 		t.Fatalf("score trust: %v", err)
 	}
 	before, err := conn.Claims.ListByIDs(ctx, []string{"cl_shared"})

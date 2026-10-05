@@ -10,6 +10,13 @@
 // Every write still routes through the store's governed axi kernel, so
 // the no-bypass guarantee holds.
 //
+// It is a deliberate SUBSET of `mnemos serve`, with its own paths in the
+// pre-v0.85 claims/events vocabulary: it is not the hosted REST API, and its
+// POST /v1/recall is plain Recall while serve's GET /v1/recall is the
+// mode-switched advanced recall. The subset is recorded per capability in the
+// http-lite column of docs/reference/capabilities.md, held to this file's
+// routes by a test.
+//
 //	store, _ := mnemos.New(mnemos.WithSQLite("./mnemos.db"))
 //	handler := http.NewHandler(store)
 //	http.ListenAndServe(ctx, ":8080", handler)

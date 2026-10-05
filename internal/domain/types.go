@@ -243,6 +243,12 @@ type Belief struct {
 	CreatedAt  time.Time
 	CreatedBy  string  // user id of the actor that created this claim; "<system>" for unattributed
 	TrustScore float64 // derived from confidence × corroboration × freshness; computed by internal/trust
+	// TrustComputedAt and TrustModelVersion say what TrustScore is a cache of
+	// (ADR 0026 §5): trust.At under that model version at that instant. Both
+	// are written only by a trust recompute; zero / "" means the score predates
+	// versioning (implicitly trust/v1) or was never computed.
+	TrustComputedAt   time.Time
+	TrustModelVersion string
 
 	// ValidFrom is when the claim's content first became true. Defaults
 	// to the source event's timestamp at insert time; see internal/pipeline.
@@ -262,6 +268,13 @@ type Belief struct {
 	// VerifyCount counts every successful re-verification. Used as a
 	// secondary trust input when ranking near-tied claims.
 	VerifyCount int
+	// LastConfirmed is when the belief was last EXPLICITLY confirmed: by
+	// `mnemos verify` / the verify tool, or by an outcome that validated it.
+	// Zero means never. Unlike LastVerified — which recall reconsolidation and
+	// sleep replay also bump, as rehearsal — it is the freshness reference
+	// canonical trust reads (ADR 0026), so being retrieved or rehearsed cannot
+	// make a belief more trusted.
+	LastConfirmed time.Time
 	// HalfLifeDays optionally overrides the global trust freshness
 	// half-life on a per-claim basis. Zero falls back to the
 	// internal/trust default. Useful for facts whose decay profile

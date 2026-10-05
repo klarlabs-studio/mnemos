@@ -44,10 +44,13 @@ CREATE TABLE IF NOT EXISTS claims (
   created_at     DATETIME(6)      NOT NULL,
   created_by     VARCHAR(190)     NOT NULL DEFAULT '<system>',
   trust_score    DOUBLE           NOT NULL DEFAULT 0,
+  trust_computed_at DATETIME(6),
+  trust_model_version VARCHAR(32)      NOT NULL DEFAULT '',
   valid_from     DATETIME(6)      NULL,
   valid_to       DATETIME(6)      NULL,
   last_verified  DATETIME(6)      NULL,
   verify_count   INT              NOT NULL DEFAULT 0,
+  last_confirmed DATETIME(6)      NULL,
   half_life_days DOUBLE           NOT NULL DEFAULT 0,
   -- ADR 0025: which classifier assigned half_life_days. '' means none did.
   half_life_classifier VARCHAR(64) NOT NULL DEFAULT '',
@@ -76,6 +79,11 @@ CREATE TABLE IF NOT EXISTS claims (
 -- clause and treats "duplicate column" as success — see applySchema.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS last_verified  DATETIME(6)  NULL;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS verify_count   INT          NOT NULL DEFAULT 0;
+-- ADR 0026: explicit confirmation time, the freshness reference canonical trust reads.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS last_confirmed DATETIME(6)  NULL;
+-- ADR 0026 §5: what trust_score is a cache of.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS trust_computed_at DATETIME(6) NULL;
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS trust_model_version VARCHAR(32)      NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_days DOUBLE       NOT NULL DEFAULT 0;
 -- ALGORITHM=INSTANT on MySQL 8.0 (column added at the end of the table).
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_classifier VARCHAR(64) NOT NULL DEFAULT '';

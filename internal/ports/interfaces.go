@@ -84,6 +84,13 @@ type ClaimRepository interface {
 	// against fresh evidence is a single repository call.
 	MarkVerified(ctx context.Context, claimID string, verifiedAt time.Time, halfLifeDays float64) error
 
+	// MarkConfirmed records an EXPLICIT confirmation of the claim at
+	// confirmedAt (ADR 0026): `verify`, or an outcome that validated it. It is
+	// separate from MarkVerified because recall and replay call MarkVerified as
+	// rehearsal, and only confirmation may raise trust. A zero confirmedAt
+	// means now.
+	MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error
+
 	// RepointEvidence rewrites every claim_evidence row pointing at
 	// fromClaimID to point at toClaimID instead, then deletes the
 	// original rows. Idempotent on the (claim_id, event_id) dedup
@@ -159,7 +166,7 @@ type ClaimRepository interface {
 // fixture) are still valid ClaimRepositories — callers type-assert
 // before invoking these methods.
 type TrustScorer interface {
-	RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error)
+	RecomputeTrust(ctx context.Context, scoring domain.TrustScoring) (int, error)
 	AverageTrust(ctx context.Context) (float64, error)
 	CountClaimsBelowTrust(ctx context.Context, threshold float64) (int64, error)
 }
@@ -177,7 +184,7 @@ type TrustScorer interface {
 // Optional so a backend that cannot scope the query keeps working: callers
 // fall back to the full [TrustScorer.RecomputeTrust].
 type ScopedTrustScorer interface {
-	RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error)
+	RecomputeTrustForClaims(ctx context.Context, claimIDs []string, scoring domain.TrustScoring) (int, error)
 }
 
 // BeliefCreditWriter is the optional capability to persist an attributed

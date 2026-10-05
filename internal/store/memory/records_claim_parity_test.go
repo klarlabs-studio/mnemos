@@ -104,6 +104,23 @@ func TestStoredClaim_RoundTripsEveryField(t *testing.T) {
 	}
 }
 
+// upsertIgnoredFields are domain.Claim fields Upsert deliberately does NOT
+// write, because another statement owns them — the memory counterpart of the
+// SQL backends' unwrittenColumns allowlists. Each carries its reason; the test
+// asserts the field is NOT persisted, so an entry cannot quietly go stale.
+var upsertIgnoredFields = map[string]string{
+	"LastVerified": "it is owned by MarkVerified: re-extracting a claim is not a " +
+		"verification, and the SQL backends never write last_verified from an upsert",
+	"VerifyCount": "it is owned by MarkVerified, which increments it; the SQL backends " +
+		"never write verify_count from an upsert",
+	"TrustComputedAt": "it is owned by the trust recompute (ADR 0026 §5); the SQL " +
+		"backends never write trust_computed_at from an upsert",
+	"TrustModelVersion": "it is owned by the trust recompute (ADR 0026 §5); the SQL " +
+		"backends never write trust_model_version from an upsert",
+	"LastConfirmed": "it is owned by MarkConfirmed (ADR 0026): re-extracting a claim " +
+		"is not a confirmation, and the SQL backends never write last_confirmed from an upsert",
+}
+
 // The round trip must also hold through the repository, not just the record
 // mapper — Upsert/ListByIDs are what callers actually touch.
 func TestClaimRepository_UpsertPreservesEveryField(t *testing.T) {
@@ -129,6 +146,12 @@ func TestClaimRepository_UpsertPreservesEveryField(t *testing.T) {
 	typ := wv.Type()
 	for i := range typ.NumField() {
 		name := typ.Field(i).Name
+		if reason, owned := upsertIgnoredFields[name]; owned {
+			if !gv.Field(i).IsZero() {
+				t.Errorf("domain.Claim.%s was written by Upsert, but %s", name, reason)
+			}
+			continue
+		}
 		if !reflect.DeepEqual(wv.Field(i).Interface(), gv.Field(i).Interface()) {
 			t.Errorf("domain.Claim.%s lost through Upsert→ListByIDs: wrote %#v, read %#v",
 				name, wv.Field(i).Interface(), gv.Field(i).Interface())
