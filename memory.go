@@ -36,9 +36,9 @@
 // consuming program:
 //
 //	import (
-//	    _ "go.klarlabs.de/mnemos/internal/store/memory"
+//	    _ "go.klarlabs.de/mnemos/memory"
 //	    _ "go.klarlabs.de/mnemos/sqlite"
-//	    _ "go.klarlabs.de/mnemos/internal/store/postgres"
+//	    _ "go.klarlabs.de/mnemos/postgres"
 //	)
 //
 // Without at least one provider blank-imported, [New] cannot open the

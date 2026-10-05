@@ -400,7 +400,7 @@ matches your runtime.
 ```go
 import (
     "go.klarlabs.de/mnemos"
-    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+    _ "go.klarlabs.de/mnemos/sqlite"
 )
 
 mem, err := mnemos.New() // passive mode, XDG storage, bundled Chronos
