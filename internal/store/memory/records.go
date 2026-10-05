@@ -173,6 +173,7 @@ type storedClaim struct {
 	ValidTo              time.Time
 	LastVerified         time.Time
 	VerifyCount          int
+	LastConfirmed        time.Time
 	HalfLifeDays         float64
 	HalfLifeClassifier   string
 	Scope                domain.Scope
@@ -224,6 +225,7 @@ func (c storedClaim) toDomain() domain.Claim {
 		ValidFrom:            c.ValidFrom,
 		ValidTo:              c.ValidTo,
 		LastVerified:         c.LastVerified,
+		LastConfirmed:        c.LastConfirmed,
 		VerifyCount:          c.VerifyCount,
 		HalfLifeDays:         c.HalfLifeDays,
 		HalfLifeClassifier:   c.HalfLifeClassifier,
@@ -294,6 +296,7 @@ func storedClaimFromDomain(c domain.Claim) storedClaim {
 		ValidFrom:            validFrom.UTC(),
 		ValidTo:              c.ValidTo.UTC(),
 		LastVerified:         c.LastVerified.UTC(),
+		LastConfirmed:        c.LastConfirmed.UTC(),
 		VerifyCount:          c.VerifyCount,
 		HalfLifeDays:         c.HalfLifeDays,
 		HalfLifeClassifier:   c.HalfLifeClassifier,

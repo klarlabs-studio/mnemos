@@ -41,6 +41,13 @@ func (e markVerifiedExecutor) Execute(ctx context.Context, input any, _ axidomai
 	if err := e.conn.Claims.MarkVerified(ctx, in.ClaimID, in.VerifiedAt, in.HalfLifeDays); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("mark verified: %w", err)
 	}
+	// The governed verify is an EXPLICIT confirmation — `mnemos verify` or the
+	// memory_promote tool — so it also stamps last_confirmed, the freshness
+	// reference canonical trust reads (ADR 0026). Recall and replay call the
+	// repository's MarkVerified directly and confirm nothing.
+	if err := e.conn.Claims.MarkConfirmed(ctx, in.ClaimID, in.VerifiedAt); err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("mark confirmed: %w", err)
+	}
 	return axidomain.ExecutionResult{
 		Data:    in.ClaimID,
 		Summary: fmt.Sprintf("verified claim %s", in.ClaimID),
@@ -49,9 +56,9 @@ func (e markVerifiedExecutor) Execute(ctx context.Context, input any, _ axidomai
 	}), nil
 }
 
-// MarkVerified bumps a claim's last_verified and increments verify_count.
-// An optional halfLifeDays > 0 also rewrites the per-claim freshness
-// override.
+// MarkVerified records an explicit verification: it bumps last_verified,
+// increments verify_count, and stamps last_confirmed (ADR 0026). An optional
+// halfLifeDays > 0 also rewrites the per-claim freshness override.
 func (w *Writer) MarkVerified(ctx context.Context, claimID string, verifiedAt time.Time, halfLifeDays float64) error {
 	_, err := dispatch[string](ctx, w, actionMarkVerified, markVerifiedInput{
 		ClaimID: claimID, VerifiedAt: verifiedAt, HalfLifeDays: halfLifeDays,

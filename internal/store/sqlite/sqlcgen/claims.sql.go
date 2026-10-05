@@ -89,7 +89,7 @@ func (q *Queries) DeleteClaimStatusHistoryByClaimID(ctx context.Context, claimID
 
 const listAllClaims = `-- name: ListAllClaims :many
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
-       valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -122,6 +122,7 @@ func (q *Queries) ListAllClaims(ctx context.Context) ([]Claim, error) {
 			&i.ValidTo,
 			&i.LastVerified,
 			&i.VerifyCount,
+			&i.LastConfirmed,
 			&i.HalfLifeDays,
 			&i.HalfLifeClassifier,
 			&i.ScopeService,
@@ -285,7 +286,7 @@ func (q *Queries) ListClaimTrustInputsForClaims(ctx context.Context, claimIds []
 
 const listClaimsByTestRequirementRef = `-- name: ListClaimsByTestRequirementRef :many
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
-       valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -324,6 +325,7 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 			&i.ValidTo,
 			&i.LastVerified,
 			&i.VerifyCount,
+			&i.LastConfirmed,
 			&i.HalfLifeDays,
 			&i.HalfLifeClassifier,
 			&i.ScopeService,
@@ -360,6 +362,23 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 		return nil, err
 	}
 	return items, nil
+}
+
+const markClaimConfirmed = `-- name: MarkClaimConfirmed :exec
+UPDATE claims SET last_confirmed = ? WHERE id = ?
+`
+
+type MarkClaimConfirmedParams struct {
+	LastConfirmed string `json:"last_confirmed"`
+	ID            string `json:"id"`
+}
+
+// Records an EXPLICIT confirmation (ADR 0026). Deliberately separate from
+// MarkClaimVerified, which recall and replay also call: only verify and a
+// validated outcome confirm a belief, and only confirmation feeds trust.
+func (q *Queries) MarkClaimConfirmed(ctx context.Context, arg MarkClaimConfirmedParams) error {
+	_, err := q.db.ExecContext(ctx, markClaimConfirmed, arg.LastConfirmed, arg.ID)
+	return err
 }
 
 const markClaimVerified = `-- name: MarkClaimVerified :exec

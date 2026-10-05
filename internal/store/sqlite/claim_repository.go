@@ -229,7 +229,7 @@ func (r ClaimRepository) ListByEventIDs(ctx context.Context, eventIDs []string) 
 	}
 
 	query := fmt.Sprintf(`
-SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.half_life_days, c.half_life_classifier, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class, c.durability
+SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.last_confirmed, c.half_life_days, c.half_life_classifier, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class, c.durability
 FROM claims c
 JOIN claim_evidence ce ON ce.claim_id = c.id
 WHERE ce.event_id IN (%s)
@@ -360,7 +360,7 @@ func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]do
 	}
 
 	query := fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability
 FROM claims
 WHERE id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201: placeholders are literal "?" strings, not user input
 
@@ -426,6 +426,17 @@ func (r ClaimRepository) MarkVerified(ctx context.Context, claimID string, verif
 		Column2:      halfLifeDays,
 		HalfLifeDays: halfLifeDays,
 		ID:           claimID,
+	})
+}
+
+// MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed].
+func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error {
+	if confirmedAt.IsZero() {
+		confirmedAt = time.Now().UTC()
+	}
+	return r.q.MarkClaimConfirmed(ctx, sqlcgen.MarkClaimConfirmedParams{
+		LastConfirmed: confirmedAt.UTC().Format(time.RFC3339Nano),
+		ID:            claimID,
 	})
 }
 
@@ -820,6 +831,11 @@ func mapSQLClaim(row sqlcgen.Claim) (domain.Claim, error) {
 	} else {
 		claim.LastVerified = lv
 	}
+	if lc, perr := parseOptionalTime(row.LastConfirmed); perr != nil {
+		return domain.Claim{}, fmt.Errorf("parse claim last_confirmed: %w", perr)
+	} else {
+		claim.LastConfirmed = lc
+	}
 	if le, perr := parseOptionalTime(row.LastExecuted); perr != nil {
 		return domain.Claim{}, fmt.Errorf("parse claim last_executed: %w", perr)
 	} else {
@@ -888,6 +904,7 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		validTo              sql.NullString
 		lastVerified         string
 		verifyCount          int64
+		lastConfirmed        string
 		halfLifeDays         float64
 		scopeService         string
 		scopeEnv             string
@@ -926,6 +943,7 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		&validTo,
 		&lastVerified,
 		&verifyCount,
+		&lastConfirmed,
 		&halfLifeDays,
 		&claim.HalfLifeClassifier,
 		&scopeService,
@@ -976,6 +994,11 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		if t, perr := time.Parse(time.RFC3339Nano, lastVerified); perr == nil {
 			claim.LastVerified = t
 		}
+	}
+	if lc, perr := parseOptionalTime(lastConfirmed); perr != nil {
+		return domain.Claim{}, fmt.Errorf("parse claim last_confirmed: %w", perr)
+	} else {
+		claim.LastConfirmed = lc
 	}
 	if le, perr := parseOptionalTime(lastExecuted); perr != nil {
 		return domain.Claim{}, fmt.Errorf("parse claim last_executed: %w", perr)

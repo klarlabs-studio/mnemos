@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS claims (
   valid_to TEXT,
   last_verified TEXT NOT NULL DEFAULT '',
   verify_count INTEGER NOT NULL DEFAULT 0,
+  -- last_confirmed (ADR 0026): last EXPLICIT confirmation (verify, validated
+  -- outcome). Recall and replay bump last_verified, never this.
+  last_confirmed TEXT NOT NULL DEFAULT '',
   half_life_days REAL NOT NULL DEFAULT 0,
   -- half_life_classifier (ADR 0025): which classifier assigned half_life_days.
   -- '' means none did, which is NOT the same as a classifier deciding the

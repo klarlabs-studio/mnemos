@@ -75,6 +75,12 @@ ON CONFLICT(id) DO UPDATE SET
 -- the claim), useful when a resolution is reverted.
 UPDATE claims SET valid_to = ? WHERE id = ?;
 
+-- name: MarkClaimConfirmed :exec
+-- Records an EXPLICIT confirmation (ADR 0026). Deliberately separate from
+-- MarkClaimVerified, which recall and replay also call: only verify and a
+-- validated outcome confirm a belief, and only confirmation feeds trust.
+UPDATE claims SET last_confirmed = ? WHERE id = ?;
+
 -- name: MarkClaimVerified :exec
 -- Bumps last_verified to the supplied timestamp and increments
 -- verify_count by one. The half_life_days COALESCE keeps any
@@ -93,7 +99,7 @@ ON CONFLICT(claim_id, event_id) DO NOTHING;
 
 -- name: ListAllClaims :many
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
-       valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -109,7 +115,7 @@ ORDER BY created_at ASC;
 -- previous implementation called ListAllClaims and filtered in Go,
 -- which scaled O(n) per invocation.
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
-       valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,

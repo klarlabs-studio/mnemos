@@ -61,6 +61,9 @@ var unwrittenColumns = map[string]string{
 		"recall-driven freshness on every capture.",
 	"verify_count": "Owned by MarkVerified, which increments it. The ingest upsert " +
 		"carries no count to write and would reset the tally to zero.",
+	"last_confirmed": "Owned by MarkConfirmed (ADR 0026). Re-extracting a claim is not " +
+		"a confirmation, and an ingest that wrote it would reset the explicit-confirmation " +
+		"time canonical trust reads.",
 	"lifecycle": "Owned by SetLifecycle, the human-curation path. Postgres and SQLite " +
 		"additionally carry it on the ingest upsert, which resets a curated lifecycle " +
 		"to '' whenever the claim is re-extracted; not carrying it here is the safer of " +

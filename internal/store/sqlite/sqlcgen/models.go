@@ -43,6 +43,7 @@ type Claim struct {
 	ValidTo              sql.NullString `json:"valid_to"`
 	LastVerified         string         `json:"last_verified"`
 	VerifyCount          int64          `json:"verify_count"`
+	LastConfirmed        string         `json:"last_confirmed"`
 	HalfLifeDays         float64        `json:"half_life_days"`
 	HalfLifeClassifier   string         `json:"half_life_classifier"`
 	ScopeService         string         `json:"scope_service"`
