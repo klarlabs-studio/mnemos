@@ -735,6 +735,28 @@ func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs [
 	return r.applyTrustInputs(ctx, inputs, scoring)
 }
 
+// ListTrustInputs implements [ports.TrustInputLister] with the same aggregate
+// and assembly the recompute uses.
+func (r ClaimRepository) ListTrustInputs(ctx context.Context, claimIDs []string) (map[string]domain.TrustInput, error) {
+	var (
+		inputs []trustInput
+		err    error
+	)
+	if len(claimIDs) == 0 {
+		inputs, err = r.listTrustInputs(ctx, r.trustInputsSQL(""))
+	} else {
+		inputs, err = r.listTrustInputs(ctx, r.trustInputsSQL("WHERE c.id = ANY($1)"), pgArray(claimIDs))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list trust inputs: %w", err)
+	}
+	out := make(map[string]domain.TrustInput, len(inputs))
+	for _, in := range inputs {
+		out[in.id] = in.toDomain()
+	}
+	return out, nil
+}
+
 // AverageTrust satisfies the corresponding ports method.
 func (r ClaimRepository) AverageTrust(ctx context.Context) (float64, error) {
 	var avg sql.NullFloat64

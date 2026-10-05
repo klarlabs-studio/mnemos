@@ -858,8 +858,9 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 // resolveContradictionsForAgent automatically resolves contradictions using
 // structural confidence scores. For each contradicting pair:
 //   - if either claim's Confidence is below the floor (0.7) or the margin
-//     is too slim (< 0.2), TrustScore is used as a tiebreak; if the trust
-//     margin is also slim the pair is escalated;
+//     is too slim (< 0.2), Credibility — recall's ranking signal, which
+//     admission computes for every answered claim — is used as a tiebreak;
+//     if that margin is also slim the pair is escalated;
 //   - otherwise the lower-confidence claim is demoted and a trust/update
 //     Verdict is produced with a rationale string.
 //
@@ -869,7 +870,7 @@ func resolveContradictionsForAgent(claims []domain.Claim, contradictions []domai
 	const (
 		confidenceFloor  = 0.7
 		escalationMargin = 0.2
-		trustTiebreak    = 0.05 // minimum TrustScore delta to break a slim-confidence tie
+		trustTiebreak    = 0.05 // minimum Credibility delta to break a slim-confidence tie
 	)
 	demoted := map[string]struct{}{}
 	verdicts := make([]domain.Verdict, 0, len(contradictions))
@@ -902,7 +903,7 @@ func resolveContradictionsForAgent(claims []domain.Claim, contradictions []domai
 			if winner, loser, rationale, ok := pickTestWinner(*from, *to); ok {
 				demoted[loser.ID] = struct{}{}
 				action := domain.VerdictActionTrust
-				if loser.TrustScore > 0.5 {
+				if loser.Credibility > 0.5 {
 					action = domain.VerdictActionUpdate
 				}
 				verdicts = append(verdicts, domain.Verdict{
@@ -932,13 +933,13 @@ func resolveContradictionsForAgent(claims []domain.Claim, contradictions []domai
 			}
 			demoted[loser.ID] = struct{}{}
 			action := domain.VerdictActionTrust
-			if loser.TrustScore > 0.5 {
+			if loser.Credibility > 0.5 {
 				action = domain.VerdictActionUpdate
 			}
 			rationale := fmt.Sprintf(
-				"confidence: winner %.2f vs loser %.2f (margin %.2f); trust: winner %.2f vs loser %.2f",
+				"confidence: winner %.2f vs loser %.2f (margin %.2f); credibility: winner %.2f vs loser %.2f",
 				winner.Confidence, loser.Confidence, diff,
-				winner.TrustScore, loser.TrustScore,
+				winner.Credibility, loser.Credibility,
 			)
 			verdicts = append(verdicts, domain.Verdict{
 				WinnerClaimID: winner.ID,
@@ -951,16 +952,16 @@ func resolveContradictionsForAgent(claims []domain.Claim, contradictions []domai
 		}
 
 		// Slim-confidence case: use TrustScore as a tiebreak.
-		trustDiff := from.TrustScore - to.TrustScore
+		trustDiff := from.Credibility - to.Credibility
 		if trustDiff < 0 {
 			trustDiff = -trustDiff
 		}
 		if trustDiff < trustTiebreak {
 			// Trust delta is also too slim — escalate to human.
 			reason := fmt.Sprintf(
-				"cannot auto-resolve: confidence %.2f vs %.2f (floor %.2f, margin %.2f); trust %.2f vs %.2f (min delta %.2f)",
+				"cannot auto-resolve: confidence %.2f vs %.2f (floor %.2f, margin %.2f); credibility %.2f vs %.2f (min delta %.2f)",
 				from.Confidence, to.Confidence, confidenceFloor, diff,
-				from.TrustScore, to.TrustScore, trustTiebreak,
+				from.Credibility, to.Credibility, trustTiebreak,
 			)
 			verdicts = append(verdicts, domain.Verdict{
 				Action:           domain.VerdictActionEscalate,
@@ -971,20 +972,20 @@ func resolveContradictionsForAgent(claims []domain.Claim, contradictions []domai
 
 		// TrustScore breaks the tie.
 		var winner, loser *domain.Claim
-		if from.TrustScore >= to.TrustScore {
+		if from.Credibility >= to.Credibility {
 			winner, loser = from, to
 		} else {
 			winner, loser = to, from
 		}
 		demoted[loser.ID] = struct{}{}
 		action := domain.VerdictActionTrust
-		if loser.TrustScore > 0.5 {
+		if loser.Credibility > 0.5 {
 			action = domain.VerdictActionUpdate
 		}
 		rationale := fmt.Sprintf(
-			"confidence margin slim (%.2f vs %.2f, Δ%.2f < %.2f); trust tiebreak: winner %.2f vs loser %.2f (Δ%.2f)",
+			"confidence margin slim (%.2f vs %.2f, Δ%.2f < %.2f); credibility tiebreak: winner %.2f vs loser %.2f (Δ%.2f)",
 			from.Confidence, to.Confidence, diff, escalationMargin,
-			winner.TrustScore, loser.TrustScore, trustDiff,
+			winner.Credibility, loser.Credibility, trustDiff,
 		)
 		verdicts = append(verdicts, domain.Verdict{
 			WinnerClaimID: winner.ID,
@@ -1103,9 +1104,9 @@ func buildContradictionExplanation(contradictions []domain.Relationship, claims 
 			fmt.Fprintf(&b, "  %d. Claim %s contradicts claim %s (details unavailable).\n", i+1, rel.FromClaimID, rel.ToClaimID)
 			continue
 		}
-		fmt.Fprintf(&b, "  %d. %q (trust: %.2f) contradicts %q (trust: %.2f).",
-			i+1, from.Text, from.TrustScore, to.Text, to.TrustScore)
-		diff := from.TrustScore - to.TrustScore
+		fmt.Fprintf(&b, "  %d. %q (credibility: %.2f) contradicts %q (credibility: %.2f).",
+			i+1, from.Text, from.Credibility, to.Text, to.Credibility)
+		diff := from.Credibility - to.Credibility
 		if diff < 0 {
 			diff = -diff
 		}
@@ -1116,10 +1117,10 @@ func buildContradictionExplanation(contradictions []domain.Relationship, claims 
 		switch {
 		case from.Confidence < 0.7 || to.Confidence < 0.7 || confDiff < 0.2:
 			b.WriteString(" Confidence too low or margin too slim for automatic resolution — human review recommended.")
-		case from.TrustScore > to.TrustScore:
-			fmt.Fprintf(&b, " The first claim has higher trust (Δ%.2f).", diff)
+		case from.Credibility > to.Credibility:
+			fmt.Fprintf(&b, " The first claim has higher credibility (Δ%.2f).", diff)
 		default:
-			fmt.Fprintf(&b, " The second claim has higher trust (Δ%.2f).", diff)
+			fmt.Fprintf(&b, " The second claim has higher credibility (Δ%.2f).", diff)
 		}
 		b.WriteString("\n")
 	}
@@ -1175,10 +1176,12 @@ func computeConfidence(claims []domain.Claim, contradictions []domain.Relationsh
 		return 0.0
 	}
 
-	// 1. Average trust score (weight: 0.4)
+	// 1. Average credibility (weight: 0.4). Credibility, not TrustScore: this
+	// is recall's ranking signal (ADR 0026 §2), and it is what this aggregate
+	// has always read — admission used to overwrite TrustScore with it.
 	var trustSum float64
 	for _, c := range claims {
-		trustSum += c.TrustScore
+		trustSum += c.Credibility
 	}
 	avgTrust := trustSum / float64(len(claims))
 

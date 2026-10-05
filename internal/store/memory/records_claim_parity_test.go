@@ -97,6 +97,9 @@ func TestStoredClaim_RoundTripsEveryField(t *testing.T) {
 	typ := wv.Type()
 	for i := range typ.NumField() {
 		name := typ.Field(i).Name
+		if _, readTime := readTimeFields[name]; readTime {
+			continue
+		}
 		if !reflect.DeepEqual(wv.Field(i).Interface(), gv.Field(i).Interface()) {
 			t.Errorf("domain.Claim.%s did not survive the memory round trip: stored %#v, read back %#v",
 				name, wv.Field(i).Interface(), gv.Field(i).Interface())
@@ -104,11 +107,18 @@ func TestStoredClaim_RoundTripsEveryField(t *testing.T) {
 	}
 }
 
+// readTimeFields are domain.Claim fields computed when a claim is read for an
+// answer and never stored by any backend, so the record need not carry them.
+var readTimeFields = map[string]string{
+	"Credibility": "recall credibility (ADR 0026 section 2) is computed at admission, never persisted",
+}
+
 // upsertIgnoredFields are domain.Claim fields Upsert deliberately does NOT
 // write, because another statement owns them — the memory counterpart of the
 // SQL backends' unwrittenColumns allowlists. Each carries its reason; the test
 // asserts the field is NOT persisted, so an entry cannot quietly go stale.
 var upsertIgnoredFields = map[string]string{
+	"Credibility": "it is a read-time recall signal (ADR 0026 section 2), never persisted by any backend",
 	"LastVerified": "it is owned by MarkVerified: re-extracting a claim is not a " +
 		"verification, and the SQL backends never write last_verified from an upsert",
 	"VerifyCount": "it is owned by MarkVerified, which increments it; the SQL backends " +

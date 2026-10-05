@@ -496,6 +496,54 @@ func toTrustRowsScoped(rows []sqlcgen.ListClaimTrustInputsForClaimsRow) []trustR
 	return out
 }
 
+// toDomain assembles the canonical trust input (ADR 0026) for one row. The
+// recompute and ListTrustInputs both go through it, so what a consumer projects
+// is exactly what the recompute scores.
+func (row trustRow) toDomain() domain.TrustInput {
+	var latest time.Time
+	if row.latestEvidenceAt != "" {
+		if t, perr := time.Parse(time.RFC3339Nano, row.latestEvidenceAt); perr == nil {
+			latest = t
+		}
+	}
+	// last_confirmed is written by MarkConfirmed in this same format; an
+	// unparseable value reads as "never confirmed".
+	lastConfirmed, _ := parseOptionalTime(row.lastConfirmed)
+	return domain.TrustInput{
+		Confidence: row.confidence,
+		// Corroboration graded by independence (echo-chamber guard): distinct
+		// evidence-event authors count fully, same-source repeats are discounted.
+		EvidenceCount:  domain.EffectiveEvidenceCount(int(row.distinctSources), int(row.totalEvents)),
+		LatestEvidence: latest,
+		LastConfirmed:  lastConfirmed,
+		HalfLifeDays:   row.halfLifeDays,
+		Credit:         domain.AppliedCredit(decodeConfidenceComponents(row.confidenceComponents)),
+	}
+}
+
+// ListTrustInputs implements [ports.TrustInputLister].
+func (r ClaimRepository) ListTrustInputs(ctx context.Context, claimIDs []string) (map[string]domain.TrustInput, error) {
+	var rows []trustRow
+	if len(claimIDs) == 0 {
+		all, err := r.q.ListClaimTrustInputs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list trust inputs: %w", err)
+		}
+		rows = toTrustRows(all)
+	} else {
+		some, err := r.q.ListClaimTrustInputsForClaims(ctx, claimIDs)
+		if err != nil {
+			return nil, fmt.Errorf("list trust inputs for claims: %w", err)
+		}
+		rows = toTrustRowsScoped(some)
+	}
+	out := make(map[string]domain.TrustInput, len(rows))
+	for _, row := range rows {
+		out[row.claimID] = row.toDomain()
+	}
+	return out, nil
+}
+
 func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, scoring domain.TrustScoring) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -504,25 +552,7 @@ func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, sc
 	defer func() { _ = tx.Rollback() }()
 	qtx := r.q.WithTx(tx)
 	for _, row := range rows {
-		var latest time.Time
-		if row.latestEvidenceAt != "" {
-			if t, perr := time.Parse(time.RFC3339Nano, row.latestEvidenceAt); perr == nil {
-				latest = t
-			}
-		}
-		// last_confirmed is written by MarkConfirmed in this same format; an
-		// unparseable value reads as "never confirmed".
-		lastConfirmed, _ := parseOptionalTime(row.lastConfirmed)
-		s := scoring.Score(domain.TrustInput{
-			Confidence: row.confidence,
-			// Corroboration graded by independence (echo-chamber guard): distinct
-			// evidence-event authors count fully, same-source repeats are discounted.
-			EvidenceCount:  domain.EffectiveEvidenceCount(int(row.distinctSources), int(row.totalEvents)),
-			LatestEvidence: latest,
-			LastConfirmed:  lastConfirmed,
-			HalfLifeDays:   row.halfLifeDays,
-			Credit:         domain.AppliedCredit(decodeConfidenceComponents(row.confidenceComponents)),
-		})
+		s := scoring.Score(row.toDomain())
 		if err := qtx.UpdateClaimTrust(ctx, sqlcgen.UpdateClaimTrustParams{
 			TrustScore:        s,
 			TrustComputedAt:   scoring.At.UTC().Format(time.RFC3339Nano),
