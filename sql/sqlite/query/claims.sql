@@ -131,21 +131,26 @@ ORDER BY test_last_run_at DESC, created_at DESC;
 UPDATE claims SET trust_score = ? WHERE id = ?;
 
 -- name: ListClaimTrustInputs :many
--- Inputs to recompute trust_score for every claim: confidence, the count of
--- DISTINCT evidence-event authors and of total events (so corroboration can be
--- graded by independence - an echo-chamber guard), and the most-recent evidence
--- timestamp. LEFT JOIN so claims with no evidence still appear; the caller treats
+-- Inputs to recompute trust_score for every claim (ADR 0026 trust.At):
+-- confidence, the count of DISTINCT evidence-event authors and of total events
+-- (so corroboration can be graded by independence - an echo-chamber guard), the
+-- most-recent evidence timestamp, and the claim's own last_confirmed,
+-- half_life_days and confidence_components (which carries applied credit).
+-- LEFT JOIN so claims with no evidence still appear; the caller treats
 -- the missing aggregate as 0/empty.
 SELECT
   c.id              AS claim_id,
   c.confidence      AS confidence,
   COUNT(DISTINCT e.created_by) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
-  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
+  c.last_confirmed  AS last_confirmed,
+  c.half_life_days  AS half_life_days,
+  c.confidence_components AS confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
-GROUP BY c.id, c.confidence;
+GROUP BY c.id, c.confidence, c.last_confirmed, c.half_life_days, c.confidence_components;
 
 -- name: ListClaimTrustInputsForClaims :many
 -- Same inputs as ListClaimTrustInputs, bounded to the given claims.
@@ -160,12 +165,15 @@ SELECT
   c.confidence      AS confidence,
   COUNT(DISTINCT e.created_by) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
-  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
+  c.last_confirmed  AS last_confirmed,
+  c.half_life_days  AS half_life_days,
+  c.confidence_components AS confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
 WHERE c.id IN (sqlc.slice('claim_ids'))
-GROUP BY c.id, c.confidence;
+GROUP BY c.id, c.confidence, c.last_confirmed, c.half_life_days, c.confidence_components;
 
 -- name: AverageTrust :one
 SELECT CAST(COALESCE(AVG(trust_score), 0) AS REAL) AS avg_trust FROM claims;

@@ -160,7 +160,7 @@ type ClaimRepository interface {
 // fixture) are still valid ClaimRepositories — callers type-assert
 // before invoking these methods.
 type TrustScorer interface {
-	RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error)
+	RecomputeTrust(ctx context.Context, score func(domain.TrustInput) float64) (int, error)
 	AverageTrust(ctx context.Context) (float64, error)
 	CountClaimsBelowTrust(ctx context.Context, threshold float64) (int64, error)
 }
@@ -178,7 +178,7 @@ type TrustScorer interface {
 // Optional so a backend that cannot scope the query keeps working: callers
 // fall back to the full [TrustScorer.RecomputeTrust].
 type ScopedTrustScorer interface {
-	RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error)
+	RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(domain.TrustInput) float64) (int, error)
 }
 
 // BeliefCreditWriter is the optional capability to persist an attributed

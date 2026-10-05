@@ -188,9 +188,7 @@ func handleDedupe(args []string, f Flags) {
 		// changed; recompute so the next query sees fresh scores.
 		now := time.Now().UTC()
 		if scorer, ok := conn.Claims.(ports.TrustScorer); ok {
-			if _, err := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-				return trust.Score(confidence, evidenceCount, latestEvidence, now)
-			}); err != nil {
+			if _, err := scorer.RecomputeTrust(ctx, trust.Scorer(now)); err != nil {
 				fmt.Fprintf(os.Stderr, "  warning: post-dedupe trust recompute failed: %v\n", err)
 			}
 		}
@@ -236,9 +234,7 @@ func handleRecomputeTrust(args []string, f Flags) {
 			return NewSystemError(fmt.Errorf("backend %T does not support trust scoring", conn.Claims), "recompute trust")
 		}
 		now := time.Now().UTC()
-		n, err := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-			return trust.Score(confidence, evidenceCount, latestEvidence, now)
-		})
+		n, err := scorer.RecomputeTrust(ctx, trust.Scorer(now))
 		if err != nil {
 			return NewSystemError(err, "recompute trust")
 		}

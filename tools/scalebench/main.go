@@ -203,7 +203,7 @@ func run(p scalebench.Params, batch, queries, ingests int, timeout time.Duration
 	})
 
 	// 3. The full trust recompute (`mnemos recompute-trust --all`), with the
-	// exact scoring function that command uses.
+	// canonical scorer that command uses.
 	rep.Operations = append(rep.Operations, timeOnce("recompute_trust_full", timeout, func(ctx context.Context) (string, error) {
 		conn, err := store.Open(ctx, dsn)
 		if err != nil {
@@ -214,10 +214,9 @@ func run(p scalebench.Params, batch, queries, ingests int, timeout time.Duration
 		if !ok {
 			return "", errUnsupported
 		}
-		now := p.Anchor
-		n, err := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-			return trust.Score(confidence, evidenceCount, latestEvidence, now)
-		})
+		// The canonical model every writer uses (ADR 0026), scored at the
+		// corpus anchor so the pass is reproducible.
+		n, err := scorer.RecomputeTrust(ctx, trust.Scorer(p.Anchor))
 		return fmt.Sprintf("%d beliefs rescored", n), err
 	}))
 

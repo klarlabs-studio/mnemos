@@ -272,7 +272,8 @@ func TestClaimRepository_TrustScorerCapability(t *testing.T) {
 		t.Fatalf("UpsertEvidence: %v", err)
 	}
 
-	n, err := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, _ time.Time) float64 {
+	n, err := scorer.RecomputeTrust(ctx, func(in domain.TrustInput) float64 {
+		confidence, evidenceCount := in.Confidence, in.EvidenceCount
 		return confidence * float64(evidenceCount)
 	})
 	if err != nil {
@@ -340,7 +341,8 @@ func TestClaimRepository_IndependenceAwareCorroboration(t *testing.T) {
 	}
 
 	// score = the graded evidence count, to isolate corroboration.
-	if _, err := scorer.RecomputeTrust(ctx, func(_ float64, evidenceCount int, _ time.Time) float64 {
+	if _, err := scorer.RecomputeTrust(ctx, func(in domain.TrustInput) float64 {
+		evidenceCount := in.EvidenceCount
 		return float64(evidenceCount)
 	}); err != nil {
 		t.Fatal(err)
