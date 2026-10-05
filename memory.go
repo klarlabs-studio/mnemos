@@ -353,9 +353,15 @@ type Result struct {
 	// when the claim was created.
 	Confidence float64
 
-	// TrustScore is the [0, 1] composite score combining confidence,
-	// corroboration, and freshness. Computed by Mnemos at query time.
+	// TrustScore is the belief's canonical [0, 1] trust (ADR 0026):
+	// confidence × corroboration × freshness, plus outcome credit. It is the
+	// same value Get, the API and brain health report for this belief.
 	TrustScore float64
+
+	// Credibility is recall's [0, 1] ranking signal: trust combined with
+	// source authority, citations, execution liveness and test results.
+	// It explains why a result ranked where it did; it is not trust.
+	Credibility float64
 
 	// HopDistance is how many supports/contradicts edges Mnemos walked
 	// from the directly-retrieved set to reach this claim. 0 means

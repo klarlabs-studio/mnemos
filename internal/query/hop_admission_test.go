@@ -231,25 +231,32 @@ func TestHopExpansion_RescoresCredibilityLikeDirectHits(t *testing.T) {
 		t.Fatalf("AnswerWithOptions: %v", err)
 	}
 
-	var seedTrust, hopTrust float64
+	// Admission computes CREDIBILITY for every answered claim, hop or direct,
+	// and leaves TrustScore as the canonical stored trust (ADR 0026 §2).
+	var seedCred, hopCred, hopTrust float64
 	var hopRationale string
+	found := false
 	for _, c := range ans.Claims {
 		switch c.ID {
 		case "cl_seed":
-			seedTrust = c.TrustScore
+			seedCred = c.Credibility
 		case "cl_hop":
-			hopTrust = c.TrustScore
+			found = true
+			hopCred, hopTrust = c.Credibility, c.TrustScore
 			hopRationale = c.ProvenanceRationale
 		}
 	}
-	if hopTrust == 0 {
+	if !found {
 		t.Fatalf("hop claim missing from answer: %v", claimIDs(ans.Claims))
 	}
-	if hopTrust == stored {
-		t.Fatalf("hop claim kept its raw stored trust score %.3f — it was never rescored", stored)
+	if hopCred == 0 {
+		t.Fatalf("hop claim has no credibility — it was never rescored")
 	}
-	if hopTrust != seedTrust {
-		t.Fatalf("hop trust %.6f != direct-hit trust %.6f for identical provenance — the two are ranked on different scales", hopTrust, seedTrust)
+	if hopTrust != stored {
+		t.Fatalf("hop claim trust %.3f differs from its stored trust %.3f — admission must not overwrite canonical trust", hopTrust, stored)
+	}
+	if hopCred != seedCred {
+		t.Fatalf("hop credibility %.6f != direct-hit credibility %.6f for identical provenance — the two are ranked on different scales", hopCred, seedCred)
 	}
 	if hopRationale == "" {
 		t.Errorf("hop claim has no provenance rationale — the rescore did not run over it")

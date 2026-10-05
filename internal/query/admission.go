@@ -27,10 +27,15 @@ import (
 // the chain would just recreate the drift.
 
 // rescoreCredibility fills each claim's derived provenance fields (execution
-// time, liveness) and recomputes its trust score from the current provenance
-// signals, in place. Every claim that reaches an Answer must be rescored, or
-// claims from different retrieval paths get ranked and trust-filtered on
-// different scales.
+// time, liveness) and computes its credibility from the current provenance
+// signals, in place. Every claim that reaches an Answer must be rescored, so
+// claims from different retrieval paths carry comparable credibility.
+//
+// It no longer overwrites TrustScore (ADR 0026 §2). It used to, which made
+// recall report, filter on and resolve contradictions with a different number
+// from the trust Get, the API and brain health reported for the same belief at
+// the same instant. Credibility is now its own field; TrustScore stays the
+// canonical stored trust.
 func rescoreCredibility(claims []domain.Claim, now time.Time) {
 	for i := range claims {
 		if claims[i].LastExecuted.IsZero() {
@@ -66,7 +71,7 @@ func rescoreCredibility(claims []domain.Claim, now time.Time) {
 			TestPassCount:   claims[i].TestPassCount,
 			TestFailCount:   claims[i].TestFailCount,
 		})
-		claims[i].TrustScore = score
+		claims[i].Credibility = score
 		claims[i].ProvenanceRationale = rationale
 	}
 }
@@ -75,8 +80,8 @@ func rescoreCredibility(claims []domain.Claim, now time.Time) {
 // returns the survivors, credibility-rescored. The input slice is never
 // mutated: the first filter copies.
 //
-// Order matters in exactly one place — the rescore has to run before MinTrust,
-// because MinTrust gates on the recomputed score, not the stored one.
+// MinTrust gates on canonical trust (ADR 0026 §2), the same value Get and the
+// API report, not on recall credibility.
 func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []domain.Claim {
 	// Drop deprecated claims before anything ranks them. `forget` and
 	// `memory_deprecate` promise that a forgotten claim stops being recalled,
