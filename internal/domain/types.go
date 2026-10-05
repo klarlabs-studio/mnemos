@@ -262,6 +262,13 @@ type Belief struct {
 	// VerifyCount counts every successful re-verification. Used as a
 	// secondary trust input when ranking near-tied claims.
 	VerifyCount int
+	// LastConfirmed is when the belief was last EXPLICITLY confirmed: by
+	// `mnemos verify` / the verify tool, or by an outcome that validated it.
+	// Zero means never. Unlike LastVerified — which recall reconsolidation and
+	// sleep replay also bump, as rehearsal — it is the freshness reference
+	// canonical trust reads (ADR 0026), so being retrieved or rehearsed cannot
+	// make a belief more trusted.
+	LastConfirmed time.Time
 	// HalfLifeDays optionally overrides the global trust freshness
 	// half-life on a per-claim basis. Zero falls back to the
 	// internal/trust default. Useful for facts whose decay profile

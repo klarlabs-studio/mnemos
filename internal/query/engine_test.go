@@ -94,8 +94,9 @@ func (f fakeClaimRepo) MarkVerified(_ context.Context, claimID string, _ time.Ti
 	}
 	return nil
 }
-func (f fakeClaimRepo) RepointEvidence(_ context.Context, _, _ string) error { return nil }
-func (f fakeClaimRepo) DeleteCascade(_ context.Context, _ string) error      { return nil }
+func (f fakeClaimRepo) RepointEvidence(_ context.Context, _, _ string) error         { return nil }
+func (f fakeClaimRepo) DeleteCascade(_ context.Context, _ string) error              { return nil }
+func (f fakeClaimRepo) MarkConfirmed(_ context.Context, _ string, _ time.Time) error { return nil }
 func (f fakeClaimRepo) ListByEventIDs(_ context.Context, _ []string) ([]domain.Claim, error) {
 	return f.claims, nil
 }

@@ -1479,6 +1479,11 @@ func (m *memory) reinforceValidatedClaims(ctx context.Context) (int, error) {
 		if err := m.conn.Claims.MarkVerified(ctx, c.ID, now, 0); err != nil {
 			return n, fmt.Errorf("reinforce validated claim %s: %w", c.ID, err)
 		}
+		// An observed outcome that validated the belief is a confirmation
+		// (ADR 0026), unlike replay rehearsal, which only bumps last_verified.
+		if err := m.conn.Claims.MarkConfirmed(ctx, c.ID, now); err != nil {
+			return n, fmt.Errorf("confirm validated claim %s: %w", c.ID, err)
+		}
 		n++
 	}
 	return n, nil

@@ -87,6 +87,19 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 				stored.HalfLifeClassifier = existing.HalfLifeClassifier
 			}
 		}
+		// last_verified / verify_count are owned by MarkVerified and
+		// last_confirmed by MarkConfirmed (ADR 0026). The SQL backends never
+		// write any of them from an upsert, so neither does this one: a
+		// re-extracted claim is neither a verification nor a confirmation.
+		// This backend used to write all three straight through, so re-ingesting
+		// a verified claim on memory:// reset its verification while every SQL
+		// backend kept it.
+		stored.LastVerified, stored.VerifyCount, stored.LastConfirmed = time.Time{}, 0, time.Time{}
+		if existing, ok := r.state.claims[claim.ID]; ok {
+			stored.LastVerified = existing.LastVerified
+			stored.VerifyCount = existing.VerifyCount
+			stored.LastConfirmed = existing.LastConfirmed
+		}
 
 		if _, ok := r.state.claims[claim.ID]; !ok {
 			r.state.claimOrder = append(r.state.claimOrder, claim.ID)
@@ -405,6 +418,22 @@ func (r ClaimRepository) ListStatusHistoryByClaimID(_ context.Context, claimID s
 		})
 	}
 	return out, nil
+}
+
+// MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed].
+func (r ClaimRepository) MarkConfirmed(_ context.Context, claimID string, confirmedAt time.Time) error {
+	if confirmedAt.IsZero() {
+		confirmedAt = time.Now().UTC()
+	}
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	c, ok := r.state.claims[claimID]
+	if !ok {
+		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
+	}
+	c.LastConfirmed = confirmedAt.UTC()
+	r.state.claims[claimID] = c
+	return nil
 }
 
 // MarkVerified bumps last_verified, increments verify_count, and

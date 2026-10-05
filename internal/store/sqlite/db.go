@@ -90,6 +90,10 @@ CREATE TABLE IF NOT EXISTS claims (
 	valid_to TEXT,
 	last_verified TEXT NOT NULL DEFAULT '',
 	verify_count INTEGER NOT NULL DEFAULT 0,
+	-- last_confirmed (ADR 0026): when the belief was last EXPLICITLY confirmed —
+	-- by verify or a validated outcome. Recall and replay bump last_verified,
+	-- never this, so being retrieved cannot make a belief more trusted.
+	last_confirmed TEXT NOT NULL DEFAULT '',
 	half_life_days REAL NOT NULL DEFAULT 0,
 	-- half_life_classifier (ADR 0025): which classifier assigned half_life_days.
 	-- '' means none did. That is a different fact from "the classifier read this
@@ -585,7 +589,10 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 // every pre-existing one — and the first read fails with "no such column". Caught by
 // running the new binary against a copy of a real 88k-belief brain; a fresh test DB
 // gets the column from CREATE TABLE and never exercises this path.
-const currentSchemaVersion = 25
+// v26 (ADR 0026) adds claims.last_confirmed, the explicit-confirmation time
+// canonical trust reads. Bumped for the same reason as v25: without it the
+// expectedColumns entry never runs on a pre-existing brain.
+const currentSchemaVersion = 26
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -695,6 +702,8 @@ var expectedColumns = []addMissingColumn{
 	// same trap durability documents above: CREATE TABLE IF NOT EXISTS does not
 	// add columns to a table that already exists.
 	{"claims", "half_life_classifier", "TEXT NOT NULL DEFAULT ''"},
+	// v26 - explicit confirmation time (ADR 0026), read by canonical trust.
+	{"claims", "last_confirmed", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for

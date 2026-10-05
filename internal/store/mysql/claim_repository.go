@@ -495,6 +495,20 @@ WHERE id = ?`, verifiedAt.UTC(), halfLifeDays, halfLifeDays, claimID)
 	return nil
 }
 
+// MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed]. Unlike
+// MarkVerified it does not treat zero affected rows as not-found: MySQL reports
+// affected rows as CHANGED rows, so confirming a claim twice at the same instant
+// would otherwise read as a missing claim.
+func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error {
+	if confirmedAt.IsZero() {
+		confirmedAt = time.Now().UTC()
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE claims SET last_confirmed = ? WHERE id = ?`, confirmedAt.UTC(), claimID); err != nil {
+		return fmt.Errorf("mark confirmed %s: %w", claimID, err)
+	}
+	return nil
+}
+
 // ApplyBeliefCredit overwrites the claim's confidence_components map and sets its
 // trust_score together (the ports.BeliefCreditWriter capability, ADR 0014). The
 // caller passes the already-merged map, so the write is a plain assignment and
@@ -699,7 +713,7 @@ func nullTime(t time.Time) any {
 // UPDATE set, so an omission fails a test instead of zeroing production rows.
 var claimColumnNames = []string{
 	"id", "text", "type", "confidence", "status", "created_at", "created_by",
-	"trust_score", "valid_from", "valid_to", "last_verified", "verify_count",
+	"trust_score", "valid_from", "valid_to", "last_verified", "verify_count", "last_confirmed",
 	"half_life_days", "half_life_classifier", "lifecycle", "subject_class", "durability",
 	"confidence_components",
 	"test_id", "test_requirement_ref", "test_author", "test_last_modified",
@@ -769,6 +783,8 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	// cross-backend "never verified" sentinel — scanning it into a NullTime
 	// keeps the zero time rather than inventing an instant.
 	var lastVerified sql.NullTime
+	// last_confirmed is NULL until the first explicit confirmation (ADR 0026).
+	var lastConfirmed sql.NullTime
 	var testLastModified, testLastRunAt sql.NullTime
 	var scopeService, scopeEnv, scopeTeam string
 	var sourceDocument, sourceType, liveness, provenanceRationale, visibility string
@@ -779,7 +795,7 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	var lastExecuted sql.NullTime
 	if err := rows.Scan(
 		&c.ID, &c.Text, &typ, &c.Confidence, &status,
-		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &lastVerified, &c.VerifyCount,
+		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &lastVerified, &c.VerifyCount, &lastConfirmed,
 		&c.HalfLifeDays, &c.HalfLifeClassifier, &lifecycle, &subjectClass, &durability, &confidenceComponents,
 		&c.TestID, &c.TestRequirementRef, &c.TestAuthor, &testLastModified, &testLastRunAt, &c.TestPassCount, &c.TestFailCount,
 		&scopeService, &scopeEnv, &scopeTeam,
@@ -811,6 +827,9 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	}
 	if lastVerified.Valid {
 		c.LastVerified = lastVerified.Time
+	}
+	if lastConfirmed.Valid {
+		c.LastConfirmed = lastConfirmed.Time
 	}
 	if testLastModified.Valid {
 		c.TestLastModified = testLastModified.Time
