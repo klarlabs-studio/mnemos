@@ -643,9 +643,9 @@ Three inputs are per belief:
   historical name `half_life_days`.
 - **Confirmation.** `mnemos verify`, the `memory_promote` MCP tool and an outcome that
   validated the belief record `last_confirmed`, which refreshes trust. Being
-  recalled or rehearsed during sleep does **not**. Recall and replay update
-  `last_verified` (liveness, replay order) only, so retrieval cannot inflate
-  trust.
+  rehearsed during sleep, or recalled with `--reconsolidate`, does **not**.
+  Those update `last_verified` (liveness, replay order) only, so retrieval
+  cannot inflate trust.
 - **Credit.** When a decision's prediction is validated or refuted, the
   beliefs behind it gain or lose credit. Credit is stored and re-applied on
   every recompute, so a later ingest does not erase it.
