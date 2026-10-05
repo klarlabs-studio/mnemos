@@ -67,10 +67,10 @@ func rescoreTrust(t *testing.T, m *memory) {
 		t.Fatal("store does not score trust; the vital under test would be meaningless")
 	}
 	now := time.Now().UTC()
-	if _, err := scorer.RecomputeTrust(context.Background(), func(in domain.TrustInput) float64 {
+	if _, err := scorer.RecomputeTrust(context.Background(), domain.TrustScoring{Score: func(in domain.TrustInput) float64 {
 		confidence, evidenceCount, latestEvidence := in.Confidence, in.EvidenceCount, in.LatestEvidence
 		return trust.Score(confidence, evidenceCount, latestEvidence, now)
-	}); err != nil {
+	}}); err != nil {
 		t.Fatalf("recompute trust: %v", err)
 	}
 }

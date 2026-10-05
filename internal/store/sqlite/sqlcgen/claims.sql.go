@@ -88,7 +88,7 @@ func (q *Queries) DeleteClaimStatusHistoryByClaimID(ctx context.Context, claimID
 }
 
 const listAllClaims = `-- name: ListAllClaims :many
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
        valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
@@ -118,6 +118,8 @@ func (q *Queries) ListAllClaims(ctx context.Context) ([]Claim, error) {
 			&i.CreatedAt,
 			&i.CreatedBy,
 			&i.TrustScore,
+			&i.TrustComputedAt,
+			&i.TrustModelVersion,
 			&i.ValidFrom,
 			&i.ValidTo,
 			&i.LastVerified,
@@ -305,7 +307,7 @@ func (q *Queries) ListClaimTrustInputsForClaims(ctx context.Context, claimIds []
 }
 
 const listClaimsByTestRequirementRef = `-- name: ListClaimsByTestRequirementRef :many
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
        valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
@@ -341,6 +343,8 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 			&i.CreatedAt,
 			&i.CreatedBy,
 			&i.TrustScore,
+			&i.TrustComputedAt,
+			&i.TrustModelVersion,
 			&i.ValidFrom,
 			&i.ValidTo,
 			&i.LastVerified,
@@ -448,16 +452,25 @@ func (q *Queries) SetClaimValidity(ctx context.Context, arg SetClaimValidityPara
 }
 
 const updateClaimTrust = `-- name: UpdateClaimTrust :exec
-UPDATE claims SET trust_score = ? WHERE id = ?
+UPDATE claims SET trust_score = ?, trust_computed_at = ?, trust_model_version = ? WHERE id = ?
 `
 
 type UpdateClaimTrustParams struct {
-	TrustScore float64 `json:"trust_score"`
-	ID         string  `json:"id"`
+	TrustScore        float64 `json:"trust_score"`
+	TrustComputedAt   string  `json:"trust_computed_at"`
+	TrustModelVersion string  `json:"trust_model_version"`
+	ID                string  `json:"id"`
 }
 
+// trust_score is a cache of trust.At (ADR 0026 section 5): it is always written with
+// the instant it was computed for and the model version that computed it.
 func (q *Queries) UpdateClaimTrust(ctx context.Context, arg UpdateClaimTrustParams) error {
-	_, err := q.db.ExecContext(ctx, updateClaimTrust, arg.TrustScore, arg.ID)
+	_, err := q.db.ExecContext(ctx, updateClaimTrust,
+		arg.TrustScore,
+		arg.TrustComputedAt,
+		arg.TrustModelVersion,
+		arg.ID,
+	)
 	return err
 }
 

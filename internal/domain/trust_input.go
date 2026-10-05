@@ -40,3 +40,15 @@ type TrustInput struct {
 func AppliedCredit(components map[string]float64) float64 {
 	return components[CreditAppliedComponentKey]
 }
+
+// TrustScoring is one trust recompute pass: the scoring function, the instant it
+// scores against, and the model version it implements. A backend writes the
+// score together with At and ModelVersion (trust_computed_at,
+// trust_model_version), so a stored trust_score is always readable as "trust.At
+// under ModelVersion at At" — a cache with a provenance, not a free-standing
+// fact (ADR 0026 §5).
+type TrustScoring struct {
+	At           time.Time
+	ModelVersion string
+	Score        func(TrustInput) float64
+}

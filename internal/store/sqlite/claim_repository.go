@@ -229,7 +229,7 @@ func (r ClaimRepository) ListByEventIDs(ctx context.Context, eventIDs []string) 
 	}
 
 	query := fmt.Sprintf(`
-SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.last_confirmed, c.half_life_days, c.half_life_classifier, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class, c.durability
+SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.trust_computed_at, c.trust_model_version, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.last_confirmed, c.half_life_days, c.half_life_classifier, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class, c.durability
 FROM claims c
 JOIN claim_evidence ce ON ce.claim_id = c.id
 WHERE ce.event_id IN (%s)
@@ -360,7 +360,7 @@ func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]do
 	}
 
 	query := fmt.Sprintf(`
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score, valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version, valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability
 FROM claims
 WHERE id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201: placeholders are literal "?" strings, not user input
 
@@ -445,18 +445,18 @@ func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, conf
 // freshness of the most recent evidence. Returns the number of claims
 // touched. Caller supplies the scoring function (typically
 // trust.Score) so the repository stays free of policy decisions.
-func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(domain.TrustInput) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrust(ctx context.Context, scoring domain.TrustScoring) (int, error) {
 	rows, err := r.q.ListClaimTrustInputs(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list trust inputs: %w", err)
 	}
-	return r.applyTrustRows(ctx, toTrustRows(rows), score)
+	return r.applyTrustRows(ctx, toTrustRows(rows), scoring)
 }
 
 // RecomputeTrustForClaims implements [ports.ScopedTrustScorer]: the same
 // recomputation bounded to claimIDs, so the cost of a write tracks what the
 // write touched instead of the size of the store.
-func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(domain.TrustInput) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, scoring domain.TrustScoring) (int, error) {
 	if len(claimIDs) == 0 {
 		return 0, nil
 	}
@@ -464,7 +464,7 @@ func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs [
 	if err != nil {
 		return 0, fmt.Errorf("list trust inputs for claims: %w", err)
 	}
-	return r.applyTrustRows(ctx, toTrustRowsScoped(rows), score)
+	return r.applyTrustRows(ctx, toTrustRowsScoped(rows), scoring)
 }
 
 // trustRow is the backend-agnostic shape both trust queries produce, so the
@@ -496,7 +496,7 @@ func toTrustRowsScoped(rows []sqlcgen.ListClaimTrustInputsForClaimsRow) []trustR
 	return out
 }
 
-func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, score func(domain.TrustInput) float64) (int, error) {
+func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, scoring domain.TrustScoring) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin tx: %w", err)
@@ -513,7 +513,7 @@ func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, sc
 		// last_confirmed is written by MarkConfirmed in this same format; an
 		// unparseable value reads as "never confirmed".
 		lastConfirmed, _ := parseOptionalTime(row.lastConfirmed)
-		s := score(domain.TrustInput{
+		s := scoring.Score(domain.TrustInput{
 			Confidence: row.confidence,
 			// Corroboration graded by independence (echo-chamber guard): distinct
 			// evidence-event authors count fully, same-source repeats are discounted.
@@ -524,8 +524,10 @@ func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, sc
 			Credit:         domain.AppliedCredit(decodeConfidenceComponents(row.confidenceComponents)),
 		})
 		if err := qtx.UpdateClaimTrust(ctx, sqlcgen.UpdateClaimTrustParams{
-			TrustScore: s,
-			ID:         row.claimID,
+			TrustScore:        s,
+			TrustComputedAt:   scoring.At.UTC().Format(time.RFC3339Nano),
+			TrustModelVersion: scoring.ModelVersion,
+			ID:                row.claimID,
 		}); err != nil {
 			return 0, fmt.Errorf("update trust for %s: %w", row.claimID, err)
 		}
@@ -817,6 +819,7 @@ func mapSQLClaim(row sqlcgen.Claim) (domain.Claim, error) {
 		Status:               domain.ClaimStatus(row.Status),
 		CreatedBy:            row.CreatedBy,
 		TrustScore:           row.TrustScore,
+		TrustModelVersion:    row.TrustModelVersion,
 		VerifyCount:          int(row.VerifyCount),
 		HalfLifeDays:         row.HalfLifeDays,
 		HalfLifeClassifier:   row.HalfLifeClassifier,
@@ -847,6 +850,11 @@ func mapSQLClaim(row sqlcgen.Claim) (domain.Claim, error) {
 		return domain.Claim{}, fmt.Errorf("parse claim last_confirmed: %w", perr)
 	} else {
 		claim.LastConfirmed = lc
+	}
+	if tc, perr := parseOptionalTime(row.TrustComputedAt); perr != nil {
+		return domain.Claim{}, fmt.Errorf("parse claim trust_computed_at: %w", perr)
+	} else {
+		claim.TrustComputedAt = tc
 	}
 	if le, perr := parseOptionalTime(row.LastExecuted); perr != nil {
 		return domain.Claim{}, fmt.Errorf("parse claim last_executed: %w", perr)
@@ -912,6 +920,7 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		claimType            string
 		status               string
 		createdAt            string
+		trustComputedAt      string
 		validFrom            string
 		validTo              sql.NullString
 		lastVerified         string
@@ -951,6 +960,8 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		&createdAt,
 		&claim.CreatedBy,
 		&claim.TrustScore,
+		&trustComputedAt,
+		&claim.TrustModelVersion,
 		&validFrom,
 		&validTo,
 		&lastVerified,
@@ -1011,6 +1022,11 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		return domain.Claim{}, fmt.Errorf("parse claim last_confirmed: %w", perr)
 	} else {
 		claim.LastConfirmed = lc
+	}
+	if tc, perr := parseOptionalTime(trustComputedAt); perr != nil {
+		return domain.Claim{}, fmt.Errorf("parse claim trust_computed_at: %w", perr)
+	} else {
+		claim.TrustComputedAt = tc
 	}
 	if le, perr := parseOptionalTime(lastExecuted); perr != nil {
 		return domain.Claim{}, fmt.Errorf("parse claim last_executed: %w", perr)

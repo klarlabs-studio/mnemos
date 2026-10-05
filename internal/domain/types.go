@@ -243,6 +243,12 @@ type Belief struct {
 	CreatedAt  time.Time
 	CreatedBy  string  // user id of the actor that created this claim; "<system>" for unattributed
 	TrustScore float64 // derived from confidence × corroboration × freshness; computed by internal/trust
+	// TrustComputedAt and TrustModelVersion say what TrustScore is a cache of
+	// (ADR 0026 §5): trust.At under that model version at that instant. Both
+	// are written only by a trust recompute; zero / "" means the score predates
+	// versioning (implicitly trust/v1) or was never computed.
+	TrustComputedAt   time.Time
+	TrustModelVersion string
 
 	// ValidFrom is when the claim's content first became true. Defaults
 	// to the source event's timestamp at insert time; see internal/pipeline.

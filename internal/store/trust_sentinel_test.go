@@ -114,11 +114,11 @@ func TestTrustScoring_NoEvidenceSentinelAgreesAcrossBackends(t *testing.T) {
 		}
 		var seen time.Time
 		now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-		if _, err := scorer.RecomputeTrust(ctx, func(in domain.TrustInput) float64 {
+		if _, err := scorer.RecomputeTrust(ctx, domain.TrustScoring{Score: func(in domain.TrustInput) float64 {
 			c, evidenceCount, latestEvidence := in.Confidence, in.EvidenceCount, in.LatestEvidence
 			seen = latestEvidence
 			return trust.Score(c, evidenceCount, latestEvidence, now)
-		}); err != nil {
+		}}); err != nil {
 			t.Fatalf("%s: recompute trust: %v", b.name, err)
 		}
 
@@ -177,13 +177,13 @@ func TestTrustScoring_WithEvidenceAgreesAcrossBackends(t *testing.T) {
 		}
 
 		scorer := b.conn.Claims.(ports.TrustScorer) //nolint:errcheck // asserted in the sibling test
-		if _, err := scorer.RecomputeTrust(ctx, func(in domain.TrustInput) float64 {
+		if _, err := scorer.RecomputeTrust(ctx, domain.TrustScoring{Score: func(in domain.TrustInput) float64 {
 			c, n, latest := in.Confidence, in.EvidenceCount, in.LatestEvidence
 			if latest.IsZero() {
 				t.Errorf("%s: claim WITH evidence reached the scorer with a zero timestamp", b.name)
 			}
 			return trust.Score(c, n, latest, now)
-		}); err != nil {
+		}}); err != nil {
 			t.Fatalf("%s: recompute trust: %v", b.name, err)
 		}
 		rows, err := b.conn.Claims.ListByIDs(ctx, []string{"with-evidence"})

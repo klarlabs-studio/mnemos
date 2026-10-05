@@ -39,6 +39,8 @@ type Claim struct {
 	CreatedAt            string         `json:"created_at"`
 	CreatedBy            string         `json:"created_by"`
 	TrustScore           float64        `json:"trust_score"`
+	TrustComputedAt      string         `json:"trust_computed_at"`
+	TrustModelVersion    string         `json:"trust_model_version"`
 	ValidFrom            string         `json:"valid_from"`
 	ValidTo              sql.NullString `json:"valid_to"`
 	LastVerified         string         `json:"last_verified"`

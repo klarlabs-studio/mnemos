@@ -169,6 +169,8 @@ type storedClaim struct {
 	CreatedAt            time.Time
 	CreatedBy            string
 	TrustScore           float64
+	TrustComputedAt      time.Time
+	TrustModelVersion    string
 	ValidFrom            time.Time
 	ValidTo              time.Time
 	LastVerified         time.Time
@@ -222,6 +224,8 @@ func (c storedClaim) toDomain() domain.Claim {
 		CreatedAt:            c.CreatedAt,
 		CreatedBy:            c.CreatedBy,
 		TrustScore:           c.TrustScore,
+		TrustComputedAt:      c.TrustComputedAt,
+		TrustModelVersion:    c.TrustModelVersion,
 		ValidFrom:            c.ValidFrom,
 		ValidTo:              c.ValidTo,
 		LastVerified:         c.LastVerified,
@@ -293,6 +297,8 @@ func storedClaimFromDomain(c domain.Claim) storedClaim {
 		CreatedAt:            c.CreatedAt.UTC(),
 		CreatedBy:            actorOr(c.CreatedBy),
 		TrustScore:           c.TrustScore,
+		TrustComputedAt:      c.TrustComputedAt.UTC(),
+		TrustModelVersion:    c.TrustModelVersion,
 		ValidFrom:            validFrom.UTC(),
 		ValidTo:              c.ValidTo.UTC(),
 		LastVerified:         c.LastVerified.UTC(),

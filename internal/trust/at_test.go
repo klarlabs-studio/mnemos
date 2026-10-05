@@ -99,7 +99,10 @@ func TestAt_AddsAppliedCreditWithinTheCap(t *testing.T) {
 
 func TestScorer_BindsOneInstant(t *testing.T) {
 	in := domain.TrustInput{Confidence: 0.8, EvidenceCount: 2, LatestEvidence: daysAgo(45), HalfLifeDays: 30}
-	if got, want := Scorer(atNow)(in), At(in, atNow); got != want {
-		t.Fatalf("Scorer(at)(in)=%v, At(in, at)=%v", got, want)
+	if got, want := Scorer(atNow).Score(in), At(in, atNow); got != want {
+		t.Fatalf("Scorer(at).Score(in)=%v, At(in, at)=%v", got, want)
+	}
+	if s := Scorer(atNow); !s.At.Equal(atNow) || s.ModelVersion != ModelVersion {
+		t.Fatalf("Scorer stamps At=%v version=%q, want %v %q", s.At, s.ModelVersion, atNow, ModelVersion)
 	}
 }
