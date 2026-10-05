@@ -55,7 +55,9 @@ All implementations are behind these interfaces, enabling clean testing and prov
 - **Scope** — multi-tenant filter primitive: {Service, Env, Team} (LessonScope is an alias kept for back-compat)
 - **Answer** — query result bundling claims, contradictions, timeline, hop distances, claim provenance, and `StaleClaimIDs`
 
-All domain types have `Validate()` methods. Contradictions are first-class concepts, not afterthoughts.
+All domain types have `Validate()` methods.
+
+**Vocabulary is frozen during consolidation.** Machine terms (Claim/Event/Relationship/Lesson/Playbook) and brain terms (Belief/Episode/Association/Schema/Reflex) each own specific surfaces. The wire is brain-native, while the root Go API, storage and config use machine terms. `internal/domain` declares the brain names, but call sites use the machine aliases. Do not rename in either direction. See [docs/vocabulary.md](docs/vocabulary.md). Contradictions are first-class concepts, not afterthoughts.
 
 ### Package Responsibilities
 
