@@ -292,6 +292,17 @@ ON CONFLICT (claim_id, event_id) DO NOTHING`,
 	return nil
 }
 
+// UnlinkEvidence implements [ports.ClaimRepository.UnlinkEvidence].
+func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1 AND event_id = $2`, qualify(r.ns, "claim_evidence")),
+		claimID, eventID,
+	); err != nil {
+		return fmt.Errorf("unlink evidence %s -> %s: %w", claimID, eventID, err)
+	}
+	return nil
+}
+
 // DeleteCascade removes a claim plus every claim-keyed row it owns.
 //
 // The set is the canonical one from [ports.ClaimRepository], narrowed to

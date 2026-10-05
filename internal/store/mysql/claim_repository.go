@@ -288,6 +288,16 @@ SELECT ?, event_id FROM claim_evidence WHERE claim_id = ?`,
 	return nil
 }
 
+// UnlinkEvidence implements [ports.ClaimRepository.UnlinkEvidence].
+func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM claim_evidence WHERE claim_id = ? AND event_id = ?`, claimID, eventID,
+	); err != nil {
+		return fmt.Errorf("unlink evidence %s -> %s: %w", claimID, eventID, err)
+	}
+	return nil
+}
+
 // DeleteCascade drops the claim plus every claim-keyed row it owns, in
 // one tx.
 //

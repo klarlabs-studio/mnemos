@@ -98,6 +98,12 @@ type ClaimRepository interface {
 	// pipeline.ApplySemanticDedupe.
 	RepointEvidence(ctx context.Context, fromClaimID, toClaimID string) error
 
+	// UnlinkEvidence removes the single (claimID, eventID) evidence row and
+	// nothing else. Idempotent: unlinking a link that does not exist is
+	// success. Used when an episode is deleted but a claim it supported
+	// still has other evidence — the claim keeps standing on what is left.
+	UnlinkEvidence(ctx context.Context, claimID, eventID string) error
+
 	// DeleteCascade removes a claim and every row keyed on claim_id
 	// that the claim alone owns. The canonical cascade set, which
 	// every backend must clear in full for the tables it actually
