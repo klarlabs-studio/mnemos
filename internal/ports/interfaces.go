@@ -181,6 +181,17 @@ type ScopedTrustScorer interface {
 	RecomputeTrustForClaims(ctx context.Context, claimIDs []string, scoring domain.TrustScoring) (int, error)
 }
 
+// TrustInputLister is the optional capability to read the canonical trust
+// inputs (ADR 0026) without writing anything: the same per-claim aggregate a
+// recompute scores, assembled by the same code. Consumers that need trust at an
+// instant other than when it was stored — brain health projecting decay
+// forward, float-back gating at "now" — call trust.At on these inputs instead
+// of reimplementing the formula from raw rows, which is how the subsystems
+// drifted apart in the first place. Empty claimIDs means every claim.
+type TrustInputLister interface {
+	ListTrustInputs(ctx context.Context, claimIDs []string) (map[string]domain.TrustInput, error)
+}
+
 // BeliefCreditWriter is the optional capability to persist an attributed
 // belief-credit update produced by credit assignment (ADR 0014): a claim's
 // confidence_components audit map plus the resulting trust_score, written

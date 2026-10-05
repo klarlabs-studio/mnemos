@@ -528,31 +528,54 @@ func (r ClaimRepository) recomputeTrustLocked(ids []string, scoring domain.Trust
 		if !ok {
 			continue
 		}
-		// Corroboration is graded by INDEPENDENCE, not raw volume: count distinct
-		// evidence-event authors, with same-source repeats discounted (echo-chamber
-		// guard) — many events from one voice don't corroborate like many voices.
-		distinct := make(map[string]struct{})
-		total := 0
-		for evID := range r.state.evidence[id] {
-			if ev, ok := r.state.events[evID]; ok {
-				distinct[ev.CreatedBy] = struct{}{}
-				total++
-			}
-		}
-		c.TrustScore = scoring.Score(domain.TrustInput{
-			Confidence:     c.Confidence,
-			EvidenceCount:  domain.EffectiveEvidenceCount(len(distinct), total),
-			LatestEvidence: latestEvidenceTimestamp(r.state, id),
-			LastConfirmed:  c.LastConfirmed,
-			HalfLifeDays:   c.HalfLifeDays,
-			Credit:         domain.AppliedCredit(c.ConfidenceComponents),
-		})
+		c.TrustScore = scoring.Score(r.trustInputLocked(id, c))
 		c.TrustComputedAt = scoring.At.UTC()
 		c.TrustModelVersion = scoring.ModelVersion
 		r.state.claims[id] = c
 		count++
 	}
 	return count
+}
+
+// trustInputLocked assembles the canonical trust input (ADR 0026) for one
+// claim. Callers hold state.mu. The recompute and ListTrustInputs both use it.
+func (r ClaimRepository) trustInputLocked(id string, c storedClaim) domain.TrustInput {
+	// Corroboration is graded by INDEPENDENCE, not raw volume: count distinct
+	// evidence-event authors, with same-source repeats discounted (echo-chamber
+	// guard) — many events from one voice don't corroborate like many voices.
+	distinct := make(map[string]struct{})
+	total := 0
+	for evID := range r.state.evidence[id] {
+		if ev, ok := r.state.events[evID]; ok {
+			distinct[ev.CreatedBy] = struct{}{}
+			total++
+		}
+	}
+	return domain.TrustInput{
+		Confidence:     c.Confidence,
+		EvidenceCount:  domain.EffectiveEvidenceCount(len(distinct), total),
+		LatestEvidence: latestEvidenceTimestamp(r.state, id),
+		LastConfirmed:  c.LastConfirmed,
+		HalfLifeDays:   c.HalfLifeDays,
+		Credit:         domain.AppliedCredit(c.ConfidenceComponents),
+	}
+}
+
+// ListTrustInputs implements [ports.TrustInputLister].
+func (r ClaimRepository) ListTrustInputs(_ context.Context, claimIDs []string) (map[string]domain.TrustInput, error) {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	ids := claimIDs
+	if len(ids) == 0 {
+		ids = r.state.claimOrder
+	}
+	out := make(map[string]domain.TrustInput, len(ids))
+	for _, id := range ids {
+		if c, ok := r.state.claims[id]; ok {
+			out[id] = r.trustInputLocked(id, c)
+		}
+	}
+	return out, nil
 }
 
 // ApplyBeliefCredit implements [ports.BeliefCreditWriter]: it overwrites a

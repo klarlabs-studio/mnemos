@@ -695,6 +695,36 @@ GROUP BY c.id, c.confidence`
 	return r.applyTrustInputs(ctx, inputs, scoring)
 }
 
+// ListTrustInputs implements [ports.TrustInputLister] with the same aggregate
+// and assembly the recompute uses, chunked as RecomputeTrustForClaims is.
+func (r ClaimRepository) ListTrustInputs(ctx context.Context, claimIDs []string) (map[string]domain.TrustInput, error) {
+	var inputs []trustInput
+	if len(claimIDs) == 0 {
+		all, err := r.listTrustInputs(ctx, trustInputsSelect+`GROUP BY c.id, c.confidence`)
+		if err != nil {
+			return nil, fmt.Errorf("list trust inputs: %w", err)
+		}
+		inputs = all
+	}
+	for start := 0; start < len(claimIDs); start += trustIDChunk {
+		end := min(start+trustIDChunk, len(claimIDs))
+		placeholders, args := inPlaceholders(claimIDs[start:end])
+		//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
+		q := trustInputsSelect + `WHERE c.id IN (` + placeholders + `)
+GROUP BY c.id, c.confidence`
+		chunk, err := r.listTrustInputs(ctx, q, args...)
+		if err != nil {
+			return nil, fmt.Errorf("list trust inputs for claims: %w", err)
+		}
+		inputs = append(inputs, chunk...)
+	}
+	out := make(map[string]domain.TrustInput, len(inputs))
+	for _, in := range inputs {
+		out[in.id] = in.toDomain()
+	}
+	return out, nil
+}
+
 // AverageTrust returns the mean trust_score across every claim.
 func (r ClaimRepository) AverageTrust(ctx context.Context) (float64, error) {
 	var avg sql.NullFloat64

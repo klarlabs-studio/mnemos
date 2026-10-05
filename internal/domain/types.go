@@ -249,6 +249,12 @@ type Belief struct {
 	// versioning (implicitly trust/v1) or was never computed.
 	TrustComputedAt   time.Time
 	TrustModelVersion string
+	// Credibility is a READ-TIME recall ranking signal (ADR 0026 §2), derived
+	// from TrustScore plus source authority, citations, execution liveness and
+	// test results. It is filled by recall admission, never persisted, and is
+	// deliberately not trust: TrustScore stays the one trust value every
+	// subsystem reports and gates on.
+	Credibility float64
 
 	// ValidFrom is when the claim's content first became true. Defaults
 	// to the source event's timestamp at insert time; see internal/pipeline.
