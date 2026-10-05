@@ -650,9 +650,14 @@ Three inputs are per belief:
   beliefs behind it gain or lose credit. Credit is stored and re-applied on
   every recompute, so a later ingest does not erase it.
 
-Trust is recomputed for the beliefs a write touches. `mnemos recompute-trust`
-rebuilds it for the whole store, which you need after upgrading or retuning
-`internal/trust`. `mnemos query --min-trust 0.5 "..."` filters before
+Trust is recomputed for the beliefs a write touches. Each stored score records
+the model version and instant that produced it (`trust_model_version`,
+`trust_computed_at`), so a stored value is a cache, not a separate truth. After
+upgrading, run `mnemos recompute-trust --stale --dry-run` to see how many
+beliefs predate the current model, then `mnemos recompute-trust --stale`. It
+rescores them in verified batches of 500 and resumes if interrupted.
+`mnemos recompute-trust --all` rebuilds everything in one pass, for when you
+retune `internal/trust`. `mnemos query --min-trust 0.5 "..."` filters before
 ranking, and `mnemos metrics` reports `avg_trust` and `low_trust_count`.
 
 ### Hybrid retrieval (v0.10+)
