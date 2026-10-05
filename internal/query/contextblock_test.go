@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -119,4 +120,34 @@ func newTestEngine(_ *testing.T, events []domain.Event, claims []domain.Claim, r
 		fakeClaimRepo{claims: claims},
 		fakeRelationshipRepo{rels: relMap},
 	)
+}
+
+// The Context Block must admit the same beliefs recall does. It used to drop
+// only deprecated claims, so narration recall suppresses (session-local) and
+// forgotten or superseded claims (valid time closed) reached agents as
+// "Active claims".
+func TestBuildContextBlock_UsesTheRecallPopulation(t *testing.T) {
+	past := time.Now().UTC().Add(-time.Hour)
+	events := []domain.Event{{ID: "e1", RunID: "r1"}}
+	claims := []domain.Claim{
+		{ID: "cl_live", Text: "kept", Type: domain.ClaimTypeFact, TrustScore: 0.5, Status: domain.ClaimStatusActive},
+		{ID: "cl_contested", Text: "kept too", Type: domain.ClaimTypeFact, TrustScore: 0.5, Status: domain.ClaimStatusContested},
+		{ID: "cl_session", Text: "now let me check", Type: domain.ClaimTypeFact, TrustScore: 0.9, Status: domain.ClaimStatusActive, Durability: domain.DurabilitySessionLocal},
+		{ID: "cl_forgotten", Text: "closed", Type: domain.ClaimTypeFact, TrustScore: 0.9, Status: domain.ClaimStatusActive, ValidTo: past},
+	}
+	e := newTestEngine(t, events, claims, nil)
+	out, err := e.BuildContextBlock(context.Background(), ContextBlockOptions{RunID: "r1"})
+	if err != nil {
+		t.Fatalf("BuildContextBlock: %v", err)
+	}
+	for _, id := range []string{"cl_live", "cl_contested"} {
+		if !strings.Contains(out, id) {
+			t.Errorf("%s missing; live and contested beliefs belong in the block\n%s", id, out)
+		}
+	}
+	for _, id := range []string{"cl_session", "cl_forgotten"} {
+		if strings.Contains(out, id) {
+			t.Errorf("%s present; recall excludes it, so the Context Block must too\n%s", id, out)
+		}
+	}
 }

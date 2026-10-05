@@ -15,7 +15,7 @@ OpenClaw, NanoClaw, or your own — without standing up the HTTP server.
 ```go
 import (
     "go.klarlabs.de/mnemos"
-    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+    _ "go.klarlabs.de/mnemos/sqlite"
 )
 
 mem, err := mnemos.New() // passive mode, XDG storage, bundled Chronos
@@ -65,11 +65,17 @@ results, _ := mem.Recall(ctx, mnemos.Query{Text: "Postgres decision", Hops: 1})
 ```go
 import "go.klarlabs.de/mnemos/providers"
 
-type myAdapter struct{ client *anthropic.Client }
+// myAdapter adapts the model call your runtime already makes.
+type myAdapter struct {
+    complete func(ctx context.Context, msgs []providers.Message) (string, error)
+}
 
 func (a *myAdapter) GenerateText(
     ctx context.Context, in providers.GenerateTextInput,
-) (providers.GenerateTextOutput, error) { /* wrap your client */ }
+) (providers.GenerateTextOutput, error) {
+    text, err := a.complete(ctx, in.Messages)
+    return providers.GenerateTextOutput{Content: text}, err
+}
 ```
 
 ### Chronos bundled

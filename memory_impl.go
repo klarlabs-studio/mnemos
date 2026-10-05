@@ -2136,16 +2136,22 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 	if herr != nil {
 		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance: %w", herr)
 	}
-	claimCount, cerr := m.conn.Claims.CountAll(ctx)
-	if cerr != nil {
-		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance count: %w", cerr)
+	// The denominator is the LIVE belief population, the same one the
+	// numerator is drawn from: hypercorrectionList drops every pair with a
+	// retired side. It used to be Claims.CountAll, every row ever stored, so
+	// each forgotten, deprecated or pruned belief diluted the rate. A brain
+	// that retired half its beliefs reported half the dissonance while
+	// holding exactly the same live contradictions.
+	live, lerr := m.liveBeliefCount(ctx)
+	if lerr != nil {
+		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance count: %w", lerr)
 	}
-	diss.Samples = int(claimCount)
-	if claimCount > 0 {
-		diss.Error = math.Min(float64(len(hyper))/float64(claimCount), 1)
-		diss.Basis = fmt.Sprintf("%d active hypercorrection(s) over %d belief(s)", len(hyper), claimCount)
+	diss.Samples = live
+	if live > 0 {
+		diss.Error = math.Min(float64(len(hyper))/float64(live), 1)
+		diss.Basis = fmt.Sprintf("%d active hypercorrection(s) over %d live belief(s)", len(hyper), live)
 	} else {
-		diss.Basis = "no beliefs"
+		diss.Basis = "no live beliefs"
 	}
 	levels = append(levels, diss)
 
@@ -2184,7 +2190,29 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 	if n > 0 {
 		total = sum / float64(n)
 	}
-	return PredictiveError{Levels: levels, Total: total, Hotspot: hotspot}, nil
+	return PredictiveError{Levels: levels, Total: total, Hotspot: hotspot, LevelsMeasured: n}, nil
+}
+
+// isLiveBelief is the population every brain-health rate is a fraction of: a
+// belief neither forgotten (valid time closed) nor deprecated. The low-trust,
+// staleness and trust-decay loop in BrainHealth applies the same two checks.
+func isLiveBelief(c domain.Claim) bool {
+	return c.ValidTo.IsZero() && c.Status != domain.ClaimStatusDeprecated
+}
+
+// liveBeliefCount counts the beliefs [isLiveBelief] admits.
+func (m *memory) liveBeliefCount(ctx context.Context) (int, error) {
+	claims, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, c := range claims {
+		if isLiveBelief(c) {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // Brain-health thresholds (ADR 0019). All five vitals are "higher is worse" rates or
@@ -2414,10 +2442,10 @@ func (m *memory) BrainHealth(ctx context.Context) (BrainHealth, error) {
 
 	// --- Vitals ---
 	// Reuse the PredictiveError dissonance level (active hypercorrections per belief).
-	dissonance := 0.0
+	dissonance, dissonanceSamples := 0.0, 0
 	for _, l := range pe.Levels {
 		if l.Level == "dissonance" {
-			dissonance = l.Error
+			dissonance, dissonanceSamples = l.Error, l.Samples
 		}
 	}
 	// low_trust + staleness over currently-valid beliefs.
@@ -2477,11 +2505,15 @@ func (m *memory) BrainHealth(ctx context.Context) (BrainHealth, error) {
 	lowTrustRate, stalenessRate := rate(lowTrust), rate(stale)
 
 	vitals := []Vital{
-		{"free_energy", pe.Total, gradeHigherWorse(pe.Total, healthFreeEnergyWarn, healthFreeEnergyCrit),
+		// Graded only when some level measured something. A free-energy total of
+		// 0 is the BEST possible value, so grading an unmeasured aggregate as OK
+		// reported a brain with no predictions, no schemas and no beliefs as
+		// healthy on the one axis that summarises all the others.
+		{"free_energy", pe.Total, gradeWithSamples(pe.LevelsMeasured, pe.Total, healthFreeEnergyWarn, healthFreeEnergyCrit),
 			fmt.Sprintf("overall prediction-error aggregate; most wrong at: %s", orNone(pe.Hotspot))},
 		{"calibration", cal.ECE, gradeWithSamples(cal.Samples, cal.ECE, healthCalibrationWarn, healthCalibrationCrit),
 			fmt.Sprintf("expected calibration error over %d adjudicated belief(s)", cal.Samples)},
-		{"dissonance", dissonance, gradeHigherWorse(dissonance, healthDissonanceWarn, healthDissonanceCrit),
+		{"dissonance", dissonance, gradeWithSamples(dissonanceSamples, dissonance, healthDissonanceWarn, healthDissonanceCrit),
 			"active high-stakes contradictions per belief"},
 		// Both are fractions OF validCount, so gradeWithSamples: 0/0 is not a
 		// brain that has lost nothing, it is a brain nothing was measured on.
