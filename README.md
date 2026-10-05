@@ -211,6 +211,7 @@ The thinking behind Mnemos, in plain language and in depth:
 - [**Meet Mnemos**](https://klarlabs.de/writing/meet-mnemos) — the intro: what it is and how people use it.
 - [**From store to brain**](https://klarlabs.de/writing/from-store-to-brain) — building the cognitive half: consolidation, forgetting, salience, self-correcting recall, with no LLM in the loop.
 - [**Is the brain healthy?**](https://klarlabs.de/writing/is-the-brain-healthy) — how a brain takes its own vitals, and what running one in production taught us about counting the right thing.
+- [**One belief, one trust**](https://klarlabs.de/writing/one-belief-one-trust) — the consolidation release: one trust value per belief, consolidation that can no longer merge a contradiction away, and what a million beliefs cost.
 
 ## Key Features
 
@@ -618,28 +619,41 @@ See [`mnemos.example.yaml`](mnemos.example.yaml) for every supported key.
 | `MNEMOS_TELEMETRY_OPTIN` | Truthy (`1`/`true`/`yes`) to opt in to anonymized usage payload. Default off. See [`docs/telemetry.md`](docs/telemetry.md). |
 | `MNEMOS_TELEMETRY_ENDPOINT` | POST destination for `mnemos metrics --workspace --telemetry-send`. Unset = no destination = no requests, even with opt-in active. |
 
-### Trust scoring (v0.7+)
+### Trust scoring
 
-Every claim carries a `trust_score ∈ [0, 1]` derived from three
-signals the LLM cannot fake:
+Every belief has one `trust_score ∈ [0, 1]`, computed by one function,
+`trust.At` ([ADR 0026](docs/adr/0026-canonical-trust.md)). Every subsystem
+uses that value: recall, `--min-trust`, brain health, forgetting and the API.
 
 ```
-trust = confidence × corroboration × freshness
-
-corroboration = 1 + ln(evidence_count) × 0.2     # 1 source: 1.0; 5: 1.32; 20: 1.60
-freshness     = max(0.3, exp(-days_since_latest / 90))   # 90-day half-life, floor 0.3
+trust     = clamp01(base + credit)
+base      = confidence × corroboration × freshness
+corroboration = 1 + ln(n) × 0.2           # n graded by independence: repeats from one source count half
+freshness = max(0.3, exp(-d / τ))         # τ = the belief's own time constant, default 90 days
+d         = days since max(newest evidence, last explicit confirmation)
+credit    = outcome credit (ADR 0014), capped at ±0.30
 ```
 
-The score is recomputed automatically after every `process` run; you
-can rebuild it manually with `mnemos recompute-trust` (e.g., after
-upgrading or tuning the constants in `internal/trust`).
+Three inputs are per belief:
 
-`mnemos query --min-trust 0.5 "..."` filters out low-confidence
-results before ranking. `mnemos metrics` reports `avg_trust` and
-`low_trust_count` for at-a-glance corpus quality. The
-trust-scoring policy lives in `internal/trust/trust.go` — change
-the constants there to retune for your corpus, then run
-`mnemos recompute-trust` to backfill.
+- **Time constant τ.** Volatile beliefs (what is installed, running or
+  deployed) get a short one at ingest, and durable ones keep the 90-day
+  default. `mnemos verify <id> --half-life-days N` overrides it. τ is an
+  e-folding time: freshness is 37%, not 50%, at `d = τ`. The column keeps its
+  historical name `half_life_days`.
+- **Confirmation.** `mnemos verify`, the `memory_promote` MCP tool and an outcome that
+  validated the belief record `last_confirmed`, which refreshes trust. Being
+  recalled or rehearsed during sleep does **not**. Recall and replay update
+  `last_verified` (liveness, replay order) only, so retrieval cannot inflate
+  trust.
+- **Credit.** When a decision's prediction is validated or refuted, the
+  beliefs behind it gain or lose credit. Credit is stored and re-applied on
+  every recompute, so a later ingest does not erase it.
+
+Trust is recomputed for the beliefs a write touches. `mnemos recompute-trust`
+rebuilds it for the whole store, which you need after upgrading or retuning
+`internal/trust`. `mnemos query --min-trust 0.5 "..."` filters before
+ranking, and `mnemos metrics` reports `avg_trust` and `low_trust_count`.
 
 ### Hybrid retrieval (v0.10+)
 
@@ -865,6 +879,14 @@ The organs (arc 1):
   the challenger; history is preserved and the alert clears. Named for the
   hypercorrection effect — high-confidence errors, once caught, correct strongest.
 
+## Vocabulary
+
+The wire (REST, gRPC, MCP) speaks the brain vocabulary: belief, episode,
+association, schema, reflex. The Go library and the storage schema use the
+machine vocabulary: claim, event, relationship, lesson, playbook.
+[`docs/vocabulary.md`](docs/vocabulary.md) maps one onto the other and says
+which surface uses which.
+
 ## Contributing
 
 Contributions welcome. See [PRD.md](./PRD.md) for product direction and [TDD.md](./TDD.md) for technical design.
@@ -883,7 +905,11 @@ Default off. Two independent gates (opt-in flag + endpoint URL) must hold for an
 
 ## Reliability
 
-SLO: 99.9% availability over 30 days, p99 read 250ms, p99 write 500ms. Error-budget burn alerts in [`SLO.md`](SLO.md). Mutation-testing gate at 70% kill rate on `internal/trust` (currently 100% / 45 mutants caught) — see [`docs/testing/mutation.md`](docs/testing/mutation.md).
+SLO: 99.9% availability over 30 days, p99 read 250ms, p99 write 500ms. Error-budget burn alerts in [`SLO.md`](SLO.md). Mutation-testing gate at 70% kill rate on `internal/trust` (97.8%, 45 of 46 mutants caught, at the consolidation baseline). See [`docs/testing/mutation.md`](docs/testing/mutation.md).
+
+Every Go example in this README and in `docs/` is compiled on every CI run from a module **outside** this repository (`test/docs`), so a documented import that only works inside the module fails the build.
+
+Scale is measured, not assumed. `go run ./tools/scalebench -beliefs N` generates a deterministic synthetic brain and times load, recall, health, gaps and writes against it. The [Phase 0 baseline](docs/consolidation/baseline/README.md) records 10k, 100k and 1M beliefs. At 1M, every operation completes, but a write takes ~19 s and a full health check ~13 s, and those are the numbers the scale work is held to.
 
 ## License
 
