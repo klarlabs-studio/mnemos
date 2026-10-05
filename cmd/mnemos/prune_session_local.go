@@ -36,9 +36,11 @@ import (
 // # WHY IT IS SAFE
 //
 // Deprecation is reduced retrievability, never erasure: the claim keeps its
-// evidence, its history, and its queryability under --include-history, and the
-// transition lands a claim_status_history row through the governed writer. It is
-// reversible; deletion would not be.
+// evidence and its history (both visible in `mnemos audit`), and the transition
+// lands a claim_status_history row through the governed writer. Recall excludes
+// deprecated claims unconditionally — --include-history widens valid time, not
+// status — so this pass removes them from recall. Nothing is deleted, which is
+// what keeps it recoverable; deletion would not be.
 //
 // The verdict it acts on comes from a classifier with a measured error profile
 // that OVER-calls durable — it under-suppresses rather than over-suppresses — so
@@ -109,7 +111,7 @@ func pruneSessionLocal(dryRun bool, f Flags) {
 			}); err != nil {
 				return NewSystemError(err, "deprecate session-local claims")
 			}
-			fmt.Printf("\ndeprecated %d session-local claim(s); they remain queryable with --include-history.\n", len(local))
+			fmt.Printf("\ndeprecated %d session-local claim(s); recall no longer returns them. Their rows, evidence and status history are kept: see `mnemos audit`.\n", len(local))
 			return nil
 		})
 	if err != nil {
