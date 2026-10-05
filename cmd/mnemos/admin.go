@@ -200,6 +200,9 @@ func handleDedupe(args []string, f Flags) {
 func printDedupePlan(plan pipeline.SemanticDedupePlan) {
 	fmt.Printf("Semantic dedupe plan (threshold=%.2f)\n", plan.Threshold)
 	fmt.Printf("  scanned:   %d claim(s) with embeddings\n", plan.ClaimsScanned)
+	if plan.SkippedRetired > 0 {
+		fmt.Printf("  retired:   %d deprecated or no-longer-valid claim(s) are never merge candidates\n", plan.SkippedRetired)
+	}
 	if plan.SkippedNoEmbedding > 0 {
 		fmt.Printf("  skipped:   %d claim(s) without embeddings (run 'mnemos reembed' to include them)\n", plan.SkippedNoEmbedding)
 	}
