@@ -25,8 +25,8 @@ useful for tests; SQLite is the right default for most callers):
 
 ```go
 import (
-    _ "go.klarlabs.de/mnemos/internal/store/memory"
-    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+    _ "go.klarlabs.de/mnemos/memory"
+    _ "go.klarlabs.de/mnemos/sqlite"
     // Postgres / MySQL / libSQL providers also available; import only
     // what your binary needs.
 )
@@ -39,9 +39,10 @@ package main
 
 import (
     "context"
+    "fmt"
 
     "go.klarlabs.de/mnemos"
-    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+    _ "go.klarlabs.de/mnemos/sqlite"
 )
 
 func main() {
@@ -57,7 +58,7 @@ func main() {
 
     results, _ := mem.Recall(ctx, mnemos.Query{Text: "user Go work"})
     for _, r := range results {
-        // r.Text, r.Type, r.Confidence, r.TrustScore, ...
+        fmt.Printf("[%s] %s (trust %.2f)\n", r.Type, r.Text, r.TrustScore)
     }
 }
 ```
@@ -91,16 +92,22 @@ content return nothing. Documented openly so adopters can decide.
 ```go
 import "go.klarlabs.de/mnemos/providers"
 
-type myTextGen struct{ client *anthropic.Client }
+// myTextGen adapts the model call your runtime already makes.
+type myTextGen struct {
+    complete func(ctx context.Context, msgs []providers.Message) (string, error)
+}
 
 func (g *myTextGen) GenerateText(
     ctx context.Context, in providers.GenerateTextInput,
 ) (providers.GenerateTextOutput, error) {
-    // wrap your existing provider call
+    text, err := g.complete(ctx, in.Messages)
+    return providers.GenerateTextOutput{Content: text}, err
 }
 
+var agentComplete func(context.Context, []providers.Message) (string, error) // your runtime's model call
+
 mem, _ := mnemos.New(
-    mnemos.WithSharedProvider(&myTextGen{client: agentLLM}, nil),
+    mnemos.WithSharedProvider(&myTextGen{complete: agentComplete}, nil),
 )
 ```
 
@@ -152,7 +159,11 @@ Same `Remember` call as Mode 1; the difference is the construction
 option:
 
 ```go
-mem, _ := mnemos.New(mnemos.WithSharedProvider(myTextGen, myEmbedder))
+var (
+    textGen  providers.TextGenerator // your adapter, as in "Shared" above
+    embedder providers.Embedder      // optional; nil falls back to token overlap
+)
+mem, _ := mnemos.New(mnemos.WithSharedProvider(textGen, embedder))
 mem.Remember(ctx, mnemos.Item{
     Type:    "fact",
     Content: "Long document with many implicit assertions ...",
@@ -224,6 +235,7 @@ detection results call into the `*embed.Engine` they supplied via
 The `mnemos/providers` subpackage exposes two framework-neutral
 interfaces consumers implement:
 
+<!-- doccheck:skip excerpt of declarations inside package providers; unqualified names are not consumer code -->
 ```go
 type TextGenerator interface {
     GenerateText(ctx context.Context, in GenerateTextInput) (GenerateTextOutput, error)
@@ -246,11 +258,11 @@ resolve. Common imports:
 
 ```go
 import (
-    _ "go.klarlabs.de/mnemos/internal/store/memory"   // memory://
-    _ "go.klarlabs.de/mnemos/internal/store/sqlite"   // sqlite://
-    _ "go.klarlabs.de/mnemos/internal/store/postgres" // postgres:// (also CockroachDB, YugabyteDB, Neon, ...)
-    _ "go.klarlabs.de/mnemos/internal/store/mysql"    // mysql:// (also PlanetScale, TiDB, MariaDB, Vitess)
-    _ "go.klarlabs.de/mnemos/internal/store/libsql"   // libsql:// (Turso remote or local file)
+    _ "go.klarlabs.de/mnemos/memory"   // memory://
+    _ "go.klarlabs.de/mnemos/sqlite"   // sqlite://
+    _ "go.klarlabs.de/mnemos/postgres" // postgres:// (also CockroachDB, YugabyteDB, Neon, ...)
+    _ "go.klarlabs.de/mnemos/mysql"    // mysql:// (also PlanetScale, TiDB, MariaDB, Vitess)
+    _ "go.klarlabs.de/mnemos/libsql"   // libsql:// (Turso remote or local file)
 )
 ```
 
