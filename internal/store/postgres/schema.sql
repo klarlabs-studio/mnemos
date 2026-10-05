@@ -44,10 +44,13 @@ CREATE TABLE IF NOT EXISTS claims (
   created_at     timestamptz      NOT NULL,
   created_by     text             NOT NULL DEFAULT '<system>',
   trust_score    double precision NOT NULL DEFAULT 0,
+  trust_computed_at timestamptz,
+  trust_model_version text             NOT NULL DEFAULT '',
   valid_from     timestamptz,
   valid_to       timestamptz,
   last_verified  timestamptz,
   verify_count   integer          NOT NULL DEFAULT 0,
+  last_confirmed timestamptz,
   half_life_days double precision NOT NULL DEFAULT 0,
   -- ADR 0025: which classifier assigned half_life_days. '' means none did,
   -- which is a different fact from a classifier judging the belief durable
@@ -63,6 +66,11 @@ CREATE TABLE IF NOT EXISTS claims (
 -- earlier schema generations.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS last_verified  timestamptz;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS verify_count   integer          NOT NULL DEFAULT 0;
+-- ADR 0026: explicit confirmation time, the freshness reference canonical trust reads.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS last_confirmed timestamptz;
+-- ADR 0026 §5: what trust_score is a cache of.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS trust_computed_at timestamptz NULL;
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS trust_model_version text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_days double precision NOT NULL DEFAULT 0;
 -- Metadata-only on PG 11+: a non-volatile default lives in the catalog rather
 -- than rewriting the heap, so this does not touch the existing rows.

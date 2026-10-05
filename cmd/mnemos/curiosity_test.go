@@ -36,9 +36,7 @@ func seedCuriosityStore(t *testing.T, dsn string, claims []domain.Claim) {
 	if !ok {
 		t.Fatalf("claim repo is not a TrustScorer")
 	}
-	if _, err := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-		return trust.Score(confidence, evidenceCount, latestEvidence, now)
-	}); err != nil {
+	if _, err := scorer.RecomputeTrust(ctx, trust.Scorer(now)); err != nil {
 		t.Fatalf("recompute trust: %v", err)
 	}
 }

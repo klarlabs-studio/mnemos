@@ -143,3 +143,26 @@ Same change: `low_trust` and `staleness` now grade with their sample count — 0
 beliefs is `unknown`, not healthy — and `--human` renders `unknown` as `[ ?? ]` instead
 of falling through to `[ ok ]`, which had been undoing the v0.122.0 fix for every reader
 who did not pipe the output through `jq`.
+
+### One population for every rate; `free_energy` and `dissonance` can be `unknown` (2026-10-04, #389)
+
+The `unknown` amendment above was applied to `calibration`, `low_trust` and
+`staleness` but not to the two vitals derived from `PredictiveError`:
+
+- **dissonance** divided live hypercorrections by `Claims.CountAll`, which
+  counts every row ever stored. Its numerator already ignores retired beliefs,
+  so each forgotten, deprecated or pruned belief diluted the rate. A brain
+  that retired half its beliefs reported half the dissonance with the same live
+  contradictions. The denominator is now the live population (`isLiveBelief`:
+  valid time open and not deprecated). That is the same population the
+  low-trust, staleness and trust-decay rates use. With no live beliefs the
+  vital is `unknown`.
+- **free_energy** was graded even when no level had data. Its total is then
+  0.0, the best possible value, so an empty brain scored as healthy on the axis
+  that summarises the others. `PredictiveError.LevelsMeasured` now records how
+  many levels contributed, and the vital is `unknown` when it is 0.
+  `unknown` ranks below `ok`, so an empty brain's overall verdict is unchanged.
+
+Still open under #389: `low_trust` reads stored trust while `trust_decay`
+reads the per-belief model (#386), calibration's population, and versioning
+health snapshots.

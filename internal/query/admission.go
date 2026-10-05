@@ -27,10 +27,15 @@ import (
 // the chain would just recreate the drift.
 
 // rescoreCredibility fills each claim's derived provenance fields (execution
-// time, liveness) and recomputes its trust score from the current provenance
-// signals, in place. Every claim that reaches an Answer must be rescored, or
-// claims from different retrieval paths get ranked and trust-filtered on
-// different scales.
+// time, liveness) and computes its credibility from the current provenance
+// signals, in place. Every claim that reaches an Answer must be rescored, so
+// claims from different retrieval paths carry comparable credibility.
+//
+// It no longer overwrites TrustScore (ADR 0026 §2). It used to, which made
+// recall report, filter on and resolve contradictions with a different number
+// from the trust Get, the API and brain health reported for the same belief at
+// the same instant. Credibility is now its own field; TrustScore stays the
+// canonical stored trust.
 func rescoreCredibility(claims []domain.Claim, now time.Time) {
 	for i := range claims {
 		if claims[i].LastExecuted.IsZero() {
@@ -66,7 +71,7 @@ func rescoreCredibility(claims []domain.Claim, now time.Time) {
 			TestPassCount:   claims[i].TestPassCount,
 			TestFailCount:   claims[i].TestFailCount,
 		})
-		claims[i].TrustScore = score
+		claims[i].Credibility = score
 		claims[i].ProvenanceRationale = rationale
 	}
 }
@@ -75,8 +80,8 @@ func rescoreCredibility(claims []domain.Claim, now time.Time) {
 // returns the survivors, credibility-rescored. The input slice is never
 // mutated: the first filter copies.
 //
-// Order matters in exactly one place — the rescore has to run before MinTrust,
-// because MinTrust gates on the recomputed score, not the stored one.
+// MinTrust gates on canonical trust (ADR 0026 §2), the same value Get and the
+// API report, not on recall credibility.
 func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []domain.Claim {
 	// Drop deprecated claims before anything ranks them. `forget` and
 	// `memory_deprecate` promise that a forgotten claim stops being recalled,
@@ -88,7 +93,7 @@ func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []dom
 	// represented and hiding it would silently pick a side; resolved is the
 	// winner of one. The evidence and history of a deprecated claim stay
 	// queryable — this governs recall, not retention.
-	out := excludeDeprecated(claims)
+	out := recallPopulation(claims)
 
 	// Drop claims an LLM judged SESSION-LOCAL: conversational narration stored
 	// as a belief, which was never knowledge.
@@ -111,7 +116,9 @@ func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []dom
 	// Unknown/unset durability is deliberately NOT filtered. 80,703 claims are
 	// still unclassified, and treating "not yet judged" as "narration" would
 	// empty the brain. Suppression grows as classification does.
-	out = keepClaims(out, func(c domain.Claim) bool { return !c.Durability.IsSessionLocal() })
+	//
+	// Both filters live in recallPopulation so the Context Block applies the
+	// exact same rule.
 
 	rescoreCredibility(out, now)
 
@@ -202,4 +209,15 @@ func keepClaims(claims []domain.Claim, pred func(domain.Claim) bool) []domain.Cl
 		}
 	}
 	return out
+}
+
+// recallPopulation is the status/durability half of admission: drop deprecated
+// and session-local claims. It is shared with BuildContextBlock so the context
+// an agent is handed and the context recall injects cannot disagree about what
+// counts as a live belief. The Context Block applied only the deprecated half,
+// so narration recall deliberately suppressed reached agents through
+// memory_context and /v1/context.
+func recallPopulation(claims []domain.Claim) []domain.Claim {
+	out := excludeDeprecated(claims)
+	return keepClaims(out, func(c domain.Claim) bool { return !c.Durability.IsSessionLocal() })
 }

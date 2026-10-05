@@ -8,6 +8,16 @@
 // Every write still routes through the store's governed axi kernel, so
 // the no-bypass guarantee holds.
 //
+// It is a deliberate SUBSET of the full MCP server (`mnemos mcp`): the core
+// Store port only, with none of the cognitive, governance or agent-workflow
+// tools. The subset is recorded per capability in the mcp-lite column of
+// docs/reference/capabilities.md, which a test holds to this file's tool
+// registrations. Two names mean something different here than on the full
+// server, a known collision kept for compatibility until the next major
+// version: `remember` here extracts beliefs from text (the full server's
+// process_text), and `recall` here is plain Recall (the full server's
+// `recall` is the mode-switched advanced recall).
+//
 //	store, _ := mnemos.New(mnemos.WithSQLite("./mnemos.db"))
 //	srv := mcp.NewServer(store)
 //	mcp.ServeStdio(ctx, srv)

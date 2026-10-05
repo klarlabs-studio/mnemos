@@ -17,9 +17,11 @@ import (
 	"time"
 )
 
-// FreshnessHalfLifeDays controls how quickly a claim's trust decays
-// in the absence of new corroborating evidence. At one half-life the
-// freshness factor is e^-1 ≈ 0.37; at two half-lives ≈ 0.13. A floor
+// FreshnessHalfLifeDays is the DEFAULT freshness time constant τ: how quickly
+// a claim's trust decays in the absence of new corroborating evidence or
+// re-verification. Despite the name it is an e-folding time, not a half-life:
+// at d = τ the freshness factor is e^-1 ≈ 0.37, at 2τ ≈ 0.13 (ADR 0026 §4 keeps
+// the arithmetic and the name). A claim's own HalfLifeDays overrides it. A floor
 // (FreshnessFloor) prevents very old facts from collapsing to zero —
 // "Paris is the capital of France" should not score 0 just because the
 // last corroborating event was a year ago.

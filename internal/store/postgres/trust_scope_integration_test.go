@@ -64,11 +64,11 @@ func TestPostgres_RecomputeTrustForClaims_OnlyTouchesNamedClaims(t *testing.T) {
 	scoped := scopedScorer(t, conn)
 
 	seedClaims(t, ctx, conn, "a", "b", "c")
-	if _, err := conn.Claims.(ports.TrustScorer).RecomputeTrust(ctx, func(float64, int, time.Time) float64 { return 0.10 }); err != nil {
+	if _, err := conn.Claims.(ports.TrustScorer).RecomputeTrust(ctx, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.10 }}); err != nil {
 		t.Fatalf("baseline recompute: %v", err)
 	}
 
-	n, err := scoped.RecomputeTrustForClaims(ctx, []string{"b"}, func(float64, int, time.Time) float64 { return 0.90 })
+	n, err := scoped.RecomputeTrustForClaims(ctx, []string{"b"}, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.90 }})
 	if err != nil {
 		t.Fatalf("scoped recompute: %v", err)
 	}
@@ -90,10 +90,10 @@ func TestPostgres_RecomputeTrustForClaims_EmptyIsNoOp(t *testing.T) {
 	scoped := scopedScorer(t, conn)
 
 	seedClaims(t, ctx, conn, "a")
-	if _, err := conn.Claims.(ports.TrustScorer).RecomputeTrust(ctx, func(float64, int, time.Time) float64 { return 0.25 }); err != nil {
+	if _, err := conn.Claims.(ports.TrustScorer).RecomputeTrust(ctx, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.25 }}); err != nil {
 		t.Fatalf("baseline: %v", err)
 	}
-	n, err := scoped.RecomputeTrustForClaims(ctx, nil, func(float64, int, time.Time) float64 { return 0.99 })
+	n, err := scoped.RecomputeTrustForClaims(ctx, nil, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.99 }})
 	if err != nil {
 		t.Fatalf("scoped recompute: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestPostgres_RecomputeTrustForClaims_UnknownIDsSkipped(t *testing.T) {
 	scoped := scopedScorer(t, conn)
 
 	seedClaims(t, ctx, conn, "a")
-	n, err := scoped.RecomputeTrustForClaims(ctx, []string{"a", "deleted"}, func(float64, int, time.Time) float64 { return 0.5 })
+	n, err := scoped.RecomputeTrustForClaims(ctx, []string{"a", "deleted"}, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.5 }})
 	if err != nil {
 		t.Fatalf("unknown id caused an error: %v", err)
 	}
@@ -151,10 +151,10 @@ func TestPostgres_RecomputeTrustForClaims_MatchesFullRecompute(t *testing.T) {
 		t.Fatalf("seed evidence: %v", err)
 	}
 
-	score := func(conf float64, n int, latest time.Time) float64 {
-		return conf/2 + float64(n)/10 + float64(latest.Unix()%7)/100
+	score := func(in domain.TrustInput) float64 {
+		return in.Confidence/2 + float64(in.EvidenceCount)/10 + float64(in.LatestEvidence.Unix()%7)/100
 	}
-	if _, err := full.RecomputeTrust(ctx, score); err != nil {
+	if _, err := full.RecomputeTrust(ctx, domain.TrustScoring{Score: score}); err != nil {
 		t.Fatalf("full: %v", err)
 	}
 	want := map[string]float64{
@@ -164,10 +164,10 @@ func TestPostgres_RecomputeTrustForClaims_MatchesFullRecompute(t *testing.T) {
 	}
 
 	// Reset, then take the scoped path over the same claims.
-	if _, err := full.RecomputeTrust(ctx, func(float64, int, time.Time) float64 { return 0 }); err != nil {
+	if _, err := full.RecomputeTrust(ctx, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0 }}); err != nil {
 		t.Fatalf("reset: %v", err)
 	}
-	n, err := scoped.RecomputeTrustForClaims(ctx, []string{"a", "b", "c"}, score)
+	n, err := scoped.RecomputeTrustForClaims(ctx, []string{"a", "b", "c"}, domain.TrustScoring{Score: score})
 	if err != nil {
 		t.Fatalf("scoped: %v", err)
 	}
@@ -236,11 +236,11 @@ func TestPostgres_RecomputeTrustForClaims_RespectsTenantRLS(t *testing.T) {
 	// RLS must make that row invisible to the aggregate and to the UPDATE.
 	seedClaims(t, ctx, a, "claim-acme")
 	seedClaims(t, ctx, b, "claim-globex")
-	if _, err := b.Claims.(ports.TrustScorer).RecomputeTrust(ctx, func(float64, int, time.Time) float64 { return 0.11 }); err != nil {
+	if _, err := b.Claims.(ports.TrustScorer).RecomputeTrust(ctx, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.11 }}); err != nil {
 		t.Fatalf("tenant B baseline: %v", err)
 	}
 
-	n, err := scopedScorer(t, a).RecomputeTrustForClaims(ctx, []string{"claim-acme", "claim-globex"}, func(float64, int, time.Time) float64 { return 0.99 })
+	n, err := scopedScorer(t, a).RecomputeTrustForClaims(ctx, []string{"claim-acme", "claim-globex"}, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.99 }})
 	if err != nil {
 		t.Fatalf("tenant A scoped recompute: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestPostgres_RecomputeTrustForClaims_LargeIDSet(t *testing.T) {
 	for i := 0; i < 5000; i++ {
 		ids = append(ids, fmt.Sprintf("absent-%d", i))
 	}
-	n, err := scoped.RecomputeTrustForClaims(ctx, ids, func(float64, int, time.Time) float64 { return 0.42 })
+	n, err := scoped.RecomputeTrustForClaims(ctx, ids, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.42 }})
 	if err != nil {
 		t.Fatalf("large id set: %v", err)
 	}

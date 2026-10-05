@@ -340,14 +340,11 @@ func groupClaimsByCreatedBy(claims []domain.Claim) map[string][]domain.Claim {
 	return groups
 }
 
-// defaultTrustScorer wraps internal/trust.Score with a real wall
-// clock. Defined here (rather than inlined) so tests can swap in a
-// fixed clock if/when we add an integration test for the persist
-// → trust pipeline.
-func defaultTrustScorer() func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-	return func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-		return trust.Score(confidence, evidenceCount, latestEvidence, time.Now().UTC())
-	}
+// defaultTrustScorer is canonical trust (trust.At, ADR 0026) at one instant
+// for the whole pass, so every row of a rescore is scored against the same
+// clock reading.
+func defaultTrustScorer() domain.TrustScoring {
+	return trust.Scorer(time.Now().UTC())
 }
 
 // MaterializeEntities walks the per-claim entity tags produced by the

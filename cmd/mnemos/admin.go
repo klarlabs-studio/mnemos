@@ -188,9 +188,7 @@ func handleDedupe(args []string, f Flags) {
 		// changed; recompute so the next query sees fresh scores.
 		now := time.Now().UTC()
 		if scorer, ok := conn.Claims.(ports.TrustScorer); ok {
-			if _, err := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-				return trust.Score(confidence, evidenceCount, latestEvidence, now)
-			}); err != nil {
+			if _, err := scorer.RecomputeTrust(ctx, trust.Scorer(now)); err != nil {
 				fmt.Fprintf(os.Stderr, "  warning: post-dedupe trust recompute failed: %v\n", err)
 			}
 		}
@@ -219,33 +217,99 @@ func printDedupePlan(plan pipeline.SemanticDedupePlan) {
 	}
 }
 
-// handleRecomputeTrust rebuilds trust_score for every claim under the
-// current scoring policy. Useful after upgrading (the v1→v2 migration
-// adds the column with default 0; this command actually populates
-// it), after tuning the trust constants in internal/trust, or as a
-// nightly cron via `mnemos schedule`.
+// handleRecomputeTrust rebuilds stored trust under the current model
+// (trust.At, ADR 0026).
+//
+//	mnemos recompute-trust [--all]                         every claim, one pass
+//	mnemos recompute-trust --stale [--batch N] [--dry-run]  only claims whose stored
+//	                                                         trust predates the current model
+//
+// --stale is the upgrade path: it rescores in bounded, verified batches and
+// resumes where it stopped, so it is safe on a large brain and after an
+// interruption. --all is for retuning the constants in internal/trust.
 func handleRecomputeTrust(args []string, f Flags) {
-	for _, a := range args {
-		if a != "--all" {
-			exitWithMnemosError(false, NewUserError("unknown argument %q for recompute-trust\n  mnemos recompute-trust [--all]", a))
-			return
-		}
+	stale, dryRun, batch, err := parseRecomputeTrustArgs(args, f)
+	if err != nil {
+		exitWithMnemosError(false, NewUserError("%v\n  mnemos recompute-trust [--all] | --stale [--batch N] [--dry-run]", err))
+		return
+	}
+	if stale {
+		recomputeStaleTrust(dryRun, batch, f)
+		return
 	}
 
-	err := runJob("recompute-trust", map[string]string{}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
+	err = runJob("recompute-trust", map[string]string{}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
 		conn := w.Conn()
 		scorer, ok := conn.Claims.(ports.TrustScorer)
 		if !ok {
 			return NewSystemError(fmt.Errorf("backend %T does not support trust scoring", conn.Claims), "recompute trust")
 		}
 		now := time.Now().UTC()
-		n, err := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-			return trust.Score(confidence, evidenceCount, latestEvidence, now)
-		})
+		n, err := scorer.RecomputeTrust(ctx, trust.Scorer(now))
 		if err != nil {
 			return NewSystemError(err, "recompute trust")
 		}
-		fmt.Printf("Recomputed trust for %d claim(s).\n", n)
+		fmt.Printf("Recomputed trust for %d claim(s) under %s.\n", n, trust.ModelVersion)
+		return nil
+	})
+	exitWithMnemosError(f.Verbose, err)
+}
+
+// parseRecomputeTrustArgs reads the recompute-trust arguments. --dry-run is a
+// GLOBAL flag: the top-level parser removes it from args and sets f.DryRun, so
+// reading it from args alone would silently ignore it — and a dry run would
+// write. It must come from f.
+func parseRecomputeTrustArgs(args []string, f Flags) (stale, dryRun bool, batch int, err error) {
+	dryRun, batch = f.DryRun, defaultTrustBackfillBatch
+	batchSet := false
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; a {
+		case "--all":
+		case "--stale":
+			stale = true
+		case "--dry-run":
+			dryRun = true
+		case "--batch":
+			if i+1 >= len(args) {
+				return false, false, 0, fmt.Errorf("--batch requires a value")
+			}
+			if batch, err = parseTrustBackfillBatch(args[i+1]); err != nil {
+				return false, false, 0, err
+			}
+			batchSet = true
+			i++
+		default:
+			return false, false, 0, fmt.Errorf("unknown argument %q for recompute-trust", a)
+		}
+	}
+	if (dryRun || batchSet) && !stale {
+		return false, false, 0, fmt.Errorf("--dry-run and --batch apply to --stale; a full recompute has no dry run")
+	}
+	return stale, dryRun, batch, nil
+}
+
+func recomputeStaleTrust(dryRun bool, batch int, f Flags) {
+	err := runJob("recompute-trust-stale", map[string]string{
+		"dry_run": fmt.Sprint(dryRun), "batch": fmt.Sprint(batch),
+	}, f.Verbose, func(ctx context.Context, _ *workflow.Job, w *govwrite.Writer) error {
+		conn := w.Conn()
+		claims, err := conn.Claims.ListAll(ctx)
+		if err != nil {
+			return NewSystemError(err, "list claims")
+		}
+		plan := planTrustBackfill(claims)
+		printTrustBackfillPlan(plan)
+		if dryRun || len(plan.Stale) == 0 {
+			if dryRun {
+				fmt.Println("\n(dry run — nothing written; re-run without --dry-run to apply)")
+			}
+			return nil
+		}
+		rescored, batches, err := applyTrustBackfill(ctx, conn, plan.Stale, batch, time.Now())
+		if err != nil {
+			return NewSystemError(err, "backfill trust (rows already rescored keep the new version; re-run to resume)")
+		}
+		fmt.Printf("\nRescored %d claim(s) in %d verified batch(es) under %s.\n", rescored, batches, trust.ModelVersion)
 		return nil
 	})
 	exitWithMnemosError(f.Verbose, err)

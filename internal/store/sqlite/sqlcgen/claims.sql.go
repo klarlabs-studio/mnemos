@@ -88,8 +88,8 @@ func (q *Queries) DeleteClaimStatusHistoryByClaimID(ctx context.Context, claimID
 }
 
 const listAllClaims = `-- name: ListAllClaims :many
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
-       valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier,
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -118,10 +118,13 @@ func (q *Queries) ListAllClaims(ctx context.Context) ([]Claim, error) {
 			&i.CreatedAt,
 			&i.CreatedBy,
 			&i.TrustScore,
+			&i.TrustComputedAt,
+			&i.TrustModelVersion,
 			&i.ValidFrom,
 			&i.ValidTo,
 			&i.LastVerified,
 			&i.VerifyCount,
+			&i.LastConfirmed,
 			&i.HalfLifeDays,
 			&i.HalfLifeClassifier,
 			&i.ScopeService,
@@ -166,25 +169,33 @@ SELECT
   c.confidence      AS confidence,
   COUNT(DISTINCT e.created_by) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
-  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
+  c.last_confirmed  AS last_confirmed,
+  c.half_life_days  AS half_life_days,
+  c.confidence_components AS confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
-GROUP BY c.id, c.confidence
+GROUP BY c.id, c.confidence, c.last_confirmed, c.half_life_days, c.confidence_components
 `
 
 type ListClaimTrustInputsRow struct {
-	ClaimID          string  `json:"claim_id"`
-	Confidence       float64 `json:"confidence"`
-	DistinctSources  int64   `json:"distinct_sources"`
-	TotalEvents      int64   `json:"total_events"`
-	LatestEvidenceAt string  `json:"latest_evidence_at"`
+	ClaimID              string  `json:"claim_id"`
+	Confidence           float64 `json:"confidence"`
+	DistinctSources      int64   `json:"distinct_sources"`
+	TotalEvents          int64   `json:"total_events"`
+	LatestEvidenceAt     string  `json:"latest_evidence_at"`
+	LastConfirmed        string  `json:"last_confirmed"`
+	HalfLifeDays         float64 `json:"half_life_days"`
+	ConfidenceComponents string  `json:"confidence_components"`
 }
 
-// Inputs to recompute trust_score for every claim: confidence, the count of
-// DISTINCT evidence-event authors and of total events (so corroboration can be
-// graded by independence - an echo-chamber guard), and the most-recent evidence
-// timestamp. LEFT JOIN so claims with no evidence still appear; the caller treats
+// Inputs to recompute trust_score for every claim (ADR 0026 trust.At):
+// confidence, the count of DISTINCT evidence-event authors and of total events
+// (so corroboration can be graded by independence - an echo-chamber guard), the
+// most-recent evidence timestamp, and the claim's own last_confirmed,
+// half_life_days and confidence_components (which carries applied credit).
+// LEFT JOIN so claims with no evidence still appear; the caller treats
 // the missing aggregate as 0/empty.
 func (q *Queries) ListClaimTrustInputs(ctx context.Context) ([]ListClaimTrustInputsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listClaimTrustInputs)
@@ -201,6 +212,9 @@ func (q *Queries) ListClaimTrustInputs(ctx context.Context) ([]ListClaimTrustInp
 			&i.DistinctSources,
 			&i.TotalEvents,
 			&i.LatestEvidenceAt,
+			&i.LastConfirmed,
+			&i.HalfLifeDays,
+			&i.ConfidenceComponents,
 		); err != nil {
 			return nil, err
 		}
@@ -221,20 +235,26 @@ SELECT
   c.confidence      AS confidence,
   COUNT(DISTINCT e.created_by) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
-  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
+  c.last_confirmed  AS last_confirmed,
+  c.half_life_days  AS half_life_days,
+  c.confidence_components AS confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
 WHERE c.id IN (/*SLICE:claim_ids*/?)
-GROUP BY c.id, c.confidence
+GROUP BY c.id, c.confidence, c.last_confirmed, c.half_life_days, c.confidence_components
 `
 
 type ListClaimTrustInputsForClaimsRow struct {
-	ClaimID          string  `json:"claim_id"`
-	Confidence       float64 `json:"confidence"`
-	DistinctSources  int64   `json:"distinct_sources"`
-	TotalEvents      int64   `json:"total_events"`
-	LatestEvidenceAt string  `json:"latest_evidence_at"`
+	ClaimID              string  `json:"claim_id"`
+	Confidence           float64 `json:"confidence"`
+	DistinctSources      int64   `json:"distinct_sources"`
+	TotalEvents          int64   `json:"total_events"`
+	LatestEvidenceAt     string  `json:"latest_evidence_at"`
+	LastConfirmed        string  `json:"last_confirmed"`
+	HalfLifeDays         float64 `json:"half_life_days"`
+	ConfidenceComponents string  `json:"confidence_components"`
 }
 
 // Same inputs as ListClaimTrustInputs, bounded to the given claims.
@@ -269,6 +289,9 @@ func (q *Queries) ListClaimTrustInputsForClaims(ctx context.Context, claimIds []
 			&i.DistinctSources,
 			&i.TotalEvents,
 			&i.LatestEvidenceAt,
+			&i.LastConfirmed,
+			&i.HalfLifeDays,
+			&i.ConfidenceComponents,
 		); err != nil {
 			return nil, err
 		}
@@ -284,8 +307,8 @@ func (q *Queries) ListClaimTrustInputsForClaims(ctx context.Context, claimIds []
 }
 
 const listClaimsByTestRequirementRef = `-- name: ListClaimsByTestRequirementRef :many
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
-       valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier,
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -320,10 +343,13 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 			&i.CreatedAt,
 			&i.CreatedBy,
 			&i.TrustScore,
+			&i.TrustComputedAt,
+			&i.TrustModelVersion,
 			&i.ValidFrom,
 			&i.ValidTo,
 			&i.LastVerified,
 			&i.VerifyCount,
+			&i.LastConfirmed,
 			&i.HalfLifeDays,
 			&i.HalfLifeClassifier,
 			&i.ScopeService,
@@ -360,6 +386,23 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 		return nil, err
 	}
 	return items, nil
+}
+
+const markClaimConfirmed = `-- name: MarkClaimConfirmed :exec
+UPDATE claims SET last_confirmed = ? WHERE id = ?
+`
+
+type MarkClaimConfirmedParams struct {
+	LastConfirmed string `json:"last_confirmed"`
+	ID            string `json:"id"`
+}
+
+// Records an EXPLICIT confirmation (ADR 0026). Deliberately separate from
+// MarkClaimVerified, which recall and replay also call: only verify and a
+// validated outcome confirm a belief, and only confirmation feeds trust.
+func (q *Queries) MarkClaimConfirmed(ctx context.Context, arg MarkClaimConfirmedParams) error {
+	_, err := q.db.ExecContext(ctx, markClaimConfirmed, arg.LastConfirmed, arg.ID)
+	return err
 }
 
 const markClaimVerified = `-- name: MarkClaimVerified :exec
@@ -409,16 +452,25 @@ func (q *Queries) SetClaimValidity(ctx context.Context, arg SetClaimValidityPara
 }
 
 const updateClaimTrust = `-- name: UpdateClaimTrust :exec
-UPDATE claims SET trust_score = ? WHERE id = ?
+UPDATE claims SET trust_score = ?, trust_computed_at = ?, trust_model_version = ? WHERE id = ?
 `
 
 type UpdateClaimTrustParams struct {
-	TrustScore float64 `json:"trust_score"`
-	ID         string  `json:"id"`
+	TrustScore        float64 `json:"trust_score"`
+	TrustComputedAt   string  `json:"trust_computed_at"`
+	TrustModelVersion string  `json:"trust_model_version"`
+	ID                string  `json:"id"`
 }
 
+// trust_score is a cache of trust.At (ADR 0026 section 5): it is always written with
+// the instant it was computed for and the model version that computed it.
 func (q *Queries) UpdateClaimTrust(ctx context.Context, arg UpdateClaimTrustParams) error {
-	_, err := q.db.ExecContext(ctx, updateClaimTrust, arg.TrustScore, arg.ID)
+	_, err := q.db.ExecContext(ctx, updateClaimTrust,
+		arg.TrustScore,
+		arg.TrustComputedAt,
+		arg.TrustModelVersion,
+		arg.ID,
+	)
 	return err
 }
 

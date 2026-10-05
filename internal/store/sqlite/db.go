@@ -86,10 +86,18 @@ CREATE TABLE IF NOT EXISTS claims (
 	created_at TEXT NOT NULL,
 	created_by TEXT NOT NULL DEFAULT '<system>',
 	trust_score REAL NOT NULL DEFAULT 0,
+	-- trust_computed_at / trust_model_version (ADR 0026 §5): what trust_score is
+	-- a cache of. Written only by a trust recompute; '' predates versioning.
+	trust_computed_at TEXT NOT NULL DEFAULT '',
+	trust_model_version TEXT NOT NULL DEFAULT '',
 	valid_from TEXT NOT NULL DEFAULT '',
 	valid_to TEXT,
 	last_verified TEXT NOT NULL DEFAULT '',
 	verify_count INTEGER NOT NULL DEFAULT 0,
+	-- last_confirmed (ADR 0026): when the belief was last EXPLICITLY confirmed —
+	-- by verify or a validated outcome. Recall and replay bump last_verified,
+	-- never this, so being retrieved cannot make a belief more trusted.
+	last_confirmed TEXT NOT NULL DEFAULT '',
 	half_life_days REAL NOT NULL DEFAULT 0,
 	-- half_life_classifier (ADR 0025): which classifier assigned half_life_days.
 	-- '' means none did. That is a different fact from "the classifier read this
@@ -585,7 +593,13 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 // every pre-existing one — and the first read fails with "no such column". Caught by
 // running the new binary against a copy of a real 88k-belief brain; a fresh test DB
 // gets the column from CREATE TABLE and never exercises this path.
-const currentSchemaVersion = 25
+// v26 (ADR 0026) adds claims.last_confirmed, the explicit-confirmation time
+// canonical trust reads. Bumped for the same reason as v25: without it the
+// expectedColumns entry never runs on a pre-existing brain.
+// v27 (ADR 0026 §5) adds claims.trust_computed_at and trust_model_version, so a
+// stored trust_score says which model computed it and when. Bumped so the
+// expectedColumns entries run on pre-existing brains.
+const currentSchemaVersion = 27
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -695,6 +709,11 @@ var expectedColumns = []addMissingColumn{
 	// same trap durability documents above: CREATE TABLE IF NOT EXISTS does not
 	// add columns to a table that already exists.
 	{"claims", "half_life_classifier", "TEXT NOT NULL DEFAULT ''"},
+	// v26 - explicit confirmation time (ADR 0026), read by canonical trust.
+	{"claims", "last_confirmed", "TEXT NOT NULL DEFAULT ''"},
+	// v27 - trust cache provenance (ADR 0026 §5).
+	{"claims", "trust_computed_at", "TEXT NOT NULL DEFAULT ''"},
+	{"claims", "trust_model_version", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for

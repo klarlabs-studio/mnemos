@@ -288,6 +288,16 @@ SELECT ?, event_id FROM claim_evidence WHERE claim_id = ?`,
 	return nil
 }
 
+// UnlinkEvidence implements [ports.ClaimRepository.UnlinkEvidence].
+func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM claim_evidence WHERE claim_id = ? AND event_id = ?`, claimID, eventID,
+	); err != nil {
+		return fmt.Errorf("unlink evidence %s -> %s: %w", claimID, eventID, err)
+	}
+	return nil
+}
+
 // DeleteCascade drops the claim plus every claim-keyed row it owns, in
 // one tx.
 //
@@ -495,6 +505,20 @@ WHERE id = ?`, verifiedAt.UTC(), halfLifeDays, halfLifeDays, claimID)
 	return nil
 }
 
+// MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed]. Unlike
+// MarkVerified it does not treat zero affected rows as not-found: MySQL reports
+// affected rows as CHANGED rows, so confirming a claim twice at the same instant
+// would otherwise read as a missing claim.
+func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error {
+	if confirmedAt.IsZero() {
+		confirmedAt = time.Now().UTC()
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE claims SET last_confirmed = ? WHERE id = ?`, confirmedAt.UTC(), claimID); err != nil {
+		return fmt.Errorf("mark confirmed %s: %w", claimID, err)
+	}
+	return nil
+}
+
 // ApplyBeliefCredit overwrites the claim's confidence_components map and sets its
 // trust_score together (the ports.BeliefCreditWriter capability, ADR 0014). The
 // caller passes the already-merged map, so the write is a plain assignment and
@@ -557,6 +581,21 @@ type trustInput struct {
 	distinctSources int
 	totalEvents     int
 	latest          time.Time
+	lastConfirmed   time.Time
+	halfLifeDays    float64
+	credit          float64
+}
+
+// toDomain assembles the canonical trust input (ADR 0026) for one row.
+func (in trustInput) toDomain() domain.TrustInput {
+	return domain.TrustInput{
+		Confidence:     in.confidence,
+		EvidenceCount:  domain.EffectiveEvidenceCount(in.distinctSources, in.totalEvents),
+		LatestEvidence: in.latest,
+		LastConfirmed:  in.lastConfirmed,
+		HalfLifeDays:   in.halfLifeDays,
+		Credit:         in.credit,
+	}
 }
 
 // trustInputsSelect is the aggregate that feeds trust scoring. COUNT distinct
@@ -564,7 +603,8 @@ type trustInput struct {
 // graded by independence (echo-chamber guard). LEFT JOIN so claims with no
 // evidence still appear.
 const trustInputsSelect = `
-SELECT c.id, c.confidence, COUNT(DISTINCT e.created_by), COUNT(DISTINCT ce.event_id), MAX(e.timestamp)
+SELECT c.id, c.confidence, COUNT(DISTINCT e.created_by), COUNT(DISTINCT ce.event_id), MAX(e.timestamp),
+       c.last_confirmed, c.half_life_days, c.confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e ON e.id = ce.event_id
@@ -586,13 +626,21 @@ func (r ClaimRepository) listTrustInputs(ctx context.Context, query string, args
 	var inputs []trustInput
 	for rows.Next() {
 		var in trustInput
-		var latest sql.NullTime
-		if err := rows.Scan(&in.id, &in.confidence, &in.distinctSources, &in.totalEvents, &latest); err != nil {
+		// c.id is the primary key, so the per-claim columns are functionally
+		// dependent on the GROUP BY (ONLY_FULL_GROUP_BY accepts them).
+		var latest, lastConfirmed sql.NullTime
+		var components sql.NullString
+		if err := rows.Scan(&in.id, &in.confidence, &in.distinctSources, &in.totalEvents, &latest,
+			&lastConfirmed, &in.halfLifeDays, &components); err != nil {
 			return nil, fmt.Errorf("scan trust input: %w", err)
 		}
 		if latest.Valid {
 			in.latest = latest.Time
 		}
+		if lastConfirmed.Valid {
+			in.lastConfirmed = lastConfirmed.Time
+		}
+		in.credit = domain.AppliedCredit(decodeConfidenceComponents(components.String))
 		inputs = append(inputs, in)
 	}
 	if err := rows.Err(); err != nil {
@@ -603,15 +651,17 @@ func (r ClaimRepository) listTrustInputs(ctx context.Context, query string, args
 
 // applyTrustInputs scores each row and writes trust_score back in one
 // transaction. Returns the number of claims touched.
-func (r ClaimRepository) applyTrustInputs(ctx context.Context, inputs []trustInput, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) applyTrustInputs(ctx context.Context, inputs []trustInput, scoring domain.TrustScoring) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin trust tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	at := scoring.At.UTC()
 	for _, in := range inputs {
-		s := score(in.confidence, domain.EffectiveEvidenceCount(in.distinctSources, in.totalEvents), in.latest)
-		if _, err := tx.ExecContext(ctx, `UPDATE claims SET trust_score = ? WHERE id = ?`, s, in.id); err != nil {
+		s := scoring.Score(in.toDomain())
+		if _, err := tx.ExecContext(ctx, `UPDATE claims SET trust_score = ?, trust_computed_at = ?, trust_model_version = ? WHERE id = ?`,
+			s, at, scoring.ModelVersion, in.id); err != nil {
 			return 0, fmt.Errorf("update trust for %s: %w", in.id, err)
 		}
 	}
@@ -623,19 +673,19 @@ func (r ClaimRepository) applyTrustInputs(ctx context.Context, inputs []trustInp
 
 // RecomputeTrust applies the supplied scoring function to every
 // claim. Returns the count touched. Implements ports.TrustScorer.
-func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrust(ctx context.Context, scoring domain.TrustScoring) (int, error) {
 	inputs, err := r.listTrustInputs(ctx, trustInputsSelect+`GROUP BY c.id, c.confidence`)
 	if err != nil {
 		return 0, fmt.Errorf("list trust inputs: %w", err)
 	}
-	return r.applyTrustInputs(ctx, inputs, score)
+	return r.applyTrustInputs(ctx, inputs, scoring)
 }
 
 // RecomputeTrustForClaims implements [ports.ScopedTrustScorer]: the same
 // recomputation bounded to claimIDs, so a write's cost tracks what it touched
 // rather than the size of the store. Ids with no matching claim are skipped, so
 // the returned count is the number of claims actually rescored.
-func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, scoring domain.TrustScoring) (int, error) {
 	if len(claimIDs) == 0 {
 		return 0, nil
 	}
@@ -652,7 +702,37 @@ GROUP BY c.id, c.confidence`
 		}
 		inputs = append(inputs, chunk...)
 	}
-	return r.applyTrustInputs(ctx, inputs, score)
+	return r.applyTrustInputs(ctx, inputs, scoring)
+}
+
+// ListTrustInputs implements [ports.TrustInputLister] with the same aggregate
+// and assembly the recompute uses, chunked as RecomputeTrustForClaims is.
+func (r ClaimRepository) ListTrustInputs(ctx context.Context, claimIDs []string) (map[string]domain.TrustInput, error) {
+	var inputs []trustInput
+	if len(claimIDs) == 0 {
+		all, err := r.listTrustInputs(ctx, trustInputsSelect+`GROUP BY c.id, c.confidence`)
+		if err != nil {
+			return nil, fmt.Errorf("list trust inputs: %w", err)
+		}
+		inputs = all
+	}
+	for start := 0; start < len(claimIDs); start += trustIDChunk {
+		end := min(start+trustIDChunk, len(claimIDs))
+		placeholders, args := inPlaceholders(claimIDs[start:end])
+		//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
+		q := trustInputsSelect + `WHERE c.id IN (` + placeholders + `)
+GROUP BY c.id, c.confidence`
+		chunk, err := r.listTrustInputs(ctx, q, args...)
+		if err != nil {
+			return nil, fmt.Errorf("list trust inputs for claims: %w", err)
+		}
+		inputs = append(inputs, chunk...)
+	}
+	out := make(map[string]domain.TrustInput, len(inputs))
+	for _, in := range inputs {
+		out[in.id] = in.toDomain()
+	}
+	return out, nil
 }
 
 // AverageTrust returns the mean trust_score across every claim.
@@ -699,7 +779,7 @@ func nullTime(t time.Time) any {
 // UPDATE set, so an omission fails a test instead of zeroing production rows.
 var claimColumnNames = []string{
 	"id", "text", "type", "confidence", "status", "created_at", "created_by",
-	"trust_score", "valid_from", "valid_to", "last_verified", "verify_count",
+	"trust_score", "trust_computed_at", "trust_model_version", "valid_from", "valid_to", "last_verified", "verify_count", "last_confirmed",
 	"half_life_days", "half_life_classifier", "lifecycle", "subject_class", "durability",
 	"confidence_components",
 	"test_id", "test_requirement_ref", "test_author", "test_last_modified",
@@ -769,6 +849,9 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	// cross-backend "never verified" sentinel — scanning it into a NullTime
 	// keeps the zero time rather than inventing an instant.
 	var lastVerified sql.NullTime
+	// last_confirmed is NULL until the first explicit confirmation (ADR 0026).
+	var lastConfirmed sql.NullTime
+	var trustComputedAt sql.NullTime
 	var testLastModified, testLastRunAt sql.NullTime
 	var scopeService, scopeEnv, scopeTeam string
 	var sourceDocument, sourceType, liveness, provenanceRationale, visibility string
@@ -779,7 +862,7 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	var lastExecuted sql.NullTime
 	if err := rows.Scan(
 		&c.ID, &c.Text, &typ, &c.Confidence, &status,
-		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &lastVerified, &c.VerifyCount,
+		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &trustComputedAt, &c.TrustModelVersion, &validFrom, &validTo, &lastVerified, &c.VerifyCount, &lastConfirmed,
 		&c.HalfLifeDays, &c.HalfLifeClassifier, &lifecycle, &subjectClass, &durability, &confidenceComponents,
 		&c.TestID, &c.TestRequirementRef, &c.TestAuthor, &testLastModified, &testLastRunAt, &c.TestPassCount, &c.TestFailCount,
 		&scopeService, &scopeEnv, &scopeTeam,
@@ -811,6 +894,12 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	}
 	if lastVerified.Valid {
 		c.LastVerified = lastVerified.Time
+	}
+	if lastConfirmed.Valid {
+		c.LastConfirmed = lastConfirmed.Time
+	}
+	if trustComputedAt.Valid {
+		c.TrustComputedAt = trustComputedAt.Time
 	}
 	if testLastModified.Valid {
 		c.TestLastModified = testLastModified.Time
