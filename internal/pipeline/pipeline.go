@@ -343,7 +343,7 @@ func groupClaimsByCreatedBy(claims []domain.Claim) map[string][]domain.Claim {
 // defaultTrustScorer is canonical trust (trust.At, ADR 0026) at one instant
 // for the whole pass, so every row of a rescore is scored against the same
 // clock reading.
-func defaultTrustScorer() func(domain.TrustInput) float64 {
+func defaultTrustScorer() domain.TrustScoring {
 	return trust.Scorer(time.Now().UTC())
 }
 

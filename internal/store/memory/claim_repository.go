@@ -95,7 +95,11 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 		// a verified claim on memory:// reset its verification while every SQL
 		// backend kept it.
 		stored.LastVerified, stored.VerifyCount, stored.LastConfirmed = time.Time{}, 0, time.Time{}
+		// The trust stamp is owned by the recompute (ADR 0026 §5), likewise.
+		stored.TrustComputedAt, stored.TrustModelVersion = time.Time{}, ""
 		if existing, ok := r.state.claims[claim.ID]; ok {
+			stored.TrustComputedAt = existing.TrustComputedAt
+			stored.TrustModelVersion = existing.TrustModelVersion
 			stored.LastVerified = existing.LastVerified
 			stored.VerifyCount = existing.VerifyCount
 			stored.LastConfirmed = existing.LastConfirmed
@@ -496,28 +500,28 @@ func (r ClaimRepository) SetLifecycle(_ context.Context, claimID string, lifecyc
 // RecomputeTrust applies the supplied scoring function to every
 // stored claim and writes the result back. Returns the number of
 // claims touched.
-func (r ClaimRepository) RecomputeTrust(_ context.Context, score func(domain.TrustInput) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrust(_ context.Context, scoring domain.TrustScoring) (int, error) {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
-	return r.recomputeTrustLocked(r.state.claimOrder, score), nil
+	return r.recomputeTrustLocked(r.state.claimOrder, scoring), nil
 }
 
 // RecomputeTrustForClaims implements [ports.ScopedTrustScorer]: the same
 // recomputation bounded to claimIDs, so a write's cost tracks what it touched
 // rather than the size of the store.
-func (r ClaimRepository) RecomputeTrustForClaims(_ context.Context, claimIDs []string, score func(domain.TrustInput) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrustForClaims(_ context.Context, claimIDs []string, scoring domain.TrustScoring) (int, error) {
 	if len(claimIDs) == 0 {
 		return 0, nil
 	}
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
-	return r.recomputeTrustLocked(claimIDs, score), nil
+	return r.recomputeTrustLocked(claimIDs, scoring), nil
 }
 
 // recomputeTrustLocked rescores the given claim ids. Callers hold state.mu.
 // Unknown ids are skipped, so a caller may pass ids for claims that were
 // deleted between the write and the rescore.
-func (r ClaimRepository) recomputeTrustLocked(ids []string, score func(domain.TrustInput) float64) int {
+func (r ClaimRepository) recomputeTrustLocked(ids []string, scoring domain.TrustScoring) int {
 	count := 0
 	for _, id := range ids {
 		c, ok := r.state.claims[id]
@@ -535,7 +539,7 @@ func (r ClaimRepository) recomputeTrustLocked(ids []string, score func(domain.Tr
 				total++
 			}
 		}
-		c.TrustScore = score(domain.TrustInput{
+		c.TrustScore = scoring.Score(domain.TrustInput{
 			Confidence:     c.Confidence,
 			EvidenceCount:  domain.EffectiveEvidenceCount(len(distinct), total),
 			LatestEvidence: latestEvidenceTimestamp(r.state, id),
@@ -543,6 +547,8 @@ func (r ClaimRepository) recomputeTrustLocked(ids []string, score func(domain.Tr
 			HalfLifeDays:   c.HalfLifeDays,
 			Credit:         domain.AppliedCredit(c.ConfidenceComponents),
 		})
+		c.TrustComputedAt = scoring.At.UTC()
+		c.TrustModelVersion = scoring.ModelVersion
 		r.state.claims[id] = c
 		count++
 	}

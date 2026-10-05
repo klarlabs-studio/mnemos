@@ -52,10 +52,10 @@ func TestTrustInput_CarriesPerBeliefInputsAcrossBackends(t *testing.T) {
 
 		scorer := b.conn.Claims.(ports.TrustScorer)
 		var seen domain.TrustInput
-		if _, err := scorer.RecomputeTrust(ctx, func(in domain.TrustInput) float64 {
+		if _, err := scorer.RecomputeTrust(ctx, domain.TrustScoring{At: now, ModelVersion: trust.ModelVersion, Score: func(in domain.TrustInput) float64 {
 			seen = in
 			return trust.At(in, now)
-		}); err != nil {
+		}}); err != nil {
 			t.Fatalf("%s: recompute: %v", b.name, err)
 		}
 
@@ -75,6 +75,25 @@ func TestTrustInput_CarriesPerBeliefInputsAcrossBackends(t *testing.T) {
 		}
 		if want := trust.At(seen, now); got[0].TrustScore != want {
 			t.Errorf("%s: stored trust %v, want trust.At = %v", b.name, got[0].TrustScore, want)
+		}
+		// The stored score is a cache with a provenance (ADR 0026 §5).
+		if got[0].TrustModelVersion != trust.ModelVersion || !got[0].TrustComputedAt.Equal(now) {
+			t.Errorf("%s: trust stamp = (%q, %v), want (%q, %v)",
+				b.name, got[0].TrustModelVersion, got[0].TrustComputedAt, trust.ModelVersion, now)
+		}
+		// Re-ingesting the claim writes no trust, so it must not touch the stamp.
+		if err := b.conn.Claims.Upsert(ctx, []domain.Claim{{
+			ID: id, Text: "the build cache is warm after deploy", Type: domain.ClaimTypeFact,
+			Confidence: 0.9, Status: domain.ClaimStatusActive, CreatedAt: created,
+		}}); err != nil {
+			t.Fatalf("%s: re-upsert: %v", b.name, err)
+		}
+		again, err := b.conn.Claims.ListByIDs(ctx, []string{id})
+		if err != nil || len(again) != 1 {
+			t.Fatalf("%s: read back after re-upsert: %v", b.name, err)
+		}
+		if again[0].TrustModelVersion != trust.ModelVersion || !again[0].TrustComputedAt.Equal(now) {
+			t.Errorf("%s: re-ingest changed the trust stamp to (%q, %v)", b.name, again[0].TrustModelVersion, again[0].TrustComputedAt)
 		}
 	}
 }

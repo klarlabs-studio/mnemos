@@ -113,6 +113,10 @@ var upsertIgnoredFields = map[string]string{
 		"verification, and the SQL backends never write last_verified from an upsert",
 	"VerifyCount": "it is owned by MarkVerified, which increments it; the SQL backends " +
 		"never write verify_count from an upsert",
+	"TrustComputedAt": "it is owned by the trust recompute (ADR 0026 §5); the SQL " +
+		"backends never write trust_computed_at from an upsert",
+	"TrustModelVersion": "it is owned by the trust recompute (ADR 0026 §5); the SQL " +
+		"backends never write trust_model_version from an upsert",
 	"LastConfirmed": "it is owned by MarkConfirmed (ADR 0026): re-extracting a claim " +
 		"is not a confirmation, and the SQL backends never write last_confirmed from an upsert",
 }

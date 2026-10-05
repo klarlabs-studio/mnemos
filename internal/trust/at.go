@@ -41,11 +41,16 @@ func At(in domain.TrustInput, at time.Time) float64 {
 	return clamp01(base + applied)
 }
 
-// Scorer returns At bound to one instant, in the shape the storage ports take.
-// A recompute pass must score every row against the same instant, so callers
-// fix it once rather than reading the clock per row.
-func Scorer(at time.Time) func(domain.TrustInput) float64 {
-	return func(in domain.TrustInput) float64 { return At(in, at) }
+// Scorer returns a recompute pass of At bound to one instant and stamped with
+// ModelVersion, in the shape the storage ports take. A pass must score every
+// row against the same instant, so callers fix it once rather than reading the
+// clock per row, and the backend persists that instant beside each score.
+func Scorer(at time.Time) domain.TrustScoring {
+	return domain.TrustScoring{
+		At:           at,
+		ModelVersion: ModelVersion,
+		Score:        func(in domain.TrustInput) float64 { return At(in, at) },
+	}
 }
 
 func freshnessWithTimeConstant(ref, at time.Time, timeConstantDays float64) float64 {

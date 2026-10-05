@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS claims (
   created_at TEXT NOT NULL,
   created_by TEXT NOT NULL DEFAULT '<system>',
   trust_score REAL NOT NULL DEFAULT 0,
+  -- trust_computed_at / trust_model_version (ADR 0026 §5): what trust_score is
+  -- a cache of. Written only by a trust recompute; '' predates versioning.
+  trust_computed_at TEXT NOT NULL DEFAULT '',
+  trust_model_version TEXT NOT NULL DEFAULT '',
   valid_from TEXT NOT NULL DEFAULT '',
   valid_to TEXT,
   last_verified TEXT NOT NULL DEFAULT '',

@@ -287,10 +287,10 @@ func TestMySQL_TrustScorerCapability(t *testing.T) {
 	if err := conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{{ClaimID: "cl-T", EventID: "ev-T"}}); err != nil {
 		t.Fatalf("UpsertEvidence: %v", err)
 	}
-	n, err := scorer.RecomputeTrust(ctx, func(in domain.TrustInput) float64 {
+	n, err := scorer.RecomputeTrust(ctx, domain.TrustScoring{Score: func(in domain.TrustInput) float64 {
 		c, count := in.Confidence, in.EvidenceCount
 		return c * float64(count)
-	})
+	}})
 	if err != nil || n != 1 {
 		t.Fatalf("RecomputeTrust = %d err=%v, want 1 nil", n, err)
 	}

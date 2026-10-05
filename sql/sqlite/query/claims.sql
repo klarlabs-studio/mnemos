@@ -98,7 +98,7 @@ VALUES (?, ?)
 ON CONFLICT(claim_id, event_id) DO NOTHING;
 
 -- name: ListAllClaims :many
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
        valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
@@ -114,7 +114,7 @@ ORDER BY created_at ASC;
 -- `mnemos trust --test=<ref>` and the which_test_to_trust MCP tool: the
 -- previous implementation called ListAllClaims and filtered in Go,
 -- which scaled O(n) per invocation.
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
        valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
@@ -128,7 +128,9 @@ WHERE type = 'test_result'
 ORDER BY test_last_run_at DESC, created_at DESC;
 
 -- name: UpdateClaimTrust :exec
-UPDATE claims SET trust_score = ? WHERE id = ?;
+-- trust_score is a cache of trust.At (ADR 0026 section 5): it is always written with
+-- the instant it was computed for and the model version that computed it.
+UPDATE claims SET trust_score = ?, trust_computed_at = ?, trust_model_version = ? WHERE id = ?;
 
 -- name: ListClaimTrustInputs :many
 -- Inputs to recompute trust_score for every claim (ADR 0026 trust.At):
