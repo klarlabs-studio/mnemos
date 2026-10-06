@@ -54,31 +54,42 @@ jobs:
       # (.goreleaser.yaml `signs:` + `docker_signs:` blocks).
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with:
+          # Explicit, not the action's moving default. The action verifies the
+          # cosign binary it downloads; this pins WHICH binary that is.
+          cosign-release: v2.5.2
 
       # Generate CycloneDX + SPDX SBOMs via nox (already on our
       # toolchain — same binary the security workflow uses). Goreleaser
       # picks them up via `release.extra_files` and attaches them to
       # the GitHub release alongside the archives.
-      - name: Install nox
+      # This job can write releases, packages and attestations and holds the
+      # Homebrew tap token, so every binary it executes is verified against a
+      # hash committed here. The hashes are nox's own published checksums
+      # (checksums.txt, whose cosign bundle verifies against
+      # Nox-HQ/nox/.github/workflows/release.yml@refs/tags/v1.30.1), cross-
+      # checked against independently downloaded archives. To bump: download
+      # checksums.txt for the new tag, `cosign verify-blob` its bundle, copy the
+      # two linux lines here.
+      - name: Install nox (sha256-verified)
         env:
           NOX_VERSION: 1.30.1
+          NOX_SHA256_LINUX_AMD64: e90114e9f37b038af6d2e7f603c5f40684d7a3120f4f377b8a5741aba1b031da
+          NOX_SHA256_LINUX_ARM64: 6aaec64374a5594471226fd3cb48d8475abad3679ed01a6d0036209cbaf998fb
         run: |
           set -euo pipefail
-          if command -v nox >/dev/null 2>&1; then
-            nox version
-            exit 0
-          fi
-          arch="$(uname -m)"
-          case "$arch" in
-            x86_64) goarch=amd64 ;;
-            aarch64|arm64) goarch=arm64 ;;
-            *) echo "unsupported arch: $arch"; exit 1 ;;
+          # No "already on PATH" shortcut: a pre-installed nox is unverified.
+          case "$(uname -m)" in
+            x86_64) goarch=amd64; want="$NOX_SHA256_LINUX_AMD64" ;;
+            aarch64|arm64) goarch=arm64; want="$NOX_SHA256_LINUX_ARM64" ;;
+            *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
           esac
-          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-          url="https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_${os}_${goarch}.tar.gz"
+          [ "$(uname -s)" = "Linux" ] || { echo "release runs on Linux only"; exit 1; }
+          url="https://github.com/nox-hq/nox/releases/download/v${NOX_VERSION}/nox_${NOX_VERSION}_linux_${goarch}.tar.gz"
           mkdir -p "$HOME/.local/bin"
           tmp="$(mktemp -d)"
           curl -fsSL "$url" -o "$tmp/nox.tgz"
+          echo "${want}  $tmp/nox.tgz" | sha256sum -c -
           tar -xzf "$tmp/nox.tgz" -C "$tmp"
           install -m 0755 "$tmp/nox" "$HOME/.local/bin/nox"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -102,7 +113,7 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
-          version: '~> v2.15'
+          version: 'v2.18.2' # exact; the action verifies the archive's checksum and, with cosign on PATH, its signature
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
