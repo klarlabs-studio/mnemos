@@ -252,6 +252,15 @@ type RelationshipRepository interface {
 	DeleteAll(ctx context.Context) error
 }
 
+// RelationshipDeleter is the optional capability to delete relationships by
+// ID. Pruning (`mnemos relate --prune-supports`) needs it: rewriting a 30M-row
+// edge table through DeleteAll + Upsert is not an option. Implementations
+// delete in one transaction and report how many rows went; unknown IDs are
+// not an error.
+type RelationshipDeleter interface {
+	DeleteByIDs(ctx context.Context, ids []string) (int64, error)
+}
+
 // RelationshipStrengthener is an optional capability (ADR 0015 §4, Hebbian
 // co-activation): raise the stored strength of EXISTING association edges among a
 // set of co-retrieved beliefs — "fire together, wire together". It is type-asserted

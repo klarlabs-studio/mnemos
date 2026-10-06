@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -259,4 +260,43 @@ func (r RelationshipRepository) DecayAssociations(ctx context.Context, retain fl
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// deleteByIDsChunk bounds the IN list per statement, well under every
+// backend's bound-parameter limit.
+const deleteByIDsChunk = 500
+
+// DeleteByIDs implements ports.RelationshipDeleter.
+func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin relationship delete tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var n int64
+	for start := 0; start < len(ids); start += deleteByIDsChunk {
+		chunk := ids[start:min(start+deleteByIDsChunk, len(ids))]
+		args := make([]any, len(chunk))
+		marks := make([]string, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
+			marks[i] = fmt.Sprintf("$%d", i+1)
+		}
+		res, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id IN (%s)`, qualify(r.ns, "relationships"), strings.Join(marks, ",")), args...)
+		if err != nil {
+			return n, fmt.Errorf("delete relationships by id: %w", err)
+		}
+		k, err := res.RowsAffected()
+		if err != nil {
+			return n, fmt.Errorf("delete relationships by id: %w", err)
+		}
+		n += k
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit relationship delete tx: %w", err)
+	}
+	return n, nil
 }
