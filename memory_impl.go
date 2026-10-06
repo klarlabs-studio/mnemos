@@ -1948,7 +1948,7 @@ func (m *memory) Hypercorrections(ctx context.Context) ([]Hypercorrection, error
 func (m *memory) HypercorrectionsBounded(ctx context.Context, limit int) (HypercorrectionReport, error) {
 	var bounds Bounds
 	limit = capLimit(&bounds, limit, HypercorrectionDefaultLimit, MaxCognitiveResults)
-	all, err := m.hypercorrectionList(ctx)
+	all, err := m.hypercorrectionList(ctx, m.newHealthCorpus())
 	if err != nil {
 		return HypercorrectionReport{}, err
 	}
@@ -1969,8 +1969,8 @@ func (m *memory) HypercorrectionsBounded(ctx context.Context, limit int) (Hyperc
 // hypercorrectionList is the complete, ranked detection pass. Callers that need
 // a COUNT rather than a page (the dissonance level of [Memory.PredictiveError])
 // use it directly so the capped response never distorts a metric.
-func (m *memory) hypercorrectionList(ctx context.Context) ([]Hypercorrection, error) {
-	rels, err := m.conn.Relationships.ListAll(ctx)
+func (m *memory) hypercorrectionList(ctx context.Context, h *healthCorpus) ([]Hypercorrection, error) {
+	rels, err := h.Relationships(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mnemos: Hypercorrections: list relationships: %w", err)
 	}
@@ -1983,7 +1983,7 @@ func (m *memory) hypercorrectionList(ctx context.Context) ([]Hypercorrection, er
 	if len(contradicts) == 0 {
 		return nil, nil
 	}
-	claims, err := m.conn.Claims.ListAll(ctx)
+	claims, err := h.Claims(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mnemos: Hypercorrections: list claims: %w", err)
 	}
@@ -2080,6 +2080,12 @@ func saturateSurprise(s float64) float64 {
 // surprise, schema surprise, active dissonance, calibration error — never writes, and
 // aggregates only the levels that have data.
 func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
+	return m.predictiveErrorIn(ctx, m.newHealthCorpus())
+}
+
+// predictiveErrorIn is PredictiveError over a health computation's shared
+// snapshot.
+func (m *memory) predictiveErrorIn(ctx context.Context, h *healthCorpus) (PredictiveError, error) {
 	levels := make([]PredictiveErrorLevel, 0, 4)
 
 	// Level 1 — outcome: mean saturated surprise over resolved decision predictions.
@@ -2133,7 +2139,7 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 	// The complete list, not the capped response: this is a rate, so a page of
 	// alerts would silently floor the dissonance error once the brain grew past
 	// HypercorrectionDefaultLimit contradictions.
-	hyper, herr := m.hypercorrectionList(ctx)
+	hyper, herr := m.hypercorrectionList(ctx, h)
 	if herr != nil {
 		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance: %w", herr)
 	}
@@ -2143,7 +2149,7 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 	// each forgotten, deprecated or pruned belief diluted the rate. A brain
 	// that retired half its beliefs reported half the dissonance while
 	// holding exactly the same live contradictions.
-	live, lerr := m.liveBeliefCount(ctx)
+	live, lerr := m.liveBeliefCount(ctx, h)
 	if lerr != nil {
 		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance count: %w", lerr)
 	}
@@ -2158,7 +2164,7 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 
 	// Level 4 — calibration: expected calibration error over adjudicated beliefs.
 	cal := PredictiveErrorLevel{Level: "calibration"}
-	c, calErr := m.Calibration(ctx)
+	c, calErr := h.Calibration(ctx)
 	if calErr != nil {
 		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: calibration: %w", calErr)
 	}
@@ -2202,8 +2208,8 @@ func isLiveBelief(c domain.Claim) bool {
 }
 
 // liveBeliefCount counts the beliefs [isLiveBelief] admits.
-func (m *memory) liveBeliefCount(ctx context.Context) (int, error) {
-	claims, err := m.conn.Claims.ListAll(ctx)
+func (m *memory) liveBeliefCount(ctx context.Context, h *healthCorpus) (int, error) {
+	claims, err := h.Claims(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -2407,7 +2413,9 @@ func worseHealth(a, b HealthStatus) HealthStatus {
 // stale-expectation backlog). Full-scan diagnostic; no writes.
 func (m *memory) BrainHealth(ctx context.Context) (BrainHealth, error) {
 	now := time.Now().UTC()
-	claims, err := m.conn.Claims.ListAll(ctx)
+	// One snapshot for every vital and check below (healthCorpus).
+	h := m.newHealthCorpus()
+	claims, err := h.Claims(ctx)
 	if err != nil {
 		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list claims: %w", err)
 	}
@@ -2415,11 +2423,11 @@ func (m *memory) BrainHealth(ctx context.Context) (BrainHealth, error) {
 	if err != nil {
 		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list evidence: %w", err)
 	}
-	pe, err := m.PredictiveError(ctx)
+	pe, err := m.predictiveErrorIn(ctx, h)
 	if err != nil {
 		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: predictive error: %w", err)
 	}
-	cal, err := m.Calibration(ctx)
+	cal, err := h.Calibration(ctx)
 	if err != nil {
 		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: calibration: %w", err)
 	}
@@ -2531,7 +2539,7 @@ func (m *memory) BrainHealth(ctx context.Context) (BrainHealth, error) {
 	}
 
 	// --- Pathologies (integrity checks that did not exist before) ---
-	rels, err := m.conn.Relationships.ListAll(ctx)
+	rels, err := h.Relationships(ctx)
 	if err != nil {
 		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list relationships: %w", err)
 	}
@@ -2625,6 +2633,11 @@ func (m *memory) SnapshotHealth(ctx context.Context) (BrainHealth, error) {
 // Calibration implements [Memory.Calibration]. Pure read over the outcome edges
 // (validates / refutes) + claim confidences — no recomputation, no writes.
 func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
+	return m.calibrationIn(ctx, m.newHealthCorpus())
+}
+
+// calibrationIn is Calibration over a health computation's shared snapshot.
+func (m *memory) calibrationIn(ctx context.Context, h *healthCorpus) (Calibration, error) {
 	validates, err := m.conn.EntityRels.ListByKind(ctx, string(domain.RelationshipTypeValidates))
 	if err != nil {
 		return Calibration{}, fmt.Errorf("mnemos: Calibration: list validates: %w", err)
@@ -2658,7 +2671,7 @@ func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
 		return Calibration{}, nil
 	}
 
-	claims, err := m.conn.Claims.ListAll(ctx)
+	claims, err := h.Claims(ctx)
 	if err != nil {
 		return Calibration{}, fmt.Errorf("mnemos: Calibration: list claims: %w", err)
 	}
