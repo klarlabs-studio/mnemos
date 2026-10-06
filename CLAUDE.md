@@ -288,6 +288,8 @@ It also manifests as a **load-dependent `-race` failure that looks like flakines
 
 Corollary: **`make check` omits `-race`, so a local green does not imply a green CI.** Run `make test-race` before pushing anything touching concurrency, storage, or the write path.
 
-### Docs-only PRs and required checks
+### The merge gate is warden
 
-Branch protection requires four checks — `ci / Lint`, `ci / Test (ubuntu-latest)`, `ci / Build`, `ci / Security (nox)` — all produced by the shared reusable workflow (`jobs.ci` → `klarlabs-studio/.github/.../go-ci.yml`). `ci.yml` therefore does **not** `paths-ignore` markdown/docs: a `paths-ignore` there meant a docs-only PR never ran those checks, so the required checks could never report and the PR stayed BLOCKED forever (changelog PRs had to be `--admin`-merged). Because the required contexts are composed by the reusable workflow, a standalone "shim" workflow can't reproduce them — so the real `ci` job must run on every PR, docs included. The cost is running full CI on a docs-only change; docs PRs are rare (mostly changelogs), so this is accepted in exchange for normal, non-admin merges. If a required check is ever renamed, update it in branch protection, not here.
+Branch protection on `main` requires one check: **`warden/gate`**, the commit status warden publishes when its pre-push gate passes on the pushing machine (`.warden.yaml`: `test -race`, lint, `make cross`, govulncheck, `scripts/nox-gate.sh`). The requirement is strict, so a PR must be up to date with `main`. Push only from a checked-out branch: warden attests HEAD, not the ref being pushed.
+
+GitHub Actions (`ci.yml` → the shared `go-ci.yml`, plus the provider, recall, integration and provenance workflows) still runs on every PR, but it is **advisory**. A red Actions run on `main` is still a defect. It usually means the warden gate is missing a check, so fix that gap rather than ignore the run. `ci.yml` keeps running on docs-only PRs (no `paths-ignore`), so that signal stays complete.

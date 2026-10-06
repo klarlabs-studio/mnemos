@@ -9,11 +9,10 @@
 # (multi-arch docker / goreleaser / SLSA).
 name: CI
 
-# No paths-ignore: the four required checks (ci / Lint, Test, Build, Security)
-# come from the shared reusable workflow, so they must run on EVERY PR —
-# including docs-only ones — or a docs PR can never satisfy them and stays
-# BLOCKED (changelog PRs previously needed --admin). Running full CI on a rare
-# docs change is the accepted cost. See CLAUDE.md "Docs-only PRs".
+# Advisory: branch protection requires warden/gate, not these checks (see
+# .warden.yaml and CLAUDE.md "The merge gate is warden"). A red run on main is
+# still a defect, usually a check the warden gate lacks. No paths-ignore, so
+# the signal covers docs-only PRs too.
 on:
   push:
     branches: [main]
