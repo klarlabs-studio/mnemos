@@ -147,6 +147,7 @@ paths:
       parameters:
         - { name: run_id, in: query, schema: { type: string }, description: "When set, restricts results to episodes for this run only. Used by external-agent auditors to replay one run's full chain." }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: cursor, in: query, schema: { type: string }, description: "Keyset cursor: the next_cursor of the previous page. Stable under concurrent writes; cannot be combined with offset." }
         - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
       responses:
         "200":
@@ -162,6 +163,7 @@ paths:
                   total: { type: integer }
                   limit: { type: integer }
                   offset: { type: integer }
+                  next_cursor: { type: string, description: "Cursor for the following page; absent on the last page." }
         "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       summary: Append a batch of episodes
@@ -288,6 +290,7 @@ paths:
       parameters:
         - { name: type, in: query, schema: { type: string, enum: [supports, contradicts, causes, caused_by, action_of, outcome_of, validates, refutes, derived_from] } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: cursor, in: query, schema: { type: string }, description: "Keyset cursor: the next_cursor of the previous page. Stable under concurrent writes; cannot be combined with offset." }
         - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
       responses:
         "200":
@@ -303,6 +306,7 @@ paths:
                   total: { type: integer }
                   limit: { type: integer }
                   offset: { type: integer }
+                  next_cursor: { type: string, description: "Cursor for the following page; absent on the last page." }
         "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       summary: Upsert associations
@@ -531,6 +535,7 @@ paths:
       parameters:
         - { name: entity_type, in: query, schema: { type: string, enum: [event, claim] } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+        - { name: cursor, in: query, schema: { type: string }, description: "Keyset cursor: the next_cursor of the previous page. Stable under concurrent writes; cannot be combined with offset." }
         - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
       responses:
         "200":
@@ -546,6 +551,7 @@ paths:
                   total: { type: integer }
                   limit: { type: integer }
                   offset: { type: integer }
+                  next_cursor: { type: string, description: "Cursor for the following page; absent on the last page." }
         "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       summary: Upsert embeddings

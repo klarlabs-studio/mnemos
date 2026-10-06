@@ -165,3 +165,141 @@ func TestBrowseBeliefs_CursorIsStableUnderConcurrentWrites(t *testing.T) {
 		}
 	}
 }
+
+// walk follows next pages until the last and returns every id seen, failing on
+// an oversized page, a changing total, or no end.
+func walk(t *testing.T, label string, total int, next func(after string) ([]string, int, bool, string)) []string {
+	t.Helper()
+	var got []string
+	after := ""
+	for pages := 0; ; pages++ {
+		if pages > 500 {
+			t.Fatalf("%s: no end to the pages", label)
+		}
+		ids, tot, more, last := next(after)
+		if tot != total {
+			t.Fatalf("%s: page total %d, want %d", label, tot, total)
+		}
+		got = append(got, ids...)
+		if !more {
+			return got
+		}
+		after = last
+	}
+}
+
+func sameSet(t *testing.T, label string, got, want []string) {
+	t.Helper()
+	g, w := slices.Clone(got), slices.Clone(want)
+	slices.Sort(g)
+	slices.Sort(w)
+	if !slices.Equal(g, w) {
+		t.Fatalf("%s: pages returned %v, want %v", label, g, w)
+	}
+}
+
+// The episode and association browses partition their filtered sets on every
+// backend, as the belief browse does.
+func TestBrowseEpisodesAndAssociations_CursorPagesPartitionAcrossBackends(t *testing.T) {
+	ctx := context.Background()
+	base := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	for _, b := range openBackends(t) {
+		var claims []domain.Claim
+		for i := 0; i < 40; i++ {
+			at := base.Add(time.Duration(i/4) * time.Second)
+			if i%3 == 1 {
+				at = at.Add(250 * time.Millisecond)
+			}
+			ev := domain.Event{ID: fmt.Sprintf("pev%03d", i), RunID: fmt.Sprintf("prun-%d", i%3), Content: "e", SchemaVersion: "v1",
+				SourceInputID: fmt.Sprintf("psrc%03d", i), Timestamp: at, IngestedAt: at}
+			if err := b.conn.Events.Append(ctx, ev); err != nil {
+				t.Fatalf("%s: %v", b.name, err)
+			}
+			claims = append(claims, domain.Claim{ID: fmt.Sprintf("pc%03d", i), Text: "c", Type: domain.ClaimTypeFact,
+				Confidence: 0.5, Status: domain.ClaimStatusActive, CreatedAt: at, ValidFrom: at})
+		}
+		if err := b.conn.Claims.Upsert(ctx, claims); err != nil {
+			t.Fatal(err)
+		}
+		var rels []domain.Relationship
+		for i := 0; i < 39; i++ {
+			typ := domain.RelationshipTypeSupports
+			if i%4 == 0 {
+				typ = domain.RelationshipTypeContradicts
+			}
+			rels = append(rels, domain.Relationship{ID: fmt.Sprintf("prel%03d", (i*17)%39), Type: typ,
+				FromClaimID: fmt.Sprintf("pc%03d", i), ToClaimID: fmt.Sprintf("pc%03d", i+1), CreatedAt: base})
+		}
+		if err := b.conn.Relationships.Upsert(ctx, rels); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, run := range []string{"", "prun-1"} {
+			want, err := browse.EventsInGo(ctx, b.conn, run, nil, 1000, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wantIDs []string
+			for _, e := range want.Items {
+				wantIDs = append(wantIDs, e.ID)
+			}
+			for _, size := range []int{1, 5} {
+				label := fmt.Sprintf("%s episodes run=%q size=%d", b.name, run, size)
+				got := walk(t, label, want.Total, func(after string) ([]string, int, bool, string) {
+					var k *page.Key
+					if after != "" {
+						kk, _ := page.Decode(after)
+						k = &kk
+					}
+					pg, err := browse.Events(ctx, b.conn, run, k, size, 0)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var ids []string
+					for _, e := range pg.Items {
+						ids = append(ids, e.ID)
+					}
+					last := ""
+					if len(pg.Items) > 0 {
+						l := pg.Items[len(pg.Items)-1]
+						last = page.Key{At: l.Timestamp, ID: l.ID}.Encode()
+					}
+					return ids, pg.Total, pg.More, last
+				})
+				sameSet(t, label, got, wantIDs)
+			}
+		}
+		for _, typ := range []string{"", "contradicts"} {
+			want, err := browse.RelationshipsInGo(ctx, b.conn, typ, "", 1000, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var wantIDs []string
+			for _, r := range want.Items {
+				wantIDs = append(wantIDs, r.ID)
+			}
+			if len(wantIDs) == 0 {
+				t.Fatalf("%s: no associations of type %q", b.name, typ)
+			}
+			for _, size := range []int{1, 6} {
+				label := fmt.Sprintf("%s associations type=%q size=%d", b.name, typ, size)
+				got := walk(t, label, want.Total, func(after string) ([]string, int, bool, string) {
+					pg, err := browse.Relationships(ctx, b.conn, typ, after, size, 0)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var ids []string
+					for _, r := range pg.Items {
+						ids = append(ids, r.ID)
+					}
+					last := ""
+					if len(pg.Items) > 0 {
+						last = pg.Items[len(pg.Items)-1].ID
+					}
+					return ids, pg.Total, pg.More, last
+				})
+				sameSet(t, label, got, wantIDs)
+			}
+		}
+	}
+}

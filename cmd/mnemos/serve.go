@@ -772,10 +772,11 @@ func handleLanding(w http.ResponseWriter, r *http.Request) {
 }
 
 type eventsResponse struct {
-	Events []eventDTO `json:"episodes"`
-	Total  int        `json:"total"`
-	Limit  int        `json:"limit"`
-	Offset int        `json:"offset"`
+	Events     []eventDTO `json:"episodes"`
+	Total      int        `json:"total"`
+	Limit      int        `json:"limit"`
+	Offset     int        `json:"offset"`
+	NextCursor string     `json:"next_cursor,omitempty"`
 }
 
 type eventDTO struct {
@@ -899,29 +900,24 @@ func listEventsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 	if !requireRunScope(w, r, runID) {
 		return
 	}
-	var all []domain.Event
-	var err error
-	if runID != "" {
-		all, err = conn.Events.ListByRunID(ctx, runID)
-	} else {
-		all, err = conn.Events.ListAll(ctx)
+	after, ok := parseCursor(w, r, offset)
+	if !ok {
+		return
 	}
+	// Newest first by (timestamp, id); in the store when it can page.
+	pg, err := browse.Events(ctx, conn, runID, after, limit, offset)
 	if err != nil {
 		writeInternalError(w, "list events", err)
 		return
 	}
-	// ListAll returns ascending; the federation client expects most-
-	// recent first. Reverse without sorting since timestamps are
-	// already monotonic by run.
-	reversed := make([]domain.Event, len(all))
-	for i, e := range all {
-		reversed[len(all)-1-i] = e
+	nextCursor := ""
+	if pg.More && len(pg.Items) > 0 {
+		last := pg.Items[len(pg.Items)-1]
+		nextCursor = page.Key{At: last.Timestamp, ID: last.ID}.Encode()
 	}
-	total := len(reversed)
-	page := paginate(reversed, limit, offset)
 
-	events := make([]eventDTO, 0, len(page))
-	for _, e := range page {
+	events := make([]eventDTO, 0, len(pg.Items))
+	for _, e := range pg.Items {
 		events = append(events, eventDTO{
 			ID:            e.ID,
 			RunID:         e.RunID,
@@ -933,8 +929,31 @@ func listEventsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 			IngestedAt:    e.IngestedAt.UTC().Format(time.RFC3339),
 		})
 	}
-	writeJSON(w, http.StatusOK, eventsResponse{Events: events, Total: total, Limit: limit, Offset: offset})
+	writeJSON(w, http.StatusOK, eventsResponse{Events: events, Total: pg.Total, Limit: limit, Offset: offset, NextCursor: nextCursor})
 }
+
+// parseCursor reads ?cursor (a next_cursor this server issued). It writes the
+// 400 itself and reports false for a malformed cursor or one combined with
+// offset; a nil key means "first page".
+func parseCursor(w http.ResponseWriter, r *http.Request, offset int) (*page.Key, bool) {
+	raw := r.URL.Query().Get("cursor")
+	if raw == "" {
+		return nil, true
+	}
+	k, err := page.Decode(raw)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid cursor")
+		return nil, false
+	}
+	if offset > 0 {
+		writeError(w, http.StatusBadRequest, "cursor and offset cannot be combined; follow next_cursor")
+		return nil, false
+	}
+	return &k, true
+}
+
+// idCursor is the opaque cursor for browses keyed by a string alone.
+func idCursor(id string) string { return page.Key{ID: id}.Encode() }
 
 // paginate slices xs by limit/offset; safe on empty input or
 // out-of-range offsets.
@@ -1073,18 +1092,9 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 		recordedAsOf = t
 	}
 
-	var after *page.Key
-	if raw := r.URL.Query().Get("cursor"); raw != "" {
-		k, err := page.Decode(raw)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid cursor")
-			return
-		}
-		if offset > 0 {
-			writeError(w, http.StatusBadRequest, "cursor and offset cannot be combined; follow next_cursor")
-			return
-		}
-		after = &k
+	after, ok := parseCursor(w, r, offset)
+	if !ok {
+		return
 	}
 	filter := page.ClaimFilter{Type: typeFilter, Status: statusFilter, AsOf: asOf, RecordedAsOf: recordedAsOf, RunID: runIDFilter}
 	ctx := r.Context()
@@ -1290,6 +1300,7 @@ type relationshipsResponse struct {
 	Total         int               `json:"total"`
 	Limit         int               `json:"limit"`
 	Offset        int               `json:"offset"`
+	NextCursor    string            `json:"next_cursor,omitempty"`
 }
 
 type relationshipDTO struct {
@@ -1336,45 +1347,32 @@ func listRelationshipsHandler(conn *store.Conn, w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// The relationships repository doesn't expose a "list all"
-	// since the use case is hop-traversal, not export. Walk
-	// every claim and union its edges; dedup by relationship id.
-	// This is bounded by the federation page size (200 max), so
-	// scanning every claim once per page request is acceptable for
-	// the registry-server scale.
-	ctx := r.Context()
-	allClaims, err := conn.Claims.ListAll(ctx)
-	if err != nil {
-		writeInternalError(w, "list claims for relationship export: %v", err)
+	after, ok := parseCursor(w, r, offset)
+	if !ok {
 		return
 	}
-	claimIDs := make([]string, 0, len(allClaims))
-	for _, c := range allClaims {
-		claimIDs = append(claimIDs, c.ID)
+	afterID := ""
+	if after != nil {
+		afterID = after.ID
 	}
-	rels, err := conn.Relationships.ListByClaimIDs(ctx, claimIDs)
+	// By id ascending, in the store when it can page. This used to load
+	// every claim and then every edge touching one, for each page: 32M edges
+	// on a large brain. The primary key orders the pages, so no index beyond
+	// the one every relationship table has is needed.
+	ctx := r.Context()
+	pg, err := browse.Relationships(ctx, conn, typeFilter, afterID, limit, offset)
 	if err != nil {
 		writeInternalError(w, "list relationships", err)
 		return
 	}
-	filtered := rels[:0]
-	for _, rel := range rels {
-		if typeFilter != "" && string(rel.Type) != typeFilter {
-			continue
-		}
-		filtered = append(filtered, rel)
+	total := pg.Total
+	nextCursor := ""
+	if pg.More && len(pg.Items) > 0 {
+		nextCursor = idCursor(pg.Items[len(pg.Items)-1].ID)
 	}
-	// Reverse for created_at DESC (rels come back in storage order,
-	// which approximates created_at ASC).
-	reversed := make([]domain.Relationship, len(filtered))
-	for i, rel := range filtered {
-		reversed[len(filtered)-1-i] = rel
-	}
-	total := len(reversed)
-	page := paginate(reversed, limit, offset)
 
-	out := make([]relationshipDTO, 0, len(page))
-	for _, rel := range page {
+	out := make([]relationshipDTO, 0, len(pg.Items))
+	for _, rel := range pg.Items {
 		out = append(out, relationshipDTO{
 			ID:          rel.ID,
 			Type:        string(rel.Type),
@@ -1383,7 +1381,7 @@ func listRelationshipsHandler(conn *store.Conn, w http.ResponseWriter, r *http.R
 			CreatedAt:   rel.CreatedAt.UTC().Format(time.RFC3339),
 		})
 	}
-	writeJSON(w, http.StatusOK, relationshipsResponse{Relationships: out, Total: total, Limit: limit, Offset: offset})
+	writeJSON(w, http.StatusOK, relationshipsResponse{Relationships: out, Total: total, Limit: limit, Offset: offset, NextCursor: nextCursor})
 }
 
 // appendEventsRequest is the body for POST /v1/episodes. Single-event submits
@@ -1888,6 +1886,7 @@ type embeddingsResponse struct {
 	Total      int            `json:"total"`
 	Limit      int            `json:"limit"`
 	Offset     int            `json:"offset"`
+	NextCursor string         `json:"next_cursor,omitempty"`
 }
 
 type appendEmbeddingsRequest struct {
@@ -1918,26 +1917,33 @@ func listEmbeddingsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Two-pass: when no filter is set we union both entity types so
-	// the federation pull can mirror the registry.
-	var records []domain.EmbeddingRecord
+	after, ok := parseCursor(w, r, offset)
+	if !ok {
+		return
+	}
+	afterKey := ""
+	if after != nil {
+		afterKey = after.ID
+	}
+	// When no filter is set, both entity types, so the federation pull can
+	// mirror the registry. Ordered by (entity type, entity id, model).
 	wantedTypes := []string{typeFilter}
 	if typeFilter == "" {
 		wantedTypes = []string{"event", "claim"}
 	}
-	for _, t := range wantedTypes {
-		recs, err := conn.Embeddings.ListByEntityType(ctx, t)
-		if err != nil {
-			writeInternalError(w, "list embeddings", err)
-			return
-		}
-		records = append(records, recs...)
+	pg, err := browse.Embeddings(ctx, conn, wantedTypes, afterKey, limit, offset)
+	if err != nil {
+		writeInternalError(w, "list embeddings", err)
+		return
 	}
-	total := len(records)
-	page := paginate(records, limit, offset)
+	total := pg.Total
+	nextCursor := ""
+	if pg.More && len(pg.Items) > 0 {
+		nextCursor = idCursor(browse.EmbeddingKey(pg.Items[len(pg.Items)-1]))
+	}
 
-	out := make([]embeddingDTO, 0, len(page))
-	for _, rec := range page {
+	out := make([]embeddingDTO, 0, len(pg.Items))
+	for _, rec := range pg.Items {
 		out = append(out, embeddingDTO{
 			EntityID:   rec.EntityID,
 			EntityType: rec.EntityType,
@@ -1946,7 +1952,7 @@ func listEmbeddingsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Requ
 			Dimensions: rec.Dimensions,
 		})
 	}
-	writeJSON(w, http.StatusOK, embeddingsResponse{Embeddings: out, Total: total, Limit: limit, Offset: offset})
+	writeJSON(w, http.StatusOK, embeddingsResponse{Embeddings: out, Total: total, Limit: limit, Offset: offset, NextCursor: nextCursor})
 }
 
 func appendEmbeddingsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
