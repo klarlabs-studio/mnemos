@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: klarlabs-studio/.github/.github/workflows/go-ci.yml@main
+    uses: klarlabs-studio/.github/.github/workflows/go-ci.yml@75edaf97c1274c4036460d3895dd85f9d7dbc021 # main @ 2026-10-06; this job holds security-events:write and inherited secrets, so the code it runs is pinned
     permissions:
       contents: read
       security-events: write
