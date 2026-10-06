@@ -598,9 +598,9 @@ var Registry = []Capability{
 	},
 	{
 		ID: "infra.web", Effect: Infra,
-		Summary: "Landing page and registry web app shell",
+		Summary: "Landing page and registry web app shell, with their scripts and stylesheets",
 		On: map[Transport]Binding{
-			Go: No(notServer), REST: Has("GET /", "GET /app"), GRPC: No(notServer),
+			Go: No(notServer), REST: Has("GET /", "GET /app", "GET /assets/landing.css", "GET /assets/landing.js", "GET /assets/app.css", "GET /assets/app.js"), GRPC: No(notServer),
 			MCP: No(notServer), MCPLite: No(notLite), HTTPLite: No(notLite), Client: No(notServer),
 		},
 	},

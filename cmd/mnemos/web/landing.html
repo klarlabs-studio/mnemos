@@ -5,256 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mnemos — Evidence layer for AI agents you actually own</title>
   <meta name="description" content="Self-hosted memory + evidence layer for AI agents. Extracts claims, detects contradictions, answers queries with citations. SQLite/Postgres/MySQL/libSQL — your agents' memory never leaves your infrastructure.">
-  <style>
-    :root {
-      --fg: #1a1a1a;
-      --bg: #fafaf7;
-      --muted: #6b6b6b;
-      --border: #e5e5e0;
-      --accent: #0b5fff;
-      --warn: #b04a00;
-      --code-bg: #0f1216;
-      --code-fg: #e6e6e6;
-      --code-muted: #8a8f99;
-      --code-accent: #7ec699;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font: 16px/1.6 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      color: var(--fg);
-      background: var(--bg);
-    }
-    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
-
-    header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 20px 0;
-      border-bottom: 1px solid var(--border);
-    }
-    header h1 { margin: 0; font-size: 24px; font-weight: 700; }
-    nav a { color: var(--fg); text-decoration: none; margin-left: 24px; font-size: 14px; }
-    nav a:hover { color: var(--accent); }
-
-    .hero { padding: 80px 0 40px; text-align: center; }
-    .hero h2 {
-      font-size: 44px;
-      font-weight: 800;
-      line-height: 1.15;
-      margin: 0 0 20px;
-      letter-spacing: -0.02em;
-    }
-    .hero p.tagline {
-      font-size: 20px;
-      color: var(--muted);
-      max-width: 720px;
-      margin: 0 auto 32px;
-    }
-    .hero .pill {
-      display: inline-block;
-      background: #eef2ff;
-      color: var(--accent);
-      font-size: 13px;
-      font-weight: 600;
-      padding: 4px 12px;
-      border-radius: 999px;
-      margin-bottom: 20px;
-      letter-spacing: 0.02em;
-    }
-    .cta-primary, .cta-secondary {
-      display: inline-block;
-      padding: 14px 28px;
-      text-decoration: none;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 16px;
-      margin: 0 6px 12px 6px;
-      transition: opacity 0.2s, border-color 0.2s;
-    }
-    .cta-primary { background: var(--accent); color: white; }
-    .cta-primary:hover { opacity: 0.9; }
-    .cta-secondary { background: white; color: var(--fg); border: 1px solid var(--border); }
-    .cta-secondary:hover { border-color: var(--accent); }
-
-    /* Terminal demo */
-    .demo { padding: 20px 0 80px; }
-    .terminal {
-      background: var(--code-bg);
-      color: var(--code-fg);
-      border-radius: 10px;
-      padding: 0;
-      overflow: hidden;
-      box-shadow: 0 16px 40px -16px rgba(15, 18, 22, 0.4);
-      max-width: 920px;
-      margin: 0 auto;
-    }
-    .terminal-bar {
-      display: flex;
-      align-items: center;
-      padding: 12px 16px;
-      background: #181c22;
-      border-bottom: 1px solid #23272e;
-    }
-    .terminal-bar span {
-      width: 12px; height: 12px; border-radius: 50%;
-      background: #3a3f47; margin-right: 8px;
-    }
-    .terminal-bar span:nth-child(1) { background: #ff5f56; }
-    .terminal-bar span:nth-child(2) { background: #ffbd2e; }
-    .terminal-bar span:nth-child(3) { background: #27c93f; }
-    .terminal-bar .label { margin-left: 12px; color: var(--code-muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
-    .terminal pre {
-      margin: 0;
-      padding: 20px 24px 24px;
-      font-family: ui-monospace, "SF Mono", Menlo, "Cascadia Code", monospace;
-      font-size: 14px;
-      line-height: 1.55;
-      white-space: pre;
-      overflow-x: auto;
-    }
-    .terminal .prompt { color: var(--code-accent); }
-    .terminal .cmd { color: var(--code-fg); }
-    .terminal .out { color: var(--code-muted); }
-    .terminal .key { color: #b8c0ff; }
-    .terminal .str { color: #f7c977; }
-    .terminal .warn { color: #ff9b6e; font-weight: 600; }
-
-    /* Comparison */
-    .compare { padding: 80px 0; background: white; }
-    .section-title {
-      text-align: center;
-      font-size: 32px;
-      font-weight: 700;
-      margin: 0 0 12px;
-    }
-    .section-sub { text-align: center; color: var(--muted); max-width: 680px; margin: 0 auto 40px; }
-    table.compare-table {
-      width: 100%;
-      max-width: 920px;
-      margin: 0 auto;
-      border-collapse: collapse;
-      font-size: 15px;
-    }
-    table.compare-table th, table.compare-table td {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      text-align: center;
-    }
-    table.compare-table th:first-child, table.compare-table td:first-child {
-      text-align: left;
-      font-weight: 600;
-    }
-    table.compare-table thead th {
-      font-weight: 700;
-      color: var(--fg);
-      border-bottom: 2px solid var(--border);
-    }
-    table.compare-table .yes { color: #1c8a3c; font-weight: 600; }
-    table.compare-table .no { color: #b04a00; }
-    table.compare-table .partial { color: #6b6b6b; }
-    table.compare-table .footnote { font-size: 13px; color: var(--muted); margin: 16px auto 0; max-width: 920px; }
-
-    /* Proof points */
-    .proof { padding: 60px 0; }
-    .proof .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 24px;
-      max-width: 920px;
-      margin: 0 auto;
-    }
-    .proof .card {
-      padding: 24px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: white;
-    }
-    .proof .metric {
-      font-size: 32px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      color: var(--accent);
-      margin-bottom: 8px;
-    }
-    .proof .desc { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
-    .proof .card a { color: var(--accent); font-size: 13px; text-decoration: none; font-weight: 600; }
-    .proof .card a:hover { text-decoration: underline; }
-
-    /* Pricing */
-    .pricing { padding: 80px 0; background: white; }
-    .price-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 24px;
-      max-width: 920px;
-      margin: 0 auto;
-    }
-    .price-card {
-      padding: 32px 24px;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      text-align: left;
-    }
-    .price-card.highlight { border: 2px solid var(--accent); }
-    .price-tier {
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--accent);
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .price-amount { font-size: 28px; font-weight: 800; margin-bottom: 12px; }
-    .price-amount .small { font-size: 14px; font-weight: 500; color: var(--muted); }
-    .price-card ul { margin: 16px 0 24px; padding-left: 18px; color: var(--muted); }
-    .price-card ul li { margin-bottom: 6px; font-size: 14px; }
-    .price-card .price-cta {
-      display: block;
-      padding: 10px 16px;
-      background: var(--bg);
-      color: var(--fg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      text-decoration: none;
-      text-align: center;
-      font-weight: 600;
-      font-size: 14px;
-    }
-    .price-card.highlight .price-cta { background: var(--accent); color: white; border-color: var(--accent); }
-
-    /* Lead capture */
-    .lead-section { padding: 80px 0; text-align: center; }
-    .lead-section h2 { font-size: 28px; font-weight: 700; margin: 0 0 16px; }
-    .lead-section p { color: var(--muted); margin: 0 0 32px; }
-    .lead-form { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
-    .lead-form input {
-      padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px;
-      font-size: 16px; width: 320px;
-    }
-    .lead-form button {
-      padding: 12px 24px; background: var(--accent); color: white; border: none;
-      border-radius: 8px; font-weight: 600; font-size: 16px; cursor: pointer;
-    }
-
-    footer {
-      padding: 40px 0;
-      border-top: 1px solid var(--border);
-      text-align: center;
-      color: var(--muted);
-      font-size: 14px;
-    }
-    footer a { color: var(--muted); text-decoration: none; margin: 0 12px; }
-    footer a:hover { color: var(--accent); }
-
-    @media (max-width: 768px) {
-      .hero h2 { font-size: 32px; }
-      .hero p.tagline { font-size: 17px; }
-      .terminal pre { font-size: 12px; padding: 16px; }
-      nav a { margin-left: 12px; font-size: 13px; }
-    }
-
-    :focus { outline: 2px solid var(--accent); outline-offset: 2px; }
-  </style>
+  <link rel="stylesheet" href="/assets/landing.css">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -333,16 +84,16 @@
 <span class="prompt">$</span> <span class="cmd">mnemos process --text "Final pick is MySQL. Earlier we said Postgres."</span>
 <span class="out">related</span>   1 relationship: <span class="warn">contradicts</span>  (trust 0.71 vs 0.83)</pre>
       </div>
-      <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:16px;">
+      <p class="note-center">
         Write over HTTP from any language. Read back with claims + citations.
         Contradictions land as edges in the graph, not silently overwritten.
       </p>
     </div>
   </section>
 
-  <section id="mcp" class="demo" style="padding-top:0;">
+  <section id="mcp" class="demo pt-0">
     <div class="container">
-      <h2 class="section-title" style="margin-bottom:12px;">Works with Claude Desktop, Cursor, and LangGraph</h2>
+      <h2 class="section-title mb-12">Works with Claude Desktop, Cursor, and LangGraph</h2>
       <p class="section-sub">
         <code>mnemos mcp</code> exposes 14 tools over stdio: <code>query_knowledge</code>,
         <code>process_text</code>, <code>record_decision</code>, <code>query_lessons</code>,
@@ -364,7 +115,7 @@
   }
 }</pre>
       </div>
-      <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:16px;">
+      <p class="note-center">
         Same surface available over REST (<code>/v1/*</code>) and gRPC for non-MCP runtimes.
       </p>
     </div>
@@ -482,7 +233,7 @@
           <a href="https://github.com/klarlabs-studio/mnemos/blob/main/docs/telemetry.md">privacy posture →</a>
         </div>
       </div>
-      <p style="text-align:center;color:var(--muted);font-size:13px;margin-top:24px;">
+      <p class="note-center note-center--spaced">
         Production-readiness: 100% mutation kill rate on the trust-scoring core,
         99.9% SLO targets in <a href="https://github.com/klarlabs-studio/mnemos/blob/main/SLO.md">SLO.md</a>,
         cross-transport parity tests, append-only audit log.
@@ -531,7 +282,7 @@
             <li>Custom retention &amp; key-management</li>
           </ul>
           <a href="mailto:felix@felixgeelhaar.de?subject=Enterprise%20enquiry" class="price-cta">Contact sales</a>
-          <p style="margin:12px 0 0;font-size:13px;color:var(--muted);text-align:center;">
+          <p class="form-note">
             Founder-led. felix@ replies same business day.
           </p>
         </div>
@@ -547,14 +298,14 @@
         OSS-only? Star the repo or join the discussions instead.
       </p>
       <form class="lead-form" id="lead-form">
-        <label for="lead-email" style="position:absolute;left:-9999px;">Work email</label>
+        <label for="lead-email" class="visually-hidden">Work email</label>
         <input id="lead-email" type="email" name="email" placeholder="you@company.com" required>
         <button type="submit">Join waitlist</button>
       </form>
-      <p style="margin-top:16px;color:var(--muted);font-size:14px;">
+      <p class="muted-14">
         No spam. Email only used to notify you when Team launches and for major release notes.
       </p>
-      <p style="margin-top:8px;color:var(--muted);font-size:14px;">
+      <p class="muted-14 muted-14--tight">
         OSS-only path:
         <a href="https://github.com/klarlabs-studio/mnemos">star on GitHub</a> ·
         <a href="https://github.com/klarlabs-studio/mnemos/discussions">join Discussions</a> ·
@@ -575,46 +326,6 @@
     </div>
   </footer>
 
-  <script>
-    document.getElementById('lead-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = e.target.email.value;
-      if (!email) return;
-
-      const btn = e.target.querySelector('button');
-      btn.textContent = 'Sending...';
-      btn.disabled = true;
-
-      try {
-        const resp = await fetch('/v1/leads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
-        });
-        if (resp.ok) {
-          alert("Thanks — we'll email you when Team is ready.");
-          e.target.reset();
-        } else {
-          alert('Something went wrong. Please try again later.');
-        }
-      } catch (err) {
-        window.location.href = 'mailto:felix@felixgeelhaar.de?subject=Team%20waitlist&body=Email: ' + encodeURIComponent(email);
-      } finally {
-        btn.textContent = 'Join waitlist';
-        btn.disabled = false;
-      }
-    });
-
-    document.querySelectorAll('.cta-primary, .cta-secondary, .price-cta').forEach(el => {
-      el.addEventListener('click', () => {
-        if (window.gtag) {
-          gtag('event', 'cta_click', {
-            event_category: 'Landing',
-            event_label: el.textContent.trim()
-          });
-        }
-      });
-    });
-  </script>
+  <script src="/assets/landing.js"></script>
 </body>
 </html>
