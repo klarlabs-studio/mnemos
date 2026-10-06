@@ -550,6 +550,25 @@ CREATE TABLE IF NOT EXISTS global_schemas (
 );
 CREATE INDEX IF NOT EXISTS idx_global_schemas_status ON global_schemas(status);
 CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(promoted_at);
+
+-- relate's content tokens per claim (relate.SortedContentTokens), so the write
+-- path can ask which claims share a token with a new one instead of loading
+-- the corpus (#382 Phase 5). Maintained by ClaimRepository.Upsert; deleted
+-- with the claim. relate_token_state records the tokenizer version of a
+-- COMPLETE index (empty while one is being built) and the progress of a build,
+-- which Bootstrap resumes across opens.
+CREATE TABLE IF NOT EXISTS claim_tokens (
+	token TEXT NOT NULL,
+	claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+	PRIMARY KEY (token, claim_id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_claim_tokens_claim ON claim_tokens(claim_id);
+CREATE TABLE IF NOT EXISTS relate_token_state (
+	id INTEGER PRIMARY KEY CHECK (id = 1),
+	tokenizer_version TEXT NOT NULL DEFAULT '',
+	building_version TEXT NOT NULL DEFAULT '',
+	build_cursor TEXT NOT NULL DEFAULT ''
+);
 `
 
 	if _, err := db.Exec(schema); err != nil {
@@ -558,6 +577,10 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 
 	if err := migrate(db); err != nil {
 		return fmt.Errorf("schema migration: %w", err)
+	}
+
+	if err := ensureClaimTokens(db); err != nil {
+		return fmt.Errorf("claim token index: %w", err)
 	}
 
 	return nil

@@ -1455,7 +1455,7 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 			return err
 		}
 
-		existingClaims, err := conn.Claims.ListAll(ctx)
+		existingClaims, err := pipeline.ExistingForRelate(ctx, conn, claims)
 		if err != nil {
 			return err
 		}

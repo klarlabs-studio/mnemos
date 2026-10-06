@@ -61,6 +61,7 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 
 	qtx := r.q.WithTx(tx)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	existed := make(map[string]bool, len(claims))
 
 	for _, claim := range claims {
 		if err := claim.Validate(); err != nil {
@@ -71,6 +72,8 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 		if err != nil {
 			return fmt.Errorf("look up prior status for %s: %w", claim.ID, err)
 		}
+		// currentClaimStatus returns "" only for a claim not yet stored.
+		existed[claim.ID] = existed[claim.ID] || priorStatus != ""
 
 		// valid_from defaults to created_at when the caller hasn't
 		// already populated it (legacy code paths and tests). The
@@ -160,6 +163,12 @@ VALUES (
 		); err != nil {
 			return fmt.Errorf("record status transition for %s: %w", claim.ID, err)
 		}
+	}
+
+	// In the same transaction, so a claim's relate tokens can never disagree
+	// with its committed text.
+	if err := writeClaimTokens(ctx, tx, claims, existed); err != nil {
+		return fmt.Errorf("claim tokens: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {

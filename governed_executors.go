@@ -83,7 +83,7 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("relate: %w", err)
 	}
-	existing, lerr := m.conn.Claims.ListAll(ctx)
+	existing, lerr := pipeline.ExistingForRelate(ctx, m.conn, claims)
 	if lerr == nil && len(existing) > 0 {
 		if incremental, irelErr := m.relator.DetectIncremental(claims, existing); irelErr == nil {
 			rels = append(rels, incremental...)
@@ -230,7 +230,7 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 	// Snapshot the existing corpus BEFORE upserting so edge detection compares the
 	// new claim against prior claims only (not itself). Best-effort: a read miss
 	// just means no edges this write.
-	existing, existingErr := m.conn.Claims.ListAll(ctx)
+	existing, existingErr := pipeline.ExistingForRelate(ctx, m.conn, []domain.Claim{claim})
 
 	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert claim: %w", err)
