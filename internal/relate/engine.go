@@ -14,6 +14,9 @@ import (
 type Engine struct {
 	now    func() time.Time
 	nextID func() (string, error)
+	// supportsBudget caps supports edges per source claim per pass; see
+	// DefaultSupportsBudget. 0 means the default, < 0 means unlimited.
+	supportsBudget int
 }
 
 // NewEngine returns an Engine with default clock and ID generation.
@@ -130,6 +133,7 @@ const causalTimeTolerance = 48 * time.Hour
 func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 	rels := make([]domain.Relationship, 0)
 	now := e.now().UTC()
+	var candidates []candidateEdge
 
 	// Pre-compute normalized content tokens and polarity for each claim.
 	type analyzed struct {
@@ -196,20 +200,30 @@ func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 			if suppressAsSessionNoise(relType, claims[i], claims[j]) {
 				continue
 			}
-
-			id, err := e.nextID()
-			if err != nil {
-				return nil, err
-			}
-
-			rels = append(rels, domain.Relationship{
-				ID:          id,
-				Type:        relType,
-				FromClaimID: claims[i].ID,
-				ToClaimID:   claims[j].ID,
-				CreatedAt:   now,
-			})
+			overlap := contentOverlap(cache[i].tokens, cache[j].tokens)
+			candidates = append(candidates, candidateEdge{from: i, to: j, relType: relType,
+				strength: supportsStrength(overlap, len(cache[i].tokens), len(cache[j].tokens))})
 		}
+	}
+
+	// Within a batch the same per-claim supports budget applies as against the
+	// corpus (DefaultSupportsBudget); IDs go only to the edges it keeps.
+	keep := keepWithinBudget(candidates, e.budget())
+	for k, c := range candidates {
+		if !keep[k] {
+			continue
+		}
+		id, err := e.nextID()
+		if err != nil {
+			return nil, err
+		}
+		rels = append(rels, domain.Relationship{
+			ID:          id,
+			Type:        c.relType,
+			FromClaimID: claims[c.from].ID,
+			ToClaimID:   claims[c.to].ID,
+			CreatedAt:   now,
+		})
 	}
 
 	// Explicit citations: if a claim text references another claim ID,

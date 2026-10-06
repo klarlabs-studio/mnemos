@@ -43,6 +43,9 @@ type IncrementalStats struct {
 	PairsEvaluated int
 
 	Relationships int
+	// SupportsOverBudget is the number of supports candidates the per-claim
+	// budget dropped (see DefaultSupportsBudget).
+	SupportsOverBudget int
 }
 
 // DetectIncremental compares each new claim against all existing claims and
@@ -77,21 +80,14 @@ func (e Engine) DetectIncrementalWithStats(newClaims []domain.Claim, existingCla
 		newDerived[i] = newClaimDerived(newClaims[i].Text, tokens, neg)
 	}
 
-	emit := func(i int, j int32, relType domain.RelationshipType) error {
+	// Candidates are collected first and IDs assigned only to the edges the
+	// supports budget keeps, so a dropped candidate consumes nothing.
+	var candidates []candidateEdge
+	emit := func(i int, j int32, relType domain.RelationshipType, strength float64) error {
 		if suppressAsSessionNoise(relType, newClaims[i], existingClaims[j]) {
 			return nil
 		}
-		id, err := e.nextID()
-		if err != nil {
-			return err
-		}
-		rels = append(rels, domain.Relationship{
-			ID:          id,
-			Type:        relType,
-			FromClaimID: newClaims[i].ID,
-			ToClaimID:   existingClaims[j].ID,
-			CreatedAt:   now,
-		})
+		candidates = append(candidates, candidateEdge{from: i, to: int(j), relType: relType, strength: strength})
 		return nil
 	}
 
@@ -102,6 +98,25 @@ func (e Engine) DetectIncrementalWithStats(newClaims []domain.Claim, existingCla
 		}
 	} else if err := e.scanPass(newDerived, existingClaims, emit, &stats); err != nil {
 		return nil, stats, err
+	}
+
+	keep := keepWithinBudget(candidates, e.budget())
+	for k, c := range candidates {
+		if !keep[k] {
+			stats.SupportsOverBudget++
+			continue
+		}
+		id, err := e.nextID()
+		if err != nil {
+			return nil, stats, err
+		}
+		rels = append(rels, domain.Relationship{
+			ID:          id,
+			Type:        c.relType,
+			FromClaimID: newClaims[c.from].ID,
+			ToClaimID:   existingClaims[c.to].ID,
+			CreatedAt:   now,
+		})
 	}
 
 	// Citation edges from new claims to any known claim IDs in scope
@@ -140,7 +155,7 @@ func (e Engine) DetectIncrementalWithStats(newClaims []domain.Claim, existingCla
 
 // scanPass compares every new claim against every existing claim. It is the
 // reference behaviour: indexedPass must agree with it exactly.
-func (e Engine) scanPass(newDerived []*claimDerived, existingClaims []domain.Claim, emit func(int, int32, domain.RelationshipType) error, stats *IncrementalStats) error {
+func (e Engine) scanPass(newDerived []*claimDerived, existingClaims []domain.Claim, emit func(int, int32, domain.RelationshipType, float64) error, stats *IncrementalStats) error {
 	existDerived := make([]*claimDerived, len(existingClaims))
 	for j := range existingClaims {
 		tokens, neg := contentTokensAndPolarity(existingClaims[j].Text)
@@ -156,11 +171,13 @@ func (e Engine) scanPass(newDerived []*claimDerived, existingClaims []domain.Cla
 				continue
 			}
 			stats.PairsEvaluated++
-			relType, ok := evaluatePair(newDerived[i], existDerived[j], contentOverlap(newDerived[i].tokens, existDerived[j].tokens))
+			overlap := contentOverlap(newDerived[i].tokens, existDerived[j].tokens)
+			relType, ok := evaluatePair(newDerived[i], existDerived[j], overlap)
 			if !ok {
 				continue
 			}
-			if err := emit(i, int32(j), relType); err != nil {
+			strength := supportsStrength(overlap, len(newDerived[i].tokens), len(existDerived[j].tokens))
+			if err := emit(i, int32(j), relType, strength); err != nil {
 				return err
 			}
 		}
@@ -170,7 +187,7 @@ func (e Engine) scanPass(newDerived []*claimDerived, existingClaims []domain.Cla
 
 // indexedPass narrows the candidate set with the inverted index before running
 // the pair evaluation. See candidateIndex for why that narrowing is exact.
-func (e Engine) indexedPass(newDerived []*claimDerived, existingClaims []domain.Claim, emit func(int, int32, domain.RelationshipType) error, stats *IncrementalStats) error {
+func (e Engine) indexedPass(newDerived []*claimDerived, existingClaims []domain.Claim, emit func(int, int32, domain.RelationshipType, float64) error, stats *IncrementalStats) error {
 	ci := buildCandidateIndex(existingClaims)
 
 	counts := make([]int32, len(existingClaims))
@@ -222,7 +239,7 @@ func (e Engine) indexedPass(newDerived []*claimDerived, existingClaims []domain.
 			if !ok {
 				continue
 			}
-			if err := emit(i, j, relType); err != nil {
+			if err := emit(i, j, relType, supportsStrength(int(counts[j]), len(nd.tokens), len(ed.tokens))); err != nil {
 				return err
 			}
 		}
@@ -317,6 +334,6 @@ func traceIncremental(s IncrementalStats) {
 		return
 	}
 	fmt.Fprintf(os.Stderr,
-		"relate.incremental path=%s new=%d existing=%d pairs_possible=%d pairs_probed=%d pairs_evaluated=%d rels=%d\n",
-		s.Path, s.NewClaims, s.ExistingClaims, s.PairsPossible, s.PairsProbed, s.PairsEvaluated, s.Relationships)
+		"relate.incremental path=%s new=%d existing=%d pairs_possible=%d pairs_probed=%d pairs_evaluated=%d rels=%d supports_over_budget=%d\n",
+		s.Path, s.NewClaims, s.ExistingClaims, s.PairsPossible, s.PairsProbed, s.PairsEvaluated, s.Relationships, s.SupportsOverBudget)
 }
