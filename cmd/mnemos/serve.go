@@ -23,10 +23,12 @@ import (
 	"go.klarlabs.de/bolt"
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/browse"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	markdownpkg "go.klarlabs.de/mnemos/internal/markdown"
+	"go.klarlabs.de/mnemos/internal/page"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/runscope"
@@ -953,6 +955,10 @@ type claimsResponse struct {
 	Total    int                 `json:"total"`
 	Limit    int                 `json:"limit"`
 	Offset   int                 `json:"offset"`
+	// NextCursor, when set, fetches the following page (?cursor=). Absent on
+	// the last page. Prefer it to offset: it neither re-reads the table nor
+	// shifts when beliefs are recorded between requests.
+	NextCursor string `json:"next_cursor,omitempty"`
 }
 
 type claimDTO struct {
@@ -1067,102 +1073,37 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 		recordedAsOf = t
 	}
 
-	ctx := r.Context()
-
-	// Build the allowed-event set for run_id tenant scoping. Empty set
-	// when run_id is specified means there are no claims for that
-	// tenant — return early to avoid leaking unfiltered claims.
-	var allowedEventIDs map[string]struct{}
-	if runIDFilter != "" {
-		events, err := conn.Events.ListByRunID(ctx, runIDFilter)
+	var after *page.Key
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		k, err := page.Decode(raw)
 		if err != nil {
-			writeInternalError(w, "list events by run id", err)
+			writeError(w, http.StatusBadRequest, "invalid cursor")
 			return
 		}
-		allowedEventIDs = make(map[string]struct{}, len(events))
-		for _, e := range events {
-			allowedEventIDs[e.ID] = struct{}{}
-		}
-		if len(allowedEventIDs) == 0 {
-			writeJSON(w, http.StatusOK, claimsResponse{
-				Claims: []claimDTO{},
-				Limit:  limit,
-				Offset: offset,
-			})
+		if offset > 0 {
+			writeError(w, http.StatusBadRequest, "cursor and offset cannot be combined; follow next_cursor")
 			return
 		}
+		after = &k
 	}
-
-	all, err := conn.Claims.ListAll(ctx)
+	filter := page.ClaimFilter{Type: typeFilter, Status: statusFilter, AsOf: asOf, RecordedAsOf: recordedAsOf, RunID: runIDFilter}
+	ctx := r.Context()
+	pg, err := browse.Beliefs(ctx, conn, filter, after, limit, offset)
 	if err != nil {
 		writeInternalError(w, "list claims", err)
 		return
 	}
-	filtered := all[:0]
-	for _, c := range all {
-		if typeFilter != "" && string(c.Type) != typeFilter {
-			continue
-		}
-		if statusFilter != "" && string(c.Status) != statusFilter {
-			continue
-		}
-		// Validity-time filter: claim must have been valid at as_of.
-		// IsValidAt treats zero ValidFrom as "valid since forever".
-		if !asOf.IsZero() && !c.IsValidAt(asOf) {
-			continue
-		}
-		// Ingestion-time filter: drop rows recorded after the query
-		// timestamp so the response is reproducible from the snapshot
-		// of the store as it stood then.
-		if !recordedAsOf.IsZero() && c.CreatedAt.After(recordedAsOf) {
-			continue
-		}
-		filtered = append(filtered, c)
+	total := pg.Total
+	items := pg.Claims
+	nextCursor := ""
+	if pg.More && len(items) > 0 {
+		last := items[len(items)-1]
+		nextCursor = page.Key{At: last.CreatedAt, ID: last.ID}.Encode()
 	}
 
-	// run_id post-filter: drop claims whose evidence does not link to
-	// an event with the matching RunID. Performed after cheaper filters
-	// so the evidence load runs only for surviving candidates.
-	if allowedEventIDs != nil && len(filtered) > 0 {
-		candidateIDs := make([]string, 0, len(filtered))
-		for _, c := range filtered {
-			candidateIDs = append(candidateIDs, c.ID)
-		}
-		evLinks, err := conn.Claims.ListEvidenceByClaimIDs(ctx, candidateIDs)
-		if err != nil {
-			writeInternalError(w, "list evidence for run_id filter", err)
-			return
-		}
-		eventsByClaim := make(map[string][]string, len(evLinks))
-		for _, link := range evLinks {
-			eventsByClaim[link.ClaimID] = append(eventsByClaim[link.ClaimID], link.EventID)
-		}
-		kept := filtered[:0]
-		for _, c := range filtered {
-			matched := false
-			for _, eid := range eventsByClaim[c.ID] {
-				if _, ok := allowedEventIDs[eid]; ok {
-					matched = true
-					break
-				}
-			}
-			if matched {
-				kept = append(kept, c)
-			}
-		}
-		filtered = kept
-	}
-	// Reverse for created_at DESC.
-	reversed := make([]domain.Claim, len(filtered))
-	for i, c := range filtered {
-		reversed[len(filtered)-1-i] = c
-	}
-	total := len(reversed)
-	page := paginate(reversed, limit, offset)
-
-	claims := make([]claimDTO, 0, len(page))
-	ids := make([]string, 0, len(page))
-	for _, c := range page {
+	claims := make([]claimDTO, 0, len(items))
+	ids := make([]string, 0, len(items))
+	for _, c := range items {
 		claims = append(claims, claimDTO{
 			ID:                   c.ID,
 			Text:                 c.Text,
@@ -1187,7 +1128,7 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 		evidence = append(evidence, claimEvidenceItem{ClaimID: l.ClaimID, EventID: l.EventID})
 	}
 
-	writeJSON(w, http.StatusOK, claimsResponse{Claims: claims, Evidence: evidence, Total: total, Limit: limit, Offset: offset})
+	writeJSON(w, http.StatusOK, claimsResponse{Claims: claims, Evidence: evidence, Total: total, Limit: limit, Offset: offset, NextCursor: nextCursor})
 }
 
 // semanticSearchClaimsHandler ranks claims by cosine similarity

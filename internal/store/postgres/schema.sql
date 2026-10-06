@@ -135,6 +135,8 @@ CREATE INDEX IF NOT EXISTS idx_claims_test_requirement_ref
 
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
 CREATE INDEX IF NOT EXISTS idx_claims_valid_to    ON claims(valid_to);
+-- Belief browse order (keyset pagination): newest first, id breaks ties.
+CREATE INDEX IF NOT EXISTS idx_claims_created_id ON claims(created_at, id);
 
 CREATE TABLE IF NOT EXISTS entities (
   id              text        PRIMARY KEY,

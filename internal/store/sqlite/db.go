@@ -881,9 +881,11 @@ INSERT INTO claims_fts(claim_id, text) SELECT id, text FROM claims;
 // EXISTS, so an up-to-date brain pays one catalog lookup per index.
 const postMigrateIndexes = `
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
--- ListAll orders by created_at; without this every full read sorted the whole
--- table, spilling to disk at 1M beliefs.
-CREATE INDEX IF NOT EXISTS idx_claims_created_at ON claims(created_at);
+-- ListAll orders by created_at and the belief browse by (created_at, id)
+-- newest first; without this every full read sorted the whole table, spilling
+-- to disk at 1M beliefs. Supersedes idx_claims_created_at, its prefix.
+DROP INDEX IF EXISTS idx_claims_created_at;
+CREATE INDEX IF NOT EXISTS idx_claims_created_id ON claims(created_at, id);
 -- The live beliefs brain health counts and samples (HealthSampler). Partial, so
 -- counting and listing them reads this narrow index, not every claim row. Its
 -- WHERE must stay identical to liveClaimSQL for the planner to use it.
