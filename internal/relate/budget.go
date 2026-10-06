@@ -90,3 +90,97 @@ func keepWithinBudget(edges []candidateEdge, budget int) []bool {
 	}
 	return keep
 }
+
+// SupportsPruner applies the supports budget to edges already stored, for
+// brains written before it existed (`mnemos relate --prune-supports`). It
+// ranks a claim's stored supports edges exactly as a detection pass would rank
+// them as candidates: Jaccard overlap of content tokens, ties to the target
+// that comes first in the claim order it was built from.
+//
+// Token sets are interned to sorted ids, so a pruner over a few hundred
+// thousand claims costs tens of megabytes rather than a map per claim.
+type SupportsPruner struct {
+	budget int
+	index  map[string]int // claim id -> position in the build order
+	tokens [][]uint32
+}
+
+// NewSupportsPruner prepares a pruner over claims, in the order ties resolve.
+// budget follows WithSupportsBudget: 0 is the default, < 0 keeps everything.
+func NewSupportsPruner(claims []domain.Claim, budget int) *SupportsPruner {
+	p := &SupportsPruner{budget: Engine{supportsBudget: budget}.budget(),
+		index: make(map[string]int, len(claims)), tokens: make([][]uint32, len(claims))}
+	dict := map[string]uint32{}
+	scratch := make(map[string]struct{}, 32)
+	for i, c := range claims {
+		p.index[c.ID] = i
+		clear(scratch)
+		tokenizeContentInto(scratch, c.Text)
+		ids := make([]uint32, 0, len(scratch))
+		for tok := range scratch {
+			id, ok := dict[tok]
+			if !ok {
+				id = uint32(len(dict))
+				dict[tok] = id
+			}
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+		p.tokens[i] = ids
+	}
+	return p
+}
+
+// OverBudget returns the IDs of from's outgoing supports edges among rels that
+// the budget would not keep. Edges of other types, edges from other claims,
+// and edges to claims the pruner does not know are ignored: they are neither
+// ranked nor counted against the budget.
+func (p *SupportsPruner) OverBudget(from string, rels []domain.Relationship) []string {
+	fi, ok := p.index[from]
+	if !ok || p.budget < 0 {
+		return nil
+	}
+	var cands []candidateEdge
+	var ids []string
+	for _, r := range rels {
+		if r.Type != domain.RelationshipTypeSupports || r.FromClaimID != from {
+			continue
+		}
+		ti, ok := p.index[r.ToClaimID]
+		if !ok {
+			continue
+		}
+		overlap := sortedOverlap(p.tokens[fi], p.tokens[ti])
+		cands = append(cands, candidateEdge{from: fi, to: ti, relType: r.Type,
+			strength: supportsStrength(overlap, len(p.tokens[fi]), len(p.tokens[ti]))})
+		ids = append(ids, r.ID)
+	}
+	if len(cands) <= p.budget {
+		return nil
+	}
+	keep := keepWithinBudget(cands, p.budget)
+	var drop []string
+	for k, kept := range keep {
+		if !kept {
+			drop = append(drop, ids[k])
+		}
+	}
+	return drop
+}
+
+func sortedOverlap(a, b []uint32) int {
+	n, i, j := 0, 0, 0
+	for i < len(a) && j < len(b) {
+		switch {
+		case a[i] == b[j]:
+			n++
+			i++
+			j++
+		case a[i] < b[j]:
+			i++
+		default:
+			j++
+		}
+	}
+	return n
+}

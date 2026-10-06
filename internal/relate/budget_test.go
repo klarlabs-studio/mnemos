@@ -2,6 +2,7 @@ package relate
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"testing"
 
@@ -168,6 +169,59 @@ func TestSupportsBudget_Defaults(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("keepWithinBudget(…, 2) = %v, want %v", got, want)
+		}
+	}
+}
+
+// Pruning a brain written without the budget leaves exactly the edges the
+// budgeted write path would have written: the pruner and the detection pass
+// rank and break ties identically.
+func TestSupportsPruner_MatchesTheBudgetedWritePath(t *testing.T) {
+	opts := corpusOptions{Size: 600, VocabSize: 120, Zipf: 1.0, Seed: 47, MinTokens: 4, MaxTokens: 14,
+		ShortShare: 0.15, NumShare: 0.25, NegShare: 0.15, AspectShar: 0.2, ProperShar: 0.15}
+	existing := generateCorpus(opts)
+	batch := opts
+	batch.Size, batch.Seed = 15, 4747
+	newClaims := generateCorpus(batch)
+	for i := range newClaims {
+		newClaims[i].ID = fmt.Sprintf("cl_new_%04d", i)
+	}
+	unbudgeted, err := equivalenceEngine().WithSupportsBudget(-1).DetectIncremental(newClaims, existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budgeted, err := equivalenceEngine().DetectIncremental(newClaims, existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p := NewSupportsPruner(append(slices.Clone(existing), newClaims...), 0)
+	drop := map[string]bool{}
+	for _, c := range newClaims {
+		for _, id := range p.OverBudget(c.ID, unbudgeted) {
+			drop[id] = true
+		}
+	}
+	if len(drop) == 0 {
+		t.Fatal("pruner dropped nothing; the corpus no longer exceeds the budget")
+	}
+	var pruned []string
+	for _, r := range unbudgeted {
+		if !drop[r.ID] {
+			pruned = append(pruned, relKey(r))
+		}
+	}
+	var want []string
+	for _, r := range budgeted {
+		want = append(want, relKey(r))
+	}
+	if !slices.Equal(pruned, want) {
+		t.Fatalf("pruned brain has %d edges, budgeted write path %d; they must be identical", len(pruned), len(want))
+	}
+	unlimited := NewSupportsPruner(append(slices.Clone(existing), newClaims...), -1)
+	for _, c := range newClaims {
+		if unlimited.OverBudget(c.ID, unbudgeted) != nil {
+			t.Fatal("a negative budget must prune nothing")
 		}
 	}
 }

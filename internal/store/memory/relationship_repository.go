@@ -240,3 +240,17 @@ func (r RelationshipRepository) DecayAssociations(_ context.Context, retain floa
 	}
 	return n, nil
 }
+
+// DeleteByIDs implements ports.RelationshipDeleter.
+func (r RelationshipRepository) DeleteByIDs(_ context.Context, ids []string) (int64, error) {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	var n int64
+	for _, id := range ids {
+		if _, ok := r.state.relationships[id]; ok {
+			delete(r.state.relationships, id)
+			n++
+		}
+	}
+	return n, nil
+}
