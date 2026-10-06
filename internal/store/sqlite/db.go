@@ -859,6 +859,9 @@ INSERT INTO claims_fts(claim_id, text) SELECT id, text FROM claims;
 	// adds above so legacy DBs don't fail with "no such column".
 	const postMigrateIndexes = `
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
+-- ListAll orders by created_at; without this every full read sorted the whole
+-- table, spilling to disk at 1M beliefs.
+CREATE INDEX IF NOT EXISTS idx_claims_created_at ON claims(created_at);
 CREATE INDEX IF NOT EXISTS idx_claims_valid_to ON claims(valid_to);
 CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 -- v24: ListClaimsByTestRequirementRef filters
