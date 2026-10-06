@@ -290,6 +290,6 @@ Corollary: **`make check` omits `-race`, so a local green does not imply a green
 
 ### The merge gate is warden
 
-Branch protection on `main` requires one check: **`warden/gate`**, the commit status warden publishes when its pre-push gate passes on the pushing machine (`.warden.yaml`: `test -race`, lint, `make cross`, govulncheck, `scripts/nox-gate.sh`). The requirement is strict, so a PR must be up to date with `main`. Push only from a checked-out branch: warden attests HEAD, not the ref being pushed.
+Branch protection on `main` requires one check: **`warden/gate`**, the commit status warden publishes when its pre-push gate passes on the pushing machine (`.warden.yaml`: `test -race`, lint, `make cross`, govulncheck, `scripts/nox-gate.sh`, and `scripts/test-integration.sh` against Postgres and MySQL in Docker). The requirement is strict, so a PR must be up to date with `main`. Push only from a checked-out branch: warden attests HEAD, not the ref being pushed.
 
 GitHub Actions (`ci.yml` → the shared `go-ci.yml`, plus the provider, recall, integration and provenance workflows) still runs on every PR, but it is **advisory**. A red Actions run on `main` is still a defect. It usually means the warden gate is missing a check, so fix that gap rather than ignore the run. `ci.yml` keeps running on docs-only PRs (no `paths-ignore`), so that signal stays complete.
