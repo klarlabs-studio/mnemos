@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   remediate:
-    uses: klarlabs-studio/.github/.github/workflows/nox-remediate.yml@main
+    uses: klarlabs-studio/.github/.github/workflows/nox-remediate.yml@75edaf97c1274c4036460d3895dd85f9d7dbc021 # main @ 2026-10-06; contents:write + inherited secrets, so pinned
     secrets: inherit
     # with:
     #   include-major: true   # also apply major-version action bumps
