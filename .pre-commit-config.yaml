@@ -45,7 +45,7 @@ repos:
 
       - id: gocritic
         name: gocritic
-        entry: bash -c 'command -v gocritic >/dev/null 2>&1 || go install github.com/go-critic/go-critic/cmd/gocritic@latest; gocritic check ./...'
+        entry: bash -c 'command -v gocritic >/dev/null 2>&1 || go install github.com/go-critic/go-critic/cmd/gocritic@v0.15.0; gocritic check ./...'
         language: system
         types: [go]
         pass_filenames: false
