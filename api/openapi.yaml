@@ -208,7 +208,8 @@ paths:
         - { name: run_id, in: query, schema: { type: string }, description: "Restrict to beliefs whose evidence links to an episode in this run." }
         - { name: similar_to, in: query, schema: { type: string }, description: "Semantic-search branch: rank beliefs by cosine similarity to this text. REQUIRES run_id (the tenant boundary) and short-circuits the type/status/as_of filters." }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
-        - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: cursor, in: query, schema: { type: string }, description: "Keyset cursor: the next_cursor of the previous page. Pages newest first (created_at, then id) and is stable under concurrent writes. Cannot be combined with offset." }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0 }, description: "Legacy paging. Re-reads the whole list per page and shifts when beliefs are recorded between requests; prefer cursor." }
       responses:
         "200":
           description: Beliefs
@@ -226,6 +227,8 @@ paths:
                   total: { type: integer }
                   limit: { type: integer }
                   offset: { type: integer }
+                  next_cursor: { type: string, description: "Cursor for the following page; absent on the last page." }
+        "400": { description: "Malformed cursor, or cursor combined with offset." }
         "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       summary: Upsert a batch of beliefs

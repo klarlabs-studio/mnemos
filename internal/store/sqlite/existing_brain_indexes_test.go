@@ -23,7 +23,7 @@ func TestBootstrap_AddsNewIndexesToAnExistingBrain(t *testing.T) {
 		t.Fatal(err)
 	}
 	// An existing brain: current schema version, the later indexes absent.
-	for _, idx := range []string{"idx_claims_live", "idx_claims_created_at", "idx_claims_test_requirement_ref"} {
+	for _, idx := range []string{"idx_claims_live", "idx_claims_created_id", "idx_claims_test_requirement_ref"} {
 		if _, err := db.Exec(`DROP INDEX IF EXISTS ` + idx); err != nil {
 			t.Fatal(err)
 		}
@@ -38,7 +38,7 @@ func TestBootstrap_AddsNewIndexesToAnExistingBrain(t *testing.T) {
 	if err := Bootstrap(db); err != nil {
 		t.Fatal(err)
 	}
-	for _, idx := range []string{"idx_claims_live", "idx_claims_created_at", "idx_claims_test_requirement_ref"} {
+	for _, idx := range []string{"idx_claims_live", "idx_claims_created_id", "idx_claims_test_requirement_ref"} {
 		var n int
 		if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, idx).Scan(&n); err != nil || n != 1 {
 			t.Errorf("index %s missing after reopening an existing brain (%d, %v)", idx, n, err)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/page"
 	"go.klarlabs.de/mnemos/internal/relate"
 )
 
@@ -267,6 +268,28 @@ type RelateCandidateSource interface {
 // store's token index is still being built. The caller must fall back to
 // ListAll: a partial index would drop candidates.
 var ErrRelateCandidatesNotReady = errors.New("mnemos: relate candidate index not ready")
+
+// ClaimPage is one page of a belief browse: at most the requested number of
+// beliefs in page.Newer order, how many match the filter in all, and whether
+// more follow.
+type ClaimPage struct {
+	Claims []domain.Claim
+	Total  int
+	More   bool
+}
+
+// ErrPageUnsupported is returned by a ClaimPager that cannot evaluate a
+// filter exactly in the store; the caller pages in Go instead.
+var ErrPageUnsupported = errors.New("mnemos: filter not pageable in this store")
+
+// ClaimPager is the optional capability to page the belief browse in the
+// store: filter, order and cut there, and read only the page. after, when set,
+// is the last belief of the previous page (keyset pagination). Every
+// implementation must partition the filtered set: walking the pages returns
+// each matching belief exactly once.
+type ClaimPager interface {
+	PageClaims(ctx context.Context, f page.ClaimFilter, after *page.Key, limit int) (ClaimPage, error)
+}
 
 // GapCandidates is what knowledge-gap detection needs from the store: every
 // claim with open validity that is a hypothesis or the endpoint of at least
