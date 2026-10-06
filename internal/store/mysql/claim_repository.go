@@ -657,7 +657,11 @@ func (r ClaimRepository) applyTrustInputs(ctx context.Context, inputs []trustInp
 		return 0, fmt.Errorf("begin trust tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	at := scoring.At.UTC()
+	// An unstamped scoring (zero At) is stored as NULL. Strict-mode MySQL
+	// rejects the zero datetime ('0000-00-00') outright, which failed every
+	// recompute with no instant; NULL reads back as the zero time, as the
+	// other backends' stored zero does.
+	at := nullTime(scoring.At.UTC())
 	for _, in := range inputs {
 		s := scoring.Score(in.toDomain())
 		if _, err := tx.ExecContext(ctx, `UPDATE claims SET trust_score = ?, trust_computed_at = ?, trust_model_version = ? WHERE id = ?`,
