@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	_ "embed"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -52,6 +52,48 @@ var webIndexHTML []byte
 
 //go:embed web/landing.html
 var webLandingHTML []byte
+
+// webAssets are the pages' scripts and stylesheets. They are files rather
+// than inline blocks so the CSP can forbid inline code ('unsafe-inline').
+//
+//go:embed web/landing.css web/landing.js web/app.css web/app.js
+var webAssets embed.FS
+
+// webAssetRoutes maps each public asset path to its embedded file and type.
+// Exact routes, not a /assets/ prefix: the capability registry and its parity
+// test read every route the server registers, and the auth bypass for public
+// paths stays an explicit list.
+var webAssetRoutes = map[string]struct{ file, contentType string }{
+	"/assets/landing.css": {"web/landing.css", "text/css; charset=utf-8"},
+	"/assets/landing.js":  {"web/landing.js", "text/javascript; charset=utf-8"},
+	"/assets/app.css":     {"web/app.css", "text/css; charset=utf-8"},
+	"/assets/app.js":      {"web/app.js", "text/javascript; charset=utf-8"},
+}
+
+// handleWebAsset serves one embedded page asset.
+func handleWebAsset(w http.ResponseWriter, r *http.Request) {
+	a, ok := webAssetRoutes[r.URL.Path]
+	if !ok {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	data, err := webAssets.ReadFile(a.file)
+	if err != nil {
+		writeInternalError(w, "read web asset", err)
+		return
+	}
+	w.Header().Set("Content-Type", a.contentType)
+	w.Header().Set("Cache-Control", "no-cache")
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	_, _ = w.Write(data)
+}
 
 const (
 	defaultServePort   = 7777
@@ -427,6 +469,10 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleLanding)
 	mux.HandleFunc("/app", handleWebRoot)
+	mux.HandleFunc("/assets/landing.css", handleWebAsset)
+	mux.HandleFunc("/assets/landing.js", handleWebAsset)
+	mux.HandleFunc("/assets/app.css", handleWebAsset)
+	mux.HandleFunc("/assets/app.js", handleWebAsset)
 	// /health(z) is a bare liveness 200 — no version/db/tenant data, anonymous
 	// by design (probes need reachability, not data). The richer readiness probe
 	// (DB write check) lives at /internal/ready behind auth.
