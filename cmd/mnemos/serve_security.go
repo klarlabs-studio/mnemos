@@ -42,20 +42,11 @@ func securityHeaders(next http.Handler) http.Handler {
 		// CSP — same-origin scripts/styles, deny framing, deny mixed
 		// content, restrict form-action to same origin so a phished
 		// page cannot exfiltrate the lead form to a third party.
-		// 'unsafe-inline' is a transitional concession for the
-		// landing page's inline submit handler; tighten when the
-		// inline script is removed.
-		h.Set("Content-Security-Policy",
-			"default-src 'self'; "+
-				"script-src 'self' 'unsafe-inline'; "+
-				"style-src 'self' 'unsafe-inline'; "+
-				"img-src 'self' data:; "+
-				"font-src 'self' data:; "+
-				"connect-src 'self'; "+
-				"form-action 'self'; "+
-				"frame-ancestors 'none'; "+
-				"base-uri 'self'; "+
-				"object-src 'none'")
+		// No 'unsafe-inline': both pages load their scripts and styles
+		// from /assets/, so an injected <script> or style="…" does not
+		// run. TestServe_CSPForbidsInlineCode pins the policy and the
+		// pages together.
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
 
 		if tlsEnabled {
 			// Two-year max-age + includeSubDomains is the OWASP
@@ -67,3 +58,16 @@ func securityHeaders(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// contentSecurityPolicy is the policy every response carries. Scripts and
+// styles are same-origin files only — no inline code of either kind.
+const contentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self'; " +
+	"style-src 'self'; " +
+	"img-src 'self' data:; " +
+	"font-src 'self' data:; " +
+	"connect-src 'self'; " +
+	"form-action 'self'; " +
+	"frame-ancestors 'none'; " +
+	"base-uri 'self'; " +
+	"object-src 'none'"

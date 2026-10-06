@@ -1068,12 +1068,12 @@ Prometheus metrics (infra).
 
 ### infra.web
 
-Landing page and registry web app shell (infra).
+Landing page and registry web app shell, with their scripts and stylesheets (infra).
 
 | Transport | Binding |
 |---|---|
 | go | _server process plumbing; meaningless for this transport_ |
-| rest | `GET /`, `GET /app` |
+| rest | `GET /`, `GET /app`, `GET /assets/landing.css`, `GET /assets/landing.js`, `GET /assets/app.css`, `GET /assets/app.js` |
 | grpc | _server process plumbing; meaningless for this transport_ |
 | mcp | _server process plumbing; meaningless for this transport_ |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |

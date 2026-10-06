@@ -230,6 +230,11 @@ func jwtAuthMiddleware(verifier *auth.Verifier, h http.Handler, requireTenant, p
 			h.ServeHTTP(w, r)
 			return
 		}
+		// The pages' own scripts and stylesheets are as public as the pages.
+		if _, ok := webAssetRoutes[r.URL.Path]; ok {
+			h.ServeHTTP(w, r)
+			return
+		}
 
 		// Prometheus metrics: anonymous only when the operator explicitly opts in
 		// with --metrics-public / MNEMOS_METRICS_PUBLIC. Otherwise it falls
