@@ -1015,6 +1015,15 @@ type Pathology struct {
 	Detail string `json:"detail"`
 }
 
+// VitalEstimate describes a vital estimated from a sample: the vital's value
+// is the sample rate, and the population rate lies within ±Margin95 of it with
+// 95% confidence (Wilson interval, finite-population corrected).
+type VitalEstimate struct {
+	SampleSize int     `json:"sample_size"`
+	Population int     `json:"population"`
+	Margin95   float64 `json:"margin_95"`
+}
+
 // BrainHealth is the unified brain-health report (ADR 0019): a single verdict rolling up
 // the cognitive vitals and structural-integrity checks. Strictly read-only.
 type BrainHealth struct {
@@ -1026,6 +1035,13 @@ type BrainHealth struct {
 	// Pathologies are the structural-integrity findings (orphans, dangling edges,
 	// stale-expectation backlog).
 	Pathologies []Pathology `json:"pathologies"`
+	// Mode is HealthModeExact when every vital was computed over every belief,
+	// HealthModeSampled when the per-belief rate vitals were estimated.
+	Mode string `json:"mode"`
+	// Estimates holds, for each sampled vital by name, how it was estimated.
+	// Empty in exact mode. Counts (beliefs, orphans, dangling edges,
+	// contradictions) are never estimated.
+	Estimates map[string]VitalEstimate `json:"estimates,omitempty"`
 	// At is when the report was computed.
 	At time.Time `json:"at"`
 }
@@ -1367,9 +1383,15 @@ type Memory interface {
 	// BrainHealth reports whether the brain is healthy (ADR 0019): a single verdict
 	// rolling up the cognitive vitals (free-energy, calibration, dissonance, low-trust,
 	// staleness) and structural-integrity checks (orphan beliefs, dangling edges,
-	// stale-expectation backlog). Strictly read-only; a full-scan diagnostic meant for
-	// on-demand or modest-cadence use.
+	// stale-expectation backlog). Strictly read-only. On a brain larger than 50k
+	// live beliefs the per-belief rate vitals (low_trust, staleness, trust_decay)
+	// are estimated from a fixed sample and reported in BrainHealth.Estimates;
+	// counts stay exact. Use BrainHealthFull for an exact scan at any size.
 	BrainHealth(ctx context.Context) (BrainHealth, error)
+
+	// BrainHealthFull is BrainHealth computed exactly over every belief. It
+	// scans the whole brain: seconds at 1M beliefs, longer on a cold cache.
+	BrainHealthFull(ctx context.Context) (BrainHealth, error)
 
 	// SnapshotHealth computes [BrainHealth] and records it to the cognitive journal as a
 	// `health` entry (ADR 0019 + 0018), so vital signs become a queryable time series.

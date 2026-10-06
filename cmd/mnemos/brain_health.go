@@ -12,12 +12,16 @@ import (
 // dissonance, low-trust, staleness) and structural-integrity checks (orphan beliefs,
 // dangling edges, stale-expectation backlog). `--journal` also records the snapshot to
 // the cognitive journal so vital signs become a time series (read with `journal --kind health`).
+// On a brain over 50k live beliefs the rate vitals are estimated from a sample
+// (mode "sampled", margins under "estimates"); `--full` computes them exactly.
 //
-//	mnemos health [--human] [--journal] [--explain]
+//	mnemos health [--human] [--journal] [--explain] [--full]
 func handleBrainHealth(args []string, f Flags) {
-	journal, explain := false, false
+	journal, explain, full := false, false, false
 	for _, a := range args {
 		switch a {
+		case "--full":
+			full = true
 		case "--journal":
 			journal = true
 		case "--explain":
@@ -40,9 +44,12 @@ func handleBrainHealth(args []string, f Flags) {
 	defer func() { _ = mem.Close() }()
 
 	var health mnemos.BrainHealth
-	if journal {
+	switch {
+	case journal:
 		health, err = mem.SnapshotHealth(ctx)
-	} else {
+	case full:
+		health, err = mem.BrainHealthFull(ctx)
+	default:
 		health, err = mem.BrainHealth(ctx)
 	}
 	if err != nil {
@@ -61,7 +68,11 @@ func printBrainHealthHuman(h mnemos.BrainHealth, explain bool) {
 	fmt.Printf("Brain health: %s\n\n", h.Status)
 	fmt.Println("  vitals")
 	for _, v := range h.Vitals {
-		fmt.Printf("    %-8s %-12s %6.3f   %s\n", healthMark(v.Status), v.Name, v.Value, v.Detail)
+		detail := v.Detail
+		if e, ok := h.Estimates[v.Name]; ok {
+			detail = fmt.Sprintf("%s, ±%.3f", detail, e.Margin95)
+		}
+		fmt.Printf("    %-8s %-12s %6.3f   %s\n", healthMark(v.Status), v.Name, v.Value, detail)
 	}
 	fmt.Println("  integrity")
 	for _, p := range h.Pathologies {
@@ -70,6 +81,10 @@ func printBrainHealthHuman(h mnemos.BrainHealth, explain bool) {
 	if explain {
 		printBrainHealthExplain()
 		return
+	}
+	if h.Mode == mnemos.HealthModeSampled {
+		fmt.Println("\n  Rate vitals marked ± are estimated from a sample (95% margin); counts are exact.")
+		fmt.Println("  Run 'mnemos health --full' to compute every vital exactly.")
 	}
 	fmt.Println("\n  Run 'mnemos health --explain' for what each line means.")
 }

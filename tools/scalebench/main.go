@@ -256,6 +256,11 @@ func run(p scalebench.Params, batch, queries, ingests int, timeout time.Duration
 	}))
 	rep.Operations = append(rep.Operations, timeOnce("brain_health", timeout, func(ctx context.Context) (string, error) {
 		h, err := mem.BrainHealth(ctx)
+		return fmt.Sprintf("status=%s mode=%s", h.Status, h.Mode), err
+	}))
+	// The exact scan BrainHealth falls back from above 50k live beliefs.
+	rep.Operations = append(rep.Operations, timeOnce("brain_health_full", timeout, func(ctx context.Context) (string, error) {
+		h, err := mem.BrainHealthFull(ctx)
 		return fmt.Sprintf("status=%s", h.Status), err
 	}))
 	rep.Operations = append(rep.Operations, timeOnce("knowledge_gaps", timeout, func(ctx context.Context) (string, error) {

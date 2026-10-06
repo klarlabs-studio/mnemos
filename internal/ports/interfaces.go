@@ -268,6 +268,36 @@ type RelateCandidateSource interface {
 // ListAll: a partial index would drop candidates.
 var ErrRelateCandidatesNotReady = errors.New("mnemos: relate candidate index not ready")
 
+// RelationshipTypeLister is the optional capability to list one relationship
+// type, in ListAll's order (created_at ascending). Brain health needs only the
+// contradictions, a fraction of the edges; ListAll decoded and sorted every one.
+type RelationshipTypeLister interface {
+	ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error)
+}
+
+// HealthSampler is the optional capability brain health uses on a large
+// brain: exact counts computed in the store instead of over every decoded row,
+// and a deterministic uniform sample of live beliefs for the per-belief rate
+// vitals. A live belief is one whose valid time is open and whose status is
+// not deprecated (mnemos.isLiveBelief).
+type HealthSampler interface {
+	CountLiveClaims(ctx context.Context) (int, error)
+	// CountLiveOrphans counts live beliefs with no evidence link.
+	CountLiveOrphans(ctx context.Context) (int, error)
+	// CountDanglingRelationships counts relationships with a missing endpoint.
+	CountDanglingRelationships(ctx context.Context) (int, error)
+	// SampleLiveClaims returns min(n, live) distinct live beliefs, chosen
+	// uniformly and deterministically by seed. When n >= live it returns them
+	// all.
+	SampleLiveClaims(ctx context.Context, n int, seed uint64) ([]domain.Claim, error)
+	// CountHypercorrections counts the contradictions mnemos's
+	// hypercorrectionList would report with this trust floor: both sides
+	// live (valid time open, not deprecated) and not superseded, and the
+	// more-established side (promoted ranks as 1+trust; ties go to the
+	// edge's source) promoted or trusted at least floor.
+	CountHypercorrections(ctx context.Context, floor float64) (int, error)
+}
+
 // RelationshipDeleter is the optional capability to delete relationships by
 // ID. Pruning (`mnemos relate --prune-supports`) needs it: rewriting a 30M-row
 // edge table through DeleteAll + Upsert is not an option. Implementations

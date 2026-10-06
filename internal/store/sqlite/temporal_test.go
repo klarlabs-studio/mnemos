@@ -101,9 +101,10 @@ func TestMigrate_BackfillsValidFromOnLegacyV2Schema(t *testing.T) {
 		defer func() { _ = raw.Close() }()
 		// Force user_version back to 2 and drop the v3 columns so
 		// migrate has work to do on the next Open. Index must come
-		// down first because it references valid_to.
+		// down first because they reference valid_to.
 		if _, err := raw.Exec(`
 			DROP INDEX IF EXISTS idx_claims_valid_to;
+			DROP INDEX IF EXISTS idx_claims_live;
 			ALTER TABLE claims DROP COLUMN valid_to;
 			ALTER TABLE claims DROP COLUMN valid_from;
 			PRAGMA user_version = 2;
