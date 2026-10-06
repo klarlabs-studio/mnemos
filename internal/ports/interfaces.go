@@ -268,6 +268,24 @@ type RelateCandidateSource interface {
 // ListAll: a partial index would drop candidates.
 var ErrRelateCandidatesNotReady = errors.New("mnemos: relate candidate index not ready")
 
+// GapCandidates is what knowledge-gap detection needs from the store: every
+// claim with open validity that is a hypothesis or the endpoint of at least
+// the threshold of contradiction edges, its contradiction-edge and evidence
+// counts, and how many open-validity claims there are in all.
+type GapCandidates struct {
+	Claims         []domain.Claim
+	Contradictions map[string]int
+	Evidence       map[string]int
+	OpenClaims     int
+}
+
+// GapCandidateSource is the optional capability to answer GapCandidates in the
+// store. KnowledgeGaps used to decode every claim, every evidence link and
+// every relationship to report the few that are gaps.
+type GapCandidateSource interface {
+	GapCandidates(ctx context.Context, minContradictions int) (GapCandidates, error)
+}
+
 // RelationshipTypeLister is the optional capability to list one relationship
 // type, in ListAll's order (created_at ascending). Brain health needs only the
 // contradictions, a fraction of the edges; ListAll decoded and sorted every one.

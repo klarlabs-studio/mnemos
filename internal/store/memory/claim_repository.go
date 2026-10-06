@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/relate"
 	"go.klarlabs.de/mnemos/internal/store"
 )
@@ -793,4 +794,34 @@ func (r ClaimRepository) CountHypercorrections(_ context.Context, floor float64)
 		}
 	}
 	return n, nil
+}
+
+// GapCandidates implements ports.GapCandidateSource.
+func (r ClaimRepository) GapCandidates(ctx context.Context, minContradictions int) (ports.GapCandidates, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return ports.GapCandidates{}, err
+	}
+	out := ports.GapCandidates{Contradictions: map[string]int{}, Evidence: map[string]int{}}
+	r.state.mu.RLock()
+	for _, rel := range r.state.relationships {
+		if rel.Type == domain.RelationshipTypeContradicts {
+			out.Contradictions[rel.FromClaimID]++
+			out.Contradictions[rel.ToClaimID]++
+		}
+	}
+	for _, c := range all {
+		if !c.ValidTo.IsZero() {
+			continue
+		}
+		out.OpenClaims++
+		if c.Type == domain.ClaimTypeHypothesis || out.Contradictions[c.ID] >= minContradictions {
+			out.Claims = append(out.Claims, c)
+			if n := len(r.state.evidence[c.ID]); n > 0 {
+				out.Evidence[c.ID] = n
+			}
+		}
+	}
+	r.state.mu.RUnlock()
+	return out, nil
 }

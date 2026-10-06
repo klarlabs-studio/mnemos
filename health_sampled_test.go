@@ -69,6 +69,15 @@ func healthBrain(t *testing.T, dsn string) (m *memory, dangling int) {
 	if err := m.conn.Claims.Upsert(ctx, claims); err != nil {
 		t.Fatal(err)
 	}
+	// Closed validity goes through SetValidity: the SQL backends' Upsert does
+	// not write valid_to, so without this the forgotten beliefs stay live there.
+	for _, c := range claims {
+		if !c.ValidTo.IsZero() {
+			if err := m.conn.Claims.SetValidity(ctx, c.ID, c.ValidTo); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	if err := m.conn.Claims.UpsertEvidence(ctx, links); err != nil {
 		t.Fatal(err)
 	}

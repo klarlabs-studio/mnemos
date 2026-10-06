@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/trust"
 )
 
@@ -55,45 +56,11 @@ func (m *memory) KnowledgeGaps(ctx context.Context, limit int) ([]Gap, error) {
 func (m *memory) KnowledgeGapsBounded(ctx context.Context, limit int) (GapReport, error) {
 	var bounds Bounds
 	limit = capLimit(&bounds, limit, GapDefaultLimit, MaxCognitiveResults)
-	all, err := m.conn.Claims.ListAll(ctx)
+	in, err := m.gapInputs(ctx)
 	if err != nil {
-		return GapReport{}, fmt.Errorf("mnemos: KnowledgeGaps: list claims: %w", err)
+		return GapReport{}, err
 	}
-	evidence, err := m.conn.Claims.ListAllEvidence(ctx)
-	if err != nil {
-		return GapReport{}, fmt.Errorf("mnemos: KnowledgeGaps: list evidence: %w", err)
-	}
-	evidenceCount := make(map[string]int, len(all))
-	for _, e := range evidence {
-		evidenceCount[e.ClaimID]++
-	}
-	// Which claims already carry a validates/refutes verdict (from outcome edges).
-	resolved := map[string]struct{}{}
-	for _, kind := range []domain.RelationshipType{domain.RelationshipTypeValidates, domain.RelationshipTypeRefutes} {
-		edges, eerr := m.conn.EntityRels.ListByKind(ctx, string(kind))
-		if eerr != nil {
-			return GapReport{}, fmt.Errorf("mnemos: KnowledgeGaps: list %s: %w", kind, eerr)
-		}
-		for _, e := range edges {
-			if e.ToType == domain.RelEntityClaim && e.ToID != "" {
-				resolved[e.ToID] = struct{}{}
-			}
-		}
-	}
-	// Contradiction density per claim (claim↔claim graph).
-	contradicts := map[string]int{}
-	rels, err := m.conn.Relationships.ListAll(ctx)
-	if err != nil {
-		return GapReport{}, fmt.Errorf("mnemos: KnowledgeGaps: list relationships: %w", err)
-	}
-	for _, r := range rels {
-		if r.Type != domain.RelationshipTypeContradicts {
-			continue
-		}
-		contradicts[r.FromClaimID]++
-		contradicts[r.ToClaimID]++
-	}
-
+	all, evidenceCount, resolved, contradicts := in.claims, in.evidence, in.resolved, in.contradicts
 	now := time.Now().UTC()
 	var gaps []Gap
 	for _, c := range all {
@@ -121,6 +88,12 @@ func (m *memory) KnowledgeGapsBounded(ctx context.Context, limit int) (GapReport
 		score := trust.SalienceOf(c, evidenceCount[c.ID]) * uncertainty * (0.3 + 0.7*staleness)
 		gaps = append(gaps, Gap{ClaimID: c.ID, Text: c.Text, Kind: kind, Score: score})
 	}
+	// Open claims the inputs left out (neither hypotheses nor contested, so
+	// never gaps) are still part of the sweep's population: Scanned and
+	// Considered count every open claim, as the full read always did.
+	skipped := in.openClaims - bounds.Scanned
+	bounds.Scanned += skipped
+	bounds.Considered += skipped
 	bounds.Available = len(gaps)
 	// Rank by expected information gain, THEN cut; id breaks ties so equal-score
 	// queues are stable.
@@ -135,4 +108,94 @@ func (m *memory) KnowledgeGapsBounded(ctx context.Context, limit int) (GapReport
 	}
 	bounds.finish(len(gaps))
 	return GapReport{Gaps: gaps, Bounds: bounds}, nil
+}
+
+// gapsFullSweep forces the full read even where the store offers candidates,
+// so tests can compare the two.
+var gapsFullSweep = false
+
+// gapInputs is what the gap sweep scores: the claims that can be gaps, their
+// evidence and contradiction counts, which hypotheses carry a verdict, and how
+// many open-validity claims the sweep covers in all.
+type gapInputs struct {
+	claims      []domain.Claim
+	evidence    map[string]int
+	contradicts map[string]int
+	resolved    map[string]struct{}
+	openClaims  int
+}
+
+// gapInputs gathers them from the store's candidates when it can answer
+// ports.GapCandidateSource, and from a full read otherwise. Both yield the same
+// report (TestKnowledgeGaps_CandidatesEqualTheFullSweep): a claim that is
+// neither a hypothesis nor contested is never a gap, so leaving it unread
+// changes nothing but the cost.
+func (m *memory) gapInputs(ctx context.Context) (gapInputs, error) {
+	resolved, err := m.gapVerdicts(ctx)
+	if err != nil {
+		return gapInputs{}, err
+	}
+	if src, ok := m.conn.Claims.(ports.GapCandidateSource); ok && !gapsFullSweep {
+		c, err := src.GapCandidates(ctx, GapContestedThreshold)
+		if err != nil {
+			return gapInputs{}, fmt.Errorf("mnemos: KnowledgeGaps: candidates: %w", err)
+		}
+		return gapInputs{claims: c.Claims, evidence: c.Evidence, contradicts: c.Contradictions, resolved: resolved, openClaims: c.OpenClaims}, nil
+	}
+	return m.gapInputsFull(ctx, resolved)
+}
+
+// gapVerdicts is which claims already carry a validates/refutes verdict (from
+// outcome edges).
+func (m *memory) gapVerdicts(ctx context.Context) (map[string]struct{}, error) {
+	resolved := map[string]struct{}{}
+	for _, kind := range []domain.RelationshipType{domain.RelationshipTypeValidates, domain.RelationshipTypeRefutes} {
+		edges, eerr := m.conn.EntityRels.ListByKind(ctx, string(kind))
+		if eerr != nil {
+			return nil, fmt.Errorf("mnemos: KnowledgeGaps: list %s: %w", kind, eerr)
+		}
+		for _, e := range edges {
+			if e.ToType == domain.RelEntityClaim && e.ToID != "" {
+				resolved[e.ToID] = struct{}{}
+			}
+		}
+	}
+	return resolved, nil
+}
+
+// gapInputsFull reads every claim, evidence link and relationship.
+func (m *memory) gapInputsFull(ctx context.Context, resolved map[string]struct{}) (gapInputs, error) {
+	all, err := m.conn.Claims.ListAll(ctx)
+	if err != nil {
+		return gapInputs{}, fmt.Errorf("mnemos: KnowledgeGaps: list claims: %w", err)
+	}
+	evidence, err := m.conn.Claims.ListAllEvidence(ctx)
+	if err != nil {
+		return gapInputs{}, fmt.Errorf("mnemos: KnowledgeGaps: list evidence: %w", err)
+	}
+	evidenceCount := make(map[string]int, len(all))
+	for _, e := range evidence {
+		evidenceCount[e.ClaimID]++
+	}
+	// Contradiction density per claim (claim↔claim graph).
+	contradicts := map[string]int{}
+	rels, err := m.conn.Relationships.ListAll(ctx)
+	if err != nil {
+		return gapInputs{}, fmt.Errorf("mnemos: KnowledgeGaps: list relationships: %w", err)
+	}
+	for _, r := range rels {
+		if r.Type != domain.RelationshipTypeContradicts {
+			continue
+		}
+		contradicts[r.FromClaimID]++
+		contradicts[r.ToClaimID]++
+	}
+
+	open := 0
+	for _, c := range all {
+		if c.ValidTo.IsZero() {
+			open++
+		}
+	}
+	return gapInputs{claims: all, evidence: evidenceCount, contradicts: contradicts, resolved: resolved, openClaims: open}, nil
 }
