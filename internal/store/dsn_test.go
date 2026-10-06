@@ -14,6 +14,18 @@ func TestRedactDSN(t *testing.T) {
 		{"sqlite (no credentials)", "sqlite:///var/lib/mnemos/mnemos.db", "sqlite:///var/lib/mnemos/mnemos.db"},
 		{"memory", "memory://", "memory://"},
 		{"empty password", "postgres://thor:@postgres:5432/thor", "postgres://thor:***@postgres:5432/thor"},
+		// Forms the original regex missed, every one of which reached an error
+		// message with the credential in clear.
+		{"libsql authToken", "libsql://db.turso.io?authToken=s3cr3t", "libsql://db.turso.io?authToken=***"},
+		{"libsql authToken, other params kept", "libsql://db.turso.io?namespace=a&authToken=s3cr3t&tls=1", "libsql://db.turso.io?namespace=a&authToken=***&tls=1"},
+		{"param name is case-insensitive", "libsql://db.turso.io?AUTHTOKEN=s3cr3t", "libsql://db.turso.io?AUTHTOKEN=***"},
+		{"postgres password param", "postgres://thor@db/thor?sslmode=require&password=s3cr3t", "postgres://thor@db/thor?sslmode=require&password=***"},
+		{"userinfo and param together", "postgres://thor:s3cr3t@db/thor?sslpassword=hunter2", "postgres://thor:***@db/thor?sslpassword=***"},
+		{"mysql driver form", "root:hunter2@tcp(db:3306)/app?parseTime=true", "root:***@tcp(db:3306)/app?parseTime=true"},
+		{"mysql driver form, unix socket", "root:hunter2@unix(/tmp/mysql.sock)/app", "root:***@unix(/tmp/mysql.sock)/app"},
+		{"driver form without password", "root@tcp(db:3306)/app", "root@tcp(db:3306)/app"},
+		{"no query, no credentials", "postgres://db/thor", "postgres://db/thor"},
+		{"harmless params untouched", "sqlite:///x.db?_pragma=busy_timeout(5000)", "sqlite:///x.db?_pragma=busy_timeout(5000)"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

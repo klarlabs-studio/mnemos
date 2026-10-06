@@ -96,7 +96,7 @@ func RegisterTenantEnumerator(scheme string, fn TenantEnumerator) {
 func EnumerateTenants(ctx context.Context, baseDSN string) ([]TenantScope, error) {
 	scheme, _, ok := strings.Cut(baseDSN, "://")
 	if !ok || scheme == "" {
-		return nil, fmt.Errorf("store: dsn %q missing scheme://", baseDSN)
+		return nil, fmt.Errorf("store: dsn %q missing scheme://", RedactDSN(baseDSN))
 	}
 	if TenancyModeForDSN(baseDSN) == TenancyNone {
 		return nil, fmt.Errorf("store: backend %q cannot enumerate tenants (need postgres, sqlite, mysql, or local libsql)", scheme)

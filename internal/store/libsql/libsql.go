@@ -121,7 +121,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 // remote libSQL by store.TenancyModeForDSN.
 func translateDSN(dsn string) (string, error) {
 	if !strings.HasPrefix(dsn, "libsql://") {
-		return "", fmt.Errorf("libsql: not a libsql dsn: %q", dsn)
+		return "", fmt.Errorf("libsql: not a libsql dsn: %q", redactDSN(dsn))
 	}
 	// Extract the namespace before stripping it, so local file mode can apply
 	// the file-per-namespace suffix.
@@ -197,25 +197,7 @@ func stripQueryParam(rawURL, name string) string {
 	return prefix + "?" + strings.Join(kept, "&")
 }
 
-// redactDSN drops sensitive query params (authToken) when echoing a
-// DSN back to operators in error messages.
-func redactDSN(dsn string) string {
-	q := strings.Index(dsn, "?")
-	if q < 0 {
-		return dsn
-	}
-	prefix := dsn[:q]
-	parts := strings.Split(dsn[q+1:], "&")
-	kept := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if strings.HasPrefix(p, "authToken=") {
-			kept = append(kept, "authToken=REDACTED")
-			continue
-		}
-		kept = append(kept, p)
-	}
-	if len(kept) == 0 {
-		return prefix
-	}
-	return prefix + "?" + strings.Join(kept, "&")
-}
+// redactDSN masks the authToken (and any other credential) when echoing a DSN
+// back to operators in error messages. It used to match only the exact,
+// case-sensitive prefix "authToken="; the shared redactor is case-insensitive.
+func redactDSN(dsn string) string { return store.RedactDSN(dsn) }

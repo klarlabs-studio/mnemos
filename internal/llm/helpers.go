@@ -69,3 +69,14 @@ func sanitizeForLog(s string) string {
 	}
 	return s
 }
+
+// withoutSecret removes secret from text before it becomes error text. Provider
+// error bodies are copied into errors for diagnosis, and a provider — or a
+// proxy in front of it — that echoes the request back would otherwise hand the
+// API key to every log and MCP reply that formats the error.
+func withoutSecret(text, secret string) string {
+	if secret == "" {
+		return text
+	}
+	return strings.ReplaceAll(text, secret, "[REDACTED]")
+}

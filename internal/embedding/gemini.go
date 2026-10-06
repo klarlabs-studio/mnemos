@@ -110,7 +110,7 @@ func (c *GeminiEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gemini embedding returned status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("gemini embedding returned status %d: %s", resp.StatusCode, withoutSecret(string(respBody), c.apiKey))
 	}
 
 	var result geminiBatchEmbedResponse
