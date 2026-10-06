@@ -291,6 +291,29 @@ type ClaimPager interface {
 	PageClaims(ctx context.Context, f page.ClaimFilter, after *page.Key, limit int) (ClaimPage, error)
 }
 
+// Page is one page of a browse: at most the requested number of items in the
+// browse's order, how many match in all, and whether more follow.
+type Page[T any] struct {
+	Items []T
+	Total int
+	More  bool
+}
+
+// EventPager pages the episode browse in the store, newest first by
+// (timestamp, id), optionally within one run. after is the last episode of
+// the previous page. Walking the pages returns each match exactly once.
+type EventPager interface {
+	PageEvents(ctx context.Context, runID string, after *page.Key, limit int) (Page[domain.Event], error)
+}
+
+// RelationshipPager pages the association browse in the store, by id
+// ascending, optionally of one type. afterID is the last id of the previous
+// page ("" for the first). The order is the primary key's, so paging needs no
+// index beyond the one every relationship table already has.
+type RelationshipPager interface {
+	PageRelationships(ctx context.Context, relType string, afterID string, limit int) (Page[domain.Relationship], error)
+}
+
 // GapCandidates is what knowledge-gap detection needs from the store: every
 // claim with open validity that is a hypothesis or the endpoint of at least
 // the threshold of contradiction edges, its contradiction-edge and evidence
