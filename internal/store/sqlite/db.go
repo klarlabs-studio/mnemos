@@ -795,8 +795,14 @@ func migrate(db *sql.DB) error {
 		}
 	}
 
+	// Indexes on those columns, also ahead of the gate (see
+	// ensurePostMigrateIndexes).
+	if err := ensurePostMigrateIndexes(db); err != nil {
+		return err
+	}
+
 	// The version gate still guards everything below: the one-shot data
-	// migrations must not re-run, and the index creation is version-keyed.
+	// migrations must not re-run.
 	if userVersion >= currentSchemaVersion {
 		return nil
 	}
@@ -855,9 +861,25 @@ INSERT INTO claims_fts(claim_id, text) SELECT id, text FROM claims;
 		}
 	}
 
-	// Indexes that depend on migrated columns. Run after the column
-	// adds above so legacy DBs don't fail with "no such column".
-	const postMigrateIndexes = `
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", currentSchemaVersion)); err != nil {
+		return fmt.Errorf("set user_version: %w", err)
+	}
+	return nil
+}
+
+// postMigrateIndexes are the indexes on columns a legacy brain may only gain
+// in migrate's column probes, so they cannot sit in the bootstrap schema.
+//
+// They used to be created inside migrate, below its version gate, so a brain
+// already at currentSchemaVersion never got an index added later. That is the
+// same trap the column probes were moved out of: every brain from the previous
+// release sits at the current version. idx_claims_created_at (#421) and
+// idx_claims_live (#422) were therefore created only on brand-new brains, and
+// idx_claims_live is named by INDEXED BY, so BrainHealth failed with "no such
+// index" on every existing brain. migrate now ensures them on every open, right
+// after the column probes and ahead of the gate; each statement is IF NOT
+// EXISTS, so an up-to-date brain pays one catalog lookup per index.
+const postMigrateIndexes = `
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
 -- ListAll orders by created_at; without this every full read sorted the whole
 -- table, spilling to disk at 1M beliefs.
@@ -880,12 +902,12 @@ CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 CREATE INDEX IF NOT EXISTS idx_claims_test_requirement_ref
   ON claims(test_requirement_ref, type);
 `
+
+// ensurePostMigrateIndexes creates any missing post-migrate index. migrate
+// calls it on every open, once the column probes have added what they need.
+func ensurePostMigrateIndexes(db *sql.DB) error {
 	if _, err := db.Exec(postMigrateIndexes); err != nil {
 		return fmt.Errorf("post-migrate indexes: %w", err)
-	}
-
-	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", currentSchemaVersion)); err != nil {
-		return fmt.Errorf("set user_version: %w", err)
 	}
 	return nil
 }
