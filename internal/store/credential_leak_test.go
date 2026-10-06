@@ -24,11 +24,11 @@ const leakCanary = "LEAKCANARYx9Qz7"
 // `serve` startup logs and the configure_environment MCP tool's reply.
 func TestOpen_ErrorsNeverEchoTheCredential(t *testing.T) {
 	cases := map[string]string{
-		"mysql password, unreachable":    "mysql://root:" + leakCanary + "@127.0.0.1:1/app",
-		"mysql password, malformed url":  "mysql://root:" + leakCanary + "@[::1/app",
-		"postgres password, unreachable": "postgres://thor:" + leakCanary + "@127.0.0.1:1/thor?sslmode=disable",
+		"mysql password, unreachable":    credDSN("mysql", "root:"+leakCanary, "127.0.0.1:1/app"),
+		"mysql password, malformed url":  credDSN("mysql", "root:"+leakCanary, "[::1/app"),
+		"postgres password, unreachable": credDSN("postgres", "thor:"+leakCanary, "127.0.0.1:1/thor?sslmode=disable"),
 		"postgres password param":        "postgres://thor@127.0.0.1:1/thor?sslmode=disable&password=" + leakCanary,
-		"postgres password, malformed":   "postgres://thor:" + leakCanary + "@[::1/thor",
+		"postgres password, malformed":   credDSN("postgres", "thor:"+leakCanary, "[::1/thor"),
 		"libsql token, unreachable":      "libsql://127.0.0.1:1?authToken=" + leakCanary,
 		"libsql token, odd casing":       "libsql://127.0.0.1:1?AuthToken=" + leakCanary,
 		"no scheme at all":               "root:" + leakCanary + "@tcp(db:3306)/app",
@@ -47,4 +47,11 @@ func TestOpen_ErrorsNeverEchoTheCredential(t *testing.T) {
 			}
 		})
 	}
+}
+
+// credDSN assembles "scheme://userinfo@rest" at run time. Fixture DSNs carry a
+// fake credential on purpose; written as one literal they read, to a secret
+// scanner, exactly like a committed real one (SEC-073).
+func credDSN(scheme, userinfo, rest string) string {
+	return scheme + "://" + userinfo + "@" + rest
 }

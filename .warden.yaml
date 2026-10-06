@@ -23,7 +23,11 @@ commands:
   lint: "golangci-lint run --allow-parallel-runners ./..."
   test: "go test -race ./..."
   cross: "make cross"
+  # The security gate. It ran only in the shared GitHub workflow; merges go
+  # through warden, so without this line nothing scanned on the way to main —
+  # which is how nine fixture DSNs reached main as net-new criticals unnoticed.
+  security: "scripts/nox-gate.sh"
 steps:
   pre_commit: [lint]
-  pre_push: [test, lint, cross, vulns]
+  pre_push: [test, lint, cross, vulns, security]
 parallel: true

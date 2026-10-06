@@ -9,7 +9,7 @@ Email **felix.geelhaar@gmail.com** with `[MNEMOS SECURITY]` in the subject. Do n
 Mnemos persists evidence-backed claims and serves them over CLI, MCP, HTTP REST, and gRPC. The trust boundary depends on the entrypoint:
 
 - **CLI / MCP (stdio)**: trusted; the operator runs the binary locally and owns the database file.
-- **HTTP registry (`mnemos serve`)**: writes (POST/PUT/DELETE) require a JWT bearer token issued by the same instance. Reads are open by default — appropriate for browse-only dashboards on a trusted network.
+- **HTTP registry (`mnemos serve`)**: writes (POST/PUT/DELETE) require a JWT bearer token issued by the same instance. Reads require a token too, by default. `serve --public-reads` (`MNEMOS_PUBLIC_READS`) opts in to anonymous GET reads for a browse-only dashboard on a trusted network; it is not for hosted deployments, and it never exposes `/internal/metrics`.
 - **gRPC server (`mnemos serve --grpc-port`)**: every RPC is gated by the same JWT verifier. Configure via `MNEMOS_JWT_SECRET` (hex-encoded ≥ 32 bytes) or the per-install secret file under `MNEMOS_AUTH_DIR`. Issue tokens with `mnemos token issue`; revoke with `mnemos token revoke`.
 
 Production deployments must:
@@ -75,23 +75,24 @@ Mnemos stores claims, evidence events, embeddings, and synthesised lessons. Oper
 
 No secrets are stored in source. JWT signing material lives in `MNEMOS_AUTH_DIR/jwt-secret` (auto-created with 0600 permissions on first run) or in `MNEMOS_JWT_SECRET`. LLM API keys come from `MNEMOS_LLM_API_KEY` / `MNEMOS_EMBED_API_KEY` at process start.
 
-## Security baseline (`findings.json`)
+## Security gate and baseline
 
-`findings.json` is the committed baseline of [`nox`](https://github.com/felixgeelhaar/nox) v0.7.0 scan results. Every finding has `Status: "baselined"` — meaning it was reviewed and accepted as known-and-acceptable. New scans diff against this file in CI; any finding **not** present in the baseline fails the build.
+[`nox`](https://github.com/nox-hq/nox) scans every push. `scripts/nox-gate.sh` runs in warden's pre-push hook, the gate on the way to `main`. It runs a pinned nox release, checks the archive against a committed sha256 before running it, and fails on any **critical or high finding that `.nox/baseline.json` does not list**. The shared CI workflow pins the same nox version. That matters because fingerprints differ between nox releases.
 
-Categories tracked:
+The baseline says *what* is suppressed. **`.nox/waivers.yaml`** says *why*, *who* owns that decision, and *until when*. `test/security` fails when:
 
-- **`IAC-254` / `IAC-351` (critical)** — CI workflow creds. False positives: postgres/mysql container creds for ephemeral test databases in `.github/workflows/ci.yml`. Not production secrets.
-- **`AI-006` (medium)** — prompt/LLM responses logged. Reviewed: log statements emit metadata only, not raw prompts.
-- **`DATA-001` (low)** — test-data emails / IDs in test fixtures.
+- a baseline entry has no waiver (same rule, file listed by name),
+- a waiver has no owner or reason, or expires more than a year out,
+- a waiver has expired: the risk must be re-decided, not inherited,
+- a waiver no longer covers any entry.
 
-Refresh:
+Fix real findings. Waive only verified false positives and accepted gaps, with a reason that would convince a reviewer. Accepted hardening gaps carry shorter expiries.
+
+Refresh after a fix, or when bumping nox:
 
 ```bash
-make nox-scan          # produces findings.json
-# review the diff; mark any new genuine concerns as "baselined" only
-# after triage. Unexplained additions block merge.
-git add findings.json
+NOX_GATE_WRITE_BASELINE=1 scripts/nox-gate.sh   # baseline = exactly the current findings
+go test ./test/security/                         # then cover any new entry in .nox/waivers.yaml
 ```
 
 ## Known gaps

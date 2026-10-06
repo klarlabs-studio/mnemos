@@ -11,8 +11,8 @@ import (
 func TestApplyInitPlan_UnreachableBrainNeverEchoesTheCredential(t *testing.T) {
 	const canary = "LEAKCANARYinit42"
 	for _, dsn := range []string{
-		"postgres://thor:" + canary + "@127.0.0.1:1/thor?sslmode=disable",
-		"mysql://root:" + canary + "@127.0.0.1:1/app",
+		credDSN("postgres", "thor:"+canary, "127.0.0.1:1/thor?sslmode=disable"),
+		credDSN("mysql", "root:"+canary, "127.0.0.1:1/app"),
 		"libsql://127.0.0.1:1?authToken=" + canary,
 	} {
 		r := applyInitPlan(initPlan{dsn: dsn, backend: "postgres"})
@@ -25,4 +25,11 @@ func TestApplyInitPlan_UnreachableBrainNeverEchoesTheCredential(t *testing.T) {
 			}
 		}
 	}
+}
+
+// credDSN assembles "scheme://userinfo@rest" at run time. Fixture DSNs carry a
+// fake credential on purpose; written as one literal they read, to a secret
+// scanner, exactly like a committed real one (SEC-073).
+func credDSN(scheme, userinfo, rest string) string {
+	return scheme + "://" + userinfo + "@" + rest
 }

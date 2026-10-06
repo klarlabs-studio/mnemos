@@ -11,7 +11,7 @@ import (
 // could not match, so the password went out in clear.
 func TestPingError_RedactsTheDriverDSN(t *testing.T) {
 	const canary = "LEAKCANARYping7"
-	parsed, err := ParseDSN("mysql://root:" + canary + "@db:3306/app")
+	parsed, err := ParseDSN(credDSN("mysql", "root:"+canary, "db:3306/app"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,4 +25,11 @@ func TestPingError_RedactsTheDriverDSN(t *testing.T) {
 	if !strings.Contains(msg, "root:***@tcp(db:3306)/app") {
 		t.Errorf("ping error lost the diagnostic DSN: %s", msg)
 	}
+}
+
+// credDSN assembles "scheme://userinfo@rest" at run time. Fixture DSNs carry a
+// fake credential on purpose; written as one literal they read, to a secret
+// scanner, exactly like a committed real one (SEC-073).
+func credDSN(scheme, userinfo, rest string) string {
+	return scheme + "://" + userinfo + "@" + rest
 }

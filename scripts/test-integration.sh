@@ -28,13 +28,13 @@ trap cleanup EXIT
 echo "starting postgres on :${PG_PORT}…"
 docker run -d --rm --name "${PG_NAME}" \
   -e POSTGRES_USER=mnemos -e POSTGRES_PASSWORD=mnemos -e POSTGRES_DB=mnemos \
-  -p "${PG_PORT}:5432" \
+  -p "127.0.0.1:${PG_PORT}:5432" \
   postgres:16-alpine >/dev/null
 
 echo "starting mysql on :${MY_PORT}…"
 docker run -d --rm --name "${MY_NAME}" \
   -e MYSQL_ROOT_PASSWORD=mnemos -e MYSQL_DATABASE=mnemos \
-  -p "${MY_PORT}:3306" \
+  -p "127.0.0.1:${MY_PORT}:3306" \
   mysql:8 >/dev/null
 
 echo "waiting for postgres…"
