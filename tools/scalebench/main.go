@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"slices"
 	"strings"
 	"sync"
@@ -117,6 +118,8 @@ func main() {
 	flag.StringVar(&jsonOut, "json", "", "write the report here (\"-\" for stdout)")
 	flag.StringVar(&workDir, "work", "", "directory for the database (default: a temp dir)")
 	flag.BoolVar(&keep, "keep", false, "keep the database after the run")
+	flag.StringVar(&profileOp, "profile-op", "", "CPU-profile this one operation (e.g. ingest_remember, brain_health)")
+	flag.StringVar(&profileOut, "cpuprofile", "scalebench.cpu.pprof", "where -profile-op writes its profile")
 	flag.Parse()
 	p.Shape = scalebench.Shape(shape)
 	p.Anchor = scalebench.DefaultAnchor
@@ -293,9 +296,37 @@ func finish(rep Report, peak *atomic.Uint64, stop func(), dbPath, jsonOut string
 	return os.WriteFile(jsonOut, append(data, '\n'), 0o644)
 }
 
+// profileOp names the one operation to CPU-profile, so a profile shows that
+// operation and not the bulk load that dominates a run's wall time.
+var profileOp, profileOut string
+
+// profiling starts the CPU profile when name is the selected operation and
+// returns the function that stops it.
+func profiling(name string) func() {
+	if name != profileOp {
+		return func() {}
+	}
+	f, err := os.Create(profileOut)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "scalebench: cpuprofile:", err)
+		return func() {}
+	}
+	if err := pprof.StartCPUProfile(f); err != nil {
+		fmt.Fprintln(os.Stderr, "scalebench: cpuprofile:", err)
+		_ = f.Close()
+		return func() {}
+	}
+	return func() {
+		pprof.StopCPUProfile()
+		_ = f.Close()
+		fmt.Fprintf(os.Stderr, "  cpu profile of %s written to %s\n", name, profileOut)
+	}
+}
+
 func timeOnce(name string, timeout time.Duration, fn func(context.Context) (string, error)) operation {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	defer profiling(name)()
 	start := time.Now()
 	detail, err := fn(ctx)
 	d := time.Since(start)
@@ -307,6 +338,7 @@ func timeOnce(name string, timeout time.Duration, fn func(context.Context) (stri
 func timeEach[T any](name string, timeout time.Duration, inputs []T, fn func(context.Context, T) error) operation {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	defer profiling(name)()
 	var ds []time.Duration
 	var total time.Duration
 	op := operation{Name: name, Outcome: "ok"}
