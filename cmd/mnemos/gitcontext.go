@@ -16,6 +16,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/relate"
 )
 
@@ -251,7 +252,7 @@ func ingestGitLog(ctx context.Context, w *govwrite.Writer, repoRoot string, limi
 		rels = nil
 	}
 
-	if existingClaims, listErr := conn.Claims.ListAll(ctx); listErr == nil && len(existingClaims) > 0 {
+	if existingClaims, listErr := pipeline.ExistingForRelate(ctx, conn, newClaims); listErr == nil && len(existingClaims) > 0 {
 		if incremental, incErr := relEngine.DetectIncremental(newClaims, existingClaims); incErr == nil {
 			rels = append(rels, incremental...)
 		}

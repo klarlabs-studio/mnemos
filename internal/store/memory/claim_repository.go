@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/relate"
 )
 
 // ClaimRepository is the in-memory implementation of
@@ -660,4 +661,23 @@ func latestEvidenceTimestamp(s *state, claimID string) time.Time {
 		}
 	}
 	return latest
+}
+
+// RelateCandidates implements ports.RelateCandidateSource by applying the
+// query's own definition to every claim. The memory store holds the corpus in
+// process anyway, so it needs no index; it implements the port so the write
+// path takes the same route on every backend under test.
+func (r ClaimRepository) RelateCandidates(ctx context.Context, q relate.CandidateQuery) ([]domain.Claim, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0]
+	for _, c := range all {
+		if q.Matches(c) {
+			out = append(out, c)
+		}
+	}
+	relate.SortCandidates(out)
+	return out, nil
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/relate"
 )
 
 // ErrVectorSearchUnavailable is returned by an EventVectorSearcher
@@ -251,6 +252,21 @@ type RelationshipRepository interface {
 	// DeleteAll wipes every relationship row.
 	DeleteAll(ctx context.Context) error
 }
+
+// RelateCandidateSource is the optional capability to answer a
+// relate.CandidateQuery: every stored claim q.Matches accepts, in
+// relate.SortCandidates order. With it, the write path relates new claims
+// against the few claims that can pair with them instead of loading the whole
+// corpus on every write, and the result is identical (relate's
+// TestCandidateQuery_IsExact). Without it, callers fall back to ListAll.
+type RelateCandidateSource interface {
+	RelateCandidates(ctx context.Context, q relate.CandidateQuery) ([]domain.Claim, error)
+}
+
+// ErrRelateCandidatesNotReady is returned by RelateCandidates while the
+// store's token index is still being built. The caller must fall back to
+// ListAll: a partial index would drop candidates.
+var ErrRelateCandidatesNotReady = errors.New("mnemos: relate candidate index not ready")
 
 // RelationshipDeleter is the optional capability to delete relationships by
 // ID. Pruning (`mnemos relate --prune-supports`) needs it: rewriting a 30M-row
