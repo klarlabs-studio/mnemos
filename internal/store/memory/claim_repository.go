@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // ClaimRepository is the in-memory implementation of
@@ -680,4 +682,115 @@ func (r ClaimRepository) RelateCandidates(ctx context.Context, q relate.Candidat
 	}
 	relate.SortCandidates(out)
 	return out, nil
+}
+
+func isLive(c domain.Claim) bool {
+	return c.ValidTo.IsZero() && c.Status != domain.ClaimStatusDeprecated
+}
+
+// CountLiveClaims implements ports.HealthSampler.
+func (r ClaimRepository) CountLiveClaims(ctx context.Context) (int, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, c := range all {
+		if isLive(c) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// CountLiveOrphans implements ports.HealthSampler.
+func (r ClaimRepository) CountLiveOrphans(ctx context.Context) (int, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	n := 0
+	for _, c := range all {
+		if isLive(c) && len(r.state.evidence[c.ID]) == 0 {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// CountDanglingRelationships implements ports.HealthSampler.
+func (r ClaimRepository) CountDanglingRelationships(_ context.Context) (int, error) {
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	n := 0
+	for _, rel := range r.state.relationships {
+		_, from := r.state.claims[rel.FromClaimID]
+		_, to := r.state.claims[rel.ToClaimID]
+		if !from || !to {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// SampleLiveClaims implements ports.HealthSampler with the same choice as
+// the SQL backends (store.ChooseSample over the sorted live ids).
+func (r ClaimRepository) SampleLiveClaims(ctx context.Context, n int, seed uint64) ([]domain.Claim, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[string]domain.Claim{}
+	var ids []string
+	for _, c := range all {
+		if isLive(c) {
+			byID[c.ID] = c
+			ids = append(ids, c.ID)
+		}
+	}
+	slices.Sort(ids)
+	chosen := store.ChooseSample(ids, n, seed)
+	out := make([]domain.Claim, len(chosen))
+	for i, id := range chosen {
+		out[i] = byID[id]
+	}
+	return out, nil
+}
+
+// CountHypercorrections implements ports.HealthSampler.
+func (r ClaimRepository) CountHypercorrections(_ context.Context, floor float64) (int, error) {
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	est := func(c domain.Claim) float64 {
+		if c.Lifecycle == domain.ClaimLifecyclePromoted {
+			return 1 + c.TrustScore
+		}
+		return c.TrustScore
+	}
+	n := 0
+	for _, rel := range r.state.relationships {
+		if rel.Type != domain.RelationshipTypeContradicts {
+			continue
+		}
+		sa, aok := r.state.claims[rel.FromClaimID]
+		sb, bok := r.state.claims[rel.ToClaimID]
+		if !aok || !bok {
+			continue
+		}
+		a, b := sa.toDomain(), sb.toDomain()
+		if !isLive(a) || !isLive(b) ||
+			a.Lifecycle == domain.ClaimLifecycleSuperseded || b.Lifecycle == domain.ClaimLifecycleSuperseded {
+			continue
+		}
+		c := a
+		if est(b) > est(a) {
+			c = b
+		}
+		if c.Lifecycle == domain.ClaimLifecyclePromoted || c.TrustScore >= floor {
+			n++
+		}
+	}
+	return n, nil
 }

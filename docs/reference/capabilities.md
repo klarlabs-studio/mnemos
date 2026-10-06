@@ -688,7 +688,7 @@ Brain health: vitals, integrity checks and one verdict (ADR 0019) (read).
 
 | Transport | Binding |
 |---|---|
-| go | `BrainHealth`, `SnapshotHealth` |
+| go | `BrainHealth`, `BrainHealthFull`, `SnapshotHealth` |
 | rest | **GAP** — only Prometheus gauges at /internal/metrics; no health report route |
 | grpc | **GAP** — no brain-health RPC |
 | mcp | **GAP** — no brain-health tool |

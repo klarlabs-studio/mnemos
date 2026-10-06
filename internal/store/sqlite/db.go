@@ -862,6 +862,11 @@ CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
 -- ListAll orders by created_at; without this every full read sorted the whole
 -- table, spilling to disk at 1M beliefs.
 CREATE INDEX IF NOT EXISTS idx_claims_created_at ON claims(created_at);
+-- The live beliefs brain health counts and samples (HealthSampler). Partial, so
+-- counting and listing them reads this narrow index, not every claim row. Its
+-- WHERE must stay identical to liveClaimSQL for the planner to use it.
+CREATE INDEX IF NOT EXISTS idx_claims_live ON claims(id)
+	WHERE (valid_to IS NULL OR valid_to = '') AND status <> 'deprecated';
 CREATE INDEX IF NOT EXISTS idx_claims_valid_to ON claims(valid_to);
 CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 -- v24: ListClaimsByTestRequirementRef filters

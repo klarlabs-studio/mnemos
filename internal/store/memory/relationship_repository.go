@@ -254,3 +254,18 @@ func (r RelationshipRepository) DeleteByIDs(_ context.Context, ids []string) (in
 	}
 	return n, nil
 }
+
+// ListByType implements ports.RelationshipTypeLister.
+func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0]
+	for _, rel := range all {
+		if rel.Type == relType {
+			out = append(out, rel)
+		}
+	}
+	return out, nil
+}
