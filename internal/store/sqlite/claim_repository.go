@@ -225,7 +225,7 @@ func (r ClaimRepository) UpsertEvidence(ctx context.Context, links []domain.Clai
 }
 
 // ListByEventIDs returns all claims linked to the given event IDs via claim evidence.
-func (r ClaimRepository) ListByEventIDs(ctx context.Context, eventIDs []string) ([]domain.Claim, error) {
+func (r ClaimRepository) listByEventIDsChunk(ctx context.Context, eventIDs []string) ([]domain.Claim, error) {
 	if len(eventIDs) == 0 {
 		return []domain.Claim{}, nil
 	}
@@ -314,7 +314,7 @@ func (r ClaimRepository) ListStatusHistoryByClaimID(ctx context.Context, claimID
 // ListEvidenceByClaimIDs returns the (claim_id, event_id) link rows for the
 // given claim IDs. Used by the query engine to attribute claim provenance
 // back to the events they were extracted from.
-func (r ClaimRepository) ListEvidenceByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.ClaimEvidence, error) {
+func (r ClaimRepository) listEvidenceByClaimIDsChunk(ctx context.Context, claimIDs []string) ([]domain.ClaimEvidence, error) {
 	if len(claimIDs) == 0 {
 		return []domain.ClaimEvidence{}, nil
 	}
@@ -356,7 +356,7 @@ WHERE claim_id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201
 // Used by the query engine for hop-expanded claim lookup — given a set of
 // neighbor claim IDs from relationship traversal, materialize the full
 // Claim records.
-func (r ClaimRepository) ListByIDs(ctx context.Context, claimIDs []string) ([]domain.Claim, error) {
+func (r ClaimRepository) listByIDsChunk(ctx context.Context, claimIDs []string) ([]domain.Claim, error) {
 	if len(claimIDs) == 0 {
 		return []domain.Claim{}, nil
 	}

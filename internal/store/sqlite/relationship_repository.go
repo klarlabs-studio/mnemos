@@ -254,7 +254,7 @@ func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.R
 // ListByClaimIDs returns every relationship that touches any of the given
 // claim IDs (as source OR target). Used by hop-expansion in the query
 // engine — N IDs in one round trip rather than N round trips.
-func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.Relationship, error) {
+func (r RelationshipRepository) listByClaimIDsChunk(ctx context.Context, claimIDs []string) ([]domain.Relationship, error) {
 	if len(claimIDs) == 0 {
 		return []domain.Relationship{}, nil
 	}

@@ -73,7 +73,7 @@ func (r EventRepository) GetByID(ctx context.Context, id string) (domain.Event, 
 }
 
 // ListByIDs returns events matching the given IDs, preserving the input order.
-func (r EventRepository) ListByIDs(ctx context.Context, ids []string) ([]domain.Event, error) {
+func (r EventRepository) listByIDsChunk(ctx context.Context, ids []string) ([]domain.Event, error) {
 	if len(ids) == 0 {
 		return []domain.Event{}, nil
 	}
