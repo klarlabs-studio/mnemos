@@ -365,7 +365,7 @@ func renderInitPlan(p initPlan) {
 	}
 
 	fmt.Println("Will apply:")
-	fmt.Printf("  • brain:     %s  (%s, scope: %s)\n", p.dsn, p.backend, p.scope)
+	fmt.Printf("  • brain:     %s  (%s, scope: %s)\n", store.RedactDSN(p.dsn), p.backend, p.scope)
 	if len(p.configKV) > 0 {
 		secret := ""
 		if !p.inlineDSN {
@@ -452,7 +452,9 @@ func applyInitPlan(p initPlan) initResult {
 		// never wire hooks/MCP at a brain that can't be reached.
 		if err := probeBrain(p.dsn); err != nil {
 			if !p.opts.force {
-				r.err("cannot reach brain %s: %s", p.dsn, err)
+				// r.err lines are returned to the MCP client by configure_environment,
+				// so the DSN must never carry its credentials into an agent transcript.
+				r.err("cannot reach brain %s: %s", store.RedactDSN(p.dsn), err)
 				return r
 			}
 			r.skip("brain unreachable (%s) — continuing anyway (--force)", err)

@@ -136,7 +136,7 @@ func Register(scheme string, fn OpenFunc) {
 func Open(ctx context.Context, dsn string) (*Conn, error) {
 	scheme, _, ok := strings.Cut(dsn, "://")
 	if !ok || scheme == "" {
-		return nil, fmt.Errorf("store: dsn %q missing scheme://", dsn)
+		return nil, fmt.Errorf("store: dsn %q missing scheme://", RedactDSN(dsn))
 	}
 	registryMu.RLock()
 	fn, found := registry[scheme]

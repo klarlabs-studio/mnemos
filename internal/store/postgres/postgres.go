@@ -103,28 +103,15 @@ type pgQuerier interface {
 	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
-// dsnPasswordRE matches the "://user:password@" segment of a URL DSN so a
-// password can be masked when the DSN is unparseable (best-effort fallback).
-var dsnPasswordRE = regexp.MustCompile(`(://[^:/@]+:)[^@/]*(@)`)
-
-// redactDSN masks the password in a URL-form DSN so it is safe to include in
-// error messages and logs. Never returns the original password.
-func redactDSN(dsn string) string {
-	if u, err := url.Parse(dsn); err == nil && u.User != nil {
-		if _, has := u.User.Password(); has {
-			u.User = url.UserPassword(u.User.Username(), "***")
-			return u.String()
-		}
-		return dsn
-	}
-	return dsnPasswordRE.ReplaceAllString(dsn, "${1}***${2}")
-}
+// redactDSN masks every credential in a DSN (userinfo password and
+// ?password= / ?sslpassword= parameters) for error messages and logs.
+func redactDSN(dsn string) string { return store.RedactDSN(dsn) }
 
 // ParseDSN extracts the namespace + tenant and produces a libpq-compatible
 // DSN with those query parameters stripped.
 func ParseDSN(dsn string) (DSN, error) {
 	if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
-		return DSN{}, fmt.Errorf("postgres: not a postgres dsn: %q", dsn)
+		return DSN{}, fmt.Errorf("postgres: not a postgres dsn: %q", redactDSN(dsn))
 	}
 	u, err := url.Parse(dsn)
 	if err != nil {

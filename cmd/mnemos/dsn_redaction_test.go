@@ -37,6 +37,11 @@ func TestNoUnredactedDSNInMessages(t *testing.T) {
 	rendering := map[string]bool{
 		"Errorf": true, "Printf": true, "Sprintf": true, "Fprintf": true,
 		"NewSystemError": true, "NewUserError": true, "Println": true, "Fatalf": true,
+		// initResult's line builders: configure_environment returns these lines
+		// to the MCP client, so they are output exactly like Printf. A raw DSN
+		// went out through r.err("cannot reach brain %s", p.dsn, …) because this
+		// set did not list them.
+		"err": true, "ok": true, "skip": true,
 	}
 	// Wrappers that make a DSN safe to print.
 	safe := map[string]bool{
@@ -82,11 +87,11 @@ func TestNoUnredactedDSNInMessages(t *testing.T) {
 			// formatting one into it, so it is checked the same way.
 			if bin, ok := n.(*ast.BinaryExpr); ok && bin.Op == token.ADD {
 				for _, side := range []ast.Expr{bin.X, bin.Y} {
-					ident, ok := side.(*ast.Ident)
-					if !ok || !looksLikeDSN(ident.Name) {
+					name, ok := dsnName(side)
+					if !ok {
 						continue
 					}
-					pos := fset.Position(ident.Pos())
+					pos := fset.Position(side.Pos())
 					if exempt[pos.Line] {
 						continue
 					}
@@ -94,7 +99,7 @@ func TestNoUnredactedDSNInMessages(t *testing.T) {
 						"wrap it in store.RedactDSN. A DSN reaching a message is a password "+
 						"reaching a log, whether it got there via Sprintf or via `+`. If this "+
 						"site must emit the real DSN, add a %q comment on the line with a reason.",
-						pos, ident.Name, exemptMarker)
+						pos, name, exemptMarker)
 				}
 
 				return true
@@ -105,11 +110,11 @@ func TestNoUnredactedDSNInMessages(t *testing.T) {
 				return true
 			}
 			for _, arg := range call.Args {
-				ident, ok := arg.(*ast.Ident)
-				if !ok || !looksLikeDSN(ident.Name) {
+				name, ok := dsnName(arg)
+				if !ok {
 					continue
 				}
-				pos := fset.Position(ident.Pos())
+				pos := fset.Position(arg.Pos())
 				if exempt[pos.Line] {
 					continue
 				}
@@ -117,7 +122,7 @@ func TestNoUnredactedDSNInMessages(t *testing.T) {
 					"wrap it in store.RedactDSN. A DSN reaching a message is a password "+
 					"reaching a log. If this site must emit the real DSN (writing a "+
 					"config file), add a %q comment on the line with a reason.",
-					pos, calleeName(call.Fun), ident.Name, exemptMarker)
+					pos, calleeName(call.Fun), name, exemptMarker)
 			}
 
 			return true
@@ -150,6 +155,20 @@ func calleeName(fun ast.Expr) string {
 	}
 
 	return ""
+}
+
+// dsnName reports whether expr is a bare connection-string value: an
+// identifier (dsn, globalDSN) or a field selection (p.dsn, parsed.DriverDSN).
+// Selectors were invisible to this guard, which is how init's plan and result
+// lines printed p.dsn raw.
+func dsnName(expr ast.Expr) (string, bool) {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name, looksLikeDSN(e.Name)
+	case *ast.SelectorExpr:
+		return e.Sel.Name, looksLikeDSN(e.Sel.Name)
+	}
+	return "", false
 }
 
 // looksLikeDSN reports whether an identifier names a connection string. Matches

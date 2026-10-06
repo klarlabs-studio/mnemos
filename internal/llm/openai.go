@@ -150,7 +150,7 @@ func (c *OpenAIClient) Complete(ctx context.Context, messages []Message) (Respon
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return Response{}, fmt.Errorf("%s API returned status %d: %s", c.provider, resp.StatusCode, string(respBody))
+		return Response{}, fmt.Errorf("%s API returned status %d: %s", c.provider, resp.StatusCode, withoutSecret(string(respBody), c.apiKey))
 	}
 
 	// Use a streaming Decoder rather than Unmarshal so a stray trailing
