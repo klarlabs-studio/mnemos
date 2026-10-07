@@ -10,7 +10,7 @@ Mnemos is the **local-first evidence layer** of the cognitive stack (Mnemos → 
 - **Technical design**: `TDD.md` (covers MVP domain — Phase 2+ schema lives in `sql/sqlite/schema.sql` + ADRs)
 - **Architecture decisions**: `docs/adr/` (currently `0001-multi-backend-storage.md`)
 - **Roadmap**: `Roadmap.md` — phase status: 1, 2A, 2B, A, F, axi-go all SHIPPED; Phase 3 (v1.0) FUTURE
-- **Execution state**: `.roady/` workspace (spec, plan, state)
+- **Execution state**: GitHub issues and milestones (the consolidation program is #382)
 - **Architecture overview for AI agents**: `CLAUDE.md`
 
 ## Build, test, lint
@@ -34,7 +34,6 @@ CI: `.github/workflows/ci.yml` runs format → vet → golangci-lint v2.1 → ra
 - `docs/` — guides (`library.md`, `integrations.md`, …), `adr/` decisions, `reference/` generated references, `notes/` dated working notes; `docs/README.md` indexes them
 - `client/` — typed Go client for the HTTP registry
 - `data/` — local ingestion artifacts (gitignored except `.gitkeep`)
-- `.relicta/` — release tooling metadata; not product source
 
 ## Conventions
 
