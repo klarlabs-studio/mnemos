@@ -65,13 +65,30 @@ func ensureClaimTokens(db *sql.DB) error {
 
 // buildClaimTokenBatch indexes the next batch of claims after cursor (by id)
 // in one transaction and advances the stored cursor with it.
+//
+// The transaction is BEGIN IMMEDIATE: it takes the write lock before reading,
+// waiting through busy_timeout for any other writer. A deferred transaction
+// reads first and upgrades on its first insert, and if another process
+// committed in between, that upgrade fails at once with SQLITE_BUSY_SNAPSHOT,
+// which no busy_timeout can wait out. A Claude Code hook capturing a session
+// while a brain was being opened did exactly that, and the open failed.
 func buildClaimTokenBatch(db *sql.DB, cursor string) (next string, done bool, err error) {
-	tx, err := db.Begin()
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		return "", false, err
 	}
-	defer rollbackTx(tx)
-	rows, err := tx.Query(`SELECT id, text FROM claims WHERE id > ? ORDER BY id LIMIT ?`, cursor, claimTokenBuildBatch)
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
+		return "", false, fmt.Errorf("begin: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(ctx, `ROLLBACK`)
+		}
+	}()
+	rows, err := conn.QueryContext(ctx, `SELECT id, text FROM claims WHERE id > ? ORDER BY id LIMIT ?`, cursor, claimTokenBuildBatch)
 	if err != nil {
 		return "", false, fmt.Errorf("read claims: %w", err)
 	}
@@ -101,16 +118,20 @@ func buildClaimTokenBatch(db *sql.DB, cursor string) (next string, done bool, er
 			args = append(args, tok, c.id)
 		}
 		// OR IGNORE: a claim upserted during the build already has its rows.
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO claim_tokens(token, claim_id) VALUES `+
+		if _, err := conn.ExecContext(ctx, `INSERT OR IGNORE INTO claim_tokens(token, claim_id) VALUES `+
 			strings.TrimSuffix(strings.Repeat("(?,?),", len(toks)), ","), args...); err != nil {
 			return "", false, fmt.Errorf("index %s: %w", c.id, err)
 		}
 	}
 	next = batch[len(batch)-1].id
-	if _, err := tx.Exec(`UPDATE relate_token_state SET build_cursor = ? WHERE id = 1`, next); err != nil {
+	if _, err := conn.ExecContext(ctx, `UPDATE relate_token_state SET build_cursor = ? WHERE id = 1`, next); err != nil {
 		return "", false, err
 	}
-	return next, false, tx.Commit()
+	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
+		return "", false, fmt.Errorf("commit: %w", err)
+	}
+	committed = true
+	return next, false, nil
 }
 
 // writeClaimTokens replaces the token rows of each claim inside tx. Called by
