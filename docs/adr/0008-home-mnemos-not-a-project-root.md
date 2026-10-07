@@ -146,5 +146,5 @@ as a project.
   fallback; unchanged by this ADR).
 - `cmd/mnemos/doctor.go` — `probeProjectRoot`, updated in the same series to
   reflect the `MNEMOS_DB_URL` override so it no longer contradicts `store_open`.
-- `docs/global-brain-setup-ux.md` — the dogfooding walkthrough that surfaced
+- `docs/notes/global-brain-setup-ux.md` — the dogfooding walkthrough that surfaced
   this footgun.

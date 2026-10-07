@@ -31,7 +31,7 @@ CI: `.github/workflows/ci.yml` runs format → vet → golangci-lint v2.1 → ra
 - `internal/` — packages by domain (extract, relate, query, synthesize, store/{sqlite,memory,postgres,mysql,libsql}, ...)
 - `proto/mnemos/v1/mnemos.proto` — gRPC schema; `proto/gen/` holds generated code
 - `sql/sqlite/` — schema + sqlc query source; regenerate after edits via `make sqlc`
-- `docs/` — `phase2-plan.md`, `integrations.md`, `backlog.md`, `adr/0001-multi-backend-storage.md`
+- `docs/` — guides (`library.md`, `integrations.md`, …), `adr/` decisions, `reference/` generated references, `notes/` dated working notes; `docs/README.md` indexes them
 - `client/` — typed Go client for the HTTP registry
 - `data/` — local ingestion artifacts (gitignored except `.gitkeep`)
 - `.relicta/` — release tooling metadata; not product source
