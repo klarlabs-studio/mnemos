@@ -3,6 +3,7 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -579,8 +580,15 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 		return fmt.Errorf("schema migration: %w", err)
 	}
 
+	// The token index is an accelerator, never a precondition: until it is
+	// built, RelateCandidates reports ErrRelateCandidatesNotReady and writes
+	// relate against the full corpus. So a build that cannot finish (another
+	// process holding the write lock past busy_timeout, a full disk) must not
+	// make the brain unopenable. Each committed batch is kept, and the next
+	// open resumes from the stored cursor.
 	if err := ensureClaimTokens(db); err != nil {
-		return fmt.Errorf("claim token index: %w", err)
+		slog.Warn("claim token index not built yet; relate uses the full corpus until a later open finishes it",
+			"error", err)
 	}
 
 	return nil
