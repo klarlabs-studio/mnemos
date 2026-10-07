@@ -255,6 +255,7 @@ type Relationship struct {
 	CreatedAt   string  `json:"created_at"`
 	CreatedBy   string  `json:"created_by"`
 	Strength    float64 `json:"strength"`
+	DerivedBy   string  `json:"derived_by"`
 }
 
 type RevokedToken struct {

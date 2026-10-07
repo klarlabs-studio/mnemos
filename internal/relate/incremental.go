@@ -111,6 +111,7 @@ func (e Engine) DetectIncrementalWithStats(newClaims []domain.Claim, existingCla
 			return nil, stats, err
 		}
 		rels = append(rels, domain.Relationship{
+			DerivedBy:   ModelVersion,
 			ID:          id,
 			Type:        c.relType,
 			FromClaimID: newClaims[c.from].ID,

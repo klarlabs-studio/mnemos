@@ -56,6 +56,7 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [ADR 0026: One canonical trust value per belief, per instant](adr/0026-canonical-trust.md)
 - [ADR 0027: A per-claim budget on inferred supports edges](adr/0027-supports-edge-budget.md)
 - [ADR 0028: A computation budget on relate's candidates](adr/0028-relate-candidate-budget.md)
+- [ADR 0029: Derived state records what produced it](adr/0029-derived-state-records-its-producer.md)
 
 ## Working notes
 

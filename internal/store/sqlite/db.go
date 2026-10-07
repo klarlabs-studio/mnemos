@@ -622,7 +622,10 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // v27 (ADR 0026 §5) adds claims.trust_computed_at and trust_model_version, so a
 // stored trust_score says which model computed it and when. Bumped so the
 // expectedColumns entries run on pre-existing brains.
-const currentSchemaVersion = 27
+// v28 (#382 Phase 6) adds relationships.derived_by: the rule set that inferred
+// each edge (relate.ModelVersion), so edges an older rule set produced can be
+// found and re-derived. Existing edges backfill to ” (unknown/explicit).
+const currentSchemaVersion = 28
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -722,6 +725,7 @@ var expectedColumns = []addMissingColumn{
 	// the base 1.0, so spreading activation is unchanged until StrengthenAssociations
 	// raises an edge from repeated co-retrieval.
 	{"relationships", "strength", "REAL NOT NULL DEFAULT 1"},
+	{"relationships", "derived_by", "TEXT NOT NULL DEFAULT ''"},
 	// v23 - claim durability (ADR 0023): 'durable' | 'session' | '' (unknown).
 	// CREATE TABLE IF NOT EXISTS does not add columns to a table that already
 	// exists, so without this entry every pre-existing brain would fail on the

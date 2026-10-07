@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS relationships (
   created_at TEXT NOT NULL,
   created_by TEXT NOT NULL DEFAULT '<system>',
   strength REAL NOT NULL DEFAULT 1,
+  derived_by TEXT NOT NULL DEFAULT '',
   FOREIGN KEY (from_claim_id) REFERENCES claims(id),
   FOREIGN KEY (to_claim_id) REFERENCES claims(id)
 );

@@ -84,6 +84,7 @@ func referenceDetectIncremental(e Engine, newClaims []domain.Claim, existingClai
 			}
 
 			rels = append(rels, domain.Relationship{
+				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        relType,
 				FromClaimID: newClaims[i].ID,

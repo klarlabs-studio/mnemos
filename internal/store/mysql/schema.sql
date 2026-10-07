@@ -185,6 +185,7 @@ CREATE TABLE IF NOT EXISTS relationships (
   created_at    DATETIME(6)  NOT NULL,
   created_by    VARCHAR(190) NOT NULL DEFAULT '<system>',
   strength      DOUBLE       NOT NULL DEFAULT 1,
+  derived_by    VARCHAR(64)  NOT NULL DEFAULT '',
   PRIMARY KEY (id),
   UNIQUE KEY uniq_relationships_edge (type, from_claim_id, to_claim_id),
   KEY idx_relationships_from_claim   (from_claim_id),
@@ -192,6 +193,11 @@ CREATE TABLE IF NOT EXISTS relationships (
   CONSTRAINT fk_relationships_from FOREIGN KEY (from_claim_id) REFERENCES claims(id),
   CONSTRAINT fk_relationships_to   FOREIGN KEY (to_claim_id)   REFERENCES claims(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Columns added after the table first shipped, so existing databases gain
+-- them too. strength (ADR 0015) was missing this ALTER: a MySQL brain created
+-- before it never got the column.
+ALTER TABLE relationships ADD COLUMN IF NOT EXISTS strength DOUBLE NOT NULL DEFAULT 1;
+ALTER TABLE relationships ADD COLUMN IF NOT EXISTS derived_by VARCHAR(64) NOT NULL DEFAULT '';
 
 -- cognitive_journal (ADR 0018): append-only learning log; data is a kind-specific JSON payload.
 CREATE TABLE IF NOT EXISTS cognitive_journal (
