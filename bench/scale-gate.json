@@ -1,0 +1,38 @@
+{
+  "beliefs": 100000,
+  "notes": [
+    "Regression ceilings for `make scale-gate` (scripts/scale-gate.sh): scalebench at 100k beliefs, -repeat 3 (median of three warm rounds).",
+    "Set 2026-10-07 at ~3x the worst of two measurement rounds on an Apple M5 (10 cores, 24 GiB), with the relate trace confirming every measured write related (40 edges kept). Hub recall p95 is spiky by nature (fan-out through hub beliefs) and gets wider headroom.",
+    "They are alarms for order-of-magnitude regressions, not targets. With exact relate candidates ingest_remember was 713 ms p50 here, and without the supports budget 1600 ms; the 200 ms ceiling catches either.",
+    "Re-baseline deliberately when a change moves a number for a reason: run the gate, read the report, change the ceiling in the same PR, and say why."
+  ],
+  "limits": {
+    "uniform": {
+      "ingest_remember":      {"p50_ms": 200,  "p95_ms": 600},
+      "recall_hops0":         {"p50_ms": 450,  "p95_ms": 800},
+      "recall_hops1":         {"p50_ms": 550,  "p95_ms": 1400},
+      "brain_health":         {"p50_ms": 4500},
+      "brain_health_full":    {"p50_ms": 7500},
+      "knowledge_gaps":       {"p50_ms": 1800},
+      "recompute_trust_full": {"p50_ms": 24000}
+    },
+    "hub": {
+      "ingest_remember":      {"p50_ms": 200,  "p95_ms": 400},
+      "recall_hops0":         {"p50_ms": 700,  "p95_ms": 2200},
+      "recall_hops1":         {"p50_ms": 600,  "p95_ms": 7500},
+      "brain_health":         {"p50_ms": 5500},
+      "brain_health_full":    {"p50_ms": 7500},
+      "knowledge_gaps":       {"p50_ms": 1600},
+      "recompute_trust_full": {"p50_ms": 26000}
+    },
+    "contradiction": {
+      "ingest_remember":      {"p50_ms": 300,  "p95_ms": 450},
+      "recall_hops0":         {"p50_ms": 300,  "p95_ms": 450},
+      "recall_hops1":         {"p50_ms": 350,  "p95_ms": 450},
+      "brain_health":         {"p50_ms": 6500},
+      "brain_health_full":    {"p50_ms": 7600},
+      "knowledge_gaps":       {"p50_ms": 5000},
+      "recompute_trust_full": {"p50_ms": 9000}
+    }
+  }
+}
