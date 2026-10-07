@@ -43,48 +43,90 @@ func (s *scalar) UnmarshalYAML(node *yaml.Node) error {
 // Each leaf maps to exactly one environment variable (see EnvOverrides).
 type Config struct {
 	DB struct {
-		URL             scalar `yaml:"url"`
-		MaxConns        scalar `yaml:"max_conns"`
-		MaxIdleConns    scalar `yaml:"max_idle_conns"`
+		// URL is the brain's storage DSN: sqlite://, postgres://, mysql://,
+		// libsql:// or memory://. Unset, the local brain file is used.
+		URL scalar `yaml:"url"`
+		// MaxConns caps open connections to a networked database (Postgres,
+		// MySQL). Default 25.
+		MaxConns scalar `yaml:"max_conns"`
+		// MaxIdleConns caps idle pooled connections (Postgres, MySQL). Default 5.
+		MaxIdleConns scalar `yaml:"max_idle_conns"`
+		// ConnMaxLifetime recycles a pooled connection after this Go duration
+		// (Postgres, MySQL). Default 30m.
 		ConnMaxLifetime scalar `yaml:"conn_max_lifetime"`
-		SharedPool      scalar `yaml:"shared_pool"`
+		// SharedPool makes a multi-tenant Postgres server check each request's
+		// connection out of one shared pool, instead of caching a connection
+		// per tenant for the life of the process.
+		SharedPool scalar `yaml:"shared_pool"`
 	} `yaml:"db"`
 
 	LLM struct {
-		Provider      scalar `yaml:"provider"`
-		APIKey        scalar `yaml:"api_key"`
-		Model         scalar `yaml:"model"`
-		BaseURL       scalar `yaml:"base_url"`
-		Timeout       scalar `yaml:"timeout"`
+		// Provider selects the LLM for extraction and relation detection:
+		// anthropic, openai, gemini, ollama or openai-compat. Unset, extraction
+		// is rule-based.
+		Provider scalar `yaml:"provider"`
+		// APIKey authenticates to the LLM provider. Secret.
+		APIKey scalar `yaml:"api_key"`
+		// Model overrides the provider's default model.
+		Model scalar `yaml:"model"`
+		// BaseURL overrides the provider's endpoint; required for openai-compat.
+		BaseURL scalar `yaml:"base_url"`
+		// Timeout bounds one LLM request, as a Go duration. Default 120s.
+		Timeout scalar `yaml:"timeout"`
+		// CacheMaxBytes caps the on-disk LLM response cache. Default 1 GiB; 0
+		// disables the size sweep (unbounded cache).
 		CacheMaxBytes scalar `yaml:"cache_max_bytes"`
-		ExtractModel  scalar `yaml:"extract_model"`
+		// ExtractModel overrides llm.model for the extraction stage only, so a
+		// strong model can extract while a cheaper one does the rest.
+		ExtractModel scalar `yaml:"extract_model"`
 		// ExtractBatchChars bounds one extraction request. A whole transcript in
 		// a single prompt overran the per-request timeout on local models, so
 		// extraction silently fell back to rule-based; batching keeps each
 		// request completable. Raise it for fast/large-context providers.
+		// Default 24000 characters.
 		ExtractBatchChars scalar `yaml:"extract_batch_chars"`
 	} `yaml:"llm"`
 
 	Embed struct {
+		// Provider selects the embedding model behind semantic recall:
+		// openai, gemini, ollama or openai-compat. Unset, it falls back to the
+		// LLM provider (Anthropic has no embedding API) or a local Ollama.
 		Provider scalar `yaml:"provider"`
-		APIKey   scalar `yaml:"api_key"`
-		Model    scalar `yaml:"model"`
-		BaseURL  scalar `yaml:"base_url"`
-		Timeout  scalar `yaml:"timeout"`
+		// APIKey authenticates to the embedding provider; falls back to the
+		// LLM API key. Secret.
+		APIKey scalar `yaml:"api_key"`
+		// Model overrides the provider's default embedding model.
+		Model scalar `yaml:"model"`
+		// BaseURL overrides the embedding endpoint.
+		BaseURL scalar `yaml:"base_url"`
+		// Timeout bounds one embedding request, as a Go duration. Default 60s.
+		Timeout scalar `yaml:"timeout"`
+		// Batch caps the texts in one embedding request during `reembed`.
+		// Default 64; lower it for self-hosted providers with small batch limits.
+		Batch scalar `yaml:"batch"`
 	} `yaml:"embed"`
 
 	Serve struct {
-		Port             scalar `yaml:"port"`
-		TLSCertFile      scalar `yaml:"tls_cert_file"`
-		TLSKeyFile       scalar `yaml:"tls_key_file"`
+		// Port is the REST listener of `mnemos serve`. Default 7777.
+		Port scalar `yaml:"port"`
+		// TLSCertFile serves HTTPS with this certificate, with serve.tls_key_file.
+		TLSCertFile scalar `yaml:"tls_cert_file"`
+		// TLSKeyFile is the private key for serve.tls_cert_file.
+		TLSKeyFile scalar `yaml:"tls_key_file"`
+		// MTLSClientCAFile requires client certificates signed by this CA.
 		MTLSClientCAFile scalar `yaml:"mtls_client_ca_file"`
-		// PublicReads and MetricsPublic mirror `serve --public-reads` /
-		// `--metrics-public`. Both LOOSEN authentication, so they live here
-		// rather than only on the command line: a deployment's auth posture
-		// belongs in reviewable config, not in whichever flags the process
-		// happened to start with. Secure by default when unset.
-		PublicReads   scalar `yaml:"public_reads"`
+		// PublicReads mirrors `serve --public-reads`: anonymous GET reads. It
+		// LOOSENS authentication, so it lives in reviewable config, not only in
+		// whichever flags a process started with. Off by default; not for
+		// hosted deployments.
+		PublicReads scalar `yaml:"public_reads"`
+		// MetricsPublic mirrors `serve --metrics-public`: anonymous
+		// /internal/metrics. Off by default.
 		MetricsPublic scalar `yaml:"metrics_public"`
+		// TrustProxy mirrors `serve --trust-proxy`: take the client IP used
+		// for rate limiting from X-Forwarded-For. Set it only behind a proxy
+		// that overwrites the header; off by default.
+		TrustProxy scalar `yaml:"trust_proxy"`
 		// ConsolidateInterval is the hosted brain's sleep cadence: how often a
 		// running server consolidates (dedupe, trust refresh, credit, the skill
 		// loop, session-noise clearing). Defaults to the same ~daily gap the
@@ -99,44 +141,74 @@ type Config struct {
 	// local store. Distinct from Registry (federation) and Serve (this process's
 	// own listener).
 	Server struct {
-		URL   scalar `yaml:"url"`
+		// URL is the hosted brain the hooks and client call instead of a local
+		// store.
+		URL scalar `yaml:"url"`
+		// Token is the bearer token sent to server.url. Secret.
 		Token scalar `yaml:"token"`
 	} `yaml:"server"`
 
 	Auth struct {
-		JWTSecret     scalar `yaml:"jwt_secret"`
+		// JWTSecret signs and verifies tokens: hex, at least 32 bytes. Unset,
+		// a per-install secret is created in auth.dir. Secret.
+		JWTSecret scalar `yaml:"jwt_secret"`
+		// JWTPrevSecret still verifies tokens signed before a secret rotation.
+		// Secret.
 		JWTPrevSecret scalar `yaml:"jwt_prev_secret"`
-		Dir           scalar `yaml:"dir"`
-		UserID        scalar `yaml:"user_id"`
+		// Dir holds the generated JWT secret. Default: .mnemos in the project
+		// root, else the home directory.
+		Dir scalar `yaml:"dir"`
+		// UserID stamps every write's actor. Unset, writes are attributed to
+		// the system user.
+		UserID scalar `yaml:"user_id"`
 	} `yaml:"auth"`
 
 	Registry struct {
-		URL   scalar `yaml:"url"`
+		// URL is the federation registry `push` and `pull` talk to.
+		URL scalar `yaml:"url"`
+		// Token authenticates to the registry. Secret.
 		Token scalar `yaml:"token"`
 	} `yaml:"registry"`
 
 	Federation struct {
+		// Enabled serves GET /v1/federation/export (anonymized playbooks).
+		// Off by default.
 		Enabled scalar `yaml:"enabled"`
 	} `yaml:"federation"`
 
 	Telemetry struct {
-		OptIn    scalar `yaml:"optin"`
+		// OptIn enables anonymized usage counts. Off by default; nothing is
+		// sent unless telemetry.endpoint is also set.
+		OptIn scalar `yaml:"optin"`
+		// Endpoint receives the opted-in usage counts.
 		Endpoint scalar `yaml:"endpoint"`
 	} `yaml:"telemetry"`
 
 	Kernel struct {
-		MaxDuration    scalar `yaml:"max_duration"`
+		// MaxDuration bounds one governed write session, as a Go duration.
+		// Default 5m.
+		MaxDuration scalar `yaml:"max_duration"`
+		// MaxInvocations bounds capability calls per session. Default 1000.
 		MaxInvocations scalar `yaml:"max_invocations"`
-		MaxTokens      scalar `yaml:"max_tokens"`
-		EvidenceLog    scalar `yaml:"evidence_log"`
+		// MaxTokens bounds LLM tokens per session. Default unlimited.
+		MaxTokens scalar `yaml:"max_tokens"`
+		// EvidenceLog appends every governed write's evidence as JSONL to this
+		// file. Symlinks are refused.
+		EvidenceLog scalar `yaml:"evidence_log"`
 	} `yaml:"kernel"`
 
 	Feedback struct {
+		// ContestThreshold is the negative-feedback count at which a belief
+		// becomes contested. Default 3.
 		ContestThreshold scalar `yaml:"contest_threshold"`
-		Decay            scalar `yaml:"decay"`
+		// Decay multiplies confidence on each negative feedback. Default 0.9.
+		Decay scalar `yaml:"decay"`
 	} `yaml:"feedback"`
 
 	Job struct {
+		// Timeout bounds one CLI job attempt, as a Go duration. Default 10m.
+		// Whole-brain maintenance (`relate --prune-supports`) defaults to 4h
+		// unless this is set.
 		Timeout scalar `yaml:"timeout"`
 	} `yaml:"job"`
 
@@ -171,11 +243,13 @@ type Config struct {
 	// that the Claude Code hook timeout written by `mnemos init` caps this in
 	// practice — re-run `mnemos init` after raising it.
 	Capture struct {
-		// Strategy is auto | incremental | end | off. See mnemos.example.yaml
-		// for the per-provider guidance; auto picks incremental for local
-		// inference and end for hosted providers.
+		// Strategy chooses when the capture hook ingests: auto, incremental,
+		// end or off. auto picks incremental for local inference and end for
+		// hosted providers; mnemos.example.yaml has the per-provider guidance.
 		Strategy scalar `yaml:"strategy"`
-		Timeout  scalar `yaml:"timeout"`
+		// Timeout bounds one session's capture pipeline, as a Go duration.
+		// Default 4m.
+		Timeout scalar `yaml:"timeout"`
 	} `yaml:"capture"`
 
 	// Floatback tunes the local upward flow that promotes important repo/workspace
@@ -183,6 +257,8 @@ type Config struct {
 	// an opt-in (default false): when true, a session-end capture inside a
 	// repo/workspace also floats those learnings up, best-effort.
 	Floatback struct {
+		// OnCapture also floats repo learnings to the personal brain at
+		// session end. Off by default.
 		OnCapture scalar `yaml:"on_capture"`
 	} `yaml:"floatback"`
 
@@ -191,6 +267,8 @@ type Config struct {
 	// learning-rate gain (default 1.0; 0 disables just neuromodulation, leaving
 	// per-belief metaplasticity active).
 	Plasticity struct {
+		// Sensitivity scales surprise-driven learning-rate gain. Default 1.0;
+		// 0 disables neuromodulation only.
 		Sensitivity scalar `yaml:"sensitivity"`
 	} `yaml:"plasticity"`
 
@@ -203,18 +281,24 @@ type Config struct {
 	// It was env-only and absent from this struct, so it could not be set from
 	// a config file at all — while the docs promise every setting can be.
 	Pipeline struct {
+		// EpisodicEvents types operational events (deploys, releases, merges,
+		// incidents) at ingest. Off by default.
 		EpisodicEvents scalar `yaml:"episodic_events"`
 	} `yaml:"pipeline"`
 
 	// Metrics tunes the `serve` Prometheus product-metrics sampler (ADR 0020).
 	// SampleInterval is a Go duration (default 60s; 0 disables the sampler).
 	Metrics struct {
+		// SampleInterval is the product-metrics sampler cadence, as a Go
+		// duration. Default 60s; 0 disables it.
 		SampleInterval scalar `yaml:"sample_interval"`
 	} `yaml:"metrics"`
 
 	// Log tunes the structured operational logs (ADR 0021). Level is one of
 	// trace|debug|info|warn|error (default info).
 	Log struct {
+		// Level sets log verbosity: trace, debug, info, warn or error. Default
+		// info.
 		Level scalar `yaml:"level"`
 	} `yaml:"log"`
 
@@ -252,6 +336,7 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_EMBED_MODEL", c.Embed.Model},
 		{"MNEMOS_EMBED_BASE_URL", c.Embed.BaseURL},
 		{"MNEMOS_EMBED_TIMEOUT", c.Embed.Timeout},
+		{"MNEMOS_EMBED_BATCH", c.Embed.Batch},
 
 		{"MNEMOS_SERVE_PORT", c.Serve.Port},
 		{"MNEMOS_TLS_CERT_FILE", c.Serve.TLSCertFile},
@@ -259,6 +344,7 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_MTLS_CLIENT_CA_FILE", c.Serve.MTLSClientCAFile},
 		{"MNEMOS_PUBLIC_READS", c.Serve.PublicReads},
 		{"MNEMOS_METRICS_PUBLIC", c.Serve.MetricsPublic},
+		{"MNEMOS_TRUST_PROXY", c.Serve.TrustProxy},
 		{"MNEMOS_CONSOLIDATE_INTERVAL", c.Serve.ConsolidateInterval},
 
 		{"MNEMOS_URL", c.Server.URL},

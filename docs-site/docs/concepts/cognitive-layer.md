@@ -93,7 +93,7 @@ corrected most strongly.
 The capabilities above are the *organs*. A second arc added the *nervous system*: one
 signal — **prediction error** — tying them into loops so the store gets *better with
 use*. All deterministic, no LLM. Full detail in
-[`RESEARCH-perfect-agent-brain.md`](https://github.com/klarlabs-studio/mnemos/blob/main/docs/RESEARCH-perfect-agent-brain.md).
+[`RESEARCH-perfect-agent-brain.md`](https://github.com/klarlabs-studio/mnemos/blob/main/docs/notes/RESEARCH-perfect-agent-brain.md).
 
 **Epistemic honesty.** Corroboration is graded by source **independence**
 (`EffectiveEvidenceCount`) so a single voice can't manufacture consensus, and
