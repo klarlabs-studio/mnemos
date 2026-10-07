@@ -175,11 +175,14 @@ CREATE TABLE IF NOT EXISTS relationships (
   to_claim_id   text             NOT NULL REFERENCES claims(id),
   created_at    timestamptz      NOT NULL,
   created_by    text             NOT NULL DEFAULT '<system>',
-  strength      double precision NOT NULL DEFAULT 1
+  strength      double precision NOT NULL DEFAULT 1,
+  derived_by    text             NOT NULL DEFAULT ''
 );
 -- ADR 0015 §4: Hebbian co-activation weight for existing DBs (fresh ones get it
 -- inline above). Backfills to the base 1.0 so spreading activation is unchanged.
 ALTER TABLE relationships ADD COLUMN IF NOT EXISTS strength double precision NOT NULL DEFAULT 1;
+-- #382 Phase 6: the rule set that inferred the edge (relate.ModelVersion).
+ALTER TABLE relationships ADD COLUMN IF NOT EXISTS derived_by text NOT NULL DEFAULT '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_unique_edge
   ON relationships(type, from_claim_id, to_claim_id);

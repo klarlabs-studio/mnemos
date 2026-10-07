@@ -29,19 +29,20 @@ func (r RelationshipRepository) Upsert(ctx context.Context, relationships []doma
 	defer func() { _ = tx.Rollback() }()
 
 	stmt := fmt.Sprintf(`
-INSERT INTO %s (id, type, from_claim_id, to_claim_id, created_at, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO %s (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (id) DO UPDATE SET
   type = EXCLUDED.type,
   from_claim_id = EXCLUDED.from_claim_id,
-  to_claim_id = EXCLUDED.to_claim_id`, qualify(r.ns, "relationships"))
+  to_claim_id = EXCLUDED.to_claim_id,
+  derived_by = EXCLUDED.derived_by`, qualify(r.ns, "relationships"))
 	for _, rel := range relationships {
 		if err := rel.Validate(); err != nil {
 			return fmt.Errorf("invalid relationship %s: %w", rel.ID, err)
 		}
 		if _, err := tx.ExecContext(ctx, stmt,
 			rel.ID, string(rel.Type), rel.FromClaimID, rel.ToClaimID,
-			rel.CreatedAt.UTC(), actorOr(rel.CreatedBy),
+			rel.CreatedAt.UTC(), actorOr(rel.CreatedBy), rel.DerivedBy,
 		); err != nil {
 			return fmt.Errorf("upsert relationship %s: %w", rel.ID, err)
 		}
@@ -55,7 +56,7 @@ ON CONFLICT (id) DO UPDATE SET
 // ListByClaim satisfies the corresponding ports method.
 func (r RelationshipRepository) ListByClaim(ctx context.Context, claimID string) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by
 FROM %s WHERE from_claim_id = $1 OR to_claim_id = $1`, qualify(r.ns, "relationships")), claimID)
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim: %w", err)
@@ -187,7 +188,7 @@ func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 // ListAll satisfies the corresponding ports method.
 func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by
 FROM %s ORDER BY created_at ASC`, qualify(r.ns, "relationships")))
 	if err != nil {
 		return nil, fmt.Errorf("list all relationships: %w", err)
@@ -202,7 +203,7 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 		return []domain.Relationship{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by
 FROM %s WHERE from_claim_id = ANY($1) OR to_claim_id = ANY($1)`, qualify(r.ns, "relationships")), pgArray(claimIDs))
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim ids: %w", err)
@@ -216,7 +217,7 @@ func collectRelationshipRows(rows *sql.Rows) ([]domain.Relationship, error) {
 	for rows.Next() {
 		var rel domain.Relationship
 		var typ string
-		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy, &rel.Strength); err != nil {
+		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy, &rel.Strength, &rel.DerivedBy); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		rel.Type = domain.RelationshipType(typ)

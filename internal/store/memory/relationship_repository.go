@@ -37,6 +37,7 @@ func (r RelationshipRepository) Upsert(_ context.Context, relationships []domain
 			CreatedAt:   rel.CreatedAt.UTC(),
 			CreatedBy:   actorOr(rel.CreatedBy),
 			Strength:    rel.Strength,
+			DerivedBy:   rel.DerivedBy,
 		}
 	}
 	return nil
@@ -179,6 +180,7 @@ func (s storedRelationship) toDomain() domain.Relationship {
 		CreatedAt:   s.CreatedAt,
 		CreatedBy:   s.CreatedBy,
 		Strength:    s.Strength,
+		DerivedBy:   s.DerivedBy,
 	}
 }
 

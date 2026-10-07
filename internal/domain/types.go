@@ -500,6 +500,11 @@ type Association struct {
 	// activation weights each edge by it so well-worn associations prime more strongly.
 	// A zero value reads as the base 1.0 (unset), so pre-strength edges are neutral.
 	Strength float64
+	// DerivedBy names the rule set that inferred the edge (relate.ModelVersion,
+	// relate.CausalLLMVersion), so edges an older rule set produced can be
+	// found and re-derived when the rules change. Empty for edges a caller
+	// supplied explicitly and for edges written before the column existed.
+	DerivedBy string
 }
 
 // EffectiveStrength returns the edge's Hebbian strength, treating the zero value as

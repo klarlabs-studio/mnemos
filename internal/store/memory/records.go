@@ -349,6 +349,7 @@ type storedRelationship struct {
 	CreatedAt   time.Time
 	CreatedBy   string
 	Strength    float64 // Hebbian co-activation weight (ADR 0015 §4); 0 reads as base 1.0
+	DerivedBy   string  // rule set that inferred the edge (relate.ModelVersion); "" when explicit or legacy
 }
 
 type embeddingKey struct {

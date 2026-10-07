@@ -69,15 +69,15 @@ func (r RelationshipRepository) PageRelationships(ctx context.Context, relType, 
 	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM relationships WHERE (? = '' OR type = ?)`, relType, relType).Scan(&out.Total); err != nil {
 		return out, fmt.Errorf("count associations: %w", err)
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+	rows, err := r.db.QueryContext(ctx, `SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by
 		FROM relationships WHERE (? = '' OR type = ?) AND id > ? ORDER BY id LIMIT ?`, relType, relType, afterID, limit+1)
 	if err != nil {
 		return out, fmt.Errorf("page associations: %w", err)
 	}
 	defer closeRows(rows)
 	for rows.Next() {
-		var id, typ, from, to, createdStr, createdBy string
-		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy); err != nil {
+		var id, typ, from, to, createdStr, createdBy, derivedBy string
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &derivedBy); err != nil {
 			return out, err
 		}
 		t, err := time.Parse(time.RFC3339Nano, createdStr)
@@ -85,7 +85,7 @@ func (r RelationshipRepository) PageRelationships(ctx context.Context, relType, 
 			return out, fmt.Errorf("parse relationship created_at: %w", err)
 		}
 		out.Items = append(out.Items, domain.Relationship{ID: id, Type: domain.RelationshipType(typ),
-			FromClaimID: from, ToClaimID: to, CreatedAt: t, CreatedBy: createdBy})
+			FromClaimID: from, ToClaimID: to, CreatedAt: t, CreatedBy: createdBy, DerivedBy: derivedBy})
 	}
 	if err := rows.Err(); err != nil {
 		return out, err

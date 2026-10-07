@@ -44,6 +44,7 @@ func (r RelationshipRepository) Upsert(ctx context.Context, relationships []doma
 			ToClaimID:   rel.ToClaimID,
 			CreatedAt:   rel.CreatedAt.UTC().Format(time.RFC3339Nano),
 			CreatedBy:   actorOr(rel.CreatedBy),
+			DerivedBy:   rel.DerivedBy,
 		})
 		if err != nil {
 			return fmt.Errorf("upsert relationship %s: %w", rel.ID, err)
@@ -80,6 +81,7 @@ func (r RelationshipRepository) ListByClaim(ctx context.Context, claimID string)
 			ToClaimID:   row.ToClaimID,
 			CreatedAt:   t,
 			CreatedBy:   row.CreatedBy,
+			DerivedBy:   row.DerivedBy,
 		})
 	}
 
@@ -176,7 +178,7 @@ func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 // ascending.
 func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+		`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by
 		 FROM relationships
 		 ORDER BY created_at ASC`)
 	if err != nil {
@@ -187,9 +189,9 @@ func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relations
 	out := make([]domain.Relationship, 0)
 	for rows.Next() {
 		var (
-			id, typ, from, to, createdStr, createdBy string
+			id, typ, from, to, createdStr, createdBy, derivedBy string
 		)
-		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy); err != nil {
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &derivedBy); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, createdStr)
@@ -203,6 +205,7 @@ func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relations
 			ToClaimID:   to,
 			CreatedAt:   t,
 			CreatedBy:   createdBy,
+			DerivedBy:   derivedBy,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -215,7 +218,7 @@ func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relations
 // idx_relationships_unique_edge serves the filter.
 func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+		`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by
 		 FROM relationships
 		 WHERE type = ?
 		 ORDER BY created_at ASC`, string(relType))
@@ -227,9 +230,9 @@ func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.R
 	out := make([]domain.Relationship, 0)
 	for rows.Next() {
 		var (
-			id, typ, from, to, createdStr, createdBy string
+			id, typ, from, to, createdStr, createdBy, derivedBy string
 		)
-		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy); err != nil {
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &derivedBy); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, createdStr)
@@ -243,6 +246,7 @@ func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.R
 			ToClaimID:   to,
 			CreatedAt:   t,
 			CreatedBy:   createdBy,
+			DerivedBy:   derivedBy,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -271,7 +275,7 @@ func (r RelationshipRepository) listByClaimIDsChunk(ctx context.Context, claimID
 	in := strings.Join(placeholders, ",")
 
 	//nolint:gosec // G201: placeholders are literal "?", IDs flow through ? bindings
-	q := "SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength FROM relationships WHERE from_claim_id IN (" + in + ") OR to_claim_id IN (" + in + ")"
+	q := "SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by FROM relationships WHERE from_claim_id IN (" + in + ") OR to_claim_id IN (" + in + ")"
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim ids: %w", err)
@@ -281,10 +285,10 @@ func (r RelationshipRepository) listByClaimIDsChunk(ctx context.Context, claimID
 	out := make([]domain.Relationship, 0)
 	for rows.Next() {
 		var (
-			id, typ, from, to, createdStr, createdBy string
-			strength                                 float64
+			id, typ, from, to, createdStr, createdBy, derivedBy string
+			strength                                            float64
 		)
-		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &strength); err != nil {
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &strength, &derivedBy); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, createdStr)
@@ -299,6 +303,7 @@ func (r RelationshipRepository) listByClaimIDsChunk(ctx context.Context, claimID
 			CreatedAt:   t,
 			CreatedBy:   createdBy,
 			Strength:    strength,
+			DerivedBy:   derivedBy,
 		})
 	}
 	if err := rows.Err(); err != nil {

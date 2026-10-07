@@ -225,3 +225,43 @@ func TestSupportsPruner_MatchesTheBudgetedWritePath(t *testing.T) {
 		}
 	}
 }
+
+// Every edge the rule-based detectors infer, through any path (pairwise,
+// incremental, citation, test conflict), records the rule set that made it.
+func TestEveryInferredEdgeIsStampedWithTheModelVersion(t *testing.T) {
+	opts := corpusOptions{Size: 300, VocabSize: 80, Zipf: 1.0, Seed: 71, MinTokens: 4, MaxTokens: 12,
+		ShortShare: 0.1, NumShare: 0.2, NegShare: 0.15, AspectShar: 0.2, ProperShar: 0.1}
+	existing := generateCorpus(opts)
+	existing = append(existing,
+		domain.Claim{ID: "cl_t1", Text: "suite", Type: domain.ClaimTypeTestResult, TestRequirementRef: "R1", TestPassCount: 2},
+	)
+	batch := opts
+	batch.Size, batch.Seed = 10, 7171
+	newClaims := generateCorpus(batch)
+	for i := range newClaims {
+		newClaims[i].ID = fmt.Sprintf("cl_new_%d", i)
+	}
+	newClaims[0].Text += " see cl_t1"
+	newClaims = append(newClaims, domain.Claim{ID: "cl_t2", Text: "suite", Type: domain.ClaimTypeTestResult, TestRequirementRef: "R1", TestFailCount: 3})
+
+	pairwise, err := equivalenceEngine().Detect(append(slices.Clone(existing[:50]), newClaims...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	incremental, err := equivalenceEngine().DetectIncremental(newClaims, existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[domain.RelationshipType]bool{}
+	for _, r := range append(pairwise, incremental...) {
+		kinds[r.Type] = true
+		if r.DerivedBy != ModelVersion {
+			t.Fatalf("%s edge %s->%s has DerivedBy %q, want %q", r.Type, r.FromClaimID, r.ToClaimID, r.DerivedBy, ModelVersion)
+		}
+	}
+	for _, k := range []domain.RelationshipType{domain.RelationshipTypeSupports, domain.RelationshipTypeContradicts, domain.RelationshipTypeCites} {
+		if !kinds[k] {
+			t.Errorf("no %s edge produced; the stamp on that path went untested", k)
+		}
+	}
+}

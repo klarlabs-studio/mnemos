@@ -69,7 +69,7 @@ func (r RelationshipRepository) PageRelationships(ctx context.Context, relType, 
 	if err := r.db.QueryRowContext(ctx, fmt.Sprintf(`SELECT count(*) FROM %s WHERE ($1 = '' OR type = $1)`, rels), relType).Scan(&out.Total); err != nil {
 		return out, fmt.Errorf("count associations: %w", err)
 	}
-	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by
 		FROM %s WHERE ($1 = '' OR type = $1) AND id > $2 ORDER BY id LIMIT $3`, rels), relType, afterID, limit+1)
 	if err != nil {
 		return out, fmt.Errorf("page associations: %w", err)
@@ -78,7 +78,7 @@ func (r RelationshipRepository) PageRelationships(ctx context.Context, relType, 
 	for rows.Next() {
 		var rel domain.Relationship
 		var typ string
-		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy, &rel.Strength); err != nil {
+		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy, &rel.Strength, &rel.DerivedBy); err != nil {
 			return out, err
 		}
 		rel.Type = domain.RelationshipType(typ)

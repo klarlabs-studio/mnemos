@@ -94,6 +94,7 @@ func (e Engine) DetectCausalLLM(ctx context.Context, claims []domain.Claim, clie
 			return nil, err
 		}
 		out = append(out, domain.Relationship{
+			DerivedBy:   CausalLLMVersion,
 			ID:          id,
 			Type:        domain.RelationshipTypeCauses,
 			FromClaimID: claims[c.i].ID,

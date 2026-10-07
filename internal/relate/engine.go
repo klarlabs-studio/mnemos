@@ -10,6 +10,19 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
+// ModelVersion is stamped on every relationship the rule-based detectors
+// infer (Association.DerivedBy). Bump it when what the rules produce changes,
+// so edges an older version wrote can be found and re-derived:
+//
+//	relate/v1  unbounded supports edges (before #417; such rows predate the
+//	           column and carry "")
+//	relate/v2  per-claim supports budget (ADR 0027)
+//	relate/v3  candidate computation budget (ADR 0028)
+const ModelVersion = "relate/v3"
+
+// CausalLLMVersion is stamped on causal edges the LLM detector infers.
+const CausalLLMVersion = "relate-llm-causal/v1"
+
 // Engine detects relationships between claims using token-overlap heuristics.
 type Engine struct {
 	now    func() time.Time
@@ -218,6 +231,7 @@ func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 			return nil, err
 		}
 		rels = append(rels, domain.Relationship{
+			DerivedBy:   ModelVersion,
 			ID:          id,
 			Type:        c.relType,
 			FromClaimID: claims[c.from].ID,
@@ -283,6 +297,7 @@ func (e Engine) appendCitationRelationships(rels []domain.Relationship, fromClai
 				return nil, err
 			}
 			rels = append(rels, domain.Relationship{
+				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        domain.RelationshipTypeCites,
 				FromClaimID: c.ID,
@@ -367,6 +382,7 @@ func (e Engine) DetectTestConflicts(claims []domain.Claim) ([]domain.Relationshi
 				return nil, err
 			}
 			rels = append(rels, domain.Relationship{
+				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        relType,
 				FromClaimID: a.ID,
@@ -453,6 +469,7 @@ func (e Engine) DetectCausal(claims []domain.Claim) ([]domain.Relationship, erro
 				return nil, err
 			}
 			rels = append(rels, domain.Relationship{
+				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        domain.RelationshipTypeCauses,
 				FromClaimID: claims[i].ID,
