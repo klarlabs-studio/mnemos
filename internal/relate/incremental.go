@@ -318,18 +318,21 @@ var traceIncrementalOn bool
 // is truthy. Off by default and free when off; it exists so an operator can see
 // which path the detector took on a real brain without redeploying instrumented
 // callers.
+// initTrace reads MNEMOS_RELATE_TRACE once for every trace line.
+func initTrace() {
+	v := os.Getenv("MNEMOS_RELATE_TRACE")
+	if v == "" {
+		return
+	}
+	if b, err := strconv.ParseBool(v); err == nil {
+		traceIncrementalOn = b
+		return
+	}
+	traceIncrementalOn = v == "yes" || v == "on"
+}
+
 func traceIncremental(s IncrementalStats) {
-	traceIncrementalOnce.Do(func() {
-		v := os.Getenv("MNEMOS_RELATE_TRACE")
-		if v == "" {
-			return
-		}
-		if b, err := strconv.ParseBool(v); err == nil {
-			traceIncrementalOn = b
-			return
-		}
-		traceIncrementalOn = v == "yes" || v == "on"
-	})
+	traceIncrementalOnce.Do(initTrace)
 	if !traceIncrementalOn {
 		return
 	}

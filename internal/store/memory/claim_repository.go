@@ -670,19 +670,13 @@ func latestEvidenceTimestamp(s *state, claimID string) time.Time {
 // query's own definition to every claim. The memory store holds the corpus in
 // process anyway, so it needs no index; it implements the port so the write
 // path takes the same route on every backend under test.
-func (r ClaimRepository) RelateCandidates(ctx context.Context, q relate.CandidateQuery) ([]domain.Claim, error) {
+func (r ClaimRepository) RelateCandidates(ctx context.Context, q relate.CandidateQuery) (ports.RelateCandidateSet, error) {
 	all, err := r.ListAll(ctx)
 	if err != nil {
-		return nil, err
+		return ports.RelateCandidateSet{}, err
 	}
-	out := all[:0]
-	for _, c := range all {
-		if q.Matches(c) {
-			out = append(out, c)
-		}
-	}
-	relate.SortCandidates(out)
-	return out, nil
+	claims, skipped := q.SelectCandidates(all)
+	return ports.RelateCandidateSet{Claims: claims, SkippedTokens: skipped}, nil
 }
 
 func isLive(c domain.Claim) bool {

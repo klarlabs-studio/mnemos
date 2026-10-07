@@ -23,7 +23,8 @@ func ExistingForRelate(ctx context.Context, conn *store.Conn, newClaims []domain
 	if src, ok := conn.Claims.(ports.RelateCandidateSource); ok {
 		got, err := src.RelateCandidates(ctx, relate.CandidateQueryFor(newClaims))
 		if !errors.Is(err, ports.ErrRelateCandidatesNotReady) {
-			return got, err
+			relate.TraceCandidateBudget(len(newClaims), len(got.Claims), got.SkippedTokens)
+			return got.Claims, err
 		}
 		// Index still being built: the full corpus is slower, never wrong.
 	}

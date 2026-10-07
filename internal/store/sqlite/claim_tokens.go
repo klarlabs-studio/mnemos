@@ -142,15 +142,15 @@ func writeClaimTokens(ctx context.Context, tx *sql.Tx, claims []domain.Claim, ex
 	return nil
 }
 
-// RelateCandidates implements ports.RelateCandidateSource: every claim
-// q.Matches accepts, in relate.SortCandidates order.
-func (r ClaimRepository) RelateCandidates(ctx context.Context, q relate.CandidateQuery) ([]domain.Claim, error) {
+// RelateCandidates implements ports.RelateCandidateSource: the claims
+// q.SelectCandidates accepts, in relate.SortCandidates order.
+func (r ClaimRepository) RelateCandidates(ctx context.Context, q relate.CandidateQuery) (ports.RelateCandidateSet, error) {
 	var ready string
 	if err := r.db.QueryRowContext(ctx, `SELECT tokenizer_version FROM relate_token_state WHERE id = 1`).Scan(&ready); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("relate token state: %w", err)
+		return ports.RelateCandidateSet{}, fmt.Errorf("relate token state: %w", err)
 	}
 	if ready != relate.TokenizerVersion {
-		return nil, ports.ErrRelateCandidatesNotReady
+		return ports.RelateCandidateSet{}, ports.ErrRelateCandidatesNotReady
 	}
 	var ids []string
 	seen := map[string]bool{}
@@ -172,27 +172,47 @@ func (r ClaimRepository) RelateCandidates(ctx context.Context, q relate.Candidat
 		}
 		return rows.Err()
 	}
-	for start := 0; start < len(q.Tokens); start += 500 {
-		chunk := q.Tokens[start:min(start+500, len(q.Tokens))]
+	// Document frequencies, so the budget can plan rarest-first, then the
+	// postings of only the tokens the plan takes. A skipped common token's
+	// posting list (half the brain, on a large one) is never read.
+	//
+	// A frequency only matters up to the budget: a token carried by more
+	// claims can never fit, so its exact count changes neither the tokens taken
+	// nor the skipped count. Counting stops at budget+1, which keeps a common
+	// token's count from walking its whole posting list (~500k entries at 1M
+	// beliefs) on every write. Unlimited needs no frequencies at all.
+	df := map[string]int{}
+	if bound := q.BudgetBound(); bound > 0 {
+		for _, tok := range q.Tokens {
+			var n int
+			if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM (SELECT 1 FROM claim_tokens WHERE token = ? LIMIT ?)`, tok, bound).Scan(&n); err != nil {
+				return ports.RelateCandidateSet{}, fmt.Errorf("relate token frequency: %w", err)
+			}
+			df[tok] = n
+		}
+	}
+	take, skipped := q.PlanTokens(df)
+	for start := 0; start < len(take); start += 500 {
+		chunk := take[start:min(start+500, len(take))]
 		if err := collect(`SELECT DISTINCT claim_id FROM claim_tokens WHERE token IN (`+placeholders(len(chunk))+`)`, anyArgs(chunk)...); err != nil {
-			return nil, fmt.Errorf("relate candidates by token: %w", err)
+			return ports.RelateCandidateSet{}, fmt.Errorf("relate candidates by token: %w", err)
 		}
 	}
 	for start := 0; start < len(q.CitedIDs); start += 500 {
 		chunk := q.CitedIDs[start:min(start+500, len(q.CitedIDs))]
 		if err := collect(`SELECT id FROM claims WHERE id IN (`+placeholders(len(chunk))+`)`, anyArgs(chunk)...); err != nil {
-			return nil, fmt.Errorf("relate candidates by citation: %w", err)
+			return ports.RelateCandidateSet{}, fmt.Errorf("relate candidates by citation: %w", err)
 		}
 	}
 	if err := collect(`SELECT id FROM claims WHERE type = ? AND test_requirement_ref <> ''`, string(domain.ClaimTypeTestResult)); err != nil {
-		return nil, fmt.Errorf("relate candidates by test requirement: %w", err)
+		return ports.RelateCandidateSet{}, fmt.Errorf("relate candidates by test requirement: %w", err)
 	}
 	claims, err := r.ListByIDs(ctx, ids)
 	if err != nil {
-		return nil, err
+		return ports.RelateCandidateSet{}, err
 	}
 	relate.SortCandidates(claims)
-	return claims, nil
+	return ports.RelateCandidateSet{Claims: claims, SkippedTokens: skipped}, nil
 }
 
 func placeholders(n int) string {

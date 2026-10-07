@@ -24,21 +24,16 @@ func candidateIDs(cs []domain.Claim) []string {
 	return out
 }
 
-// oracle applies the candidate definition to every stored claim.
-func oracle(t *testing.T, conn *store.Conn, q relate.CandidateQuery) []string {
+// oracle applies the candidate definition, budget included, to every stored
+// claim, and reports the tokens it skipped.
+func oracle(t *testing.T, conn *store.Conn, q relate.CandidateQuery) ([]string, int) {
 	t.Helper()
 	all, err := conn.Claims.ListAll(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	relate.SortCandidates(all)
-	var ids []string
-	for _, c := range all {
-		if q.Matches(c) {
-			ids = append(ids, c.ID)
-		}
-	}
-	return ids
+	claims, skipped := q.SelectCandidates(all)
+	return candidateIDs(claims), skipped
 }
 
 // A backend's RelateCandidates returns exactly the claims the definition
@@ -80,8 +75,9 @@ func TestRelateCandidates_MatchTheDefinitionAcrossBackends(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s %s: %v", b.name, label, err)
 			}
-			if want := oracle(t, b.conn, q); !slices.Equal(candidateIDs(got), want) {
-				t.Errorf("%s %s: candidates %v, want %v", b.name, label, candidateIDs(got), want)
+			want, wantSkipped := oracle(t, b.conn, q)
+			if !slices.Equal(candidateIDs(got.Claims), want) || got.SkippedTokens != wantSkipped {
+				t.Errorf("%s %s: candidates %v (skipped %d), want %v (skipped %d)", b.name, label, candidateIDs(got.Claims), got.SkippedTokens, want, wantSkipped)
 			}
 		}
 		check("shared tokens", "Webhook retries for the payments service")
@@ -147,8 +143,8 @@ func TestRelateCandidates_SQLiteRebuildsOnTokenizerChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(candidateIDs(got), []string{"cl_a"}) {
-		t.Fatalf("after reopen: candidates %v, want [cl_a] (tokens not rebuilt)", candidateIDs(got))
+	if !slices.Equal(candidateIDs(got.Claims), []string{"cl_a"}) {
+		t.Fatalf("after reopen: candidates %v, want [cl_a] (tokens not rebuilt)", candidateIDs(got.Claims))
 	}
 	raw, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -207,8 +203,8 @@ func TestRelateCandidates_SQLiteResumesAnInterruptedBuild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("after resume: %v", err)
 	}
-	if len(got) != 30 {
-		t.Fatalf("after resume: %d candidates, want all 30 (claims after the cursor were not indexed)", len(got))
+	if len(got.Claims) != 30 {
+		t.Fatalf("after resume: %d candidates, want all 30 (claims after the cursor were not indexed)", len(got.Claims))
 	}
 	var n int
 	if err := raw.QueryRowContext(ctx, `SELECT count(DISTINCT claim_id) FROM claim_tokens`).Scan(&n); err != nil || n != 30 {
@@ -239,5 +235,46 @@ func TestRelateCandidates_SQLiteRefusesWhileAnotherProcessBuilds(t *testing.T) {
 	_, err = conn.Claims.(ports.RelateCandidateSource).RelateCandidates(ctx, relate.CandidateQueryFor([]domain.Claim{{Text: "anything"}}))
 	if !errors.Is(err, ports.ErrRelateCandidatesNotReady) {
 		t.Fatalf("RelateCandidates during another build = %v, want ErrRelateCandidatesNotReady", err)
+	}
+}
+
+// Where the budget binds, every backend's candidates and skipped-token count
+// equal the reference selection: same document frequencies, same plan.
+func TestRelateCandidates_BudgetMatchesTheReferenceAcrossBackends(t *testing.T) {
+	ctx := context.Background()
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, b := range openBackends(t) {
+		src, ok := b.conn.Claims.(ports.RelateCandidateSource)
+		if !ok {
+			continue
+		}
+		var claims []domain.Claim
+		for i := 0; i < 60; i++ {
+			text := "kafka broker"
+			switch {
+			case i%6 == 0:
+				text = "zookeeper quorum kafka"
+			case i%15 == 1:
+				text = "isr shrink"
+			}
+			claims = append(claims, domain.Claim{ID: fmt.Sprintf("bc%02d", i), Text: text, Type: domain.ClaimTypeFact,
+				Confidence: 0.5, Status: domain.ClaimStatusActive, CreatedAt: at})
+		}
+		if err := b.conn.Claims.Upsert(ctx, claims); err != nil {
+			t.Fatalf("%s: %v", b.name, err)
+		}
+		for _, budget := range []int{1, 4, 10, 14, -1} {
+			q := relate.CandidateQueryFor([]domain.Claim{{ID: "new", Text: "kafka zookeeper isr"}})
+			q.Budget = budget
+			got, err := src.RelateCandidates(ctx, q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, wantSkipped := oracle(t, b.conn, q)
+			if !slices.Equal(candidateIDs(got.Claims), want) || got.SkippedTokens != wantSkipped {
+				t.Errorf("%s budget %d: %d candidates, skipped %d; want %d, skipped %d", b.name, budget,
+					len(got.Claims), got.SkippedTokens, len(want), wantSkipped)
+			}
+		}
 	}
 }
