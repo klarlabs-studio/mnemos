@@ -47,7 +47,7 @@ func tokenizerReady(t *testing.T, db *sql.DB) bool {
 func TestClaimTokenBuild_WaitsForAConcurrentWriter(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "brain.db")
 	seedUnindexed(t, path, 50)
-	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", dsnFor(path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestClaimTokenBuild_WaitsForAConcurrentWriter(t *testing.T) {
 	}
 
 	// The other process: holds the write lock, then commits a new claim.
-	other, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	other, err := sql.Open("sqlite", dsnFor(path))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestOpen_SurvivesAnUnfinishableTokenBuild(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "brain.db")
 	seedUnindexed(t, path, 50)
 
-	holder, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)")
+	holder, err := sql.Open("sqlite", dsnFor(path))
 	if err != nil {
 		t.Fatal(err)
 	}

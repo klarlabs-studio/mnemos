@@ -36,8 +36,7 @@ func open(path string) (*sql.DB, error) {
 	//   busy_timeout=5000: wait up to 5s for the writer lock before
 	//     returning SQLITE_BUSY. Friendlier than immediate failure
 	//     for short bursts of contention.
-	dsn := path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", dsnFor(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -48,6 +47,13 @@ func open(path string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// dsnFor is the driver DSN for the database at path, carrying the PRAGMAs
+// described in open. Tests that open a second connection to the same file use
+// it too, so they contend for locks exactly as a second process would.
+func dsnFor(path string) string {
+	return path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 }
 
 // Bootstrap applies the SQLite schema and runs migrations against
