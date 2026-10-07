@@ -261,7 +261,15 @@ type RelationshipRepository interface {
 // corpus on every write, and the result is identical (relate's
 // TestCandidateQuery_IsExact). Without it, callers fall back to ListAll.
 type RelateCandidateSource interface {
-	RelateCandidates(ctx context.Context, q relate.CandidateQuery) ([]domain.Claim, error)
+	RelateCandidates(ctx context.Context, q relate.CandidateQuery) (RelateCandidateSet, error)
+}
+
+// RelateCandidateSet is a RelateCandidateSource answer: the candidates, and
+// how many tokens the query's candidate budget skipped (0 when it did not
+// bind; see relate.DefaultCandidateBudget).
+type RelateCandidateSet struct {
+	Claims        []domain.Claim
+	SkippedTokens int
 }
 
 // ErrRelateCandidatesNotReady is returned by RelateCandidates while the
