@@ -17,7 +17,7 @@ PROTO_GEN := proto/gen
 # never used. The same version is recorded as a `tool` dependency in go.mod.
 SQLC_VERSION := v1.30.0
 
-.PHONY: security-gate nox-scan fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query brain-eval brain-eval-strict
+.PHONY: security-gate nox-scan scale-gate fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query brain-eval brain-eval-strict
 
 fmt:
 	$(GO) fmt ./...
@@ -90,6 +90,11 @@ check: fmt lint test build cross
 # when none was installed.) See SECURITY.md.
 security-gate:
 	scripts/nox-gate.sh
+
+# scale-gate runs scalebench at 100k beliefs over three corpus shapes against
+# the ceilings in bench/scale-gate.json (~10 min). A release check, not pre-push.
+scale-gate:
+	scripts/scale-gate.sh
 
 nox-scan: security-gate
 
