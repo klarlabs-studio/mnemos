@@ -6,18 +6,24 @@
 #
 # Usage: make test-integration
 #
-# Containers use uncommon ports (55432 / 53306) to avoid colliding
-# with developer-local servers. They are auto-removed on stop
-# (--rm) and on script exit.
+# Docker assigns each container a free host port, read back with
+# `docker port`. Fixed ports (55432 / 53306) collided with any other local
+# project using the same ones, and the gate failed on "port is already
+# allocated" for reasons unrelated to the change under test. Set
+# MNEMOS_ITEST_PG_PORT / MNEMOS_ITEST_MY_PORT to pin them. Containers are
+# auto-removed on stop (--rm) and on script exit.
 
 set -euo pipefail
 
 PG_NAME="mnemos-pg-itest"
 MY_NAME="mnemos-my-itest"
-PG_PORT=55432
-MY_PORT=53306
-PG_DSN="postgres://mnemos:mnemos@127.0.0.1:${PG_PORT}/mnemos?sslmode=disable"
-MY_DSN="mysql://root:mnemos@127.0.0.1:${MY_PORT}/"
+PG_PORT="${MNEMOS_ITEST_PG_PORT:-}"
+MY_PORT="${MNEMOS_ITEST_MY_PORT:-}"
+
+# host_port NAME CONTAINER_PORT prints the host port docker bound to it.
+host_port() {
+  docker port "$1" "$2/tcp" | head -1 | sed 's/.*://'
+}
 
 cleanup() {
   docker stop "${PG_NAME}" >/dev/null 2>&1 || true
@@ -25,17 +31,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "starting postgres on :${PG_PORT}…"
 docker run -d --rm --name "${PG_NAME}" \
   -e POSTGRES_USER=mnemos -e POSTGRES_PASSWORD=mnemos -e POSTGRES_DB=mnemos \
   -p "127.0.0.1:${PG_PORT}:5432" \
   postgres:16-alpine >/dev/null
+PG_PORT="$(host_port "${PG_NAME}" 5432)"
+echo "started postgres on :${PG_PORT}"
 
-echo "starting mysql on :${MY_PORT}…"
 docker run -d --rm --name "${MY_NAME}" \
   -e MYSQL_ROOT_PASSWORD=mnemos -e MYSQL_DATABASE=mnemos \
   -p "127.0.0.1:${MY_PORT}:3306" \
   mysql:8 >/dev/null
+MY_PORT="$(host_port "${MY_NAME}" 3306)"
+echo "started mysql on :${MY_PORT}"
+
+PG_DSN="postgres://mnemos:mnemos@127.0.0.1:${PG_PORT}/mnemos?sslmode=disable"
+MY_DSN="mysql://root:mnemos@127.0.0.1:${MY_PORT}/"
 
 echo "waiting for postgres…"
 for i in $(seq 1 60); do
