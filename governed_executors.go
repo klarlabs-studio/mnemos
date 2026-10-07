@@ -36,6 +36,9 @@ type rememberOutput struct {
 	Events        int
 	Claims        int
 	Relationships int
+	// RelateSkipped is why the new claims were stored without edges to the
+	// existing corpus; empty when they were related (#428).
+	RelateSkipped string
 }
 
 type rememberExecutor struct{ m *memory }
@@ -83,12 +86,10 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("relate: %w", err)
 	}
-	existing, lerr := pipeline.ExistingForRelate(ctx, m.conn, claims)
-	if lerr == nil && len(existing) > 0 {
-		if incremental, irelErr := m.relator.DetectIncremental(claims, existing); irelErr == nil {
-			rels = append(rels, incremental...)
-		}
-	}
+	// Best-effort: a capture is kept without its edges rather than lost, but
+	// the skip is logged, counted and recorded in the evidence (#428).
+	incremental, skipErr := pipeline.RelateToExisting(ctx, m.conn, m.relator, claims, "remember")
+	rels = append(rels, incremental...)
 	for i := range rels {
 		rels[i].CreatedBy = m.actorID
 	}
@@ -114,13 +115,18 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 	}
 
 	out := rememberOutput{Events: len(events), Claims: len(claims), Relationships: len(rels)}
+	value := map[string]any{
+		"events":        out.Events,
+		"claims":        out.Claims,
+		"relationships": out.Relationships,
+		"run_id":        item.RunID,
+	}
+	if skipErr != nil {
+		out.RelateSkipped = skipErr.Error()
+		value["relate_skipped"] = out.RelateSkipped
+	}
 	records := []axidomain.EvidenceRecord{
-		{Kind: "mnemos.remember", Source: evidenceSourceLibrary, Value: map[string]any{
-			"events":        out.Events,
-			"claims":        out.Claims,
-			"relationships": out.Relationships,
-			"run_id":        item.RunID,
-		}},
+		{Kind: "mnemos.remember", Source: evidenceSourceLibrary, Value: value},
 	}
 	records = append(records, llmEvidence(usage)...)
 
@@ -227,10 +233,11 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		claim.ConfidenceComponents[domain.SalienceComponentKey] = s
 	}
 
-	// Snapshot the existing corpus BEFORE upserting so edge detection compares the
-	// new claim against prior claims only (not itself). Best-effort: a read miss
-	// just means no edges this write.
-	existing, existingErr := pipeline.ExistingForRelate(ctx, m.conn, []domain.Claim{claim})
+	// Relate against the corpus BEFORE upserting, so the new claim is compared
+	// with prior claims only, never itself. Best-effort: the write is kept
+	// without its edges when this fails, and the skip is logged, counted and
+	// recorded in the evidence (#428).
+	rels, skipErr := pipeline.RelateToExisting(ctx, m.conn, m.relator, []domain.Claim{claim}, "remember_claim")
 
 	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{claim}); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert claim: %w", err)
@@ -249,29 +256,33 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 	// supports/contradicts edges populate on the claim-write path too — not only
 	// the full Remember pipeline. This is what lets a contradiction of established
 	// knowledge become a hypercorrection signal (see Memory.Hypercorrections).
-	// Strictly best-effort: a detection or persistence miss never fails the write,
-	// which is already durable. Mirrors rememberExecutor's incremental relate.
+	// Best-effort: a detection or persistence miss never fails the write, which
+	// is already durable, but it is never silent either (#428).
 	relCount := 0
-	if existingErr == nil && len(existing) > 0 {
-		if rels, derr := m.relator.DetectIncremental([]domain.Claim{claim}, existing); derr == nil && len(rels) > 0 {
-			for i := range rels {
-				rels[i].CreatedBy = m.actorID
-			}
-			if uerr := m.conn.Relationships.Upsert(ctx, rels); uerr == nil {
-				relCount = len(rels)
-			}
+	if len(rels) > 0 {
+		for i := range rels {
+			rels[i].CreatedBy = m.actorID
+		}
+		if uerr := m.conn.Relationships.Upsert(ctx, rels); uerr != nil {
+			skipErr = pipeline.SkipRelate(ctx, "remember_claim", 1, fmt.Errorf("persist relationships: %w", uerr))
+		} else {
+			relCount = len(rels)
 		}
 	}
 
+	value := map[string]any{
+		"claim_id":       id,
+		"type":           string(claimType),
+		"confidence":     confidence,
+		"evidence_links": linkCount,
+		"relationships":  relCount,
+		"run_id":         item.RunID,
+	}
+	if skipErr != nil {
+		value["relate_skipped"] = skipErr.Error()
+	}
 	records := []axidomain.EvidenceRecord{
-		{Kind: "mnemos.remember_claim", Source: evidenceSourceLibrary, Value: map[string]any{
-			"claim_id":       id,
-			"type":           string(claimType),
-			"confidence":     confidence,
-			"evidence_links": linkCount,
-			"relationships":  relCount,
-			"run_id":         item.RunID,
-		}},
+		{Kind: "mnemos.remember_claim", Source: evidenceSourceLibrary, Value: value},
 	}
 	return axidomain.ExecutionResult{
 		Data:    rememberClaimOutput{ClaimID: id},
