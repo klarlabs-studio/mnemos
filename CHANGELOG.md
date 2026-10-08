@@ -23,9 +23,11 @@ changes stored trust, how associations grow and how health is computed, so read
    takes under a minute on a 235k-belief brain and runs once. It is resumable and
    waits for other writers, such as capture hooks. Until it finishes, writes
    relate against the full corpus, as before.
-3. **Backfill trust to the new model:** `mnemos recompute-trust` (about a minute
-   at 235k beliefs). Until then, stored values are the old model's. See
-   *Changed* for what moves.
+3. **Backfill trust to the new model:** `mnemos recompute-trust --stale
+   --dry-run` shows how many beliefs an older model scored. `mnemos
+   recompute-trust --stale` rescores them in verified batches of 500 and
+   resumes if interrupted: 15 s at 235k beliefs. Until then, stored values are
+   the old model's. See *Changed* for what moves.
 4. **Optional, recommended on large brains:** `mnemos relate --prune-supports`
    reports supports edges beyond the new per-belief budget, and `--apply`
    deletes them. On a real 235k-belief brain it took supports edges from 32.4M
@@ -58,7 +60,7 @@ index, so reset the index if you go back to v0.127.1 and then forward again:
     float-back eligibility after the backfill.
 - **Stored trust is a versioned cache.** `trust_model_version` and
   `trust_computed_at` say which model produced each value.
-  `recompute-trust` backfills in bounded, verified batches.
+  `recompute-trust --stale` backfills in bounded, verified batches.
 - **Supports edges are budgeted (ADR 0027).** Each belief keeps at most 20, the
   strongest by token overlap. Supports edges grew with the square of the
   corpus; contradictions are never budgeted.
