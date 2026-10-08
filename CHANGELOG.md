@@ -8,6 +8,147 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.128.0] — 2026-10-08
+
+The consolidation release (#382): one trust value per belief, bounded write and
+health costs on large brains, and a series of fixes for silent failures. It
+changes stored trust, how associations grow and how health is computed, so read
+**Upgrade** before upgrading a brain you rely on.
+
+### Upgrade
+
+1. **Back up the brain first.** On SQLite:
+   `sqlite3 ~/.local/share/mnemos/mnemos.db ".backup mnemos.db.bak"`.
+2. **The first open builds a search index for relate** (`claim_tokens`). It
+   takes under a minute on a 235k-belief brain and runs once. It is resumable and
+   waits for other writers, such as capture hooks. Until it finishes, writes
+   relate against the full corpus, as before.
+3. **Backfill trust to the new model:** `mnemos recompute-trust` (about a minute
+   at 235k beliefs). Until then, stored values are the old model's. See
+   *Changed* for what moves.
+4. **Optional, recommended on large brains:** `mnemos relate --prune-supports`
+   reports supports edges beyond the new per-belief budget, and `--apply`
+   deletes them. On a real 235k-belief brain it took supports edges from 32.4M
+   to 2.7M. With VACUUM, the file shrank from 10.3 GB to 1.6 GB. Run alongside
+   live capture hooks, it took about six hours in total, VACUUM included.
+
+Schema: SQLite moves to v28. v0.127.1 still opens a v28 brain and writes to it
+normally, so a mixed fleet keeps working. It does not maintain the new search
+index, so reset the index if you go back to v0.127.1 and then forward again:
+`DELETE FROM claim_tokens; UPDATE relate_token_state SET tokenizer_version='', building_version='', build_cursor='';`.
+
+### Changed
+
+- **One canonical trust value per belief (ADR 0026).** `trust.At` is the only
+  formula. It feeds recall, health, curiosity, float-back and the stored
+  value. Recall's `trust_score` now reports it; the ranking signal moved to its
+  own credibility field, and `MinTrust` filters on canonical trust.
+  - **Freshness:** decay uses each belief's own time constant, measured from
+    its latest evidence or its last explicit confirmation.
+  - **Confirmation:** recall and replay no longer refresh trust. Only `verify`
+    and a validated outcome confirm a belief (`last_confirmed`).
+  - **Outcome credit:** it is stored and survives recomputes.
+  - **What moves:** on a real 213k-live-belief brain, the formula change
+    lowered 4.9% of live beliefs and raised none. The share below 0.3 went
+    from 0.46% to 5.18%.
+  - **The cache catches up too:** stored trust was computed at write time and
+    never decayed, so any recompute brings every value up to date. On that
+    brain the mean went from 0.627 stored to 0.548, and the share at or above
+    0.7 went from 58% to 6%. Expect more forgetting candidates and different
+    float-back eligibility after the backfill.
+- **Stored trust is a versioned cache.** `trust_model_version` and
+  `trust_computed_at` say which model produced each value.
+  `recompute-trust` backfills in bounded, verified batches.
+- **Supports edges are budgeted (ADR 0027).** Each belief keeps at most 20, the
+  strongest by token overlap. Supports edges grew with the square of the
+  corpus; contradictions are never budgeted.
+- **Relate examines a bounded candidate set (ADR 0028).** Each new belief is
+  compared against at most 5,000 stored beliefs that share a token with it,
+  rarest tokens first. Pairs that share only very common words can now go
+  unrelated on large brains. `MNEMOS_RELATE_TRACE=1` logs when the budget binds.
+- **Health samples above 50k live beliefs.** `low_trust`, `staleness` and
+  `trust_decay` are estimated from a deterministic 20k sample, with their 95%
+  margins in `BrainHealth.Estimates` and `Mode: "sampled"`. Everything else
+  stays exact. `mnemos health --full` and `BrainHealthFull` compute everything
+  exactly.
+- **Dissonance is rated over live beliefs**, not every row ever stored, so
+  retiring beliefs no longer dilutes it. With no data, `dissonance` and
+  `free_energy` report unknown instead of a perfect score.
+- **The context block admits what recall admits.** Session-local narration and
+  beliefs whose valid time has closed no longer appear under "Active claims".
+- **Paging:** `/v1/episodes` and `/v1/associations` change order. Episodes are
+  newest first by (timestamp, id). Associations are by id. See *Added*.
+- **Relationships record the rule set that inferred them (ADR 0029):**
+  `derived_by`, `relate/v3` for rule-based edges. A future rule change can then
+  find and re-derive exactly the edges an older rule set wrote. Edges written
+  before this release read empty.
+
+### Added
+
+- **Cursor pagination** on `/v1/beliefs`, `/v1/episodes`, `/v1/associations`
+  and `/v1/embeddings`. Pass `?cursor=` with the previous `next_cursor`;
+  `offset` still works. The first page of the belief browse on a 1M brain went
+  from 7–11 s to 0.7 s.
+- **`mnemos relate --prune-supports [--top-k N] [--apply]`** applies the
+  supports budget to stored edges.
+- **`mnemos_relate_skipped_total`** on `mnemos serve`. A write that cannot
+  relate its beliefs is still kept, but the skip is now logged, counted and
+  recorded in the write's evidence as `relate_skipped`.
+- **Configuration:**
+  - `MNEMOS_EMBED_BATCH` caps the texts per embedding request during
+    `reembed`.
+  - `MNEMOS_TRUST_PROXY` mirrors `serve --trust-proxy`.
+  - Every setting is now documented in
+    [docs/reference/configuration.md](docs/reference/configuration.md),
+    generated from the code.
+- **A capability registry**: every operation across the library, REST, gRPC,
+  both MCP servers and the Go client is accounted for, and a test fails when a
+  transport drifts.
+
+### Performance
+
+Measured at 1M synthetic beliefs, before → after:
+
+- `Remember`: 18.8 s → 0.3 s (p95 0.5 s).
+- `BrainHealth`: 12.8 s → 2.6 s sampled (10.8 s full).
+- `KnowledgeGaps`: 6.2 s → 2.6 s.
+
+On a real 235k-belief brain, `mnemos health` takes 12–14 s against 47–70 s with
+v0.127.1. `make scale-gate` now holds these to ceilings.
+
+### Fixed
+
+- **Relate was silently skipped on brains above ~50k beliefs** (#427). An
+  over-long SQLite `IN` list failed, and the write path swallowed the error, so
+  new beliefs got no supports or contradiction edges. Every by-ids read is now
+  chunked, and the skip is visible (#428).
+- **A capture hook writing while a brain opened could make it unopenable.** The
+  index build now takes the write lock up front, and a build that cannot
+  finish never fails the open.
+- **Consolidation no longer merges contradicting, scoped or retired beliefs.**
+  Semantic dedupe fused near-duplicates without checking they agreed: a
+  statement with its denial, two scopes, a decision with a fact. It is now
+  complete-linkage with cannot-link constraints.
+- **`delete-event` keeps beliefs that still have other evidence.** It deleted
+  every belief linked to the event, even one backed by four other episodes.
+  Such a belief now loses only that link and is rescored.
+- Post-migrate indexes now reach existing brains, not only new ones.
+- MySQL stores an unstamped trust recompute as NULL.
+- `prune --narration` and `--session-local` no longer point at a
+  `--include-history` flag that could not show what they pruned.
+
+### Security
+
+- Credentials no longer leak through errors and tool output. This covered the
+  MySQL ping error, DSNs echoed by `init` and `configure_environment` into MCP
+  transcripts, `promote`, and provider error bodies that echoed API keys.
+- The web UI's CSP drops `'unsafe-inline'`. Its scripts and styles are served
+  from `/assets/*`.
+- Release and CI workflows verify every tool they download, and are pinned to
+  commit SHAs.
+- nox is on the merge path, and every waiver has an owner, a reason and an
+  expiry.
+
 ## [0.127.1] — 2026-09-13
 
 A password masked on one line of `mnemos doctor` and printed in clear on the
