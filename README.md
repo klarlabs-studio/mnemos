@@ -32,8 +32,9 @@ No SDK to install. Any language with an HTTP client works. Below is Python; subs
 import httpx, os, uuid
 m = "http://localhost:7777"
 run = str(uuid.uuid4())
-# Every /v1/* call needs a bearer token — reads included (see "Authentication").
-h = {"Authorization": f"Bearer {os.environ['MNEMOS_JWT']}"}
+# Every /v1/* call needs a bearer token, reads included (see "Authentication").
+# export MNEMOS_TOKEN=$(mnemos token issue --user <id> | tail -1)
+h = {"Authorization": f"Bearer {os.environ['MNEMOS_TOKEN']}"}
 
 # Remember something
 httpx.post(f"{m}/v1/episodes", headers=h, json={"episodes": [{
@@ -158,7 +159,7 @@ pip install -r requirements.txt
 python agent.py --customer-id CUST-42 --amount 245.00
 
 # Replay the exact decision chain
-curl -s -H "Authorization: Bearer $MNEMOS_JWT" \
+curl -s -H "Authorization: Bearer $MNEMOS_TOKEN" \
   "http://localhost:7777/v1/episodes?run_id=<run-id>" | jq
 ```
 
@@ -211,6 +212,7 @@ The thinking behind Mnemos, in plain language and in depth:
 - [**Meet Mnemos**](https://klarlabs.de/writing/meet-mnemos) — the intro: what it is and how people use it.
 - [**From store to brain**](https://klarlabs.de/writing/from-store-to-brain) — building the cognitive half: consolidation, forgetting, salience, self-correcting recall, with no LLM in the loop.
 - [**Is the brain healthy?**](https://klarlabs.de/writing/is-the-brain-healthy) — how a brain takes its own vitals, and what running one in production taught us about counting the right thing.
+- [**One belief, one trust**](https://klarlabs.de/writing/one-belief-one-trust) — the consolidation release: one trust value per belief, consolidation that can no longer merge a contradiction away, and what a million beliefs cost.
 
 ## Key Features
 
@@ -249,6 +251,7 @@ The thinking behind Mnemos, in plain language and in depth:
 | `mnemos delete-event <id>...` | Delete events and cascade to derived claims |
 | `mnemos reembed [--force] [--dry-run]` | (Re)generate claim embeddings under the current embed config |
 | `mnemos recompute-trust` | Rebuild `trust_score` for every claim (confidence × corroboration × freshness) |
+| `mnemos recompute-trust --stale [--dry-run]` | Rescore only beliefs an older trust model scored, in verified batches (the upgrade path) |
 | `mnemos dedup [--threshold T] [--force]` | Merge near-duplicate claims by embedding cosine similarity (dry-run by default) |
 | `mnemos query --min-trust X "..."` | Only return claims whose `trust_score` ≥ X |
 | `mnemos query --kind causes,validates "..."` | Restrict hop expansion to specific edge kinds (causes, caused_by, supports, contradicts, validates, refutes, action_of, outcome_of, derived_from) |
@@ -464,11 +467,11 @@ Resource accessors (`Events()`, `Claims()`, `Relationships()`, `Embeddings()`) r
 # Append an episode (id, content, source_input_id and timestamp are required)
 curl -X POST http://localhost:7777/v1/episodes \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $MNEMOS_JWT" \
+  -H "Authorization: Bearer $MNEMOS_TOKEN" \
   -d '{"episodes":[{"id":"ev_1","run_id":"run_1","source_input_id":"cli","content":"...","timestamp":"2026-04-19T10:00:00Z"}]}'
 
 # Browse beliefs, filtered — the token is required for reads too
-curl -H "Authorization: Bearer $MNEMOS_JWT" \
+curl -H "Authorization: Bearer $MNEMOS_TOKEN" \
   'http://localhost:7777/v1/beliefs?type=decision&limit=25'
 ```
 
@@ -485,7 +488,7 @@ req = urllib.request.Request(
     }]}).encode(),
     headers={
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {os.environ['MNEMOS_JWT']}",
+        "Authorization": f"Bearer {os.environ['MNEMOS_TOKEN']}",
     },
 )
 urllib.request.urlopen(req)
@@ -593,53 +596,59 @@ See [`mnemos.example.yaml`](mnemos.example.yaml) for every supported key.
 
 ## Environment Variables
 
+Every setting, its YAML key, environment variable and default is listed in
+[docs/reference/configuration.md](docs/reference/configuration.md). That page
+is generated from the code, and a test fails when the two disagree. The ones
+most installs touch:
+
 | Variable | Description |
 |----------|-------------|
-| `MNEMOS_CONFIG` | Explicit path to the YAML config file (see [Configuration](#configuration)). Overridden by `--config`. |
-| `MNEMOS_DB_URL` | Storage DSN dispatched by URL scheme: `sqlite:///var/lib/mnemos/mnemos.db`, `memory://`, `postgres://...`, `mysql://...`, `libsql://...`. When unset, Mnemos walks up from CWD looking for `.mnemos/mnemos.db`, falling back to `~/.local/share/mnemos/mnemos.db`. See [ADR 0001](docs/adr/0001-multi-backend-storage.md). |
-| `MNEMOS_LLM_PROVIDER` | `anthropic`, `openai`, `gemini`, `ollama`, `openai-compat` |
-| `MNEMOS_LLM_API_KEY` | API key (required for cloud providers) |
-| `MNEMOS_LLM_MODEL` | Model override (optional) |
-| `MNEMOS_LLM_BASE_URL` | Custom endpoint. Required for `openai-compat`. **Required for `ollama` when Mnemos is not on the same host as the Ollama daemon** — most commonly when Mnemos runs in a container and Ollama runs on the host (`http://host.docker.internal:11434` on Docker Desktop, `http://172.17.0.1:11434` on Linux). Defaults to `http://localhost:11434` for `ollama`. |
-| `MNEMOS_LLM_TIMEOUT` | Per-request LLM HTTP timeout (default `120s`). Bump for slow local models or large completions: `MNEMOS_LLM_TIMEOUT=5m`. |
-| `MNEMOS_EXTRACT_MODEL` | Override `MNEMOS_LLM_MODEL` just for the extract stage. Lets you pair a strong model for extraction with a smaller model elsewhere. |
-| `MNEMOS_JOB_TIMEOUT` | Overall workflow-job deadline (default `10m`). Raise this if your provider is slow enough that an entire `process` run exceeds 10 minutes. |
-| `MNEMOS_EMBED_PROVIDER` | Embedding provider (falls back to `LLM_PROVIDER`) |
-| `MNEMOS_EMBED_API_KEY` | Embedding API key (falls back to `LLM_API_KEY`) |
-| `MNEMOS_EMBED_MODEL` | Embedding model override (optional) |
-| `MNEMOS_EMBED_BASE_URL` | Embedding endpoint (same container/host caveat as `MNEMOS_LLM_BASE_URL`) |
-| `MNEMOS_EMBED_TIMEOUT` | Per-request embedding HTTP timeout (default `60s`) |
-| `MNEMOS_AUTH_DIR` | Directory for the JWT signing secret (default: project `.mnemos/` or `$HOME/.mnemos/`). Override when running on a read-only rootfs (Docker `read_only: true`, k8s `readOnlyRootFilesystem: true`) by pointing at a writable volume. |
-| `MNEMOS_JWT_SECRET` | Hex-encoded JWT signing secret (≥32 bytes). When set, takes precedence over the file path; useful in CI/Kubernetes where you'd rather inject the secret as an env var than mount a file. |
-| `MNEMOS_LLM_CACHE_MAX_BYTES` | LLM extraction cache cap under `data/cache/llm-extraction/` (default `1 GiB`; `0` disables eviction). Oldest-mtime files are evicted first. |
-| `MNEMOS_DB_MAX_CONNS` | Postgres/MySQL pool `MaxOpenConns` (default `25`). |
-| `MNEMOS_DB_MAX_IDLE_CONNS` | Postgres/MySQL pool `MaxIdleConns` (default `5`). |
-| `MNEMOS_DB_CONN_MAX_LIFETIME` | Postgres/MySQL pool `ConnMaxLifetime` (default `30m`). |
-| `MNEMOS_TELEMETRY_OPTIN` | Truthy (`1`/`true`/`yes`) to opt in to anonymized usage payload. Default off. See [`docs/telemetry.md`](docs/telemetry.md). |
-| `MNEMOS_TELEMETRY_ENDPOINT` | POST destination for `mnemos metrics --workspace --telemetry-send`. Unset = no destination = no requests, even with opt-in active. |
+| `MNEMOS_DB_URL` | Storage DSN, dispatched by scheme: `sqlite:///path/mnemos.db`, `memory://`, `postgres://...`, `mysql://...`, `libsql://...` |
+| `MNEMOS_LLM_PROVIDER` / `MNEMOS_LLM_API_KEY` | `anthropic`, `openai`, `gemini`, `ollama` or `openai-compat`, and its key for cloud providers |
+| `MNEMOS_EMBED_PROVIDER` | Embedding provider; falls back to the LLM provider |
+| `MNEMOS_AUTH_DIR` / `MNEMOS_JWT_SECRET` | Where the JWT signing secret lives, or the secret itself (hex, at least 32 bytes) |
+| `MNEMOS_TOKEN` | Bearer token the CLI sends to a hosted registry; the examples above use it too |
 
-### Trust scoring (v0.7+)
+### Trust scoring
 
-Every claim carries a `trust_score ∈ [0, 1]` derived from three
-signals the LLM cannot fake:
+Every belief has one `trust_score ∈ [0, 1]`, computed by one function,
+`trust.At` ([ADR 0026](docs/adr/0026-canonical-trust.md)). Every subsystem
+uses that value: recall, `--min-trust`, brain health, forgetting and the API.
 
 ```
-trust = confidence × corroboration × freshness
-
-corroboration = 1 + ln(evidence_count) × 0.2     # 1 source: 1.0; 5: 1.32; 20: 1.60
-freshness     = max(0.3, exp(-days_since_latest / 90))   # 90-day half-life, floor 0.3
+trust     = clamp01(base + credit)
+base      = confidence × corroboration × freshness
+corroboration = 1 + ln(n) × 0.2           # n graded by independence: repeats from one source count half
+freshness = max(0.3, exp(-d / τ))         # τ = the belief's own time constant, default 90 days
+d         = days since max(newest evidence, last explicit confirmation)
+credit    = outcome credit (ADR 0014), capped at ±0.30
 ```
 
-The score is recomputed automatically after every `process` run; you
-can rebuild it manually with `mnemos recompute-trust` (e.g., after
-upgrading or tuning the constants in `internal/trust`).
+Three inputs are per belief:
 
-`mnemos query --min-trust 0.5 "..."` filters out low-confidence
-results before ranking. `mnemos metrics` reports `avg_trust` and
-`low_trust_count` for at-a-glance corpus quality. The
-trust-scoring policy lives in `internal/trust/trust.go` — change
-the constants there to retune for your corpus, then run
-`mnemos recompute-trust` to backfill.
+- **Time constant τ.** Volatile beliefs (what is installed, running or
+  deployed) get a short one at ingest, and durable ones keep the 90-day
+  default. `mnemos verify <id> --half-life-days N` overrides it. τ is an
+  e-folding time: freshness is 37%, not 50%, at `d = τ`. The column keeps its
+  historical name `half_life_days`.
+- **Confirmation.** `mnemos verify`, the `memory_promote` MCP tool and an outcome that
+  validated the belief record `last_confirmed`, which refreshes trust. Being
+  rehearsed during sleep, or recalled with `--reconsolidate`, does **not**.
+  Those update `last_verified` (liveness, replay order) only, so retrieval
+  cannot inflate trust.
+- **Credit.** When a decision's prediction is validated or refuted, the
+  beliefs behind it gain or lose credit. Credit is stored and re-applied on
+  every recompute, so a later ingest does not erase it.
+
+Trust is recomputed for the beliefs a write touches. Each stored score records
+the model version and instant that produced it (`trust_model_version`,
+`trust_computed_at`), so a stored value is a cache, not a separate truth. After
+upgrading, run `mnemos recompute-trust --stale --dry-run` to see how many
+beliefs predate the current model, then `mnemos recompute-trust --stale`. It
+rescores them in verified batches of 500 and resumes if interrupted.
+`mnemos recompute-trust --all` rebuilds everything in one pass, for when you
+retune `internal/trust`. `mnemos query --min-trust 0.5 "..."` filters before
+ranking, and `mnemos metrics` reports `avg_trust` and `low_trust_count`.
 
 ### Hybrid retrieval (v0.10+)
 
@@ -865,6 +874,14 @@ The organs (arc 1):
   the challenger; history is preserved and the alert clears. Named for the
   hypercorrection effect — high-confidence errors, once caught, correct strongest.
 
+## Vocabulary
+
+The wire (REST, gRPC, MCP) speaks the brain vocabulary: belief, episode,
+association, schema, reflex. The Go library and the storage schema use the
+machine vocabulary: claim, event, relationship, lesson, playbook.
+[`docs/vocabulary.md`](docs/vocabulary.md) maps one onto the other and says
+which surface uses which.
+
 ## Contributing
 
 Contributions welcome. See [PRD.md](./PRD.md) for product direction and [TDD.md](./TDD.md) for technical design.
@@ -883,7 +900,11 @@ Default off. Two independent gates (opt-in flag + endpoint URL) must hold for an
 
 ## Reliability
 
-SLO: 99.9% availability over 30 days, p99 read 250ms, p99 write 500ms. Error-budget burn alerts in [`SLO.md`](SLO.md). Mutation-testing gate at 70% kill rate on `internal/trust` (currently 100% / 45 mutants caught) — see [`docs/testing/mutation.md`](docs/testing/mutation.md).
+SLO: 99.9% availability over 30 days, p99 read 250ms, p99 write 500ms. Error-budget burn alerts in [`SLO.md`](SLO.md). Mutation-testing gate at 70% kill rate on `internal/trust` (97.8%, 45 of 46 mutants caught, at the consolidation baseline). See [`docs/testing/mutation.md`](docs/testing/mutation.md).
+
+Every Go example in this README and in `docs/` is compiled on every CI run from a module **outside** this repository (`test/docs`), so a documented import that only works inside the module fails the build.
+
+Scale is measured, not assumed. `go run ./tools/scalebench -beliefs N` generates a deterministic synthetic brain and times load, recall, health, gaps and writes against it. The [baseline](docs/consolidation/baseline/README.md) records 10k, 100k and 1M beliefs, before and after the consolidation work. At 1M, a write went from ~19 s to 0.3 s (p95 0.5 s), health from ~13 s to 2.6 s (sampled above 50k live beliefs; `health --full` is exact), and the first page of the belief browse from 7–11 s to 0.7 s. `make scale-gate` runs three corpus shapes at 100k beliefs and fails when an operation exceeds its ceiling.
 
 ## License
 
