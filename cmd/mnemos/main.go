@@ -1526,6 +1526,8 @@ func printUsage() {
 	fmt.Println("  delete-event <id> [<id>...] [--yes]  Delete events and cascade to derived claims")
 	fmt.Println("  reembed [--force] [--dry-run]        (Re)generate claim + event embeddings under the current embed config")
 	fmt.Println("  recompute-trust [--all]              Rebuild trust_score for every claim under the current policy")
+	fmt.Println("  recompute-trust --stale [--dry-run]  Rescore only claims an older trust model scored, in verified,")
+	fmt.Println("    [--batch N]                        resumable batches (the upgrade path)")
 	fmt.Println("  recompute-contested [--dry-run]      Clear contested status the current heuristic no longer assigns")
 	fmt.Println("  recompute-half-life [--dry-run]      Backfill the per-claim freshness half-life on rows that have none")
 	fmt.Println("    [--batch N]                        (every row predating the #331 fix); never overwrites a value already set")
