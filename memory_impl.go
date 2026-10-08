@@ -568,6 +568,7 @@ func (m *memory) recall(ctx context.Context, q Query) ([]Result, domain.Answer, 
 			Type:        string(c.Type),
 			Confidence:  c.Confidence,
 			TrustScore:  c.TrustScore,
+			Credibility: c.Credibility,
 			HopDistance: ans.ClaimHopDistance[c.ID],
 			Provenance:  ans.ClaimProvenance[c.ID],
 		})
@@ -975,15 +976,13 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 		}
 		res.Merged = merged
 	}
-	// Recompute trust (confidence × corroboration × freshness) — the
-	// renormalisation half of the sleep pass. Merging changed evidence counts,
-	// and freshness decays with wall-clock time regardless. Best-effort: a
-	// scorer-less backend still consolidated correctly.
+	// Recompute canonical trust (trust.At, ADR 0026) — the renormalisation
+	// half of the sleep pass. Merging changed evidence counts, and freshness
+	// decays with wall-clock time regardless. Stored applied credit is re-added
+	// by trust.At, so this no longer erases what a previous credit pass earned.
+	// Best-effort: a scorer-less backend still consolidated correctly.
 	if scorer, ok := m.conn.Claims.(ports.TrustScorer); ok {
-		now := time.Now().UTC()
-		if n, terr := scorer.RecomputeTrust(ctx, func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
-			return trust.Score(confidence, evidenceCount, latestEvidence, now)
-		}); terr == nil {
+		if n, terr := scorer.RecomputeTrust(ctx, trust.Scorer(time.Now().UTC())); terr == nil {
 			res.TrustRefreshed = n
 		}
 	}
@@ -1479,6 +1478,11 @@ func (m *memory) reinforceValidatedClaims(ctx context.Context) (int, error) {
 		if err := m.conn.Claims.MarkVerified(ctx, c.ID, now, 0); err != nil {
 			return n, fmt.Errorf("reinforce validated claim %s: %w", c.ID, err)
 		}
+		// An observed outcome that validated the belief is a confirmation
+		// (ADR 0026), unlike replay rehearsal, which only bumps last_verified.
+		if err := m.conn.Claims.MarkConfirmed(ctx, c.ID, now); err != nil {
+			return n, fmt.Errorf("confirm validated claim %s: %w", c.ID, err)
+		}
 		n++
 	}
 	return n, nil
@@ -1566,17 +1570,17 @@ func (m *memory) observedSurprises(ctx context.Context) ([]float64, map[string]f
 //
 // Attribution + idempotency. Each contribution is stored in the belief's
 // confidence_components map under a key that encodes the driving decision and
-// prediction — the audit trail the ADR-0011 guardrail requires. The map is
-// rewritten by assignment (credit entries replaced, other components preserved),
-// and the trust delta is applied as base+creditSum where base is the freshly
-// recomputed evidence trust — so re-running produces byte-identical components and
-// the same trust, never a double-credit.
+// prediction — the audit trail the ADR-0011 guardrail requires — and the applied
+// net under domain.CreditAppliedComponentKey. The map is rewritten by assignment
+// (credit entries replaced, other components preserved) and trust is then
+// rescored with trust.At, which adds the applied net to the evidence base. So
+// re-running produces byte-identical components and the same trust, never a
+// double-credit, and the credit survives every later rescore (ADR 0026 §3).
 //
 // Degradation. A no-op when the store lacks decisions or expectations, or when the
 // claim repository does not persist the confidence_components audit map
 // ([ports.BeliefCreditWriter]) — credit is never applied where it could not be
-// attributed. Relies on RecomputeTrust having run first (Consolidate does so
-// immediately before), so each claim's TrustScore is the evidence-based base.
+// attributed.
 func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float64) (int, []beliefTrustChange, error) {
 	if m.conn.Expectations == nil || m.conn.Decisions == nil {
 		return 0, nil, nil
@@ -1614,10 +1618,12 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 		return 0, nil, fmt.Errorf("list claims: %w", err)
 	}
 	credited := 0
-	var changes []beliefTrustChange
+	var touched, creditedIDs []string
+	before := make(map[string]float64)
 	for _, c := range all {
 		fresh := contribs[c.ID]
-		// Preserve non-credit components; replace all credit:* keys with the fresh set.
+		// Preserve non-credit components; replace all credit:* keys (the
+		// per-decision audit entries and the applied net) with the fresh set.
 		merged := make(map[string]float64)
 		hadCredit := false
 		for k, v := range c.ConfidenceComponents {
@@ -1633,27 +1639,67 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 		if len(fresh) == 0 && !hadCredit {
 			continue // no credit now, none before → nothing to write
 		}
-		// base+creditSum: c.TrustScore is the evidence base (RecomputeTrust just ran),
-		// so applying the clamped credit sum each pass is idempotent and self-healing.
-		// Under Plastic (ADR 0015) the sum is modulated by the belief's metaplastic
-		// resistance (crystallization) and the global neuromodulatory gain; with it off
-		// (resistance=1, gain=1) this is exactly credit.SumFor — behaviour unchanged.
-		resistance := 1.0
-		if metaplastic {
-			resistance = credit.ResistanceFor(c, now)
+		// The applied net credit is STORED (ADR 0026 §3) and canonical trust
+		// re-adds it on every recompute. Writing base+credit straight into
+		// trust_score instead, as this used to, lasted only until the next
+		// rescore: any ingest touching the belief reset it to the evidence base
+		// and left the credit:* keys describing a credit no longer applied.
+		// Under Plastic (ADR 0015) the sum is modulated by the belief's
+		// metaplastic resistance and the global gain; with it off (resistance=1,
+		// gain=1) this is exactly credit.SumFor.
+		if len(fresh) > 0 {
+			resistance := 1.0
+			if metaplastic {
+				resistance = credit.ResistanceFor(c, now)
+			}
+			merged[domain.CreditAppliedComponentKey] = credit.SumForModulated(fresh, resistance, gain)
 		}
-		newTrust := clamp01(c.TrustScore + credit.SumForModulated(fresh, resistance, gain))
-		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, newTrust); err != nil {
-			return credited, changes, fmt.Errorf("apply belief credit %s: %w", c.ID, err)
+		// trust_score is rewritten by the rescore below; the current value is
+		// passed so the row never holds a score computed from stale components.
+		if err := writer.ApplyBeliefCredit(ctx, c.ID, merged, c.TrustScore); err != nil {
+			return credited, nil, fmt.Errorf("apply belief credit %s: %w", c.ID, err)
 		}
+		touched = append(touched, c.ID)
 		if len(fresh) > 0 {
 			credited++
-			// Record the trust move for the cognitive journal (ADR 0018) — only when a
-			// credit was actually applied this pass.
-			changes = append(changes, beliefTrustChange{ClaimID: c.ID, Before: c.TrustScore, After: newTrust})
+			creditedIDs = append(creditedIDs, c.ID)
+			before[c.ID] = c.TrustScore
+		}
+	}
+	if err := m.rescoreClaims(ctx, touched, now); err != nil {
+		return credited, nil, fmt.Errorf("rescore credited beliefs: %w", err)
+	}
+	// Record each credited belief's trust move for the cognitive journal
+	// (ADR 0018): the stored value before this pass and the canonical value
+	// after it.
+	var changes []beliefTrustChange
+	if len(creditedIDs) > 0 {
+		after, err := m.conn.Claims.ListByIDs(ctx, creditedIDs)
+		if err != nil {
+			return credited, nil, fmt.Errorf("read back credited beliefs: %w", err)
+		}
+		for _, c := range after {
+			changes = append(changes, beliefTrustChange{ClaimID: c.ID, Before: before[c.ID], After: c.TrustScore})
 		}
 	}
 	return credited, changes, nil
+}
+
+// rescoreClaims recomputes canonical trust for ids, scoped when the backend can
+// bound the query and over the whole store otherwise.
+func (m *memory) rescoreClaims(ctx context.Context, ids []string, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if scoped, ok := m.conn.Claims.(ports.ScopedTrustScorer); ok {
+		_, err := scoped.RecomputeTrustForClaims(ctx, ids, trust.Scorer(at))
+		return err
+	}
+	if full, ok := m.conn.Claims.(ports.TrustScorer); ok {
+		_, err := full.RecomputeTrust(ctx, trust.Scorer(at))
+		return err
+	}
+	return nil
 }
 
 // beliefTrustChange is one belief's credit-driven trust move in a consolidation pass,
@@ -1902,7 +1948,7 @@ func (m *memory) Hypercorrections(ctx context.Context) ([]Hypercorrection, error
 func (m *memory) HypercorrectionsBounded(ctx context.Context, limit int) (HypercorrectionReport, error) {
 	var bounds Bounds
 	limit = capLimit(&bounds, limit, HypercorrectionDefaultLimit, MaxCognitiveResults)
-	all, err := m.hypercorrectionList(ctx)
+	all, err := m.hypercorrectionList(ctx, m.newHealthCorpus())
 	if err != nil {
 		return HypercorrectionReport{}, err
 	}
@@ -1923,27 +1969,21 @@ func (m *memory) HypercorrectionsBounded(ctx context.Context, limit int) (Hyperc
 // hypercorrectionList is the complete, ranked detection pass. Callers that need
 // a COUNT rather than a page (the dissonance level of [Memory.PredictiveError])
 // use it directly so the capped response never distorts a metric.
-func (m *memory) hypercorrectionList(ctx context.Context) ([]Hypercorrection, error) {
-	rels, err := m.conn.Relationships.ListAll(ctx)
+func (m *memory) hypercorrectionList(ctx context.Context, h *healthCorpus) ([]Hypercorrection, error) {
+	contradicts, err := h.Contradictions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("mnemos: Hypercorrections: list relationships: %w", err)
-	}
-	var contradicts []domain.Relationship
-	for _, r := range rels {
-		if r.Type == domain.RelationshipTypeContradicts {
-			contradicts = append(contradicts, r)
-		}
 	}
 	if len(contradicts) == 0 {
 		return nil, nil
 	}
-	claims, err := m.conn.Claims.ListAll(ctx)
+	endpoints := make([]string, 0, 2*len(contradicts))
+	for _, r := range contradicts {
+		endpoints = append(endpoints, r.FromClaimID, r.ToClaimID)
+	}
+	byID, err := h.ClaimsByID(ctx, endpoints)
 	if err != nil {
 		return nil, fmt.Errorf("mnemos: Hypercorrections: list claims: %w", err)
-	}
-	byID := make(map[string]domain.Claim, len(claims))
-	for _, c := range claims {
-		byID[c.ID] = c
 	}
 	// establishment ranks the two sides of a contradiction: human-promoted
 	// knowledge outranks any trust score; otherwise rank by trust.
@@ -2034,6 +2074,12 @@ func saturateSurprise(s float64) float64 {
 // surprise, schema surprise, active dissonance, calibration error — never writes, and
 // aggregates only the levels that have data.
 func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
+	return m.predictiveErrorIn(ctx, m.newHealthCorpus())
+}
+
+// predictiveErrorIn is PredictiveError over a health computation's shared
+// snapshot.
+func (m *memory) predictiveErrorIn(ctx context.Context, h *healthCorpus) (PredictiveError, error) {
 	levels := make([]PredictiveErrorLevel, 0, 4)
 
 	// Level 1 — outcome: mean saturated surprise over resolved decision predictions.
@@ -2087,26 +2133,32 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 	// The complete list, not the capped response: this is a rate, so a page of
 	// alerts would silently floor the dissonance error once the brain grew past
 	// HypercorrectionDefaultLimit contradictions.
-	hyper, herr := m.hypercorrectionList(ctx)
+	hyperCount, herr := m.hypercorrectionCount(ctx, h)
 	if herr != nil {
 		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance: %w", herr)
 	}
-	claimCount, cerr := m.conn.Claims.CountAll(ctx)
-	if cerr != nil {
-		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance count: %w", cerr)
+	// The denominator is the LIVE belief population, the same one the
+	// numerator is drawn from: hypercorrectionList drops every pair with a
+	// retired side. It used to be Claims.CountAll, every row ever stored, so
+	// each forgotten, deprecated or pruned belief diluted the rate. A brain
+	// that retired half its beliefs reported half the dissonance while
+	// holding exactly the same live contradictions.
+	live, lerr := m.liveBeliefCount(ctx, h)
+	if lerr != nil {
+		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: dissonance count: %w", lerr)
 	}
-	diss.Samples = int(claimCount)
-	if claimCount > 0 {
-		diss.Error = math.Min(float64(len(hyper))/float64(claimCount), 1)
-		diss.Basis = fmt.Sprintf("%d active hypercorrection(s) over %d belief(s)", len(hyper), claimCount)
+	diss.Samples = live
+	if live > 0 {
+		diss.Error = math.Min(float64(hyperCount)/float64(live), 1)
+		diss.Basis = fmt.Sprintf("%d active hypercorrection(s) over %d live belief(s)", hyperCount, live)
 	} else {
-		diss.Basis = "no beliefs"
+		diss.Basis = "no live beliefs"
 	}
 	levels = append(levels, diss)
 
 	// Level 4 — calibration: expected calibration error over adjudicated beliefs.
 	cal := PredictiveErrorLevel{Level: "calibration"}
-	c, calErr := m.Calibration(ctx)
+	c, calErr := h.Calibration(ctx)
 	if calErr != nil {
 		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: calibration: %w", calErr)
 	}
@@ -2139,7 +2191,43 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 	if n > 0 {
 		total = sum / float64(n)
 	}
-	return PredictiveError{Levels: levels, Total: total, Hotspot: hotspot}, nil
+	return PredictiveError{Levels: levels, Total: total, Hotspot: hotspot, LevelsMeasured: n}, nil
+}
+
+// hypercorrectionCount is len(hypercorrectionList), computed by the store
+// when sampled health hands it one: the list loads both endpoints of every
+// contradiction, which on a contradiction-dense brain is most of the corpus.
+func (m *memory) hypercorrectionCount(ctx context.Context, h *healthCorpus) (int, error) {
+	if h.sampler != nil {
+		return h.sampler.CountHypercorrections(ctx, hypercorrectionTrustFloor)
+	}
+	hyper, err := m.hypercorrectionList(ctx, h)
+	return len(hyper), err
+}
+
+// isLiveBelief is the population every brain-health rate is a fraction of: a
+// belief neither forgotten (valid time closed) nor deprecated. The low-trust,
+// staleness and trust-decay loop in BrainHealth applies the same two checks.
+func isLiveBelief(c domain.Claim) bool {
+	return c.ValidTo.IsZero() && c.Status != domain.ClaimStatusDeprecated
+}
+
+// liveBeliefCount counts the beliefs [isLiveBelief] admits.
+func (m *memory) liveBeliefCount(ctx context.Context, h *healthCorpus) (int, error) {
+	if h.liveCount >= 0 {
+		return h.liveCount, nil
+	}
+	claims, err := h.Claims(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, c := range claims {
+		if isLiveBelief(c) {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // Brain-health thresholds (ADR 0019). All five vitals are "higher is worse" rates or
@@ -2262,42 +2350,25 @@ func (m *memory) skillCoverageVital(ctx context.Context) Vital {
 	return Vital{name, rate, gradeHigherWorse(1-rate, healthSkillCoverageWarn, healthSkillCoverageCrit), detail}
 }
 
-// projectTrustDecay evaluates one currently-valid belief against the freshness
-// decay model twice — now, and at the end of the horizon — and reports whether
-// it counts as trusted today and, if so, whether it stops being trusted before
-// the horizon is out.
+// projectTrustDecay reports whether a belief is trusted now and whether it
+// falls through the low-trust floor by horizon, both from trust.At on the
+// belief's canonical inputs (ADR 0026). This vital used to run its own variant
+// of the formula — per-claim half-life, but a ValidFrom/LastVerified reference
+// and a raw evidence count — so it and low_trust applied one floor to two
+// different numbers, and a belief could be counted by neither. Both now read
+// the same function at two instants.
 //
-// Why the model rather than the stored trust_score: the persisted score is
-// recomputed with the GLOBAL half-life (pipeline's defaultTrustScorer and
-// Consolidate both call trust.Score), so it cannot see a belief the extractor
-// classified as volatile — precisely the belief whose decay matters most. The
-// per-claim HalfLifeDays is honoured everywhere it is read (query staleness,
-// curiosity, float-back) except in the number that gets written down, so the
-// vital reads the model, not the column. Both endpoints come from the same
-// evaluation, so the comparison is internally consistent whatever the level is.
-//
-// Two deliberate conservatisms, both erring toward under-reporting decay:
-//   - the freshness reference is the belief's own ValidFrom / LastVerified
-//     rather than its freshest evidence event's timestamp, which this scan does
-//     not load. ValidFrom is set from the SOURCE event, so it is never newer
-//     than the true reference; an older reference has already decayed further
-//     and is likelier to sit on the freshness floor, where nothing decays.
-//   - the evidence count is the raw link count, not the independence-graded one
-//     (grading needs each event's author). It can only overstate corroboration,
-//     which lifts the level and delays the crossing.
-//
-// A belief with neither a ValidFrom nor a LastVerified cannot be dated at all,
-// so its decay is unmeasurable and it is excluded from both counts rather than
-// silently counted as stable.
-func projectTrustDecay(c domain.Claim, evidenceCount int, now, horizon time.Time) (isTrusted, willDecay bool) {
-	ref := trust.FreshnessRef(c.ValidFrom, c.LastVerified)
-	if ref.IsZero() {
+// A belief with no dated evidence and no confirmation cannot be projected: its
+// freshness is undefined rather than perfect, so it is excluded from both
+// counts instead of being counted as stable.
+func projectTrustDecay(in domain.TrustInput, now, horizon time.Time) (isTrusted, willDecay bool) {
+	if in.LatestEvidence.IsZero() && in.LastConfirmed.IsZero() {
 		return false, false
 	}
-	if trust.ScoreWithHalfLife(c.Confidence, evidenceCount, ref, now, c.HalfLifeDays) < healthLowTrustFloor {
+	if trust.At(in, now) < healthLowTrustFloor {
 		return false, false // already below the floor: low_trust owns it, there is no fall left
 	}
-	return true, trust.ScoreWithHalfLife(c.Confidence, evidenceCount, ref, horizon, c.HalfLifeDays) < healthLowTrustFloor
+	return true, trust.At(in, horizon) < healthLowTrustFloor
 }
 
 // trustDecayVital reports the share of currently-trusted beliefs whose trust
@@ -2344,168 +2415,6 @@ func worseHealth(a, b HealthStatus) HealthStatus {
 	return a
 }
 
-// BrainHealth implements [Memory.BrainHealth] (ADR 0019): the unified read-only health
-// verdict. It rolls up the cognitive vitals (reusing PredictiveError for the error
-// signals) and runs the structural-integrity checks (orphan beliefs, dangling edges,
-// stale-expectation backlog). Full-scan diagnostic; no writes.
-func (m *memory) BrainHealth(ctx context.Context) (BrainHealth, error) {
-	now := time.Now().UTC()
-	claims, err := m.conn.Claims.ListAll(ctx)
-	if err != nil {
-		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list claims: %w", err)
-	}
-	evidence, err := m.conn.Claims.ListAllEvidence(ctx)
-	if err != nil {
-		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list evidence: %w", err)
-	}
-	pe, err := m.PredictiveError(ctx)
-	if err != nil {
-		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: predictive error: %w", err)
-	}
-	cal, err := m.Calibration(ctx)
-	if err != nil {
-		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: calibration: %w", err)
-	}
-
-	// --- Vitals ---
-	// Reuse the PredictiveError dissonance level (active hypercorrections per belief).
-	dissonance := 0.0
-	for _, l := range pe.Levels {
-		if l.Level == "dissonance" {
-			dissonance = l.Error
-		}
-	}
-	// low_trust + staleness over currently-valid beliefs.
-	evidenceCount := make(map[string]int, len(claims))
-	for _, e := range evidence {
-		evidenceCount[e.ClaimID]++
-	}
-	claimIDs := make(map[string]struct{}, len(claims))
-	validCount, lowTrust, stale, orphans := 0, 0, 0, 0
-	// trust_decay reads the SAME beliefs forward: how many of those trusted today
-	// stop being trusted within the horizon if nobody re-verifies them.
-	decayHorizon := now.Add(time.Duration(healthTrustDecayHorizonDays * 24 * float64(time.Hour)))
-	trusted, decaying := 0, 0
-	for _, c := range claims {
-		claimIDs[c.ID] = struct{}{} // every claim, so dangling-edge detection sees them all
-		if !c.ValidTo.IsZero() {
-			continue // valid-time closed → forgotten → not a currently-valid belief
-		}
-		if c.Status == domain.ClaimStatusDeprecated {
-			// Deprecated is the other way a belief is retired — it closes STATUS
-			// while leaving valid-time open — so this loop counted a deprecated
-			// belief as "currently-valid" and let it inflate every vital:
-			// validCount (the low-trust/staleness denominator) and, worse, the
-			// orphan check, where a deprecated ungrounded belief kept raising an
-			// integrity warning that deprecating it was supposed to clear. Same
-			// class of bug as the dissonance vital counting contradictions into
-			// deprecated beliefs. A retired belief is not a currently-valid one.
-			continue
-		}
-		validCount++
-		if c.TrustScore < healthLowTrustFloor {
-			lowTrust++
-		}
-		ref := c.CreatedAt
-		if c.LastVerified.After(ref) {
-			ref = c.LastVerified
-		}
-		if now.Sub(ref).Hours()/24 > healthStalenessHorizonDays {
-			stale++
-		}
-		if evidenceCount[c.ID] == 0 {
-			orphans++ // a claim requires evidence — an orphan is a data-integrity smell
-		}
-		if t, d := projectTrustDecay(c, evidenceCount[c.ID], now, decayHorizon); t {
-			trusted++
-			if d {
-				decaying++
-			}
-		}
-	}
-	rate := func(n int) float64 {
-		if validCount == 0 {
-			return 0
-		}
-		return float64(n) / float64(validCount)
-	}
-	lowTrustRate, stalenessRate := rate(lowTrust), rate(stale)
-
-	vitals := []Vital{
-		{"free_energy", pe.Total, gradeHigherWorse(pe.Total, healthFreeEnergyWarn, healthFreeEnergyCrit),
-			fmt.Sprintf("overall prediction-error aggregate; most wrong at: %s", orNone(pe.Hotspot))},
-		{"calibration", cal.ECE, gradeWithSamples(cal.Samples, cal.ECE, healthCalibrationWarn, healthCalibrationCrit),
-			fmt.Sprintf("expected calibration error over %d adjudicated belief(s)", cal.Samples)},
-		{"dissonance", dissonance, gradeHigherWorse(dissonance, healthDissonanceWarn, healthDissonanceCrit),
-			"active high-stakes contradictions per belief"},
-		// Both are fractions OF validCount, so gradeWithSamples: 0/0 is not a
-		// brain that has lost nothing, it is a brain nothing was measured on.
-		{"low_trust", lowTrustRate, gradeWithSamples(validCount, lowTrustRate, healthLowTrustWarn, healthLowTrustCrit),
-			fmt.Sprintf("%d/%d valid beliefs below trust %.2f", lowTrust, validCount, healthLowTrustFloor)},
-		{"staleness", stalenessRate, gradeWithSamples(validCount, stalenessRate, healthStalenessWarn, healthStalenessCrit),
-			fmt.Sprintf("%d/%d valid beliefs unverified in %.0f days", stale, validCount, healthStalenessHorizonDays)},
-		trustDecayVital(trusted, decaying),
-		m.skillCoverageVital(ctx),
-	}
-
-	// --- Pathologies (integrity checks that did not exist before) ---
-	rels, err := m.conn.Relationships.ListAll(ctx)
-	if err != nil {
-		return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list relationships: %w", err)
-	}
-	dangling := 0
-	for _, r := range rels {
-		if _, ok := claimIDs[r.FromClaimID]; !ok {
-			dangling++
-			continue
-		}
-		if _, ok := claimIDs[r.ToClaimID]; !ok {
-			dangling++
-		}
-	}
-	staleExpectations := 0
-	if m.conn.Expectations != nil {
-		open, oerr := m.conn.Expectations.ListOpen(ctx)
-		if oerr != nil {
-			return BrainHealth{}, fmt.Errorf("mnemos: BrainHealth: list open expectations: %w", oerr)
-		}
-		for _, exp := range open {
-			if !exp.Horizon.IsZero() && exp.Horizon.Before(now) {
-				staleExpectations++
-			}
-		}
-	}
-	orphanStatus := HealthOK
-	if orphans > 0 {
-		orphanStatus = HealthDegraded
-	}
-	danglingStatus := HealthOK
-	if dangling > 0 {
-		danglingStatus = HealthUnhealthy // referential corruption
-	}
-	staleExpStatus := HealthOK
-	if staleExpectations >= healthStaleExpectationCrit {
-		staleExpStatus = HealthUnhealthy
-	} else if staleExpectations > 0 {
-		staleExpStatus = HealthDegraded
-	}
-	pathologies := []Pathology{
-		{"orphan_claims", orphans, orphanStatus, "currently-valid beliefs with zero evidence"},
-		{"dangling_edges", dangling, danglingStatus, "relationships whose endpoint belief is missing"},
-		{"stale_expectations", staleExpectations, staleExpStatus, "open predictions past their horizon (unreconciled)"},
-	}
-
-	// --- Overall verdict: worst of everything ---
-	overall := HealthOK
-	for _, v := range vitals {
-		overall = worseHealth(overall, v.Status)
-	}
-	for _, p := range pathologies {
-		overall = worseHealth(overall, p.Status)
-	}
-	return BrainHealth{Status: overall, Vitals: vitals, Pathologies: pathologies, At: now}, nil
-}
-
 func orNone(s string) string {
 	if s == "" {
 		return "—"
@@ -2543,6 +2452,11 @@ func (m *memory) SnapshotHealth(ctx context.Context) (BrainHealth, error) {
 // Calibration implements [Memory.Calibration]. Pure read over the outcome edges
 // (validates / refutes) + claim confidences — no recomputation, no writes.
 func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
+	return m.calibrationIn(ctx, m.newHealthCorpus())
+}
+
+// calibrationIn is Calibration over a health computation's shared snapshot.
+func (m *memory) calibrationIn(ctx context.Context, h *healthCorpus) (Calibration, error) {
 	validates, err := m.conn.EntityRels.ListByKind(ctx, string(domain.RelationshipTypeValidates))
 	if err != nil {
 		return Calibration{}, fmt.Errorf("mnemos: Calibration: list validates: %w", err)
@@ -2576,7 +2490,11 @@ func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
 		return Calibration{}, nil
 	}
 
-	claims, err := m.conn.Claims.ListAll(ctx)
+	adjudicated := make([]string, 0, len(verdicts))
+	for id := range verdicts {
+		adjudicated = append(adjudicated, id)
+	}
+	claims, err := h.ClaimsByID(ctx, adjudicated)
 	if err != nil {
 		return Calibration{}, fmt.Errorf("mnemos: Calibration: list claims: %w", err)
 	}

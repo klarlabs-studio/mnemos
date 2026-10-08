@@ -358,7 +358,7 @@ func handlePromoteApprove(ctx context.Context, opts promoteOpts) {
 	}
 	defer func() { _ = conn.Close() }()
 	if conn.GlobalSchemas == nil {
-		exitWithMnemosError(false, NewUserError("global store %q does not support promoted-schema persistence", opts.globalDSN))
+		exitWithMnemosError(false, NewUserError("global store %q does not support promoted-schema persistence", store.RedactDSN(opts.globalDSN)))
 		return
 	}
 	if err := conn.GlobalSchemas.Approve(ctx, opts.approveID); err != nil {

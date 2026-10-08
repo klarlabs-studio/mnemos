@@ -33,7 +33,7 @@ func (q *Queries) DeleteRelationshipsByClaimID(ctx context.Context, arg DeleteRe
 }
 
 const listRelationshipsByClaim = `-- name: ListRelationshipsByClaim :many
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by
 FROM relationships
 WHERE from_claim_id = ? OR to_claim_id = ?
 ORDER BY created_at ASC
@@ -51,6 +51,7 @@ type ListRelationshipsByClaimRow struct {
 	ToClaimID   string `json:"to_claim_id"`
 	CreatedAt   string `json:"created_at"`
 	CreatedBy   string `json:"created_by"`
+	DerivedBy   string `json:"derived_by"`
 }
 
 func (q *Queries) ListRelationshipsByClaim(ctx context.Context, arg ListRelationshipsByClaimParams) ([]ListRelationshipsByClaimRow, error) {
@@ -69,6 +70,7 @@ func (q *Queries) ListRelationshipsByClaim(ctx context.Context, arg ListRelation
 			&i.ToClaimID,
 			&i.CreatedAt,
 			&i.CreatedBy,
+			&i.DerivedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -84,11 +86,12 @@ func (q *Queries) ListRelationshipsByClaim(ctx context.Context, arg ListRelation
 }
 
 const upsertRelationship = `-- name: UpsertRelationship :exec
-INSERT INTO relationships (id, type, from_claim_id, to_claim_id, created_at, created_by)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(type, from_claim_id, to_claim_id) DO UPDATE SET
   created_at = excluded.created_at,
-  created_by = excluded.created_by
+  created_by = excluded.created_by,
+  derived_by = excluded.derived_by
 `
 
 type UpsertRelationshipParams struct {
@@ -98,6 +101,7 @@ type UpsertRelationshipParams struct {
 	ToClaimID   string `json:"to_claim_id"`
 	CreatedAt   string `json:"created_at"`
 	CreatedBy   string `json:"created_by"`
+	DerivedBy   string `json:"derived_by"`
 }
 
 func (q *Queries) UpsertRelationship(ctx context.Context, arg UpsertRelationshipParams) error {
@@ -108,6 +112,7 @@ func (q *Queries) UpsertRelationship(ctx context.Context, arg UpsertRelationship
 		arg.ToClaimID,
 		arg.CreatedAt,
 		arg.CreatedBy,
+		arg.DerivedBy,
 	)
 	return err
 }

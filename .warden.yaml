@@ -1,14 +1,18 @@
 # Publish the gate's verdict as the warden/gate commit status, so a push
 # carries evidence that the checks ran on the machine that made it.
 #
-# This block used to say Actions cannot run here while the spending limit
-# holds, and that branch protection therefore requires warden/gate INSTEAD
-# of the CI checks. That is true of the org's private repos; mnemos is
-# public, so its Actions have always run. Carried over unedited, the
-# comment justified protection that required warden/gate and nothing else
-# — which is how main stayed red for three days in August 2026 with
-# nothing blocking a merge. Protection now requires the ci/* checks too,
-# and warden/gate alongside them rather than in their place.
+# warden is the authoritative gate (decided 2026-10-06, #382 Phase 4.1):
+# branch protection requires warden/gate, published by this block, and
+# nothing else. GitHub Actions still runs on every PR and push, but it is
+# advisory: its runners stalled for hours during the consolidation, and a
+# required check that cannot report blocks every merge.
+#
+# Advisory does not mean ignored. In August 2026, protection required
+# warden/gate alone while pre-push ran fewer checks than CI, and main stayed
+# red in Actions for three days with nothing noticing. Two things differ
+# now: pre-push runs everything CI's gate does (test -race, lint, cross,
+# govulncheck, and the pinned nox security scan), and a red Actions run on
+# main is a defect to investigate. It usually means a check is missing here.
 status:
   enabled: true
 
@@ -23,7 +27,15 @@ commands:
   lint: "golangci-lint run --allow-parallel-runners ./..."
   test: "go test -race ./..."
   cross: "make cross"
+  # The security gate. It ran only in the shared GitHub workflow; merges go
+  # through warden, so without this line nothing scanned on the way to main —
+  # which is how nine fixture DSNs reached main as net-new criticals unnoticed.
+  security: "scripts/nox-gate.sh"
+  # Postgres and MySQL, in Docker. Without it nothing on the merge path ran a
+  # real Postgres or MySQL, and MySQL's trust recompute shipped broken: every
+  # unstamped RecomputeTrust failed in strict mode. Needs Docker running.
+  integration: "scripts/test-integration.sh"
 steps:
   pre_commit: [lint]
-  pre_push: [test, lint, cross, vulns]
+  pre_push: [test, lint, cross, vulns, security, integration]
 parallel: true

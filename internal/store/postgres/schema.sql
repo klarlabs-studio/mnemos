@@ -44,10 +44,13 @@ CREATE TABLE IF NOT EXISTS claims (
   created_at     timestamptz      NOT NULL,
   created_by     text             NOT NULL DEFAULT '<system>',
   trust_score    double precision NOT NULL DEFAULT 0,
+  trust_computed_at timestamptz,
+  trust_model_version text             NOT NULL DEFAULT '',
   valid_from     timestamptz,
   valid_to       timestamptz,
   last_verified  timestamptz,
   verify_count   integer          NOT NULL DEFAULT 0,
+  last_confirmed timestamptz,
   half_life_days double precision NOT NULL DEFAULT 0,
   -- ADR 0025: which classifier assigned half_life_days. '' means none did,
   -- which is a different fact from a classifier judging the belief durable
@@ -63,6 +66,11 @@ CREATE TABLE IF NOT EXISTS claims (
 -- earlier schema generations.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS last_verified  timestamptz;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS verify_count   integer          NOT NULL DEFAULT 0;
+-- ADR 0026: explicit confirmation time, the freshness reference canonical trust reads.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS last_confirmed timestamptz;
+-- ADR 0026 §5: what trust_score is a cache of.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS trust_computed_at timestamptz NULL;
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS trust_model_version text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_days double precision NOT NULL DEFAULT 0;
 -- Metadata-only on PG 11+: a non-volatile default lives in the catalog rather
 -- than rewriting the heap, so this does not touch the existing rows.
@@ -127,6 +135,8 @@ CREATE INDEX IF NOT EXISTS idx_claims_test_requirement_ref
 
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
 CREATE INDEX IF NOT EXISTS idx_claims_valid_to    ON claims(valid_to);
+-- Belief browse order (keyset pagination): newest first, id breaks ties.
+CREATE INDEX IF NOT EXISTS idx_claims_created_id ON claims(created_at, id);
 
 CREATE TABLE IF NOT EXISTS entities (
   id              text        PRIMARY KEY,
@@ -165,11 +175,14 @@ CREATE TABLE IF NOT EXISTS relationships (
   to_claim_id   text             NOT NULL REFERENCES claims(id),
   created_at    timestamptz      NOT NULL,
   created_by    text             NOT NULL DEFAULT '<system>',
-  strength      double precision NOT NULL DEFAULT 1
+  strength      double precision NOT NULL DEFAULT 1,
+  derived_by    text             NOT NULL DEFAULT ''
 );
 -- ADR 0015 §4: Hebbian co-activation weight for existing DBs (fresh ones get it
 -- inline above). Backfills to the base 1.0 so spreading activation is unchanged.
 ALTER TABLE relationships ADD COLUMN IF NOT EXISTS strength double precision NOT NULL DEFAULT 1;
+-- #382 Phase 6: the rule set that inferred the edge (relate.ModelVersion).
+ALTER TABLE relationships ADD COLUMN IF NOT EXISTS derived_by text NOT NULL DEFAULT '';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_unique_edge
   ON relationships(type, from_claim_id, to_claim_id);

@@ -10,10 +10,26 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
+// ModelVersion is stamped on every relationship the rule-based detectors
+// infer (Association.DerivedBy). Bump it when what the rules produce changes,
+// so edges an older version wrote can be found and re-derived:
+//
+//	relate/v1  unbounded supports edges (before #417; such rows predate the
+//	           column and carry "")
+//	relate/v2  per-claim supports budget (ADR 0027)
+//	relate/v3  candidate computation budget (ADR 0028)
+const ModelVersion = "relate/v3"
+
+// CausalLLMVersion is stamped on causal edges the LLM detector infers.
+const CausalLLMVersion = "relate-llm-causal/v1"
+
 // Engine detects relationships between claims using token-overlap heuristics.
 type Engine struct {
 	now    func() time.Time
 	nextID func() (string, error)
+	// supportsBudget caps supports edges per source claim per pass; see
+	// DefaultSupportsBudget. 0 means the default, < 0 means unlimited.
+	supportsBudget int
 }
 
 // NewEngine returns an Engine with default clock and ID generation.
@@ -130,6 +146,7 @@ const causalTimeTolerance = 48 * time.Hour
 func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 	rels := make([]domain.Relationship, 0)
 	now := e.now().UTC()
+	var candidates []candidateEdge
 
 	// Pre-compute normalized content tokens and polarity for each claim.
 	type analyzed struct {
@@ -196,20 +213,31 @@ func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 			if suppressAsSessionNoise(relType, claims[i], claims[j]) {
 				continue
 			}
-
-			id, err := e.nextID()
-			if err != nil {
-				return nil, err
-			}
-
-			rels = append(rels, domain.Relationship{
-				ID:          id,
-				Type:        relType,
-				FromClaimID: claims[i].ID,
-				ToClaimID:   claims[j].ID,
-				CreatedAt:   now,
-			})
+			overlap := contentOverlap(cache[i].tokens, cache[j].tokens)
+			candidates = append(candidates, candidateEdge{from: i, to: j, relType: relType,
+				strength: supportsStrength(overlap, len(cache[i].tokens), len(cache[j].tokens))})
 		}
+	}
+
+	// Within a batch the same per-claim supports budget applies as against the
+	// corpus (DefaultSupportsBudget); IDs go only to the edges it keeps.
+	keep := keepWithinBudget(candidates, e.budget())
+	for k, c := range candidates {
+		if !keep[k] {
+			continue
+		}
+		id, err := e.nextID()
+		if err != nil {
+			return nil, err
+		}
+		rels = append(rels, domain.Relationship{
+			DerivedBy:   ModelVersion,
+			ID:          id,
+			Type:        c.relType,
+			FromClaimID: claims[c.from].ID,
+			ToClaimID:   claims[c.to].ID,
+			CreatedAt:   now,
+		})
 	}
 
 	// Explicit citations: if a claim text references another claim ID,
@@ -269,6 +297,7 @@ func (e Engine) appendCitationRelationships(rels []domain.Relationship, fromClai
 				return nil, err
 			}
 			rels = append(rels, domain.Relationship{
+				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        domain.RelationshipTypeCites,
 				FromClaimID: c.ID,
@@ -353,6 +382,7 @@ func (e Engine) DetectTestConflicts(claims []domain.Claim) ([]domain.Relationshi
 				return nil, err
 			}
 			rels = append(rels, domain.Relationship{
+				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        relType,
 				FromClaimID: a.ID,
@@ -439,6 +469,7 @@ func (e Engine) DetectCausal(claims []domain.Claim) ([]domain.Relationship, erro
 				return nil, err
 			}
 			rels = append(rels, domain.Relationship{
+				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        domain.RelationshipTypeCauses,
 				FromClaimID: claims[i].ID,
@@ -835,4 +866,14 @@ func suppressAsSessionNoise(relType domain.RelationshipType, a, b domain.Claim) 
 		return false
 	}
 	return a.Durability.IsSessionLocal() && b.Durability.IsSessionLocal()
+}
+
+// Negated reports whether text asserts a negation, using exactly the polarity
+// rule the contradiction detector applies (contrastive "not merely X" does not
+// count). Exported so other passes that must not fuse a statement with its
+// denial — semantic dedupe — agree with contradiction detection by
+// construction rather than by a second, drifting tokenizer.
+func Negated(text string) bool {
+	_, neg := contentTokensAndPolarity(text)
+	return neg
 }

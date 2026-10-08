@@ -292,6 +292,17 @@ ON CONFLICT (claim_id, event_id) DO NOTHING`,
 	return nil
 }
 
+// UnlinkEvidence implements [ports.ClaimRepository.UnlinkEvidence].
+func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID string) error {
+	if _, err := r.db.ExecContext(ctx,
+		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1 AND event_id = $2`, qualify(r.ns, "claim_evidence")),
+		claimID, eventID,
+	); err != nil {
+		return fmt.Errorf("unlink evidence %s -> %s: %w", claimID, eventID, err)
+	}
+	return nil
+}
+
 // DeleteCascade removes a claim plus every claim-keyed row it owns.
 //
 // The set is the canonical one from [ports.ClaimRepository], narrowed to
@@ -507,6 +518,23 @@ WHERE id = $3`, qualify(r.ns, "claims"))
 	return nil
 }
 
+// MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed].
+func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error {
+	if confirmedAt.IsZero() {
+		confirmedAt = time.Now().UTC()
+	}
+	res, err := r.db.ExecContext(ctx,
+		fmt.Sprintf(`UPDATE %s SET last_confirmed = $1 WHERE id = $2`, qualify(r.ns, "claims")),
+		confirmedAt.UTC(), claimID)
+	if err != nil {
+		return fmt.Errorf("mark confirmed %s: %w", claimID, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
+	}
+	return nil
+}
+
 // SetValidity satisfies the corresponding ports method.
 func (r ClaimRepository) SetValidity(ctx context.Context, claimID string, validTo time.Time) error {
 	var args []any
@@ -570,6 +598,21 @@ type trustInput struct {
 	distinctSources int
 	totalEvents     int
 	latest          time.Time
+	lastConfirmed   time.Time
+	halfLifeDays    float64
+	credit          float64
+}
+
+// toDomain assembles the canonical trust input (ADR 0026) for one row.
+func (in trustInput) toDomain() domain.TrustInput {
+	return domain.TrustInput{
+		Confidence:     in.confidence,
+		EvidenceCount:  domain.EffectiveEvidenceCount(in.distinctSources, in.totalEvents),
+		LatestEvidence: in.latest,
+		LastConfirmed:  in.lastConfirmed,
+		HalfLifeDays:   in.halfLifeDays,
+		Credit:         in.credit,
+	}
 }
 
 // trustInputsSQL builds the aggregate that feeds trust scoring. A non-empty
@@ -590,7 +633,8 @@ func (r ClaimRepository) trustInputsSQL(where string) string {
 	return fmt.Sprintf(`
 SELECT c.id, c.confidence,
        COUNT(DISTINCT e.created_by), COUNT(DISTINCT ce.event_id),
-       MAX(e.timestamp)
+       MAX(e.timestamp),
+       c.last_confirmed, c.half_life_days, c.confidence_components
 FROM %s c
 LEFT JOIN %s ce ON ce.claim_id = c.id
 LEFT JOIN %s e ON e.id = ce.event_id
@@ -617,13 +661,21 @@ func (r ClaimRepository) listTrustInputs(ctx context.Context, query string, args
 		var in trustInput
 		// NULL (no evidence rows) leaves in.latest at the zero time, the
 		// cross-backend "unknown freshness" sentinel. See trustInputsSQL.
-		var latest sql.NullTime
-		if err := rows.Scan(&in.id, &in.confidence, &in.distinctSources, &in.totalEvents, &latest); err != nil {
+		// c.id is the primary key, so the per-claim columns are functionally
+		// dependent on the GROUP BY and need no aggregate.
+		var latest, lastConfirmed sql.NullTime
+		var components string
+		if err := rows.Scan(&in.id, &in.confidence, &in.distinctSources, &in.totalEvents, &latest,
+			&lastConfirmed, &in.halfLifeDays, &components); err != nil {
 			return nil, fmt.Errorf("scan trust input: %w", err)
 		}
 		if latest.Valid {
 			in.latest = latest.Time
 		}
+		if lastConfirmed.Valid {
+			in.lastConfirmed = lastConfirmed.Time
+		}
+		in.credit = domain.AppliedCredit(decodeConfidenceComponents(components))
 		inputs = append(inputs, in)
 	}
 	if err := rows.Err(); err != nil {
@@ -634,17 +686,17 @@ func (r ClaimRepository) listTrustInputs(ctx context.Context, query string, args
 
 // applyTrustInputs scores each row and writes trust_score back in one
 // transaction. Returns the number of claims touched.
-func (r ClaimRepository) applyTrustInputs(ctx context.Context, inputs []trustInput, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) applyTrustInputs(ctx context.Context, inputs []trustInput, scoring domain.TrustScoring) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin trust tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	stmt := fmt.Sprintf(`UPDATE %s SET trust_score = $1 WHERE id = $2`, qualify(r.ns, "claims"))
+	stmt := fmt.Sprintf(`UPDATE %s SET trust_score = $1, trust_computed_at = $2, trust_model_version = $3 WHERE id = $4`, qualify(r.ns, "claims"))
+	at := scoring.At.UTC()
 	for _, in := range inputs {
-		evidenceCount := domain.EffectiveEvidenceCount(in.distinctSources, in.totalEvents)
-		s := score(in.confidence, evidenceCount, in.latest)
-		if _, err := tx.ExecContext(ctx, stmt, s, in.id); err != nil {
+		s := scoring.Score(in.toDomain())
+		if _, err := tx.ExecContext(ctx, stmt, s, at, scoring.ModelVersion, in.id); err != nil {
 			return 0, fmt.Errorf("update trust for %s: %w", in.id, err)
 		}
 	}
@@ -656,12 +708,12 @@ func (r ClaimRepository) applyTrustInputs(ctx context.Context, inputs []trustInp
 
 // RecomputeTrust applies the supplied scoring function to every
 // claim. Returns the count touched.
-func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrust(ctx context.Context, scoring domain.TrustScoring) (int, error) {
 	inputs, err := r.listTrustInputs(ctx, r.trustInputsSQL(""))
 	if err != nil {
 		return 0, fmt.Errorf("list trust inputs: %w", err)
 	}
-	return r.applyTrustInputs(ctx, inputs, score)
+	return r.applyTrustInputs(ctx, inputs, scoring)
 }
 
 // RecomputeTrustForClaims implements [ports.ScopedTrustScorer]: the same
@@ -672,7 +724,7 @@ func (r ClaimRepository) RecomputeTrust(ctx context.Context, score func(confiden
 // The id set arrives as a single text[] parameter (= ANY($1), the package's
 // existing IN-list idiom), so no chunking is needed however many ids a write
 // touched — there is one bind parameter regardless of slice length.
-func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs []string, scoring domain.TrustScoring) (int, error) {
 	if len(claimIDs) == 0 {
 		return 0, nil
 	}
@@ -680,7 +732,29 @@ func (r ClaimRepository) RecomputeTrustForClaims(ctx context.Context, claimIDs [
 	if err != nil {
 		return 0, fmt.Errorf("list trust inputs for claims: %w", err)
 	}
-	return r.applyTrustInputs(ctx, inputs, score)
+	return r.applyTrustInputs(ctx, inputs, scoring)
+}
+
+// ListTrustInputs implements [ports.TrustInputLister] with the same aggregate
+// and assembly the recompute uses.
+func (r ClaimRepository) ListTrustInputs(ctx context.Context, claimIDs []string) (map[string]domain.TrustInput, error) {
+	var (
+		inputs []trustInput
+		err    error
+	)
+	if len(claimIDs) == 0 {
+		inputs, err = r.listTrustInputs(ctx, r.trustInputsSQL(""))
+	} else {
+		inputs, err = r.listTrustInputs(ctx, r.trustInputsSQL("WHERE c.id = ANY($1)"), pgArray(claimIDs))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list trust inputs: %w", err)
+	}
+	out := make(map[string]domain.TrustInput, len(inputs))
+	for _, in := range inputs {
+		out[in.id] = in.toDomain()
+	}
+	return out, nil
 }
 
 // AverageTrust satisfies the corresponding ports method.
@@ -729,7 +803,7 @@ func nullTime(t time.Time) any {
 // an omission fails a test instead of zeroing production rows.
 var claimColumnNames = []string{
 	"id", "text", "type", "confidence", "status", "created_at", "created_by",
-	"trust_score", "valid_from", "valid_to", "last_verified", "verify_count",
+	"trust_score", "trust_computed_at", "trust_model_version", "valid_from", "valid_to", "last_verified", "verify_count", "last_confirmed",
 	"half_life_days", "half_life_classifier", "lifecycle", "subject_class",
 	"durability", "confidence_components",
 	"test_id", "test_requirement_ref", "test_author", "test_last_modified",
@@ -790,6 +864,9 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	// cross-backend "never verified" sentinel — scanning it into a NullTime
 	// keeps the zero time rather than inventing an instant.
 	var lastVerified sql.NullTime
+	// last_confirmed is NULL until the first explicit confirmation (ADR 0026).
+	var lastConfirmed sql.NullTime
+	var trustComputedAt sql.NullTime
 	var testLastModified, testLastRunAt sql.NullTime
 	var scopeService, scopeEnv, scopeTeam string
 	var sourceDocument, sourceType, liveness, provenanceRationale, visibility string
@@ -800,7 +877,7 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	var lastExecuted sql.NullTime
 	if err := rows.Scan(
 		&c.ID, &c.Text, &typ, &c.Confidence, &status,
-		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &validFrom, &validTo, &lastVerified, &c.VerifyCount,
+		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &trustComputedAt, &c.TrustModelVersion, &validFrom, &validTo, &lastVerified, &c.VerifyCount, &lastConfirmed,
 		&c.HalfLifeDays, &c.HalfLifeClassifier, &lifecycle, &subjectClass, &durability, &confidenceComponents,
 		&c.TestID, &c.TestRequirementRef, &c.TestAuthor, &testLastModified, &testLastRunAt, &c.TestPassCount, &c.TestFailCount,
 		&scopeService, &scopeEnv, &scopeTeam,
@@ -832,6 +909,12 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	}
 	if lastVerified.Valid {
 		c.LastVerified = lastVerified.Time
+	}
+	if lastConfirmed.Valid {
+		c.LastConfirmed = lastConfirmed.Time
+	}
+	if trustComputedAt.Valid {
+		c.TrustComputedAt = trustComputedAt.Time
 	}
 	if testLastModified.Valid {
 		c.TestLastModified = testLastModified.Time

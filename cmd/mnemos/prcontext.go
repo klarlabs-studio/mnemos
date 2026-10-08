@@ -14,6 +14,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/relate"
 )
 
@@ -179,11 +180,10 @@ func ingestGhPRs(ctx context.Context, w *govwrite.Writer, repoRoot string, limit
 		rels = nil
 	}
 
-	if existingClaims, listErr := conn.Claims.ListAll(ctx); listErr == nil && len(existingClaims) > 0 {
-		if incremental, incErr := relEngine.DetectIncremental(newClaims, existingClaims); incErr == nil {
-			rels = append(rels, incremental...)
-		}
-	}
+	// Best-effort: the commits are kept without their edges when relating
+	// fails; RelateToExisting logs and counts the skip (#428).
+	incremental, _ := pipeline.RelateToExisting(ctx, conn, relEngine, newClaims, "pr")
+	rels = append(rels, incremental...)
 
 	stampEventActor(newEvents, actor)
 	stampClaimActor(newClaims, actor)

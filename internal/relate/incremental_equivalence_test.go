@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -83,6 +84,7 @@ func referenceDetectIncremental(e Engine, newClaims []domain.Claim, existingClai
 			}
 
 			rels = append(rels, domain.Relationship{
+				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        relType,
 				FromClaimID: newClaims[i].ID,
@@ -229,7 +231,10 @@ func TestIncrementalMatchesReference(t *testing.T) {
 			if err != nil {
 				t.Fatalf("reference: %v", err)
 			}
-			got, stats, err := equivalenceEngine().DetectIncrementalWithStats(newClaims, existing)
+			// The reference is the pre-budget algorithm, so this compares the
+			// optimisation alone; the supports budget has its own tests
+			// (budget_test.go).
+			got, stats, err := equivalenceEngine().WithSupportsBudget(-1).DetectIncrementalWithStats(newClaims, existing)
 			if err != nil {
 				t.Fatalf("optimised: %v", err)
 			}
@@ -442,15 +447,18 @@ func TestScanAndIndexPathsAgree(t *testing.T) {
 				newClaims[i].ID = fmt.Sprintf("cl_new_%04d", i)
 			}
 
-			scanRels, scanStats, err := runPass(newClaims, existing, (Engine).scanPass)
+			scanRels, scanStrength, scanStats, err := runPass(newClaims, existing, (Engine).scanPass)
 			if err != nil {
 				t.Fatalf("%s seed=%d scanPass: %v", shape.name, seed, err)
 			}
-			indexRels, indexStats, err := runPass(newClaims, existing, (Engine).indexedPass)
+			indexRels, indexStrength, indexStats, err := runPass(newClaims, existing, (Engine).indexedPass)
 			if err != nil {
 				t.Fatalf("%s seed=%d indexedPass: %v", shape.name, seed, err)
 			}
 			assertSameRelationships(t, fmt.Sprintf("%s seed=%d", shape.name, seed), scanRels, indexRels)
+			if !slices.Equal(scanStrength, indexStrength) {
+				t.Errorf("%s seed=%d: scan and index passes report different edge strengths", shape.name, seed)
+			}
 
 			totalPairs += len(newClaims) * len(existing)
 			totalRels += len(scanRels)
@@ -468,7 +476,11 @@ func TestScanAndIndexPathsAgree(t *testing.T) {
 // runPass drives one of the two candidate-enumeration passes and collects what
 // it emitted, so the two can be compared without going through the citation and
 // test-conflict stages they share.
-func runPass(newClaims, existing []domain.Claim, pass func(Engine, []*claimDerived, []domain.Claim, func(int, int32, domain.RelationshipType) error, *IncrementalStats) error) ([]domain.Relationship, IncrementalStats, error) {
+//
+// It also returns the strength each pass reported per edge: the supports
+// budget ranks by it, so the two passes must agree on it exactly or the budget
+// would keep different edges depending on corpus size.
+func runPass(newClaims, existing []domain.Claim, pass func(Engine, []*claimDerived, []domain.Claim, func(int, int32, domain.RelationshipType, float64) error, *IncrementalStats) error) ([]domain.Relationship, []float64, IncrementalStats, error) {
 	e := equivalenceEngine()
 	derived := make([]*claimDerived, len(newClaims))
 	for i := range newClaims {
@@ -476,17 +488,19 @@ func runPass(newClaims, existing []domain.Claim, pass func(Engine, []*claimDeriv
 		derived[i] = newClaimDerived(newClaims[i].Text, tok, neg)
 	}
 	var out []domain.Relationship
+	var strengths []float64
 	stats := IncrementalStats{}
-	emit := func(i int, j int32, rt domain.RelationshipType) error {
+	emit := func(i int, j int32, rt domain.RelationshipType, strength float64) error {
 		id, err := e.nextID()
 		if err != nil {
 			return err
 		}
 		out = append(out, domain.Relationship{ID: id, Type: rt, FromClaimID: newClaims[i].ID, ToClaimID: existing[j].ID})
+		strengths = append(strengths, strength)
 		return nil
 	}
 	err := pass(e, derived, existing, emit, &stats)
-	return out, stats, err
+	return out, strengths, stats, err
 }
 
 // TestTokenizeContentIntoMatchesContentTokens guards the one place the two

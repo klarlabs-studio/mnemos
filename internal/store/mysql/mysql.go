@@ -81,11 +81,12 @@ const defaultNamespace = "mnemos"
 // CREATE DATABASE bootstrap. Honors `?namespace=` per the ADR.
 func ParseDSN(dsn string) (DSN, error) {
 	if !strings.HasPrefix(dsn, "mysql://") && !strings.HasPrefix(dsn, "mariadb://") {
-		return DSN{}, fmt.Errorf("mysql: not a mysql/mariadb dsn: %q", dsn)
+		return DSN{}, fmt.Errorf("mysql: not a mysql/mariadb dsn: %q", store.RedactDSN(dsn))
 	}
 	u, err := url.Parse(dsn)
 	if err != nil {
-		return DSN{}, fmt.Errorf("mysql: parse dsn: %w", err)
+		// Not %w: a *url.Error's text quotes the raw URL, password included.
+		return DSN{}, fmt.Errorf("mysql: malformed dsn %s", store.RedactDSN(dsn))
 	}
 
 	q := u.Query()
@@ -136,6 +137,13 @@ func ParseDSN(dsn string) (DSN, error) {
 	}, nil
 }
 
+// pingError reports a failed ping with the DSN for diagnosis, redacted. The
+// driver form "user:password@tcp(host)/db" is what DriverDSN holds, and it used
+// to be printed raw — the password in clear in every ping failure.
+func pingError(err error, parsed DSN) error {
+	return fmt.Errorf("mysql: ping: %w (dsn=%s)", err, store.RedactDSN(parsed.DriverDSN))
+}
+
 // openProvider runs the bootstrap (CREATE DATABASE IF NOT EXISTS,
 // then schema.sql) and returns a Conn populated with port-typed
 // repositories.
@@ -160,7 +168,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 	tuneConnPool(db)
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("mysql: ping: %w (dsn=%s)", err, parsed.DriverDSN)
+		return nil, pingError(err, parsed)
 	}
 
 	if err := applySchema(ctx, db); err != nil {

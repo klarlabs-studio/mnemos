@@ -75,6 +75,12 @@ ON CONFLICT(id) DO UPDATE SET
 -- the claim), useful when a resolution is reverted.
 UPDATE claims SET valid_to = ? WHERE id = ?;
 
+-- name: MarkClaimConfirmed :exec
+-- Records an EXPLICIT confirmation (ADR 0026). Deliberately separate from
+-- MarkClaimVerified, which recall and replay also call: only verify and a
+-- validated outcome confirm a belief, and only confirmation feeds trust.
+UPDATE claims SET last_confirmed = ? WHERE id = ?;
+
 -- name: MarkClaimVerified :exec
 -- Bumps last_verified to the supplied timestamp and increments
 -- verify_count by one. The half_life_days COALESCE keeps any
@@ -92,8 +98,8 @@ VALUES (?, ?)
 ON CONFLICT(claim_id, event_id) DO NOTHING;
 
 -- name: ListAllClaims :many
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
-       valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier,
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -108,8 +114,8 @@ ORDER BY created_at ASC;
 -- `mnemos trust --test=<ref>` and the which_test_to_trust MCP tool: the
 -- previous implementation called ListAllClaims and filtered in Go,
 -- which scaled O(n) per invocation.
-SELECT id, text, type, confidence, status, created_at, created_by, trust_score,
-       valid_from, valid_to, last_verified, verify_count, half_life_days, half_life_classifier,
+SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -122,24 +128,31 @@ WHERE type = 'test_result'
 ORDER BY test_last_run_at DESC, created_at DESC;
 
 -- name: UpdateClaimTrust :exec
-UPDATE claims SET trust_score = ? WHERE id = ?;
+-- trust_score is a cache of trust.At (ADR 0026 section 5): it is always written with
+-- the instant it was computed for and the model version that computed it.
+UPDATE claims SET trust_score = ?, trust_computed_at = ?, trust_model_version = ? WHERE id = ?;
 
 -- name: ListClaimTrustInputs :many
--- Inputs to recompute trust_score for every claim: confidence, the count of
--- DISTINCT evidence-event authors and of total events (so corroboration can be
--- graded by independence - an echo-chamber guard), and the most-recent evidence
--- timestamp. LEFT JOIN so claims with no evidence still appear; the caller treats
+-- Inputs to recompute trust_score for every claim (ADR 0026 trust.At):
+-- confidence, the count of DISTINCT evidence-event authors and of total events
+-- (so corroboration can be graded by independence - an echo-chamber guard), the
+-- most-recent evidence timestamp, and the claim's own last_confirmed,
+-- half_life_days and confidence_components (which carries applied credit).
+-- LEFT JOIN so claims with no evidence still appear; the caller treats
 -- the missing aggregate as 0/empty.
 SELECT
   c.id              AS claim_id,
   c.confidence      AS confidence,
   COUNT(DISTINCT e.created_by) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
-  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
+  c.last_confirmed  AS last_confirmed,
+  c.half_life_days  AS half_life_days,
+  c.confidence_components AS confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
-GROUP BY c.id, c.confidence;
+GROUP BY c.id, c.confidence, c.last_confirmed, c.half_life_days, c.confidence_components;
 
 -- name: ListClaimTrustInputsForClaims :many
 -- Same inputs as ListClaimTrustInputs, bounded to the given claims.
@@ -154,12 +167,15 @@ SELECT
   c.confidence      AS confidence,
   COUNT(DISTINCT e.created_by) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
-  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at
+  CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
+  c.last_confirmed  AS last_confirmed,
+  c.half_life_days  AS half_life_days,
+  c.confidence_components AS confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
 LEFT JOIN events e          ON e.id = ce.event_id
 WHERE c.id IN (sqlc.slice('claim_ids'))
-GROUP BY c.id, c.confidence;
+GROUP BY c.id, c.confidence, c.last_confirmed, c.half_life_days, c.confidence_components;
 
 -- name: AverageTrust :one
 SELECT CAST(COALESCE(AVG(trust_score), 0) AS REAL) AS avg_trust FROM claims;

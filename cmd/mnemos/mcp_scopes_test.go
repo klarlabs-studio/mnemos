@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 	"go.klarlabs.de/mcp/protocol"
 	"go.klarlabs.de/mnemos/internal/auth"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/sourceguard"
 )
 
 // The map must cover every tool the server actually registers. A tool added
@@ -21,13 +21,12 @@ import (
 // is safe but locks out legitimate callers — better to fail here, at build
 // time, than to debug a 403 in production.
 func TestMCPToolScopes_CoversEveryRegisteredTool(t *testing.T) {
-	root, err := repoRoot()
+	// The registrations are read from the AST (every srv.Tool("...") literal in
+	// this package), not by regex; a computed tool name is an error rather than
+	// a silently shorter list.
+	registered, err := sourceguard.CallStringArgs(".", "Tool", 0)
 	if err != nil {
-		t.Fatalf("locate repo root: %v", err)
-	}
-	registered := mustReadMCPTools(t, filepath.Join(root, "cmd/mnemos/mcp.go"))
-	if len(registered) == 0 {
-		t.Fatal("no registered tool names found; the srv.Tool extraction needs updating")
+		t.Fatalf("read the registered tools: %v", err)
 	}
 	for _, name := range registered {
 		if _, ok := mcpToolScopes[name]; !ok {

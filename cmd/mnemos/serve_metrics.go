@@ -7,6 +7,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"go.klarlabs.de/mnemos/internal/pipeline"
 )
 
 // RED metrics for the HTTP API. Naming follows the Prometheus Go
@@ -43,10 +45,18 @@ var (
 		Name: "mnemos_http_in_flight_requests",
 		Help: "Number of HTTP requests currently being handled.",
 	})
+
+	// relateSkippedTotal exposes pipeline.RelateSkips (#428): a non-zero rate
+	// means captures are being stored without their supports and
+	// contradiction edges.
+	relateSkippedTotal = prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name: "mnemos_relate_skipped_total",
+		Help: "Writes that stored new beliefs without relating them to existing ones because the relate step failed.",
+	}, func() float64 { return float64(pipeline.RelateSkips()) })
 )
 
 func init() {
-	mnemosRegistry.MustRegister(httpRequestsTotal, httpRequestDuration, httpInFlight)
+	mnemosRegistry.MustRegister(httpRequestsTotal, httpRequestDuration, httpInFlight, relateSkippedTotal)
 }
 
 // metricsMiddleware records RED telemetry (rate, errors, duration) for

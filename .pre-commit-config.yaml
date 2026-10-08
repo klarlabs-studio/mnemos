@@ -8,9 +8,9 @@
 # Run on demand against all files:
 #   pre-commit run --all-files
 #
-# The hook set is a strict subset of CI: passing pre-commit guarantees
-# CI will not reject on style or lint. CI is the source of truth — these
-# hooks are local fast-feedback, not a parallel pipeline.
+# Optional local fast feedback, and a strict subset of the gate. The gate is
+# warden's pre-push hook (.warden.yaml), which publishes the warden/gate
+# status that branch protection requires.
 
 minimum_pre_commit_version: "3.5.0"
 
@@ -45,7 +45,7 @@ repos:
 
       - id: gocritic
         name: gocritic
-        entry: bash -c 'command -v gocritic >/dev/null 2>&1 || go install github.com/go-critic/go-critic/cmd/gocritic@latest; gocritic check ./...'
+        entry: bash -c 'command -v gocritic >/dev/null 2>&1 || go install github.com/go-critic/go-critic/cmd/gocritic@v0.15.0; gocritic check ./...'
         language: system
         types: [go]
         pass_filenames: false

@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/relate"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -29,6 +31,10 @@ type SemanticDedupePlan struct {
 	// have no embedding row. Surfaced so users know the scan was
 	// partial and can run `mnemos reembed` first if they care.
 	SkippedNoEmbedding int
+	// SkippedRetired is how many claims were excluded because they are
+	// deprecated or their valid time is closed. Retired knowledge is never a
+	// merge candidate.
+	SkippedRetired int
 }
 
 // SemanticMerge describes one absorption: a winner claim id that
@@ -76,43 +82,36 @@ func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64
 		vecByID[rec.EntityID] = rec.Vector
 	}
 
-	// Index claims that actually have an embedding. We need both the
-	// vector and the rest of the claim metadata (trust + created_at
-	// for tiebreaking).
+	// Index the claims that may take part in a merge. Two kinds are left out:
+	// claims with no embedding cannot be compared, and RETIRED claims —
+	// deprecated, or with valid time closed (forgotten / superseded) — must not
+	// be. Merging a retired claim into a live one repoints its evidence onto
+	// the live claim, so knowledge the brain deliberately retired would come
+	// back as fresh corroboration of whatever it happened to resemble.
 	pool := make([]indexedClaim, 0, len(allClaims))
+	skipped, retired := 0, 0
 	for _, c := range allClaims {
-		v, ok := vecByID[c.ID]
-		if !ok || len(v) == 0 {
+		if c.Status == domain.ClaimStatusDeprecated || !c.ValidTo.IsZero() {
+			retired++
 			continue
 		}
-		pool = append(pool, indexedClaim{claim: c, vec: v})
-	}
-	skipped := len(allClaims) - len(pool)
-
-	// Union-Find over the pool. Each cluster collapses to one root;
-	// after the pass we walk roots → members to build merges.
-	parent := make([]int, len(pool))
-	for i := range parent {
-		parent[i] = i
-	}
-	find := func(i int) int {
-		for parent[i] != i {
-			parent[i] = parent[parent[i]]
-			i = parent[i]
+		v, ok := vecByID[c.ID]
+		if !ok || len(v) == 0 {
+			skipped++
+			continue
 		}
-		return i
-	}
-	union := func(a, b int) {
-		ra, rb := find(a), find(b)
-		if ra != rb {
-			parent[ra] = rb
-		}
+		pool = append(pool, indexedClaim{claim: c, vec: v, negated: relate.Negated(c.Text)})
 	}
 
-	// Pairwise similarity. O(n^2) but with a small constant — for the
-	// 10k-claim ceiling this is ~50M cosine ops, still under a second
-	// on a modern laptop.
+	disputed, err := disputedPairs(ctx, conn, pool)
+	if err != nil {
+		return SemanticDedupePlan{}, err
+	}
+
+	// Pairwise similarity. O(n²) with no computation budget yet — that is
+	// tracked separately (#382 Phase 5.3); this pass only fixes what may merge.
 	maxSim := make(map[[2]int]float32)
+	var candidates []simPair
 	for i := 0; i < len(pool); i++ {
 		for j := i + 1; j < len(pool); j++ {
 			if len(pool[i].vec) != len(pool[j].vec) {
@@ -123,10 +122,60 @@ func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64
 				continue
 			}
 			if float64(sim) >= threshold {
-				union(i, j)
 				maxSim[[2]int{i, j}] = sim
+				candidates = append(candidates, simPair{i: i, j: j, sim: sim})
 			}
 		}
+	}
+
+	// Clustering is COMPLETE-linkage under cannot-link constraints, not
+	// single-linkage union-find. Single linkage chained A≈B≈C into one
+	// cluster even when A and C were not near-duplicates, and it never asked
+	// whether two members disagreed — so a statement and its denial, a rule
+	// and its scoped exception, or the two ends of a recorded contradiction
+	// could fuse into one belief carrying both sides' evidence.
+	//
+	// Two clusters join only when EVERY cross pair is itself above threshold
+	// and no cross pair is forbidden by mayMerge. Pairs are taken strongest
+	// first, so the most certain duplicates claim each other before a weaker
+	// link can pull a member elsewhere; ties fall back to index order, which
+	// keeps the plan deterministic.
+	sort.SliceStable(candidates, func(a, b int) bool { return candidates[a].sim > candidates[b].sim })
+	parent := make([]int, len(pool))
+	members := make(map[int][]int, len(pool))
+	for i := range parent {
+		parent[i] = i
+		members[i] = []int{i}
+	}
+	find := func(i int) int {
+		for parent[i] != i {
+			parent[i] = parent[parent[i]]
+			i = parent[i]
+		}
+		return i
+	}
+	compatible := func(ra, rb int) bool {
+		for _, a := range members[ra] {
+			for _, b := range members[rb] {
+				key := [2]int{min(a, b), max(a, b)}
+				if _, ok := maxSim[key]; !ok {
+					return false
+				}
+				if !mayMerge(pool[a], pool[b], disputed) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	for _, c := range candidates {
+		ra, rb := find(c.i), find(c.j)
+		if ra == rb || !compatible(ra, rb) {
+			continue
+		}
+		parent[ra] = rb
+		members[rb] = append(members[rb], members[ra]...)
+		delete(members, ra)
 	}
 
 	// Group members by their root.
@@ -173,15 +222,79 @@ func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64
 		Threshold:          threshold,
 		ClaimsScanned:      len(pool),
 		SkippedNoEmbedding: skipped,
+		SkippedRetired:     retired,
 	}, nil
+}
+
+// simPair is one above-threshold pair of pool indexes.
+type simPair struct {
+	i, j int
+	sim  float32
+}
+
+// mayMerge reports whether two near-duplicate claims may be folded into one
+// belief. Embedding similarity says two texts are ABOUT the same thing; it does
+// not say they AGREE. Each rule below names a way two similar claims can still
+// be different beliefs:
+//
+//   - a recorded contradicts/refutes edge between them: the brain already
+//     knows they disagree, and merging would erase the dissonance;
+//   - opposite negation polarity ("X is safe" / "X is not safe"), using the
+//     contradiction detector's own polarity rule;
+//   - different scope: the same statement for two services or environments
+//     is two context-conditioned beliefs, not one;
+//   - different type: a decision and a fact with the same wording record
+//     different things (one was chosen, one was observed).
+func mayMerge(a, b indexedClaim, disputed map[[2]string]struct{}) bool {
+	if _, ok := disputed[pairKey(a.claim.ID, b.claim.ID)]; ok {
+		return false
+	}
+	if a.negated != b.negated {
+		return false
+	}
+	if !a.claim.Scope.Equal(b.claim.Scope) {
+		return false
+	}
+	return a.claim.Type == b.claim.Type
+}
+
+func pairKey(a, b string) [2]string {
+	if b < a {
+		a, b = b, a
+	}
+	return [2]string{a, b}
+}
+
+// disputedPairs returns every pool pair joined by a contradicts or refutes
+// edge, in either direction.
+func disputedPairs(ctx context.Context, conn *store.Conn, pool []indexedClaim) (map[[2]string]struct{}, error) {
+	out := map[[2]string]struct{}{}
+	if len(pool) == 0 || conn.Relationships == nil {
+		return out, nil
+	}
+	ids := make([]string, len(pool))
+	for i, c := range pool {
+		ids[i] = c.claim.ID
+	}
+	rels, err := conn.Relationships.ListByClaimIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list relationships for dedupe guard: %w", err)
+	}
+	for _, r := range rels {
+		if r.Type == domain.RelationshipTypeContradicts || r.Type == domain.RelationshipTypeRefutes {
+			out[pairKey(r.FromClaimID, r.ToClaimID)] = struct{}{}
+		}
+	}
+	return out, nil
 }
 
 // indexedClaim pairs a claim with its embedding vector for the
 // dedupe scan. Lifted out of PlanSemanticDedupe so pickWinner can
 // accept the same shape without re-declaring the anonymous type.
 type indexedClaim struct {
-	claim domain.Claim
-	vec   []float32
+	claim   domain.Claim
+	vec     []float32
+	negated bool
 }
 
 // pickWinner returns the index of the cluster member that should

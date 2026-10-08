@@ -287,7 +287,7 @@ func ingestSingleDoc(
 		return fmt.Errorf("relate: %w", err)
 	}
 
-	existingClaims, err := conn.Claims.ListAll(ctx)
+	existingClaims, err := pipeline.ExistingForRelate(ctx, conn, claims)
 	if err != nil {
 		return fmt.Errorf("list existing claims: %w", err)
 	}

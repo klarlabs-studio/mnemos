@@ -23,10 +23,17 @@ CREATE TABLE IF NOT EXISTS claims (
   created_at TEXT NOT NULL,
   created_by TEXT NOT NULL DEFAULT '<system>',
   trust_score REAL NOT NULL DEFAULT 0,
+  -- trust_computed_at / trust_model_version (ADR 0026 §5): what trust_score is
+  -- a cache of. Written only by a trust recompute; '' predates versioning.
+  trust_computed_at TEXT NOT NULL DEFAULT '',
+  trust_model_version TEXT NOT NULL DEFAULT '',
   valid_from TEXT NOT NULL DEFAULT '',
   valid_to TEXT,
   last_verified TEXT NOT NULL DEFAULT '',
   verify_count INTEGER NOT NULL DEFAULT 0,
+  -- last_confirmed (ADR 0026): last EXPLICIT confirmation (verify, validated
+  -- outcome). Recall and replay bump last_verified, never this.
+  last_confirmed TEXT NOT NULL DEFAULT '',
   half_life_days REAL NOT NULL DEFAULT 0,
   -- half_life_classifier (ADR 0025): which classifier assigned half_life_days.
   -- '' means none did, which is NOT the same as a classifier deciding the
@@ -122,6 +129,7 @@ CREATE TABLE IF NOT EXISTS relationships (
   created_at TEXT NOT NULL,
   created_by TEXT NOT NULL DEFAULT '<system>',
   strength REAL NOT NULL DEFAULT 1,
+  derived_by TEXT NOT NULL DEFAULT '',
   FOREIGN KEY (from_claim_id) REFERENCES claims(id),
   FOREIGN KEY (to_claim_id) REFERENCES claims(id)
 );

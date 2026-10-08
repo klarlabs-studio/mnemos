@@ -134,7 +134,7 @@ func (c *GeminiClient) Complete(ctx context.Context, messages []Message) (Respon
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return Response{}, fmt.Errorf("gemini returned status %d: %s", resp.StatusCode, string(respBody))
+		return Response{}, fmt.Errorf("gemini returned status %d: %s", resp.StatusCode, withoutSecret(string(respBody), c.apiKey))
 	}
 
 	var result geminiResponse

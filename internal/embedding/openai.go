@@ -108,7 +108,7 @@ func (c *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("embedding API returned status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("embedding API returned status %d: %s", resp.StatusCode, withoutSecret(string(respBody), c.apiKey))
 	}
 
 	if isOllama {

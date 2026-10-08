@@ -169,10 +169,13 @@ type storedClaim struct {
 	CreatedAt            time.Time
 	CreatedBy            string
 	TrustScore           float64
+	TrustComputedAt      time.Time
+	TrustModelVersion    string
 	ValidFrom            time.Time
 	ValidTo              time.Time
 	LastVerified         time.Time
 	VerifyCount          int
+	LastConfirmed        time.Time
 	HalfLifeDays         float64
 	HalfLifeClassifier   string
 	Scope                domain.Scope
@@ -221,9 +224,12 @@ func (c storedClaim) toDomain() domain.Claim {
 		CreatedAt:            c.CreatedAt,
 		CreatedBy:            c.CreatedBy,
 		TrustScore:           c.TrustScore,
+		TrustComputedAt:      c.TrustComputedAt,
+		TrustModelVersion:    c.TrustModelVersion,
 		ValidFrom:            c.ValidFrom,
 		ValidTo:              c.ValidTo,
 		LastVerified:         c.LastVerified,
+		LastConfirmed:        c.LastConfirmed,
 		VerifyCount:          c.VerifyCount,
 		HalfLifeDays:         c.HalfLifeDays,
 		HalfLifeClassifier:   c.HalfLifeClassifier,
@@ -291,9 +297,12 @@ func storedClaimFromDomain(c domain.Claim) storedClaim {
 		CreatedAt:            c.CreatedAt.UTC(),
 		CreatedBy:            actorOr(c.CreatedBy),
 		TrustScore:           c.TrustScore,
+		TrustComputedAt:      c.TrustComputedAt.UTC(),
+		TrustModelVersion:    c.TrustModelVersion,
 		ValidFrom:            validFrom.UTC(),
 		ValidTo:              c.ValidTo.UTC(),
 		LastVerified:         c.LastVerified.UTC(),
+		LastConfirmed:        c.LastConfirmed.UTC(),
 		VerifyCount:          c.VerifyCount,
 		HalfLifeDays:         c.HalfLifeDays,
 		HalfLifeClassifier:   c.HalfLifeClassifier,
@@ -340,6 +349,7 @@ type storedRelationship struct {
 	CreatedAt   time.Time
 	CreatedBy   string
 	Strength    float64 // Hebbian co-activation weight (ADR 0015 §4); 0 reads as base 1.0
+	DerivedBy   string  // rule set that inferred the edge (relate.ModelVersion); "" when explicit or legacy
 }
 
 type embeddingKey struct {

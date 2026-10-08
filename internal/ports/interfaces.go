@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/page"
+	"go.klarlabs.de/mnemos/internal/relate"
 )
 
 // ErrVectorSearchUnavailable is returned by an EventVectorSearcher
@@ -84,12 +86,25 @@ type ClaimRepository interface {
 	// against fresh evidence is a single repository call.
 	MarkVerified(ctx context.Context, claimID string, verifiedAt time.Time, halfLifeDays float64) error
 
+	// MarkConfirmed records an EXPLICIT confirmation of the claim at
+	// confirmedAt (ADR 0026): `verify`, or an outcome that validated it. It is
+	// separate from MarkVerified because recall and replay call MarkVerified as
+	// rehearsal, and only confirmation may raise trust. A zero confirmedAt
+	// means now.
+	MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error
+
 	// RepointEvidence rewrites every claim_evidence row pointing at
 	// fromClaimID to point at toClaimID instead, then deletes the
 	// original rows. Idempotent on the (claim_id, event_id) dedup
 	// key — duplicate evidence collapses silently. Used by
 	// pipeline.ApplySemanticDedupe.
 	RepointEvidence(ctx context.Context, fromClaimID, toClaimID string) error
+
+	// UnlinkEvidence removes the single (claimID, eventID) evidence row and
+	// nothing else. Idempotent: unlinking a link that does not exist is
+	// success. Used when an episode is deleted but a claim it supported
+	// still has other evidence — the claim keeps standing on what is left.
+	UnlinkEvidence(ctx context.Context, claimID, eventID string) error
 
 	// DeleteCascade removes a claim and every row keyed on claim_id
 	// that the claim alone owns. The canonical cascade set, which
@@ -153,7 +168,7 @@ type ClaimRepository interface {
 // fixture) are still valid ClaimRepositories — callers type-assert
 // before invoking these methods.
 type TrustScorer interface {
-	RecomputeTrust(ctx context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error)
+	RecomputeTrust(ctx context.Context, scoring domain.TrustScoring) (int, error)
 	AverageTrust(ctx context.Context) (float64, error)
 	CountClaimsBelowTrust(ctx context.Context, threshold float64) (int64, error)
 }
@@ -171,7 +186,18 @@ type TrustScorer interface {
 // Optional so a backend that cannot scope the query keeps working: callers
 // fall back to the full [TrustScorer.RecomputeTrust].
 type ScopedTrustScorer interface {
-	RecomputeTrustForClaims(ctx context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error)
+	RecomputeTrustForClaims(ctx context.Context, claimIDs []string, scoring domain.TrustScoring) (int, error)
+}
+
+// TrustInputLister is the optional capability to read the canonical trust
+// inputs (ADR 0026) without writing anything: the same per-claim aggregate a
+// recompute scores, assembled by the same code. Consumers that need trust at an
+// instant other than when it was stored — brain health projecting decay
+// forward, float-back gating at "now" — call trust.At on these inputs instead
+// of reimplementing the formula from raw rows, which is how the subsystems
+// drifted apart in the first place. Empty claimIDs means every claim.
+type TrustInputLister interface {
+	ListTrustInputs(ctx context.Context, claimIDs []string) (map[string]domain.TrustInput, error)
 }
 
 // BeliefCreditWriter is the optional capability to persist an attributed
@@ -226,6 +252,131 @@ type RelationshipRepository interface {
 
 	// DeleteAll wipes every relationship row.
 	DeleteAll(ctx context.Context) error
+}
+
+// RelateCandidateSource is the optional capability to answer a
+// relate.CandidateQuery: every stored claim q.Matches accepts, in
+// relate.SortCandidates order. With it, the write path relates new claims
+// against the few claims that can pair with them instead of loading the whole
+// corpus on every write, and the result is identical (relate's
+// TestCandidateQuery_IsExact). Without it, callers fall back to ListAll.
+type RelateCandidateSource interface {
+	RelateCandidates(ctx context.Context, q relate.CandidateQuery) (RelateCandidateSet, error)
+}
+
+// RelateCandidateSet is a RelateCandidateSource answer: the candidates, and
+// how many tokens the query's candidate budget skipped (0 when it did not
+// bind; see relate.DefaultCandidateBudget).
+type RelateCandidateSet struct {
+	Claims        []domain.Claim
+	SkippedTokens int
+}
+
+// ErrRelateCandidatesNotReady is returned by RelateCandidates while the
+// store's token index is still being built. The caller must fall back to
+// ListAll: a partial index would drop candidates.
+var ErrRelateCandidatesNotReady = errors.New("mnemos: relate candidate index not ready")
+
+// ClaimPage is one page of a belief browse: at most the requested number of
+// beliefs in page.Newer order, how many match the filter in all, and whether
+// more follow.
+type ClaimPage struct {
+	Claims []domain.Claim
+	Total  int
+	More   bool
+}
+
+// ErrPageUnsupported is returned by a ClaimPager that cannot evaluate a
+// filter exactly in the store; the caller pages in Go instead.
+var ErrPageUnsupported = errors.New("mnemos: filter not pageable in this store")
+
+// ClaimPager is the optional capability to page the belief browse in the
+// store: filter, order and cut there, and read only the page. after, when set,
+// is the last belief of the previous page (keyset pagination). Every
+// implementation must partition the filtered set: walking the pages returns
+// each matching belief exactly once.
+type ClaimPager interface {
+	PageClaims(ctx context.Context, f page.ClaimFilter, after *page.Key, limit int) (ClaimPage, error)
+}
+
+// Page is one page of a browse: at most the requested number of items in the
+// browse's order, how many match in all, and whether more follow.
+type Page[T any] struct {
+	Items []T
+	Total int
+	More  bool
+}
+
+// EventPager pages the episode browse in the store, newest first by
+// (timestamp, id), optionally within one run. after is the last episode of
+// the previous page. Walking the pages returns each match exactly once.
+type EventPager interface {
+	PageEvents(ctx context.Context, runID string, after *page.Key, limit int) (Page[domain.Event], error)
+}
+
+// RelationshipPager pages the association browse in the store, by id
+// ascending, optionally of one type. afterID is the last id of the previous
+// page ("" for the first). The order is the primary key's, so paging needs no
+// index beyond the one every relationship table already has.
+type RelationshipPager interface {
+	PageRelationships(ctx context.Context, relType string, afterID string, limit int) (Page[domain.Relationship], error)
+}
+
+// GapCandidates is what knowledge-gap detection needs from the store: every
+// claim with open validity that is a hypothesis or the endpoint of at least
+// the threshold of contradiction edges, its contradiction-edge and evidence
+// counts, and how many open-validity claims there are in all.
+type GapCandidates struct {
+	Claims         []domain.Claim
+	Contradictions map[string]int
+	Evidence       map[string]int
+	OpenClaims     int
+}
+
+// GapCandidateSource is the optional capability to answer GapCandidates in the
+// store. KnowledgeGaps used to decode every claim, every evidence link and
+// every relationship to report the few that are gaps.
+type GapCandidateSource interface {
+	GapCandidates(ctx context.Context, minContradictions int) (GapCandidates, error)
+}
+
+// RelationshipTypeLister is the optional capability to list one relationship
+// type, in ListAll's order (created_at ascending). Brain health needs only the
+// contradictions, a fraction of the edges; ListAll decoded and sorted every one.
+type RelationshipTypeLister interface {
+	ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error)
+}
+
+// HealthSampler is the optional capability brain health uses on a large
+// brain: exact counts computed in the store instead of over every decoded row,
+// and a deterministic uniform sample of live beliefs for the per-belief rate
+// vitals. A live belief is one whose valid time is open and whose status is
+// not deprecated (mnemos.isLiveBelief).
+type HealthSampler interface {
+	CountLiveClaims(ctx context.Context) (int, error)
+	// CountLiveOrphans counts live beliefs with no evidence link.
+	CountLiveOrphans(ctx context.Context) (int, error)
+	// CountDanglingRelationships counts relationships with a missing endpoint.
+	CountDanglingRelationships(ctx context.Context) (int, error)
+	// SampleLiveClaims returns min(n, live) distinct live beliefs, chosen
+	// uniformly and deterministically by seed. When n >= live it returns them
+	// all.
+	SampleLiveClaims(ctx context.Context, n int, seed uint64) ([]domain.Claim, error)
+	// CountHypercorrections counts the contradictions mnemos's
+	// hypercorrectionList would report with this trust floor: both sides
+	// live (valid time open, not deprecated) and not superseded, and the
+	// more-established side (promoted ranks as 1+trust; ties go to the
+	// edge's source) promoted or trusted at least floor.
+	CountHypercorrections(ctx context.Context, floor float64) (int, error)
+}
+
+// RelationshipDeleter is the optional capability to delete relationships by
+// ID. Pruning (`mnemos relate --prune-supports`) needs it: rewriting a 30M-row
+// edge table through DeleteAll + Upsert is not an option. Implementations
+// delete in one transaction and report how many rows went; unknown IDs are
+// not an error.
+type RelationshipDeleter interface {
+	DeleteByIDs(ctx context.Context, ids []string) (int64, error)
 }
 
 // RelationshipStrengthener is an optional capability (ADR 0015 §4, Hebbian

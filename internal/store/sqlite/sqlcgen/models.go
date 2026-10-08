@@ -39,10 +39,13 @@ type Claim struct {
 	CreatedAt            string         `json:"created_at"`
 	CreatedBy            string         `json:"created_by"`
 	TrustScore           float64        `json:"trust_score"`
+	TrustComputedAt      string         `json:"trust_computed_at"`
+	TrustModelVersion    string         `json:"trust_model_version"`
 	ValidFrom            string         `json:"valid_from"`
 	ValidTo              sql.NullString `json:"valid_to"`
 	LastVerified         string         `json:"last_verified"`
 	VerifyCount          int64          `json:"verify_count"`
+	LastConfirmed        string         `json:"last_confirmed"`
 	HalfLifeDays         float64        `json:"half_life_days"`
 	HalfLifeClassifier   string         `json:"half_life_classifier"`
 	ScopeService         string         `json:"scope_service"`
@@ -252,6 +255,7 @@ type Relationship struct {
 	CreatedAt   string  `json:"created_at"`
 	CreatedBy   string  `json:"created_by"`
 	Strength    float64 `json:"strength"`
+	DerivedBy   string  `json:"derived_by"`
 }
 
 type RevokedToken struct {

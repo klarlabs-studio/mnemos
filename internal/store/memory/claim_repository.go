@@ -4,10 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // ClaimRepository is the in-memory implementation of
@@ -86,6 +90,23 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 			if existing, ok := r.state.claims[claim.ID]; ok {
 				stored.HalfLifeClassifier = existing.HalfLifeClassifier
 			}
+		}
+		// last_verified / verify_count are owned by MarkVerified and
+		// last_confirmed by MarkConfirmed (ADR 0026). The SQL backends never
+		// write any of them from an upsert, so neither does this one: a
+		// re-extracted claim is neither a verification nor a confirmation.
+		// This backend used to write all three straight through, so re-ingesting
+		// a verified claim on memory:// reset its verification while every SQL
+		// backend kept it.
+		stored.LastVerified, stored.VerifyCount, stored.LastConfirmed = time.Time{}, 0, time.Time{}
+		// The trust stamp is owned by the recompute (ADR 0026 §5), likewise.
+		stored.TrustComputedAt, stored.TrustModelVersion = time.Time{}, ""
+		if existing, ok := r.state.claims[claim.ID]; ok {
+			stored.TrustComputedAt = existing.TrustComputedAt
+			stored.TrustModelVersion = existing.TrustModelVersion
+			stored.LastVerified = existing.LastVerified
+			stored.VerifyCount = existing.VerifyCount
+			stored.LastConfirmed = existing.LastConfirmed
 		}
 
 		if _, ok := r.state.claims[claim.ID]; !ok {
@@ -237,6 +258,19 @@ func (r ClaimRepository) RepointEvidence(_ context.Context, fromClaimID, toClaim
 		dst[evID] = struct{}{}
 	}
 	delete(r.state.evidence, fromClaimID)
+	return nil
+}
+
+// UnlinkEvidence implements [ports.ClaimRepository.UnlinkEvidence].
+func (r ClaimRepository) UnlinkEvidence(_ context.Context, claimID, eventID string) error {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	if links, ok := r.state.evidence[claimID]; ok {
+		delete(links, eventID)
+		if len(links) == 0 {
+			delete(r.state.evidence, claimID)
+		}
+	}
 	return nil
 }
 
@@ -407,6 +441,22 @@ func (r ClaimRepository) ListStatusHistoryByClaimID(_ context.Context, claimID s
 	return out, nil
 }
 
+// MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed].
+func (r ClaimRepository) MarkConfirmed(_ context.Context, claimID string, confirmedAt time.Time) error {
+	if confirmedAt.IsZero() {
+		confirmedAt = time.Now().UTC()
+	}
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	c, ok := r.state.claims[claimID]
+	if !ok {
+		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
+	}
+	c.LastConfirmed = confirmedAt.UTC()
+	r.state.claims[claimID] = c
+	return nil
+}
+
 // MarkVerified bumps last_verified, increments verify_count, and
 // optionally writes a per-claim half-life override. Returns an error
 // when the claim does not exist (the SQLite UPDATE is silent on a
@@ -467,52 +517,82 @@ func (r ClaimRepository) SetLifecycle(_ context.Context, claimID string, lifecyc
 // RecomputeTrust applies the supplied scoring function to every
 // stored claim and writes the result back. Returns the number of
 // claims touched.
-func (r ClaimRepository) RecomputeTrust(_ context.Context, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrust(_ context.Context, scoring domain.TrustScoring) (int, error) {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
-	return r.recomputeTrustLocked(r.state.claimOrder, score), nil
+	return r.recomputeTrustLocked(r.state.claimOrder, scoring), nil
 }
 
 // RecomputeTrustForClaims implements [ports.ScopedTrustScorer]: the same
 // recomputation bounded to claimIDs, so a write's cost tracks what it touched
 // rather than the size of the store.
-func (r ClaimRepository) RecomputeTrustForClaims(_ context.Context, claimIDs []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) (int, error) {
+func (r ClaimRepository) RecomputeTrustForClaims(_ context.Context, claimIDs []string, scoring domain.TrustScoring) (int, error) {
 	if len(claimIDs) == 0 {
 		return 0, nil
 	}
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
-	return r.recomputeTrustLocked(claimIDs, score), nil
+	return r.recomputeTrustLocked(claimIDs, scoring), nil
 }
 
 // recomputeTrustLocked rescores the given claim ids. Callers hold state.mu.
 // Unknown ids are skipped, so a caller may pass ids for claims that were
 // deleted between the write and the rescore.
-func (r ClaimRepository) recomputeTrustLocked(ids []string, score func(confidence float64, evidenceCount int, latestEvidence time.Time) float64) int {
+func (r ClaimRepository) recomputeTrustLocked(ids []string, scoring domain.TrustScoring) int {
 	count := 0
 	for _, id := range ids {
 		c, ok := r.state.claims[id]
 		if !ok {
 			continue
 		}
-		// Corroboration is graded by INDEPENDENCE, not raw volume: count distinct
-		// evidence-event authors, with same-source repeats discounted (echo-chamber
-		// guard) — many events from one voice don't corroborate like many voices.
-		distinct := make(map[string]struct{})
-		total := 0
-		for evID := range r.state.evidence[id] {
-			if ev, ok := r.state.events[evID]; ok {
-				distinct[ev.CreatedBy] = struct{}{}
-				total++
-			}
-		}
-		evidenceCount := domain.EffectiveEvidenceCount(len(distinct), total)
-		latest := latestEvidenceTimestamp(r.state, id)
-		c.TrustScore = score(c.Confidence, evidenceCount, latest)
+		c.TrustScore = scoring.Score(r.trustInputLocked(id, c))
+		c.TrustComputedAt = scoring.At.UTC()
+		c.TrustModelVersion = scoring.ModelVersion
 		r.state.claims[id] = c
 		count++
 	}
 	return count
+}
+
+// trustInputLocked assembles the canonical trust input (ADR 0026) for one
+// claim. Callers hold state.mu. The recompute and ListTrustInputs both use it.
+func (r ClaimRepository) trustInputLocked(id string, c storedClaim) domain.TrustInput {
+	// Corroboration is graded by INDEPENDENCE, not raw volume: count distinct
+	// evidence-event authors, with same-source repeats discounted (echo-chamber
+	// guard) — many events from one voice don't corroborate like many voices.
+	distinct := make(map[string]struct{})
+	total := 0
+	for evID := range r.state.evidence[id] {
+		if ev, ok := r.state.events[evID]; ok {
+			distinct[ev.CreatedBy] = struct{}{}
+			total++
+		}
+	}
+	return domain.TrustInput{
+		Confidence:     c.Confidence,
+		EvidenceCount:  domain.EffectiveEvidenceCount(len(distinct), total),
+		LatestEvidence: latestEvidenceTimestamp(r.state, id),
+		LastConfirmed:  c.LastConfirmed,
+		HalfLifeDays:   c.HalfLifeDays,
+		Credit:         domain.AppliedCredit(c.ConfidenceComponents),
+	}
+}
+
+// ListTrustInputs implements [ports.TrustInputLister].
+func (r ClaimRepository) ListTrustInputs(_ context.Context, claimIDs []string) (map[string]domain.TrustInput, error) {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	ids := claimIDs
+	if len(ids) == 0 {
+		ids = r.state.claimOrder
+	}
+	out := make(map[string]domain.TrustInput, len(ids))
+	for _, id := range ids {
+		if c, ok := r.state.claims[id]; ok {
+			out[id] = r.trustInputLocked(id, c)
+		}
+	}
+	return out, nil
 }
 
 // ApplyBeliefCredit implements [ports.BeliefCreditWriter]: it overwrites a
@@ -584,4 +664,158 @@ func latestEvidenceTimestamp(s *state, claimID string) time.Time {
 		}
 	}
 	return latest
+}
+
+// RelateCandidates implements ports.RelateCandidateSource by applying the
+// query's own definition to every claim. The memory store holds the corpus in
+// process anyway, so it needs no index; it implements the port so the write
+// path takes the same route on every backend under test.
+func (r ClaimRepository) RelateCandidates(ctx context.Context, q relate.CandidateQuery) (ports.RelateCandidateSet, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return ports.RelateCandidateSet{}, err
+	}
+	claims, skipped := q.SelectCandidates(all)
+	return ports.RelateCandidateSet{Claims: claims, SkippedTokens: skipped}, nil
+}
+
+func isLive(c domain.Claim) bool {
+	return c.ValidTo.IsZero() && c.Status != domain.ClaimStatusDeprecated
+}
+
+// CountLiveClaims implements ports.HealthSampler.
+func (r ClaimRepository) CountLiveClaims(ctx context.Context) (int, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, c := range all {
+		if isLive(c) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// CountLiveOrphans implements ports.HealthSampler.
+func (r ClaimRepository) CountLiveOrphans(ctx context.Context) (int, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return 0, err
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	n := 0
+	for _, c := range all {
+		if isLive(c) && len(r.state.evidence[c.ID]) == 0 {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// CountDanglingRelationships implements ports.HealthSampler.
+func (r ClaimRepository) CountDanglingRelationships(_ context.Context) (int, error) {
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	n := 0
+	for _, rel := range r.state.relationships {
+		_, from := r.state.claims[rel.FromClaimID]
+		_, to := r.state.claims[rel.ToClaimID]
+		if !from || !to {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// SampleLiveClaims implements ports.HealthSampler with the same choice as
+// the SQL backends (store.ChooseSample over the sorted live ids).
+func (r ClaimRepository) SampleLiveClaims(ctx context.Context, n int, seed uint64) ([]domain.Claim, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[string]domain.Claim{}
+	var ids []string
+	for _, c := range all {
+		if isLive(c) {
+			byID[c.ID] = c
+			ids = append(ids, c.ID)
+		}
+	}
+	slices.Sort(ids)
+	chosen := store.ChooseSample(ids, n, seed)
+	out := make([]domain.Claim, len(chosen))
+	for i, id := range chosen {
+		out[i] = byID[id]
+	}
+	return out, nil
+}
+
+// CountHypercorrections implements ports.HealthSampler.
+func (r ClaimRepository) CountHypercorrections(_ context.Context, floor float64) (int, error) {
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	est := func(c domain.Claim) float64 {
+		if c.Lifecycle == domain.ClaimLifecyclePromoted {
+			return 1 + c.TrustScore
+		}
+		return c.TrustScore
+	}
+	n := 0
+	for _, rel := range r.state.relationships {
+		if rel.Type != domain.RelationshipTypeContradicts {
+			continue
+		}
+		sa, aok := r.state.claims[rel.FromClaimID]
+		sb, bok := r.state.claims[rel.ToClaimID]
+		if !aok || !bok {
+			continue
+		}
+		a, b := sa.toDomain(), sb.toDomain()
+		if !isLive(a) || !isLive(b) ||
+			a.Lifecycle == domain.ClaimLifecycleSuperseded || b.Lifecycle == domain.ClaimLifecycleSuperseded {
+			continue
+		}
+		c := a
+		if est(b) > est(a) {
+			c = b
+		}
+		if c.Lifecycle == domain.ClaimLifecyclePromoted || c.TrustScore >= floor {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// GapCandidates implements ports.GapCandidateSource.
+func (r ClaimRepository) GapCandidates(ctx context.Context, minContradictions int) (ports.GapCandidates, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return ports.GapCandidates{}, err
+	}
+	out := ports.GapCandidates{Contradictions: map[string]int{}, Evidence: map[string]int{}}
+	r.state.mu.RLock()
+	for _, rel := range r.state.relationships {
+		if rel.Type == domain.RelationshipTypeContradicts {
+			out.Contradictions[rel.FromClaimID]++
+			out.Contradictions[rel.ToClaimID]++
+		}
+	}
+	for _, c := range all {
+		if !c.ValidTo.IsZero() {
+			continue
+		}
+		out.OpenClaims++
+		if c.Type == domain.ClaimTypeHypothesis || out.Contradictions[c.ID] >= minContradictions {
+			out.Claims = append(out.Claims, c)
+			if n := len(r.state.evidence[c.ID]); n > 0 {
+				out.Evidence[c.ID] = n
+			}
+		}
+	}
+	r.state.mu.RUnlock()
+	return out, nil
 }

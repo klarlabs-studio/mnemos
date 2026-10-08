@@ -37,6 +37,7 @@ func (r RelationshipRepository) Upsert(_ context.Context, relationships []domain
 			CreatedAt:   rel.CreatedAt.UTC(),
 			CreatedBy:   actorOr(rel.CreatedBy),
 			Strength:    rel.Strength,
+			DerivedBy:   rel.DerivedBy,
 		}
 	}
 	return nil
@@ -179,6 +180,7 @@ func (s storedRelationship) toDomain() domain.Relationship {
 		CreatedAt:   s.CreatedAt,
 		CreatedBy:   s.CreatedBy,
 		Strength:    s.Strength,
+		DerivedBy:   s.DerivedBy,
 	}
 }
 
@@ -239,4 +241,33 @@ func (r RelationshipRepository) DecayAssociations(_ context.Context, retain floa
 		n++
 	}
 	return n, nil
+}
+
+// DeleteByIDs implements ports.RelationshipDeleter.
+func (r RelationshipRepository) DeleteByIDs(_ context.Context, ids []string) (int64, error) {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	var n int64
+	for _, id := range ids {
+		if _, ok := r.state.relationships[id]; ok {
+			delete(r.state.relationships, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// ListByType implements ports.RelationshipTypeLister.
+func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error) {
+	all, err := r.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0]
+	for _, rel := range all {
+		if rel.Type == relType {
+			out = append(out, rel)
+		}
+	}
+	return out, nil
 }

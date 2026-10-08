@@ -953,6 +953,14 @@ func handleRelate(args []string, f Flags) {
 	// drops what they no longer produce. Relationships are derived state, but
 	// nothing re-derived them when a detector changed, so brains accumulate
 	// residue from every superseded heuristic.
+	// --prune-supports applies the per-claim supports budget (ADR 0027) to
+	// edges written before it existed. Reports by default; --apply deletes.
+	for i, a := range args {
+		if a == "--prune-supports" {
+			pruneSupports(append(args[:i:i], args[i+1:]...), f)
+			return
+		}
+	}
 	for i, a := range args {
 		if a == "--prune-stale" {
 			args = append(args[:i], args[i+1:]...)
@@ -1432,7 +1440,7 @@ func printUsage() {
 	fmt.Println("  ingest --text <content>              Ingest raw text as events")
 	fmt.Println("  extract <event-id> [event-id ...]    Extract claims from events")
 	fmt.Println("  extract --run <run-id>               Extract claims from all events in a run")
-	fmt.Println("  relate [event-id ...]                Detect relationships between claims\n  relate --prune-stale [--dry-run]     Drop stored edges the current detectors no longer produce")
+	fmt.Println("  relate [event-id ...]                Detect relationships between claims\n  relate --prune-stale [--dry-run]     Drop stored edges the current detectors no longer produce\n  relate --prune-supports [--top-k N] [--apply]  Report (or with --apply, delete) supports edges beyond each claim's budget")
 	fmt.Println("")
 	fmt.Println("All-in-One:")
 	fmt.Println("  process <path>                       Ingest + extract + relate in one step")
@@ -1467,7 +1475,7 @@ func printUsage() {
 	fmt.Println("  curiosity [--limit N] [--human]      What to learn/verify next: gap-driven acquisition queue (ADR 0013)")
 	fmt.Println("  predictive-error [--human]           Hierarchical prediction error — where the model is most wrong (ADR 0017)")
 	fmt.Println("  journal [--belief <id>] [--human]    Read the cognitive journal: what learning did over time (ADR 0018)")
-	fmt.Println("  health [--human] [--explain] [--journal]  Brain health: vitals + integrity checks, one verdict (--explain describes each)")
+	fmt.Println("  health [--human] [--explain] [--journal] [--full]  Brain health: vitals + integrity checks, one verdict (--full: exact on any size)")
 	fmt.Println("  audit [--include-embeddings]         Export the full knowledge base as JSON")
 	fmt.Println("")
 	fmt.Println("Decisions, Actions & Outcomes:")
@@ -1897,6 +1905,23 @@ func jobTimeout() time.Duration {
 }
 
 func runJob(kind string, scope map[string]string, verbose bool, fn func(context.Context, *workflow.Job, *govwrite.Writer) error) error {
+	return runJobWithin(jobTimeout(), kind, scope, verbose, fn)
+}
+
+// maintenanceJobTimeout bounds a whole-brain maintenance pass (`relate
+// --prune-supports`). Those scale with the edge table, not with one request:
+// on a 233k-claim, 32M-edge brain a read-only pass takes ~15 minutes and the
+// deleting pass over an hour, so the 10-minute default killed it halfway. An
+// explicit MNEMOS_JOB_TIMEOUT still wins.
+func maintenanceJobTimeout() time.Duration {
+	if strings.TrimSpace(os.Getenv("MNEMOS_JOB_TIMEOUT")) != "" {
+		return jobTimeout()
+	}
+	return 4 * time.Hour
+}
+
+// runJobWithin is runJob with an explicit per-attempt timeout.
+func runJobWithin(timeout time.Duration, kind string, scope map[string]string, verbose bool, fn func(context.Context, *workflow.Job, *govwrite.Writer) error) error {
 	// First-run detection still uses the resolved file path (a
 	// SQLite-only convenience — checking whether the DB file is
 	// newly created on disk). With non-SQLite DSNs the path is
@@ -1918,12 +1943,12 @@ func runJob(kind string, scope map[string]string, verbose bool, fn func(context.
 	defer closeWriter(w)
 
 	runner := workflow.NewRunner(w.Conn().Jobs)
-	runner.Timeout = jobTimeout()
+	runner.Timeout = timeout
 	runner.MaxRetries = 1
 	runner.Verbose = verbose
 
-	// CLI invocations have no caller deadline to inherit; jobTimeout() (10m by
-	// default, MNEMOS_JOB_TIMEOUT) is the bound.
+	// CLI invocations have no caller deadline to inherit; the timeout
+	// (jobTimeout(): 10m by default, MNEMOS_JOB_TIMEOUT) is the bound.
 	jobErr := runner.Run(context.Background(), kind, scope, func(ctx context.Context, job *workflow.Job) error {
 		return fn(ctx, job, w)
 	})

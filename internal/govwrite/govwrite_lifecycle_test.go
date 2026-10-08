@@ -51,6 +51,10 @@ func TestWriter_MarkVerified_PersistsAndRecordsEvidence(t *testing.T) {
 	if got[0].VerifyCount < 1 {
 		t.Errorf("verify_count = %d, want >= 1", got[0].VerifyCount)
 	}
+	// The governed verify is an explicit confirmation (ADR 0026).
+	if !got[0].LastConfirmed.Equal(now) {
+		t.Errorf("last_confirmed = %v, want %v: an explicit verify must confirm the belief", got[0].LastConfirmed, now)
+	}
 }
 
 func TestWriter_SetValidity_PersistsAndRecordsEvidence(t *testing.T) {

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/domain"
+
 	"go.klarlabs.de/mnemos/internal/ports"
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
 	"go.klarlabs.de/mnemos/internal/trust"
@@ -65,9 +67,10 @@ func rescoreTrust(t *testing.T, m *memory) {
 		t.Fatal("store does not score trust; the vital under test would be meaningless")
 	}
 	now := time.Now().UTC()
-	if _, err := scorer.RecomputeTrust(context.Background(), func(confidence float64, evidenceCount int, latestEvidence time.Time) float64 {
+	if _, err := scorer.RecomputeTrust(context.Background(), domain.TrustScoring{Score: func(in domain.TrustInput) float64 {
+		confidence, evidenceCount, latestEvidence := in.Confidence, in.EvidenceCount, in.LatestEvidence
 		return trust.Score(confidence, evidenceCount, latestEvidence, now)
-	}); err != nil {
+	}}); err != nil {
 		t.Fatalf("recompute trust: %v", err)
 	}
 }

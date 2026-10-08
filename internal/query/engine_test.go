@@ -94,8 +94,10 @@ func (f fakeClaimRepo) MarkVerified(_ context.Context, claimID string, _ time.Ti
 	}
 	return nil
 }
-func (f fakeClaimRepo) RepointEvidence(_ context.Context, _, _ string) error { return nil }
-func (f fakeClaimRepo) DeleteCascade(_ context.Context, _ string) error      { return nil }
+func (f fakeClaimRepo) RepointEvidence(_ context.Context, _, _ string) error         { return nil }
+func (f fakeClaimRepo) UnlinkEvidence(_ context.Context, _, _ string) error          { return nil }
+func (f fakeClaimRepo) DeleteCascade(_ context.Context, _ string) error              { return nil }
+func (f fakeClaimRepo) MarkConfirmed(_ context.Context, _ string, _ time.Time) error { return nil }
 func (f fakeClaimRepo) ListByEventIDs(_ context.Context, _ []string) ([]domain.Claim, error) {
 	return f.claims, nil
 }
@@ -1114,16 +1116,16 @@ func TestWhyTrustClaim_ReturnsSignals(t *testing.T) {
 // wins and the other is dropped from the resolved set.
 func TestTrustTiebreak_HigherTrustWins(t *testing.T) {
 	now := time.Now().UTC()
-	// Confidence margin is 0.05 (< escalationMargin=0.2), so TrustScore breaks the tie.
-	// TrustScore diff is 0.25 (> trustTiebreak=0.05), so resolution should succeed.
+	// Confidence margin is 0.05 (< escalationMargin=0.2), so Credibility breaks the tie.
+	// Credibility diff is 0.25 (> trustTiebreak=0.05), so resolution should succeed.
 	fromClaim := domain.Claim{
 		ID: "cl_from", Text: "service latency is high", Type: domain.ClaimTypeFact,
-		Status: domain.ClaimStatusActive, Confidence: 0.75, TrustScore: 0.80, CreatedAt: now,
+		Status: domain.ClaimStatusActive, Confidence: 0.75, Credibility: 0.80, CreatedAt: now,
 		Visibility: domain.VisibilityTeam,
 	}
 	toClaim := domain.Claim{
 		ID: "cl_to", Text: "service latency is normal", Type: domain.ClaimTypeFact,
-		Status: domain.ClaimStatusActive, Confidence: 0.70, TrustScore: 0.55, CreatedAt: now,
+		Status: domain.ClaimStatusActive, Confidence: 0.70, Credibility: 0.55, CreatedAt: now,
 		Visibility: domain.VisibilityTeam,
 	}
 	contradiction := domain.Relationship{
@@ -1157,15 +1159,15 @@ func TestTrustTiebreak_HigherTrustWins(t *testing.T) {
 // escalates (autoResolved=false) rather than picking a winner arbitrarily.
 func TestTrustTiebreak_TieEscalates(t *testing.T) {
 	now := time.Now().UTC()
-	// Confidence margin = 0.05 (< 0.2), TrustScore diff = 0.02 (< trustTiebreak=0.05)
+	// Confidence margin = 0.05 (< 0.2), Credibility diff = 0.02 (< trustTiebreak=0.05)
 	fromClaim := domain.Claim{
 		ID: "cl_from2", Text: "queue depth is critical", Type: domain.ClaimTypeFact,
-		Status: domain.ClaimStatusActive, Confidence: 0.75, TrustScore: 0.71, CreatedAt: now,
+		Status: domain.ClaimStatusActive, Confidence: 0.75, Credibility: 0.71, CreatedAt: now,
 		Visibility: domain.VisibilityTeam,
 	}
 	toClaim := domain.Claim{
 		ID: "cl_to2", Text: "queue depth is normal", Type: domain.ClaimTypeFact,
-		Status: domain.ClaimStatusActive, Confidence: 0.70, TrustScore: 0.73, CreatedAt: now,
+		Status: domain.ClaimStatusActive, Confidence: 0.70, Credibility: 0.73, CreatedAt: now,
 		Visibility: domain.VisibilityTeam,
 	}
 	contradiction := domain.Relationship{

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
 	"go.klarlabs.de/mnemos/internal/trust"
 )
@@ -237,40 +239,27 @@ func loadFloatInputs(ctx context.Context, srcDSN string) ([]consolidate.FloatInp
 		return nil, NewSystemError(err, "list source claims")
 	}
 
-	// Per-claim evidence count and freshest evidence timestamp, for trust.
-	eventAt := map[string]time.Time{}
-	if events, err := conn.Events.ListAll(ctx); err == nil {
-		for _, e := range events {
-			eventAt[e.ID] = e.Timestamp
-		}
+	// Trust at the gate is canonical trust at "now" (trust.At, ADR 0026), from
+	// the same inputs the stored score caches. This used to recompute its own
+	// variant from raw rows — raw evidence count, no confirmation, no credit —
+	// so a belief could pass float-back on a number nothing else in the brain
+	// would report as its trust.
+	lister, ok := conn.Claims.(ports.TrustInputLister)
+	if !ok {
+		return nil, NewSystemError(fmt.Errorf("backend %T cannot list trust inputs", conn.Claims), "float-back trust")
 	}
-	type agg struct {
-		count  int
-		latest time.Time
-	}
-	byClaim := map[string]*agg{}
-	if links, err := conn.Claims.ListAllEvidence(ctx); err == nil {
-		for _, l := range links {
-			a := byClaim[l.ClaimID]
-			if a == nil {
-				a = &agg{}
-				byClaim[l.ClaimID] = a
-			}
-			a.count++
-			if t, ok := eventAt[l.EventID]; ok && t.After(a.latest) {
-				a.latest = t
-			}
-		}
+	trustInputs, err := lister.ListTrustInputs(ctx, nil)
+	if err != nil {
+		return nil, NewSystemError(err, "list source trust inputs")
 	}
 
 	now := time.Now().UTC()
 	inputs := make([]consolidate.FloatInput, 0, len(claims))
 	for _, c := range claims {
-		count, latest := 0, time.Time{}
-		if a := byClaim[c.ID]; a != nil {
-			count, latest = a.count, a.latest
+		score := c.TrustScore
+		if in, ok := trustInputs[c.ID]; ok {
+			score = trust.At(in, now)
 		}
-		score := trust.ScoreWithHalfLife(c.Confidence, count, latest, now, c.HalfLifeDays)
 		inputs = append(inputs, consolidate.FloatInput{
 			ID:                   c.ID,
 			Text:                 c.Text,

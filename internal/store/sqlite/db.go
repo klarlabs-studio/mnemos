@@ -3,6 +3,7 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -35,8 +36,7 @@ func open(path string) (*sql.DB, error) {
 	//   busy_timeout=5000: wait up to 5s for the writer lock before
 	//     returning SQLITE_BUSY. Friendlier than immediate failure
 	//     for short bursts of contention.
-	dsn := path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", dsnFor(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -47,6 +47,13 @@ func open(path string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// dsnFor is the driver DSN for the database at path, carrying the PRAGMAs
+// described in open. Tests that open a second connection to the same file use
+// it too, so they contend for locks exactly as a second process would.
+func dsnFor(path string) string {
+	return path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 }
 
 // Bootstrap applies the SQLite schema and runs migrations against
@@ -86,10 +93,18 @@ CREATE TABLE IF NOT EXISTS claims (
 	created_at TEXT NOT NULL,
 	created_by TEXT NOT NULL DEFAULT '<system>',
 	trust_score REAL NOT NULL DEFAULT 0,
+	-- trust_computed_at / trust_model_version (ADR 0026 §5): what trust_score is
+	-- a cache of. Written only by a trust recompute; '' predates versioning.
+	trust_computed_at TEXT NOT NULL DEFAULT '',
+	trust_model_version TEXT NOT NULL DEFAULT '',
 	valid_from TEXT NOT NULL DEFAULT '',
 	valid_to TEXT,
 	last_verified TEXT NOT NULL DEFAULT '',
 	verify_count INTEGER NOT NULL DEFAULT 0,
+	-- last_confirmed (ADR 0026): when the belief was last EXPLICITLY confirmed —
+	-- by verify or a validated outcome. Recall and replay bump last_verified,
+	-- never this, so being retrieved cannot make a belief more trusted.
+	last_confirmed TEXT NOT NULL DEFAULT '',
 	half_life_days REAL NOT NULL DEFAULT 0,
 	-- half_life_classifier (ADR 0025): which classifier assigned half_life_days.
 	-- '' means none did. That is a different fact from "the classifier read this
@@ -542,6 +557,25 @@ CREATE TABLE IF NOT EXISTS global_schemas (
 );
 CREATE INDEX IF NOT EXISTS idx_global_schemas_status ON global_schemas(status);
 CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(promoted_at);
+
+-- relate's content tokens per claim (relate.SortedContentTokens), so the write
+-- path can ask which claims share a token with a new one instead of loading
+-- the corpus (#382 Phase 5). Maintained by ClaimRepository.Upsert; deleted
+-- with the claim. relate_token_state records the tokenizer version of a
+-- COMPLETE index (empty while one is being built) and the progress of a build,
+-- which Bootstrap resumes across opens.
+CREATE TABLE IF NOT EXISTS claim_tokens (
+	token TEXT NOT NULL,
+	claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+	PRIMARY KEY (token, claim_id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_claim_tokens_claim ON claim_tokens(claim_id);
+CREATE TABLE IF NOT EXISTS relate_token_state (
+	id INTEGER PRIMARY KEY CHECK (id = 1),
+	tokenizer_version TEXT NOT NULL DEFAULT '',
+	building_version TEXT NOT NULL DEFAULT '',
+	build_cursor TEXT NOT NULL DEFAULT ''
+);
 `
 
 	if _, err := db.Exec(schema); err != nil {
@@ -550,6 +584,17 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 
 	if err := migrate(db); err != nil {
 		return fmt.Errorf("schema migration: %w", err)
+	}
+
+	// The token index is an accelerator, never a precondition: until it is
+	// built, RelateCandidates reports ErrRelateCandidatesNotReady and writes
+	// relate against the full corpus. So a build that cannot finish (another
+	// process holding the write lock past busy_timeout, a full disk) must not
+	// make the brain unopenable. Each committed batch is kept, and the next
+	// open resumes from the stored cursor.
+	if err := ensureClaimTokens(db); err != nil {
+		slog.Warn("claim token index not built yet; relate uses the full corpus until a later open finishes it",
+			"error", err)
 	}
 
 	return nil
@@ -585,7 +630,16 @@ CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(prom
 // every pre-existing one — and the first read fails with "no such column". Caught by
 // running the new binary against a copy of a real 88k-belief brain; a fresh test DB
 // gets the column from CREATE TABLE and never exercises this path.
-const currentSchemaVersion = 25
+// v26 (ADR 0026) adds claims.last_confirmed, the explicit-confirmation time
+// canonical trust reads. Bumped for the same reason as v25: without it the
+// expectedColumns entry never runs on a pre-existing brain.
+// v27 (ADR 0026 §5) adds claims.trust_computed_at and trust_model_version, so a
+// stored trust_score says which model computed it and when. Bumped so the
+// expectedColumns entries run on pre-existing brains.
+// v28 (#382 Phase 6) adds relationships.derived_by: the rule set that inferred
+// each edge (relate.ModelVersion), so edges an older rule set produced can be
+// found and re-derived. Existing edges backfill to ” (unknown/explicit).
+const currentSchemaVersion = 28
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -685,6 +739,7 @@ var expectedColumns = []addMissingColumn{
 	// the base 1.0, so spreading activation is unchanged until StrengthenAssociations
 	// raises an edge from repeated co-retrieval.
 	{"relationships", "strength", "REAL NOT NULL DEFAULT 1"},
+	{"relationships", "derived_by", "TEXT NOT NULL DEFAULT ''"},
 	// v23 - claim durability (ADR 0023): 'durable' | 'session' | '' (unknown).
 	// CREATE TABLE IF NOT EXISTS does not add columns to a table that already
 	// exists, so without this entry every pre-existing brain would fail on the
@@ -695,6 +750,11 @@ var expectedColumns = []addMissingColumn{
 	// same trap durability documents above: CREATE TABLE IF NOT EXISTS does not
 	// add columns to a table that already exists.
 	{"claims", "half_life_classifier", "TEXT NOT NULL DEFAULT ''"},
+	// v26 - explicit confirmation time (ADR 0026), read by canonical trust.
+	{"claims", "last_confirmed", "TEXT NOT NULL DEFAULT ''"},
+	// v27 - trust cache provenance (ADR 0026 §5).
+	{"claims", "trust_computed_at", "TEXT NOT NULL DEFAULT ''"},
+	{"claims", "trust_model_version", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for
@@ -753,8 +813,14 @@ func migrate(db *sql.DB) error {
 		}
 	}
 
+	// Indexes on those columns, also ahead of the gate (see
+	// ensurePostMigrateIndexes).
+	if err := ensurePostMigrateIndexes(db); err != nil {
+		return err
+	}
+
 	// The version gate still guards everything below: the one-shot data
-	// migrations must not re-run, and the index creation is version-keyed.
+	// migrations must not re-run.
 	if userVersion >= currentSchemaVersion {
 		return nil
 	}
@@ -813,10 +879,36 @@ INSERT INTO claims_fts(claim_id, text) SELECT id, text FROM claims;
 		}
 	}
 
-	// Indexes that depend on migrated columns. Run after the column
-	// adds above so legacy DBs don't fail with "no such column".
-	const postMigrateIndexes = `
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", currentSchemaVersion)); err != nil {
+		return fmt.Errorf("set user_version: %w", err)
+	}
+	return nil
+}
+
+// postMigrateIndexes are the indexes on columns a legacy brain may only gain
+// in migrate's column probes, so they cannot sit in the bootstrap schema.
+//
+// They used to be created inside migrate, below its version gate, so a brain
+// already at currentSchemaVersion never got an index added later. That is the
+// same trap the column probes were moved out of: every brain from the previous
+// release sits at the current version. idx_claims_created_at (#421) and
+// idx_claims_live (#422) were therefore created only on brand-new brains, and
+// idx_claims_live is named by INDEXED BY, so BrainHealth failed with "no such
+// index" on every existing brain. migrate now ensures them on every open, right
+// after the column probes and ahead of the gate; each statement is IF NOT
+// EXISTS, so an up-to-date brain pays one catalog lookup per index.
+const postMigrateIndexes = `
 CREATE INDEX IF NOT EXISTS idx_claims_trust_score ON claims(trust_score);
+-- ListAll orders by created_at and the belief browse by (created_at, id)
+-- newest first; without this every full read sorted the whole table, spilling
+-- to disk at 1M beliefs. Supersedes idx_claims_created_at, its prefix.
+DROP INDEX IF EXISTS idx_claims_created_at;
+CREATE INDEX IF NOT EXISTS idx_claims_created_id ON claims(created_at, id);
+-- The live beliefs brain health counts and samples (HealthSampler). Partial, so
+-- counting and listing them reads this narrow index, not every claim row. Its
+-- WHERE must stay identical to liveClaimSQL for the planner to use it.
+CREATE INDEX IF NOT EXISTS idx_claims_live ON claims(id)
+	WHERE (valid_to IS NULL OR valid_to = '') AND status <> 'deprecated';
 CREATE INDEX IF NOT EXISTS idx_claims_valid_to ON claims(valid_to);
 CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 -- v24: ListClaimsByTestRequirementRef filters
@@ -830,12 +922,12 @@ CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 CREATE INDEX IF NOT EXISTS idx_claims_test_requirement_ref
   ON claims(test_requirement_ref, type);
 `
+
+// ensurePostMigrateIndexes creates any missing post-migrate index. migrate
+// calls it on every open, once the column probes have added what they need.
+func ensurePostMigrateIndexes(db *sql.DB) error {
 	if _, err := db.Exec(postMigrateIndexes); err != nil {
 		return fmt.Errorf("post-migrate indexes: %w", err)
-	}
-
-	if _, err := db.Exec(fmt.Sprintf("PRAGMA user_version = %d", currentSchemaVersion)); err != nil {
-		return fmt.Errorf("set user_version: %w", err)
 	}
 	return nil
 }

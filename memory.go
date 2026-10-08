@@ -36,9 +36,9 @@
 // consuming program:
 //
 //	import (
-//	    _ "go.klarlabs.de/mnemos/internal/store/memory"
+//	    _ "go.klarlabs.de/mnemos/memory"
 //	    _ "go.klarlabs.de/mnemos/sqlite"
-//	    _ "go.klarlabs.de/mnemos/internal/store/postgres"
+//	    _ "go.klarlabs.de/mnemos/postgres"
 //	)
 //
 // Without at least one provider blank-imported, [New] cannot open the
@@ -353,9 +353,15 @@ type Result struct {
 	// when the claim was created.
 	Confidence float64
 
-	// TrustScore is the [0, 1] composite score combining confidence,
-	// corroboration, and freshness. Computed by Mnemos at query time.
+	// TrustScore is the belief's canonical [0, 1] trust (ADR 0026):
+	// confidence × corroboration × freshness, plus outcome credit. It is the
+	// same value Get, the API and brain health report for this belief.
 	TrustScore float64
+
+	// Credibility is recall's [0, 1] ranking signal: trust combined with
+	// source authority, citations, execution liveness and test results.
+	// It explains why a result ranked where it did; it is not trust.
+	Credibility float64
 
 	// HopDistance is how many supports/contradicts edges Mnemos walked
 	// from the directly-retrieved set to reach this claim. 0 means
@@ -947,6 +953,10 @@ type PredictiveError struct {
 	// Hotspot is the highest-error level with data — where the model is most wrong;
 	// empty when no level has data.
 	Hotspot string `json:"hotspot"`
+	// LevelsMeasured is how many levels had data and entered Total. Zero means
+	// Total is unmeasured, not perfect: 0.0 is the best value free energy can
+	// take, so a caller grading Total must check this first.
+	LevelsMeasured int `json:"levels_measured"`
 }
 
 // HealthStatus is a brain-health verdict (ADR 0019), worst-wins across all vitals and
@@ -1005,6 +1015,15 @@ type Pathology struct {
 	Detail string `json:"detail"`
 }
 
+// VitalEstimate describes a vital estimated from a sample: the vital's value
+// is the sample rate, and the population rate lies within ±Margin95 of it with
+// 95% confidence (Wilson interval, finite-population corrected).
+type VitalEstimate struct {
+	SampleSize int     `json:"sample_size"`
+	Population int     `json:"population"`
+	Margin95   float64 `json:"margin_95"`
+}
+
 // BrainHealth is the unified brain-health report (ADR 0019): a single verdict rolling up
 // the cognitive vitals and structural-integrity checks. Strictly read-only.
 type BrainHealth struct {
@@ -1016,6 +1035,13 @@ type BrainHealth struct {
 	// Pathologies are the structural-integrity findings (orphans, dangling edges,
 	// stale-expectation backlog).
 	Pathologies []Pathology `json:"pathologies"`
+	// Mode is HealthModeExact when every vital was computed over every belief,
+	// HealthModeSampled when the per-belief rate vitals were estimated.
+	Mode string `json:"mode"`
+	// Estimates holds, for each sampled vital by name, how it was estimated.
+	// Empty in exact mode. Counts (beliefs, orphans, dangling edges,
+	// contradictions) are never estimated.
+	Estimates map[string]VitalEstimate `json:"estimates,omitempty"`
 	// At is when the report was computed.
 	At time.Time `json:"at"`
 }
@@ -1357,9 +1383,15 @@ type Memory interface {
 	// BrainHealth reports whether the brain is healthy (ADR 0019): a single verdict
 	// rolling up the cognitive vitals (free-energy, calibration, dissonance, low-trust,
 	// staleness) and structural-integrity checks (orphan beliefs, dangling edges,
-	// stale-expectation backlog). Strictly read-only; a full-scan diagnostic meant for
-	// on-demand or modest-cadence use.
+	// stale-expectation backlog). Strictly read-only. On a brain larger than 50k
+	// live beliefs the per-belief rate vitals (low_trust, staleness, trust_decay)
+	// are estimated from a fixed sample and reported in BrainHealth.Estimates;
+	// counts stay exact. Use BrainHealthFull for an exact scan at any size.
 	BrainHealth(ctx context.Context) (BrainHealth, error)
+
+	// BrainHealthFull is BrainHealth computed exactly over every belief. It
+	// scans the whole brain: seconds at 1M beliefs, longer on a cold cache.
+	BrainHealthFull(ctx context.Context) (BrainHealth, error)
 
 	// SnapshotHealth computes [BrainHealth] and records it to the cognitive journal as a
 	// `health` entry (ADR 0019 + 0018), so vital signs become a queryable time series.

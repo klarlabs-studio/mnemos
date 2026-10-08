@@ -17,7 +17,7 @@ PROTO_GEN := proto/gen
 # never used. The same version is recorded as a `tool` dependency in go.mod.
 SQLC_VERSION := v1.30.0
 
-.PHONY: fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query brain-eval brain-eval-strict
+.PHONY: security-gate nox-scan scale-gate fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query brain-eval brain-eval-strict
 
 fmt:
 	$(GO) fmt ./...
@@ -83,15 +83,20 @@ cross:
 
 check: fmt lint test build cross
 
-# nox-scan runs the security baseline scan and exits non-zero when any
-# new finding is detected (anything not present in findings.json).
-# Operators refresh the baseline by reviewing diffs in findings.json.
-nox-scan:
-	@if command -v nox >/dev/null 2>&1; then \
-		nox scan .; \
-	else \
-		echo "nox not installed, skipping"; \
-	fi
+# security-gate runs the same security gate as warden's pre-push hook: the
+# pinned, sha256-verified nox, failing on critical/high findings that
+# .nox/baseline.json does not list. (nox-scan used to run whichever nox was on
+# PATH, whose fingerprints never match the baseline, and skipped silently
+# when none was installed.) See SECURITY.md.
+security-gate:
+	scripts/nox-gate.sh
+
+# scale-gate runs scalebench at 100k beliefs over three corpus shapes against
+# the ceilings in bench/scale-gate.json (~10 min). A release check, not pre-push.
+scale-gate:
+	scripts/scale-gate.sh
+
+nox-scan: security-gate
 
 release-check:
 	goreleaser check

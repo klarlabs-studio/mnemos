@@ -185,3 +185,44 @@ func hasCreditKeyFor(c domain.Claim, decisionID string) bool {
 }
 
 func approxEqual(a, b, eps float64) bool { return math.Abs(a-b) < eps }
+
+// Credit used to live in trust_score only until the next rescore: the scoped
+// recompute that every ingest touching a belief triggers wrote it back to the
+// evidence base, leaving credit:* keys that described a credit no longer
+// applied (ADR 0026 §3). Canonical trust re-adds the stored applied credit, so
+// a rescore leaves a credited belief exactly where the credit pass put it.
+func TestCredit_SurvivesARescore(t *testing.T) {
+	m := calibMem(t)
+	ctx := context.Background()
+	seedClaim(t, m, "b_refuted", 0.8)
+	seedClaim(t, m, "b_control", 0.8)
+	seedDecision(t, m, "d_refuted", "b_refuted")
+	seedObservedExpectation(t, m, "b_refuted", 10, 100, 5)
+
+	if _, err := m.Consolidate(ctx, ConsolidateOptions{AssignCredit: true}); err != nil {
+		t.Fatalf("Consolidate: %v", err)
+	}
+	credited := trustOf(t, m, "b_refuted")
+	control := trustOf(t, m, "b_control")
+	if !(credited.TrustScore < control.TrustScore) {
+		t.Fatalf("fixture: refuted belief %.4f is not below control %.4f", credited.TrustScore, control.TrustScore)
+	}
+	applied, ok := credited.ConfidenceComponents[domain.CreditAppliedComponentKey]
+	if !ok || applied >= 0 {
+		t.Fatalf("applied credit not stored: %v", credited.ConfidenceComponents)
+	}
+
+	// What an ingest touching the belief does, then what `recompute-trust` does.
+	if err := m.rescoreClaims(ctx, []string{"b_refuted"}, time.Now().UTC()); err != nil {
+		t.Fatalf("scoped rescore: %v", err)
+	}
+	if got := trustOf(t, m, "b_refuted").TrustScore; !approxEqual(got, credited.TrustScore, 1e-6) {
+		t.Errorf("scoped rescore moved credited trust %.6f -> %.6f; credit was erased", credited.TrustScore, got)
+	}
+	if _, err := m.Consolidate(ctx, ConsolidateOptions{}); err != nil { // full recompute, no credit pass
+		t.Fatalf("Consolidate without credit: %v", err)
+	}
+	if got := trustOf(t, m, "b_refuted").TrustScore; !approxEqual(got, credited.TrustScore, 1e-6) {
+		t.Errorf("full recompute moved credited trust %.6f -> %.6f; credit was erased", credited.TrustScore, got)
+	}
+}

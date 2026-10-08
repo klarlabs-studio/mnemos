@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -28,19 +29,20 @@ func (r RelationshipRepository) Upsert(ctx context.Context, relationships []doma
 	defer func() { _ = tx.Rollback() }()
 
 	stmt := fmt.Sprintf(`
-INSERT INTO %s (id, type, from_claim_id, to_claim_id, created_at, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO %s (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (id) DO UPDATE SET
   type = EXCLUDED.type,
   from_claim_id = EXCLUDED.from_claim_id,
-  to_claim_id = EXCLUDED.to_claim_id`, qualify(r.ns, "relationships"))
+  to_claim_id = EXCLUDED.to_claim_id,
+  derived_by = EXCLUDED.derived_by`, qualify(r.ns, "relationships"))
 	for _, rel := range relationships {
 		if err := rel.Validate(); err != nil {
 			return fmt.Errorf("invalid relationship %s: %w", rel.ID, err)
 		}
 		if _, err := tx.ExecContext(ctx, stmt,
 			rel.ID, string(rel.Type), rel.FromClaimID, rel.ToClaimID,
-			rel.CreatedAt.UTC(), actorOr(rel.CreatedBy),
+			rel.CreatedAt.UTC(), actorOr(rel.CreatedBy), rel.DerivedBy,
 		); err != nil {
 			return fmt.Errorf("upsert relationship %s: %w", rel.ID, err)
 		}
@@ -54,7 +56,7 @@ ON CONFLICT (id) DO UPDATE SET
 // ListByClaim satisfies the corresponding ports method.
 func (r RelationshipRepository) ListByClaim(ctx context.Context, claimID string) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by
 FROM %s WHERE from_claim_id = $1 OR to_claim_id = $1`, qualify(r.ns, "relationships")), claimID)
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim: %w", err)
@@ -186,7 +188,7 @@ func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 // ListAll satisfies the corresponding ports method.
 func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by
 FROM %s ORDER BY created_at ASC`, qualify(r.ns, "relationships")))
 	if err != nil {
 		return nil, fmt.Errorf("list all relationships: %w", err)
@@ -201,7 +203,7 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 		return []domain.Relationship{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by
 FROM %s WHERE from_claim_id = ANY($1) OR to_claim_id = ANY($1)`, qualify(r.ns, "relationships")), pgArray(claimIDs))
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim ids: %w", err)
@@ -215,7 +217,7 @@ func collectRelationshipRows(rows *sql.Rows) ([]domain.Relationship, error) {
 	for rows.Next() {
 		var rel domain.Relationship
 		var typ string
-		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy, &rel.Strength); err != nil {
+		if err := rows.Scan(&rel.ID, &typ, &rel.FromClaimID, &rel.ToClaimID, &rel.CreatedAt, &rel.CreatedBy, &rel.Strength, &rel.DerivedBy); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		rel.Type = domain.RelationshipType(typ)
@@ -259,4 +261,43 @@ func (r RelationshipRepository) DecayAssociations(ctx context.Context, retain fl
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// deleteByIDsChunk bounds the IN list per statement, well under every
+// backend's bound-parameter limit.
+const deleteByIDsChunk = 500
+
+// DeleteByIDs implements ports.RelationshipDeleter.
+func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin relationship delete tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var n int64
+	for start := 0; start < len(ids); start += deleteByIDsChunk {
+		chunk := ids[start:min(start+deleteByIDsChunk, len(ids))]
+		args := make([]any, len(chunk))
+		marks := make([]string, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
+			marks[i] = fmt.Sprintf("$%d", i+1)
+		}
+		res, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id IN (%s)`, qualify(r.ns, "relationships"), strings.Join(marks, ",")), args...)
+		if err != nil {
+			return n, fmt.Errorf("delete relationships by id: %w", err)
+		}
+		k, err := res.RowsAffected()
+		if err != nil {
+			return n, fmt.Errorf("delete relationships by id: %w", err)
+		}
+		n += k
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit relationship delete tx: %w", err)
+	}
+	return n, nil
 }

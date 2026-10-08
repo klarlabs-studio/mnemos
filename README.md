@@ -401,7 +401,7 @@ matches your runtime.
 ```go
 import (
     "go.klarlabs.de/mnemos"
-    _ "go.klarlabs.de/mnemos/internal/store/sqlite"
+    _ "go.klarlabs.de/mnemos/sqlite"
 )
 
 mem, err := mnemos.New() // passive mode, XDG storage, bundled Chronos
@@ -823,7 +823,7 @@ Marketing claim: *"evidence-based memory that learns from actions over time, wit
 
 Most memory systems only write and read. Mnemos also runs the background processes
 a brain runs — and all of it is deterministic, self-hostable, and needs **no LLM**.
-See [`docs-site/docs/concepts/cognitive-layer.md`](docs-site/docs/concepts/cognitive-layer.md) and the research syntheses in [`docs/RESEARCH-brain-enhancements.md`](docs/RESEARCH-brain-enhancements.md) (arc 1) and [`docs/RESEARCH-perfect-agent-brain.md`](docs/RESEARCH-perfect-agent-brain.md) (arc 2, tiers 0–4 — all shipped).
+See [`docs-site/docs/concepts/cognitive-layer.md`](docs-site/docs/concepts/cognitive-layer.md) and the research syntheses in [`docs/notes/RESEARCH-brain-enhancements.md`](docs/notes/RESEARCH-brain-enhancements.md) (arc 1) and [`docs/notes/RESEARCH-perfect-agent-brain.md`](docs/notes/RESEARCH-perfect-agent-brain.md) (arc 2, tiers 0–4 — all shipped).
 
 The first arc (below, v0.35–v0.41) gave mnemos organs. The second (v0.42–v0.60) added
 the nervous system — one signal, **prediction error**, tying them into loops so the

@@ -44,6 +44,7 @@ func (r RelationshipRepository) Upsert(ctx context.Context, relationships []doma
 			ToClaimID:   rel.ToClaimID,
 			CreatedAt:   rel.CreatedAt.UTC().Format(time.RFC3339Nano),
 			CreatedBy:   actorOr(rel.CreatedBy),
+			DerivedBy:   rel.DerivedBy,
 		})
 		if err != nil {
 			return fmt.Errorf("upsert relationship %s: %w", rel.ID, err)
@@ -80,6 +81,7 @@ func (r RelationshipRepository) ListByClaim(ctx context.Context, claimID string)
 			ToClaimID:   row.ToClaimID,
 			CreatedAt:   t,
 			CreatedBy:   row.CreatedBy,
+			DerivedBy:   row.DerivedBy,
 		})
 	}
 
@@ -176,7 +178,7 @@ func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 // ascending.
 func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relationship, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by
+		`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by
 		 FROM relationships
 		 ORDER BY created_at ASC`)
 	if err != nil {
@@ -187,9 +189,9 @@ func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relations
 	out := make([]domain.Relationship, 0)
 	for rows.Next() {
 		var (
-			id, typ, from, to, createdStr, createdBy string
+			id, typ, from, to, createdStr, createdBy, derivedBy string
 		)
-		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy); err != nil {
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &derivedBy); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, createdStr)
@@ -203,6 +205,48 @@ func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relations
 			ToClaimID:   to,
 			CreatedAt:   t,
 			CreatedBy:   createdBy,
+			DerivedBy:   derivedBy,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate relationship rows: %w", err)
+	}
+	return out, nil
+}
+
+// ListByType implements ports.RelationshipTypeLister. The type prefix of
+// idx_relationships_unique_edge serves the filter.
+func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by
+		 FROM relationships
+		 WHERE type = ?
+		 ORDER BY created_at ASC`, string(relType))
+	if err != nil {
+		return nil, fmt.Errorf("list relationships of type %s: %w", relType, err)
+	}
+	defer closeRows(rows)
+
+	out := make([]domain.Relationship, 0)
+	for rows.Next() {
+		var (
+			id, typ, from, to, createdStr, createdBy, derivedBy string
+		)
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &derivedBy); err != nil {
+			return nil, fmt.Errorf("scan relationship row: %w", err)
+		}
+		t, err := time.Parse(time.RFC3339Nano, createdStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse relationship created_at: %w", err)
+		}
+		out = append(out, domain.Relationship{
+			ID:          id,
+			Type:        domain.RelationshipType(typ),
+			FromClaimID: from,
+			ToClaimID:   to,
+			CreatedAt:   t,
+			CreatedBy:   createdBy,
+			DerivedBy:   derivedBy,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -214,7 +258,7 @@ func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relations
 // ListByClaimIDs returns every relationship that touches any of the given
 // claim IDs (as source OR target). Used by hop-expansion in the query
 // engine — N IDs in one round trip rather than N round trips.
-func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.Relationship, error) {
+func (r RelationshipRepository) listByClaimIDsChunk(ctx context.Context, claimIDs []string) ([]domain.Relationship, error) {
 	if len(claimIDs) == 0 {
 		return []domain.Relationship{}, nil
 	}
@@ -231,7 +275,7 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 	in := strings.Join(placeholders, ",")
 
 	//nolint:gosec // G201: placeholders are literal "?", IDs flow through ? bindings
-	q := "SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength FROM relationships WHERE from_claim_id IN (" + in + ") OR to_claim_id IN (" + in + ")"
+	q := "SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by FROM relationships WHERE from_claim_id IN (" + in + ") OR to_claim_id IN (" + in + ")"
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list relationships by claim ids: %w", err)
@@ -241,10 +285,10 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 	out := make([]domain.Relationship, 0)
 	for rows.Next() {
 		var (
-			id, typ, from, to, createdStr, createdBy string
-			strength                                 float64
+			id, typ, from, to, createdStr, createdBy, derivedBy string
+			strength                                            float64
 		)
-		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &strength); err != nil {
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &strength, &derivedBy); err != nil {
 			return nil, fmt.Errorf("scan relationship row: %w", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, createdStr)
@@ -259,6 +303,7 @@ func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []s
 			CreatedAt:   t,
 			CreatedBy:   createdBy,
 			Strength:    strength,
+			DerivedBy:   derivedBy,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -314,4 +359,43 @@ func (r RelationshipRepository) DecayAssociations(ctx context.Context, retain fl
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// deleteByIDsChunk bounds the IN list per statement, well under every
+// backend's bound-parameter limit.
+const deleteByIDsChunk = 500
+
+// DeleteByIDs implements ports.RelationshipDeleter.
+func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin relationship delete tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var n int64
+	for start := 0; start < len(ids); start += deleteByIDsChunk {
+		chunk := ids[start:min(start+deleteByIDsChunk, len(ids))]
+		args := make([]any, len(chunk))
+		marks := make([]string, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
+			marks[i] = "?"
+		}
+		res, err := tx.ExecContext(ctx, `DELETE FROM relationships WHERE id IN (`+strings.Join(marks, ",")+`)`, args...)
+		if err != nil {
+			return n, fmt.Errorf("delete relationships by id: %w", err)
+		}
+		k, err := res.RowsAffected()
+		if err != nil {
+			return n, fmt.Errorf("delete relationships by id: %w", err)
+		}
+		n += k
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit relationship delete tx: %w", err)
+	}
+	return n, nil
 }

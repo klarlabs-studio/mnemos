@@ -1,0 +1,175 @@
+# Why each finding in .nox/baseline.json is accepted, who owns that
+# decision, and when it must be looked at again.
+#
+# nox's baseline records WHAT is suppressed (a fingerprint per finding) but
+# not why, by whom or until when — 143 of its 144 entries had no reason at
+# all. This file is the register. test/security enforces it:
+#
+#   - every baseline entry is covered by a waiver (same rule, file listed),
+#   - every waiver has an owner, a reason, and an expiry no later than
+#     one year out — and FAILS once that date passes, so an accepted risk is
+#     re-decided rather than inherited,
+#   - every waiver still covers at least one entry (none outlive their finding).
+#
+# Paths are listed one by one, not globbed: a new file that trips a rule needs
+# its own decision, not a pattern that happens to match it.
+#
+# Fingerprints come from the nox version the gate pins (scripts/nox-gate.sh);
+# another version computes different ones. Re-baselining: run the gate script
+# with NOX_GATE_WRITE_BASELINE=1, then cover any new entry here.
+
+waivers:
+  - id: fixture-dsns
+    rules: [SEC-073, SEC-161]
+    paths:
+      - cmd/mnemos/dsn_test.go
+      - cmd/mnemos/hooks_install_test.go
+      - cmd/mnemos/init_test.go
+      - internal/config/merge_test.go
+      - internal/query/pgvector_integration_test.go
+      - internal/store/dsn_test.go
+      - internal/store/mysql/mysql_test.go
+      - internal/store/postgres/postgres_test.go
+      - internal/store/tenancy_test.go
+      - tenant_internal_test.go
+    owner: "@felixgeelhaar"
+    expires: 2027-04-06
+    reason: >-
+      Test fixtures. The "credentials" are placeholders (u:p, user:pw,
+      mnemos:mnemos, s3cr3t, hunter2, xyz) in DSNs that exercise parsing,
+      redaction, tenancy detection and hook-command rendering; none names a
+      reachable server. Tests that do connect read TEST_*_DSN from the
+      environment and skip when it is unset. New fixtures should build the DSN
+      at run time (see credDSN) so the scanner does not see a literal.
+
+  - id: example-dsns-in-docs
+    rules: [SEC-073]
+    paths:
+      - docs-site/docs/self-host.md
+      - docs/adr/0001-multi-backend-storage.md
+      - internal/store/store.go
+    owner: "@felixgeelhaar"
+    expires: 2027-04-06
+    reason: >-
+      Example DSNs in documentation and in a doc comment (store.go lists the
+      accepted DSN shapes), with placeholder credentials the reader is told to
+      replace. No code path reads them.
+
+  - id: disposable-local-stacks
+    rules: [SEC-073, IAC-254, SEC-081, SEC-788]
+    paths:
+      - benchmarks/docker-compose.yml
+      - scripts/test-integration.sh
+      - test/integration/docker-compose.yml
+    owner: "@felixgeelhaar"
+    expires: 2027-04-06
+    reason: >-
+      Credentials of throwaway containers. The benchmark stack's Postgres
+      (mnemos/mnemos) publishes no port. The integration script binds its
+      databases to 127.0.0.1 and removes them on exit. The smoke stack's JWT
+      secret is sha256 of a fixed phrase, documented in place, so the test can
+      mint a token client-side; that stack runs on the memory store inside one
+      CI job. None of these guards anything that outlives the run.
+
+  - id: scanner-misreads
+    rules: [SEC-533, SEC-161, SEC-082, AI-006, AGENT-004, IAC-238, IAC-406]
+    paths:
+      - learning_dynamics_test.go
+      - reinforce_test.go
+      - salience_test.go
+      - internal/store/sqlite/db.go
+      - internal/store/sqlite/lesson_hydration_test.go
+      - cmd/mnemos/registry.go
+      - cmd/mnemos/admin.go
+      - cmd/mnemos/main.go
+      - CLAUDE.md
+      - data/eval/boundaries.yaml
+      - data/eval/deduplication.yaml
+      - data/eval/edge_cases.yaml
+      - data/eval/robustness.yaml
+      - api/openapi.yaml
+    owner: "@felixgeelhaar"
+    expires: 2027-04-06
+    reason: >-
+      False positives, each checked against the source. SEC-533 "IBM Cloud API
+      key" matches long Go test function names. SEC-161 matches SQLite pragma
+      strings ("_pragma=busy_timeout(5000)"). SEC-082 matches the message
+      "auth: bearer token configured", which prints no token. AI-006 matches a
+      y/N confirmation prompt on stdin and a printed prompt-version label, not
+      LLM traffic. AGENT-004 matches CLAUDE.md describing where the session
+      hooks send data when a hosted brain is configured. IAC-238/IAC-406 read
+      eval datasets and the OpenAPI spec as Kubernetes manifests.
+
+  - id: fixture-emails
+    rules: [DATA-001]
+    paths:
+      - cmd/mnemos/actor_test.go
+      - cmd/mnemos/docsync_test.go
+      - cmd/mnemos/dsn_test.go
+      - cmd/mnemos/registry_test.go
+      - cmd/mnemos/serve_batch4_test.go
+      - cmd/mnemos/serve_expectations_test.go
+      - cmd/mnemos/serve_feedback_test.go
+      - cmd/mnemos/serve_gdpr_test.go
+      - cmd/mnemos/serve_leads_test.go
+      - cmd/mnemos/serve_test.go
+      - cmd/mnemos/serve_write_test.go
+      - internal/auth/jwt_test.go
+      - internal/store/sqlite/concurrent_test.go
+      - internal/store/sqlite/user_repository_test.go
+      - docs/index.html
+      - cmd/mnemos/web/landing.html
+    owner: "@felixgeelhaar"
+    expires: 2027-04-06
+    reason: >-
+      Test identities at example domains, and the project's published contact
+      address on the landing page and docs site. Neither is personal data
+      held about anyone.
+
+  - id: test-runner-no-retries
+    rules: [AI-050]
+    paths: [internal/workflow/runner_test.go]
+    owner: "@felixgeelhaar"
+    expires: 2027-04-06
+    reason: >-
+      The test sets MaxRetries = 0 on purpose, to assert a failing step fails
+      once. Production runners keep their retry policy.
+
+  # Real hardening gaps, accepted for now with a short expiry so they are fixed
+  # rather than carried: none is exploitable on its own, all are worth doing.
+  - id: container-hardening
+    rules: [CONT-001, IAC-121, IAC-123, IAC-124]
+    paths: [Dockerfile]
+    owner: "@felixgeelhaar"
+    expires: 2027-01-06
+    reason: >-
+      Accepted gap. The base image is pinned by tag, not digest; there is no
+      HEALTHCHECK and no maintainer LABEL. The image runs as the non-root
+      user "mnemos" and GoReleaser signs it (docker_signs), but a digest pin
+      and a HEALTHCHECK are the fix; do them before this expires. IAC-123
+      (COPY without --chown) is deliberate: the binary stays root-owned, so
+      the runtime user cannot replace it.
+
+  - id: docs-site-workflow
+    rules: [IAC-153, IAC-308, IAC-314]
+    paths: [docs-site/.github/workflows/docs.yml]
+    owner: "@felixgeelhaar"
+    expires: 2027-01-06
+    reason: >-
+      Accepted gap in the docs site's own Pages workflow: contents:write,
+      manual dispatch and an unattested artifact upload. It publishes static
+      documentation only, with no secrets beyond its token. Narrow the
+      permission before this expires.
+
+  - id: compose-latest-tags
+    rules: [IAC-231]
+    paths:
+      - benchmarks/docker-compose.yml
+      - test/integration/docker-compose.yml
+    owner: "@felixgeelhaar"
+    expires: 2027-01-06
+    reason: >-
+      Accepted gap. Benchmark competitors and the integration stack use
+      :latest images. Both are local, disposable stacks, so a moved tag
+      changes a measurement, not a deployment, but pin them before this
+      expires so benchmark runs are reproducible.
