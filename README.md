@@ -32,8 +32,9 @@ No SDK to install. Any language with an HTTP client works. Below is Python; subs
 import httpx, os, uuid
 m = "http://localhost:7777"
 run = str(uuid.uuid4())
-# Every /v1/* call needs a bearer token — reads included (see "Authentication").
-h = {"Authorization": f"Bearer {os.environ['MNEMOS_JWT']}"}
+# Every /v1/* call needs a bearer token, reads included (see "Authentication").
+# export MNEMOS_TOKEN=$(mnemos token issue --user <id> | tail -1)
+h = {"Authorization": f"Bearer {os.environ['MNEMOS_TOKEN']}"}
 
 # Remember something
 httpx.post(f"{m}/v1/episodes", headers=h, json={"episodes": [{
@@ -158,7 +159,7 @@ pip install -r requirements.txt
 python agent.py --customer-id CUST-42 --amount 245.00
 
 # Replay the exact decision chain
-curl -s -H "Authorization: Bearer $MNEMOS_JWT" \
+curl -s -H "Authorization: Bearer $MNEMOS_TOKEN" \
   "http://localhost:7777/v1/episodes?run_id=<run-id>" | jq
 ```
 
@@ -250,6 +251,7 @@ The thinking behind Mnemos, in plain language and in depth:
 | `mnemos delete-event <id>...` | Delete events and cascade to derived claims |
 | `mnemos reembed [--force] [--dry-run]` | (Re)generate claim embeddings under the current embed config |
 | `mnemos recompute-trust` | Rebuild `trust_score` for every claim (confidence × corroboration × freshness) |
+| `mnemos recompute-trust --stale [--dry-run]` | Rescore only beliefs an older trust model scored, in verified batches (the upgrade path) |
 | `mnemos dedup [--threshold T] [--force]` | Merge near-duplicate claims by embedding cosine similarity (dry-run by default) |
 | `mnemos query --min-trust X "..."` | Only return claims whose `trust_score` ≥ X |
 | `mnemos query --kind causes,validates "..."` | Restrict hop expansion to specific edge kinds (causes, caused_by, supports, contradicts, validates, refutes, action_of, outcome_of, derived_from) |
@@ -465,11 +467,11 @@ Resource accessors (`Events()`, `Claims()`, `Relationships()`, `Embeddings()`) r
 # Append an episode (id, content, source_input_id and timestamp are required)
 curl -X POST http://localhost:7777/v1/episodes \
   -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $MNEMOS_JWT" \
+  -H "Authorization: Bearer $MNEMOS_TOKEN" \
   -d '{"episodes":[{"id":"ev_1","run_id":"run_1","source_input_id":"cli","content":"...","timestamp":"2026-04-19T10:00:00Z"}]}'
 
 # Browse beliefs, filtered — the token is required for reads too
-curl -H "Authorization: Bearer $MNEMOS_JWT" \
+curl -H "Authorization: Bearer $MNEMOS_TOKEN" \
   'http://localhost:7777/v1/beliefs?type=decision&limit=25'
 ```
 
@@ -486,7 +488,7 @@ req = urllib.request.Request(
     }]}).encode(),
     headers={
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {os.environ['MNEMOS_JWT']}",
+        "Authorization": f"Bearer {os.environ['MNEMOS_TOKEN']}",
     },
 )
 urllib.request.urlopen(req)
@@ -594,30 +596,18 @@ See [`mnemos.example.yaml`](mnemos.example.yaml) for every supported key.
 
 ## Environment Variables
 
+Every setting, its YAML key, environment variable and default is listed in
+[docs/reference/configuration.md](docs/reference/configuration.md). That page
+is generated from the code, and a test fails when the two disagree. The ones
+most installs touch:
+
 | Variable | Description |
 |----------|-------------|
-| `MNEMOS_CONFIG` | Explicit path to the YAML config file (see [Configuration](#configuration)). Overridden by `--config`. |
-| `MNEMOS_DB_URL` | Storage DSN dispatched by URL scheme: `sqlite:///var/lib/mnemos/mnemos.db`, `memory://`, `postgres://...`, `mysql://...`, `libsql://...`. When unset, Mnemos walks up from CWD looking for `.mnemos/mnemos.db`, falling back to `~/.local/share/mnemos/mnemos.db`. See [ADR 0001](docs/adr/0001-multi-backend-storage.md). |
-| `MNEMOS_LLM_PROVIDER` | `anthropic`, `openai`, `gemini`, `ollama`, `openai-compat` |
-| `MNEMOS_LLM_API_KEY` | API key (required for cloud providers) |
-| `MNEMOS_LLM_MODEL` | Model override (optional) |
-| `MNEMOS_LLM_BASE_URL` | Custom endpoint. Required for `openai-compat`. **Required for `ollama` when Mnemos is not on the same host as the Ollama daemon** — most commonly when Mnemos runs in a container and Ollama runs on the host (`http://host.docker.internal:11434` on Docker Desktop, `http://172.17.0.1:11434` on Linux). Defaults to `http://localhost:11434` for `ollama`. |
-| `MNEMOS_LLM_TIMEOUT` | Per-request LLM HTTP timeout (default `120s`). Bump for slow local models or large completions: `MNEMOS_LLM_TIMEOUT=5m`. |
-| `MNEMOS_EXTRACT_MODEL` | Override `MNEMOS_LLM_MODEL` just for the extract stage. Lets you pair a strong model for extraction with a smaller model elsewhere. |
-| `MNEMOS_JOB_TIMEOUT` | Overall workflow-job deadline (default `10m`). Raise this if your provider is slow enough that an entire `process` run exceeds 10 minutes. |
-| `MNEMOS_EMBED_PROVIDER` | Embedding provider (falls back to `LLM_PROVIDER`) |
-| `MNEMOS_EMBED_API_KEY` | Embedding API key (falls back to `LLM_API_KEY`) |
-| `MNEMOS_EMBED_MODEL` | Embedding model override (optional) |
-| `MNEMOS_EMBED_BASE_URL` | Embedding endpoint (same container/host caveat as `MNEMOS_LLM_BASE_URL`) |
-| `MNEMOS_EMBED_TIMEOUT` | Per-request embedding HTTP timeout (default `60s`) |
-| `MNEMOS_AUTH_DIR` | Directory for the JWT signing secret (default: project `.mnemos/` or `$HOME/.mnemos/`). Override when running on a read-only rootfs (Docker `read_only: true`, k8s `readOnlyRootFilesystem: true`) by pointing at a writable volume. |
-| `MNEMOS_JWT_SECRET` | Hex-encoded JWT signing secret (≥32 bytes). When set, takes precedence over the file path; useful in CI/Kubernetes where you'd rather inject the secret as an env var than mount a file. |
-| `MNEMOS_LLM_CACHE_MAX_BYTES` | LLM extraction cache cap under `data/cache/llm-extraction/` (default `1 GiB`; `0` disables eviction). Oldest-mtime files are evicted first. |
-| `MNEMOS_DB_MAX_CONNS` | Postgres/MySQL pool `MaxOpenConns` (default `25`). |
-| `MNEMOS_DB_MAX_IDLE_CONNS` | Postgres/MySQL pool `MaxIdleConns` (default `5`). |
-| `MNEMOS_DB_CONN_MAX_LIFETIME` | Postgres/MySQL pool `ConnMaxLifetime` (default `30m`). |
-| `MNEMOS_TELEMETRY_OPTIN` | Truthy (`1`/`true`/`yes`) to opt in to anonymized usage payload. Default off. See [`docs/telemetry.md`](docs/telemetry.md). |
-| `MNEMOS_TELEMETRY_ENDPOINT` | POST destination for `mnemos metrics --workspace --telemetry-send`. Unset = no destination = no requests, even with opt-in active. |
+| `MNEMOS_DB_URL` | Storage DSN, dispatched by scheme: `sqlite:///path/mnemos.db`, `memory://`, `postgres://...`, `mysql://...`, `libsql://...` |
+| `MNEMOS_LLM_PROVIDER` / `MNEMOS_LLM_API_KEY` | `anthropic`, `openai`, `gemini`, `ollama` or `openai-compat`, and its key for cloud providers |
+| `MNEMOS_EMBED_PROVIDER` | Embedding provider; falls back to the LLM provider |
+| `MNEMOS_AUTH_DIR` / `MNEMOS_JWT_SECRET` | Where the JWT signing secret lives, or the secret itself (hex, at least 32 bytes) |
+| `MNEMOS_TOKEN` | Bearer token the CLI sends to a hosted registry; the examples above use it too |
 
 ### Trust scoring
 
@@ -914,7 +904,7 @@ SLO: 99.9% availability over 30 days, p99 read 250ms, p99 write 500ms. Error-bud
 
 Every Go example in this README and in `docs/` is compiled on every CI run from a module **outside** this repository (`test/docs`), so a documented import that only works inside the module fails the build.
 
-Scale is measured, not assumed. `go run ./tools/scalebench -beliefs N` generates a deterministic synthetic brain and times load, recall, health, gaps and writes against it. The [Phase 0 baseline](docs/consolidation/baseline/README.md) records 10k, 100k and 1M beliefs. At 1M, every operation completes, but a write takes ~19 s and a full health check ~13 s, and those are the numbers the scale work is held to.
+Scale is measured, not assumed. `go run ./tools/scalebench -beliefs N` generates a deterministic synthetic brain and times load, recall, health, gaps and writes against it. The [baseline](docs/consolidation/baseline/README.md) records 10k, 100k and 1M beliefs, before and after the consolidation work. At 1M, a write went from ~19 s to 0.3 s (p95 0.5 s), health from ~13 s to 2.6 s (sampled above 50k live beliefs; `health --full` is exact), and the first page of the belief browse from 7–11 s to 0.7 s. `make scale-gate` runs three corpus shapes at 100k beliefs and fails when an operation exceeds its ceiling.
 
 ## License
 
