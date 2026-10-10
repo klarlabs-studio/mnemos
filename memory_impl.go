@@ -778,6 +778,39 @@ func (m *memory) embedAsync(entityID, entityType, text string) {
 	}()
 }
 
+// closeEmbedGrace is how long Close lets in-flight background embeds finish
+// before cancelling them. An embed takes milliseconds against a local model and
+// well under a second against a remote one, so a write followed at once by
+// Close (a CLI call, a capture hook, an MCP handler's deferred Close) keeps its
+// vectors. A stalled provider still cannot hold Close for the full 30s embed
+// timeout.
+const closeEmbedGrace = 5 * time.Second
+
+// drainEmbeds waits up to grace for in-flight embeds, then cancels the rest and
+// waits for them to return.
+//
+// Close used to cancel first and then wait, so every embed still in flight was
+// discarded. A process that wrote and exited lost the vectors for what it had
+// just written, and that belief was recalled by token overlap only from then on.
+func (m *memory) drainEmbeds(grace time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		m.embedWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(grace):
+		if m.embedCancel != nil {
+			m.embedCancel()
+		}
+		<-done
+	}
+	if m.embedCancel != nil {
+		m.embedCancel()
+	}
+}
+
 // eventToEntityState maps a public mnemos.Event into a chronos.EntityState
 // suitable for the bundled in-process engine. See [memory.RememberEvent]
 // for the mapping rationale.
@@ -2608,10 +2641,7 @@ func (m *memory) calibrationIn(ctx context.Context, h *healthCorpus) (Calibratio
 // does `defer mem.Close()` (the remember_episode MCP tool, every short-lived
 // CLI write) tore the connection away from a goroutine still mid-request.
 func (m *memory) Close() error {
-	if m.embedCancel != nil {
-		m.embedCancel()
-	}
-	m.embedWG.Wait()
+	m.drainEmbeds(closeEmbedGrace)
 
 	var firstErr error
 	if m.conn != nil {
