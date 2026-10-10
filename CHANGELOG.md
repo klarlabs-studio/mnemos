@@ -8,6 +8,11 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.128.1] — 2026-10-10
+
+A security patch, plus three fixes found while building the answer-quality
+evaluation (#441).
+
 ### Security
 
 - **Four `net/http` vulnerabilities fixed** by building with Go 1.27.2 and
@@ -23,6 +28,30 @@ notable changes.
 
   v0.128.0 was built with Go 1.26.7 and `x/net` v0.58.0 and is affected.
   Upgrade if you run `mnemos serve`.
+
+### Fixed
+
+- **`Remember` now embeds what it writes, and `Close` lets in-flight embeds
+  finish** (#449).
+  - `Remember`, the write path that extracts beliefs, never stored embeddings,
+    so with an embedder configured its beliefs were recalled by word overlap
+    only.
+  - `Close` cancelled in-flight embeds before waiting, so a process that wrote
+    and exited lost them. It now allows up to 5 s.
+  - On a real brain only 21% of beliefs had embeddings. Run `mnemos reembed`
+    to backfill existing brains.
+- **The extraction cache is keyed on the model that produced it.** The key was
+  read from environment variables, which are empty when the model is
+  configured in code or in the config file. So switching extraction models
+  silently reused the previous model's claims. Entries cached before this
+  release no longer match, so each text is extracted once more after
+  upgrading.
+- **SQLite write transactions take the write lock up front** (`BEGIN
+  IMMEDIATE`). A transaction that read before writing failed at once with
+  "database is locked" when another connection committed in between, and
+  `busy_timeout` could not help. The embedding fix above made this routine
+  between consecutive writes; it was caught before release. Overlapping
+  writes now wait up to 5 s for the lock instead of failing.
 
 ## [0.128.0] — 2026-10-08
 
