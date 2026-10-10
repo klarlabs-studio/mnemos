@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -129,5 +131,66 @@ func TestRemember_ConsecutiveWritesWithEmbeddingSucceed(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Remember %d: %v", i, err)
 		}
+	}
+}
+
+// peakEmbedder records the most Embed calls in flight at once.
+type peakEmbedder struct {
+	mu       sync.Mutex
+	inflight int
+	peak     int
+	delay    time.Duration
+}
+
+func (e *peakEmbedder) Embed(ctx context.Context, in providers.EmbedInput) (providers.EmbedOutput, error) {
+	e.mu.Lock()
+	e.inflight++
+	if e.inflight > e.peak {
+		e.peak = e.inflight
+	}
+	e.mu.Unlock()
+	defer func() { e.mu.Lock(); e.inflight--; e.mu.Unlock() }()
+	select {
+	case <-time.After(e.delay):
+	case <-ctx.Done():
+		return providers.EmbedOutput{}, ctx.Err()
+	}
+	vectors := make([][]float32, len(in.Texts))
+	for i := range vectors {
+		vectors[i] = []float32{0.1, 0.2, 0.3}
+	}
+	return providers.EmbedOutput{Vectors: vectors, Model: "test-embed"}, nil
+}
+
+// One Remember that extracts many beliefs must not put them all on the
+// provider at once. Unbounded, a local model timed some out and 21% of a fresh
+// brain's claims had no vector (#457). Bounded, every belief is embedded.
+func TestRemember_EmbedsWithBoundedConcurrency(t *testing.T) {
+	clearMnemosEnv(t)
+	dsn := "sqlite://" + filepath.Join(t.TempDir(), "brain.db")
+	emb := &peakEmbedder{delay: 30 * time.Millisecond}
+	mem, err := mnemos.New(mnemos.WithStorage(dsn), mnemos.WithSharedProvider(nil, emb))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var text strings.Builder
+	for i := range 24 {
+		fmt.Fprintf(&text, "The service %d deploys on Friday. ", i)
+	}
+	if err := mem.Remember(context.Background(), mnemos.Item{Content: text.String()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mem.Close(); err != nil {
+		t.Fatal(err)
+	}
+	claims, claimVectors, _ := embeddedCounts(t, dsn)
+	if claims < 10 {
+		t.Fatalf("only %d claims extracted; the test needs many to exercise the bound", claims)
+	}
+	if claimVectors != claims {
+		t.Errorf("%d of %d claims embedded, want all", claimVectors, claims)
+	}
+	if emb.peak > 4 {
+		t.Errorf("%d embeds ran at once, want at most 4", emb.peak)
 	}
 }

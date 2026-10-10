@@ -455,14 +455,14 @@ func (e Engine) inhibitLosers(ctx context.Context, opts AnswerOptions, ans domai
 // the pre-gate flow when the corrective pass doesn't fire.
 func (e Engine) answerOnce(ctx context.Context, question string, opts AnswerOptions) (domain.Answer, bool, error) {
 	if candidates, ok := e.eventsByHybrid(ctx, question); ok {
-		ans, err := e.answerWithEvents(ctx, question, candidates, opts, true)
+		ans, err := e.answerWithEvents(ctx, question, candidates, opts, true, true)
 		return ans, true, err
 	}
 	allEvents, err := e.events.ListAll(ctx)
 	if err != nil {
 		return domain.Answer{}, false, fmt.Errorf("load events for query: %w", err)
 	}
-	ans, err := e.answerWithEvents(ctx, question, allEvents, opts, false)
+	ans, err := e.answerWithEvents(ctx, question, allEvents, opts, false, true)
 	return ans, false, err
 }
 
@@ -474,7 +474,7 @@ func (e Engine) answerCorpusWide(ctx context.Context, question string, opts Answ
 	if err != nil {
 		return domain.Answer{}, fmt.Errorf("load events for corrective query: %w", err)
 	}
-	return e.answerWithEvents(ctx, question, allEvents, opts, false)
+	return e.answerWithEvents(ctx, question, allEvents, opts, false, true)
 }
 
 // correctiveScanReserve is the time the whole-corpus corrective pass is
@@ -672,7 +672,8 @@ func (e Engine) AnswerForRunWithOptions(ctx context.Context, question, runID str
 // skipped outright. As in the global gate, semantic filters are never relaxed
 // and the corrective answer is kept only if it is strictly stronger.
 func (e Engine) resolveRunAnswer(ctx context.Context, question string, events []domain.Event, opts AnswerOptions) (domain.Answer, error) {
-	ans, err := e.answerWithEvents(ctx, question, events, opts, false)
+	// Run-scoped: never widened, or recall would pull beliefs from other runs.
+	ans, err := e.answerWithEvents(ctx, question, events, opts, false, false)
 	if err != nil {
 		return domain.Answer{}, err
 	}
@@ -683,7 +684,7 @@ func (e Engine) resolveRunAnswer(ctx context.Context, question string, events []
 	if !relaxedFilters || !hasBudgetForCorrectiveScan(ctx) {
 		return ans, nil
 	}
-	corrected, cerr := e.answerWithEvents(ctx, question, events, relaxed, false)
+	corrected, cerr := e.answerWithEvents(ctx, question, events, relaxed, false, false)
 	if cerr == nil && strongerAnswer(corrected, ans) {
 		return corrected, nil
 	}
@@ -697,7 +698,7 @@ func (e Engine) resolveRunAnswer(ctx context.Context, question string, events []
 // would otherwise reload and re-score the WHOLE event-embedding corpus in Go,
 // negating the fast-path's entire reason for existing. When false, the events
 // are the full corpus and get the hybrid BM25 + cosine rank.
-func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents []domain.Event, opts AnswerOptions, preRanked bool) (domain.Answer, error) {
+func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents []domain.Event, opts AnswerOptions, preRanked, widen bool) (domain.Answer, error) {
 	q := strings.TrimSpace(question)
 	if q == "" {
 		return domain.Answer{}, fmt.Errorf("query question is required")
@@ -728,6 +729,9 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 	claims, err := e.claims.ListByEventIDs(ctx, eventIDs)
 	if err != nil {
 		return domain.Answer{}, fmt.Errorf("load claims for query: %w", err)
+	}
+	if widen {
+		claims = e.widenClaimCandidates(ctx, q, claims)
 	}
 	// Admission chain: deprecated-exclusion, credibility rescore, then every
 	// caller-supplied filter (entity, scope, visibility, lifecycle, min-trust,
@@ -1688,6 +1692,65 @@ func (e Engine) claimScoresByCandidate(ctx context.Context, question string, cla
 		out[h.ClaimID] = h.Similarity
 	}
 	return out, true
+}
+
+// claimCandidateK is how many beliefs each corpus-wide signal (claim vectors,
+// claim BM25) adds to recall's candidate pool (ADR 0030).
+const claimCandidateK = 50
+
+// widenClaimCandidates adds the beliefs most similar to the question across the
+// whole brain, by vector and by BM25, to the beliefs linked to the top-ranked
+// episodes (ADR 0030).
+//
+// Recall used to consider only beliefs linked to the answerEventLimit (5)
+// best-ranked episodes. A conversation of about 50 episode chunks therefore
+// left about 90% of its beliefs unreachable, and when episode ranking missed
+// the right session, no belief-level scoring could recover the answer. On
+// LoCoMo the answer was in the brain for 91.5% of single-hop questions but in
+// recall's top 100 for only 63% (#456).
+//
+// The episode-linked beliefs stay in the pool; this only adds candidates. The
+// hybrid ranker then orders the pool. Run-scoped recall does not call this.
+func (e Engine) widenClaimCandidates(ctx context.Context, question string, claims []domain.Claim) []domain.Claim {
+	have := make(map[string]struct{}, len(claims))
+	for _, c := range claims {
+		have[c.ID] = struct{}{}
+	}
+	extra := make([]string, 0, 2*claimCandidateK)
+	add := func(id string) {
+		if _, ok := have[id]; !ok {
+			have[id] = struct{}{}
+			extra = append(extra, id)
+		}
+	}
+	if e.claimVectorSearch != nil && e.embedClient != nil {
+		if qv, err := e.questionVector(ctx, question); err == nil {
+			hits, err := e.claimVectorSearch.SearchClaimsByVector(ctx, qv, nil,
+				embedding.ModelIDOf(e.embedClient), claimCandidateK, claimVectorFloor)
+			if err == nil {
+				for _, h := range hits {
+					add(h.ClaimID)
+				}
+			}
+		}
+	}
+	bm := e.bm25ClaimScores(ctx, question, claimCandidateK)
+	bmIDs := make([]string, 0, len(bm))
+	for id := range bm {
+		bmIDs = append(bmIDs, id)
+	}
+	sort.Strings(bmIDs)
+	for _, id := range bmIDs {
+		add(id)
+	}
+	if len(extra) == 0 {
+		return claims
+	}
+	more, err := e.claims.ListByIDs(ctx, extra)
+	if err != nil {
+		return claims
+	}
+	return append(claims, more...)
 }
 
 // bm25ClaimScores mirrors bm25EventScores but for the claims_fts index.

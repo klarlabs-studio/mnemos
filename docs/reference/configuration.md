@@ -54,7 +54,7 @@ file, the code, or any `MNEMOS_*` name the code reads disagree.
 | `MNEMOS_FEEDBACK_CONTEST_THRESHOLD` | `feedback.contest_threshold` | The negative-feedback count at which a belief becomes contested. Default 3. |
 | `MNEMOS_FEEDBACK_DECAY` | `feedback.decay` | Multiplies confidence on each negative feedback. Default 0.9. |
 | `MNEMOS_JOB_TIMEOUT` | `job.timeout` | Bounds one CLI job attempt, as a Go duration. Default 10m. Whole-brain maintenance (`relate --prune-supports`) defaults to 4h unless this is set. |
-| `MNEMOS_SPREADING_ACTIVATION` | `query.spreading_activation` | Primes strongly-associated beliefs (ADR 0013 §2). Read-only ranking. |
+| `MNEMOS_SPREADING_ACTIVATION` | `query.spreading_activation` | Primes strongly-associated beliefs (ADR 0013 §2). Read-only ranking. Off unless set to true: it lowered recall quality on LoCoMo (ADR 0030). |
 | `MNEMOS_SALIENCE` | `query.salience` | Blends a bounded stakes term into ranking (ADR 0013 §4). Read-only ranking. |
 | `MNEMOS_HEBBIAN` | `query.hebbian` | Strengthens edges among co-retrieved beliefs (ADR 0015 §4). WRITES. |
 | `MNEMOS_RECONSOLIDATE` | `query.reconsolidate` | Re-marks recalled beliefs verified-now (ADR 0015 §5). WRITES. |

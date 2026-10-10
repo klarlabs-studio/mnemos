@@ -62,7 +62,36 @@ func TestWithCognitiveDefaults_PreservesCallerIntentAndOtherFields(t *testing.T)
 	if got.Hops != 3 || got.MinTrust != 0.4 {
 		t.Errorf("unrelated fields were modified: hops=%d minTrust=%v", got.Hops, got.MinTrust)
 	}
-	if !got.Prime || !got.Salient || !got.Reconsolidate || !got.Inhibit {
-		t.Errorf("the other four must default on: %+v", got)
+	if !got.Salient || !got.Reconsolidate || !got.Inhibit {
+		t.Errorf("salience, reconsolidation and inhibition must default on: %+v", got)
+	}
+	if got.Prime {
+		t.Errorf("spreading activation must default off (ADR 0030): %+v", got)
+	}
+}
+
+// Spreading activation is opt-in (ADR 0030). On LoCoMo it cut the share of
+// answerable questions whose answer ranked in recall's top 5 from 39.4% to
+// 15.6%; no other behaviour moved it.
+func TestSpreadingActivation_IsOptIn(t *testing.T) {
+	t.Setenv(envSpreadingActivation, "")
+	if (AnswerOptions{}).WithCognitiveDefaults().Prime {
+		t.Error("unset must leave spreading activation off")
+	}
+	for _, truthy := range []string{"1", "true", "yes", "on", " TRUE "} {
+		t.Setenv(envSpreadingActivation, truthy)
+		if !(AnswerOptions{}).WithCognitiveDefaults().Prime {
+			t.Errorf("%q must turn spreading activation on", truthy)
+		}
+	}
+	for _, other := range []string{"0", "false", "flase", "2"} {
+		t.Setenv(envSpreadingActivation, other)
+		if (AnswerOptions{}).WithCognitiveDefaults().Prime {
+			t.Errorf("%q must not turn an opt-in behaviour on", other)
+		}
+	}
+	t.Setenv(envSpreadingActivation, "")
+	if !(AnswerOptions{Prime: true}).WithCognitiveDefaults().Prime {
+		t.Error("an explicit per-query Prime:true (--prime) must survive the default")
 	}
 }
