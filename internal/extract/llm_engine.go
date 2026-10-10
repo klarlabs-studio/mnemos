@@ -461,22 +461,27 @@ func (e LLMEngine) buildClaims(rawClaims []llmClaim, sourceEvents []domain.Event
 	return claims, evidence, entities, nil
 }
 
+// cacheKey identifies one extraction response in the on-disk cache.
+//
+// The key names the client that produces the claims (provider, model and
+// endpoint, via [llm.Identified]). It used to read MNEMOS_LLM_PROVIDER,
+// MNEMOS_LLM_MODEL and MNEMOS_EXTRACT_MODEL from the environment. The library
+// configures its client in code (WithEnhancedMode), so those were empty there,
+// and the key ignored the model: switching extraction models silently served
+// the previous model's claims. A client that cannot name itself is not cached,
+// because a cache that cannot say what produced an entry cannot be trusted.
 func (e LLMEngine) cacheKey(texts []string) string {
 	if e.cacheDir == "" {
+		return ""
+	}
+	id, ok := e.client.(llm.Identified)
+	if !ok {
 		return ""
 	}
 	h := sha256.New()
 	_, _ = h.Write([]byte(PromptVersion))
 	_, _ = h.Write([]byte("\n"))
-	_, _ = h.Write([]byte(strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER"))))
-	_, _ = h.Write([]byte("\n"))
-	_, _ = h.Write([]byte(strings.TrimSpace(os.Getenv("MNEMOS_LLM_MODEL"))))
-	// MNEMOS_EXTRACT_MODEL overrides the model for extraction specifically
-	// (see pipeline.NewExtractor), so it is part of what produced these claims.
-	// Leaving it out let two different extract models share one entry: a switch
-	// silently served the previous model's output.
-	_, _ = h.Write([]byte("\n"))
-	_, _ = h.Write([]byte(strings.TrimSpace(os.Getenv("MNEMOS_EXTRACT_MODEL"))))
+	_, _ = h.Write([]byte(id.Identity()))
 	for _, text := range texts {
 		_, _ = h.Write([]byte("\n"))
 		_, _ = h.Write([]byte(text))
