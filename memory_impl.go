@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"math"
 	"os"
@@ -110,7 +111,16 @@ type memory struct {
 	embedWG     sync.WaitGroup
 	embedCtx    context.Context
 	embedCancel context.CancelFunc
+	// embedSlots bounds how many background embeds call the provider at once
+	// (#457). nil means unbounded, for a memory built without the constructor.
+	embedSlots chan struct{}
 }
+
+// embedConcurrency is how many background embeds one memory runs against its
+// provider at a time. Remember embeds every claim and episode it writes, so an
+// unbounded fan-out put dozens of concurrent requests on a local model and
+// timed some out: 21% of a freshly ingested brain's claims had no vector (#457).
+const embedConcurrency = 4
 
 var _ Memory = (*memory)(nil)
 
@@ -761,21 +771,40 @@ func (m *memory) embedAsync(entityID, entityType, text string) {
 		if parent == nil {
 			parent = context.Background()
 		}
+		// Wait for a slot before the timeout starts, so a queued embed is not
+		// timed out by the ones ahead of it.
+		if m.embedSlots != nil {
+			select {
+			case m.embedSlots <- struct{}{}:
+				defer func() { <-m.embedSlots }()
+			case <-parent.Done():
+				embedFailed(entityID, entityType, parent.Err())
+				return
+			}
+		}
 		ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 		defer cancel()
 		vectors, err := embedder.Embed(ctx, []string{text})
 		if err != nil || len(vectors) == 0 || len(vectors[0]) == 0 {
-			if m.logger != nil {
-				m.logger.Ctx(ctx).Warn().Err(err).Str("entity_id", entityID).Str("entity_type", entityType).Msg("mnemos: async embed skipped")
+			if err == nil {
+				err = errors.New("embedder returned no vector")
 			}
+			embedFailed(entityID, entityType, err)
 			return
 		}
 		if err := embeddings.Upsert(ctx, entityID, entityType, vectors[0], embedding.ModelIDOf(embedder), m.actorID); err != nil {
-			if m.logger != nil {
-				m.logger.Ctx(ctx).Warn().Err(err).Str("entity_id", entityID).Str("entity_type", entityType).Msg("mnemos: async embed upsert failed")
-			}
+			embedFailed(entityID, entityType, err)
 		}
 	}()
+}
+
+// embedFailed records a background embed that stored no vector. The belief
+// stays recallable by text only, so the failure is counted and logged rather
+// than left to a logger that may not be configured (#457).
+func embedFailed(entityID, entityType string, err error) {
+	embedding.RecordFailure()
+	slog.Warn("mnemos: background embed stored no vector; the item is recallable by text only",
+		"entity_id", entityID, "entity_type", entityType, "error", err)
 }
 
 // closeEmbedGrace is how long Close lets in-flight background embeds finish
