@@ -154,6 +154,7 @@ func newFromCfg(cfg config) (Memory, error) {
 	// Root context for background embedding work, cancelled by Close so
 	// in-flight goroutines stop before the connection goes away.
 	m.embedCtx, m.embedCancel = context.WithCancel(context.Background())
+	m.embedSlots = make(chan struct{}, embedConcurrency)
 
 	// The cumulative token budget (WithTokenBudget) is enforced at the
 	// Mnemos layer across writes: a pre-execution gate rejects writes once
