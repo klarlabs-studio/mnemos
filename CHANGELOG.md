@@ -10,7 +10,7 @@ notable changes.
 
 ## [0.128.1] — 2026-10-10
 
-A security patch, plus two fixes found while building the answer-quality
+A security patch, plus three fixes found while building the answer-quality
 evaluation (#441).
 
 ### Security
@@ -46,6 +46,12 @@ evaluation (#441).
   silently reused the previous model's claims. Entries cached before this
   release no longer match, so each text is extracted once more after
   upgrading.
+- **SQLite write transactions take the write lock up front** (`BEGIN
+  IMMEDIATE`). A transaction that read before writing failed at once with
+  "database is locked" when another connection committed in between, and
+  `busy_timeout` could not help. The embedding fix above made this routine
+  between consecutive writes; it was caught before release. Overlapping
+  writes now wait up to 5 s for the lock instead of failing.
 
 ## [0.128.0] — 2026-10-08
 
