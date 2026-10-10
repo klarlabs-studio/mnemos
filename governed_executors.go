@@ -98,6 +98,17 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("persist: %w", err)
 	}
 
+	// Embed what this write stored, in the background, as RememberClaim and
+	// RememberEvent already do. Remember never did, so with an embedder
+	// configured every belief it extracted was still recalled by token overlap
+	// only (#449).
+	for _, c := range claims {
+		m.embedAsync(c.ID, "claim", c.Text)
+	}
+	for _, ev := range events {
+		m.embedAsync(ev.ID, "event", ev.Content)
+	}
+
 	// Materialise the entity tags the extractor produced.
 	//
 	// This is the governed write path — what MCP process_text, and therefore
