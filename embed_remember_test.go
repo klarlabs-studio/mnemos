@@ -2,6 +2,7 @@ package mnemos_test
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -106,5 +107,27 @@ func TestClose_LetsInFlightEmbedsFinish(t *testing.T) {
 	}
 	if _, _, eventVectors := embeddedCounts(t, dsn); eventVectors != 1 {
 		t.Errorf("%d event vectors after Close, want 1: the in-flight embed was discarded", eventVectors)
+	}
+}
+
+// Back-to-back Remember calls with embedding on. Each Remember leaves vector
+// writes in flight, and the next one's claim upsert used to collide with them
+// and fail with "database is locked" (SQLITE_BUSY_SNAPSHOT). Found when 9 of
+// 10 LoCoMo conversations failed to ingest in the #441 harness.
+func TestRemember_ConsecutiveWritesWithEmbeddingSucceed(t *testing.T) {
+	clearMnemosEnv(t)
+	dsn := "sqlite://" + filepath.Join(t.TempDir(), "brain.db")
+	mem, err := mnemos.New(mnemos.WithStorage(dsn), mnemos.WithSharedProvider(nil, slowEmbedder{delay: 20 * time.Millisecond}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = mem.Close() }()
+	for i := range 25 {
+		err := mem.Remember(context.Background(), mnemos.Item{
+			Content: fmt.Sprintf("Session %d: the user moved the release to Friday %d. The user prefers tea over coffee in session %d.", i, i, i),
+		})
+		if err != nil {
+			t.Fatalf("Remember %d: %v", i, err)
+		}
 	}
 }
