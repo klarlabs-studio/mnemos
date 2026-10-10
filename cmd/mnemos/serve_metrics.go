@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 )
 
@@ -53,10 +54,17 @@ var (
 		Name: "mnemos_relate_skipped_total",
 		Help: "Writes that stored new beliefs without relating them to existing ones because the relate step failed.",
 	}, func() float64 { return float64(pipeline.RelateSkips()) })
+
+	// embedFailedTotal exposes embedding.Failures (#457): a non-zero rate means
+	// beliefs are being stored that semantic recall cannot reach.
+	embedFailedTotal = prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name: "mnemos_embed_failed_total",
+		Help: "Background embeds that stored no vector, leaving the item recallable by text only.",
+	}, func() float64 { return float64(embedding.Failures()) })
 )
 
 func init() {
-	mnemosRegistry.MustRegister(httpRequestsTotal, httpRequestDuration, httpInFlight, relateSkippedTotal)
+	mnemosRegistry.MustRegister(httpRequestsTotal, httpRequestDuration, httpInFlight, relateSkippedTotal, embedFailedTotal)
 }
 
 // metricsMiddleware records RED telemetry (rate, errors, duration) for
