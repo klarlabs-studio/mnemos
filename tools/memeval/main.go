@@ -86,18 +86,22 @@ func main() {
 	workers := flag.Int("workers", 4, "haystacks processed concurrently")
 	limit := flag.Int("limit", 50, "beliefs recalled per question")
 	keep := flag.Bool("keep", false, "keep each brain's database after use")
+	recallOnly := flag.Bool("recall-only", false, "skip ingest; recall against brains kept by an earlier -keep run")
 	flag.Parse()
 	if *in == "" || *out == "" || *workdir == "" {
 		fmt.Fprintln(os.Stderr, "usage: memeval -in FILE -out FILE -workdir DIR [-workers N] [-limit N]")
 		os.Exit(2)
 	}
-	if err := run(*in, *out, *workdir, *workers, *limit, *keep); err != nil {
+	if *recallOnly {
+		*keep = true
+	}
+	if err := run(*in, *out, *workdir, *workers, *limit, *keep, *recallOnly); err != nil {
 		fmt.Fprintln(os.Stderr, "memeval:", err)
 		os.Exit(1)
 	}
 }
 
-func run(in, out, workdir string, workers, limit int, keep bool) error {
+func run(in, out, workdir string, workers, limit int, keep, recallOnly bool) error {
 	if err := guardWorkdir(workdir); err != nil {
 		return err
 	}
@@ -130,7 +134,7 @@ func run(in, out, workdir string, workers, limit int, keep bool) error {
 		go func() {
 			defer wg.Done()
 			for h := range jobs {
-				o := evaluate(h, workdir, limit, keep, cfg)
+				o := evaluate(h, workdir, limit, keep, recallOnly, cfg)
 				line, _ := json.Marshal(o)
 				mu.Lock()
 				_, _ = f.Write(append(line, '\n'))
@@ -191,11 +195,18 @@ func providerConfig() (mnemos.ProviderConfig, error) {
 	return cfg, nil
 }
 
-func evaluate(h Haystack, workdir string, limit int, keep bool, cfg mnemos.ProviderConfig) Output {
+func evaluate(h Haystack, workdir string, limit int, keep, recallOnly bool, cfg mnemos.ProviderConfig) Output {
 	o := Output{HaystackID: h.ID}
 	ctx := context.Background()
 	path := filepath.Join(workdir, sanitize(h.ID)+".db")
-	_ = os.Remove(path)
+	if recallOnly {
+		if _, err := os.Stat(path); err != nil {
+			o.Error = "recall-only: no kept brain: " + err.Error()
+			return o
+		}
+	} else {
+		_ = os.Remove(path)
+	}
 	if !keep {
 		defer func() {
 			for _, suffix := range []string{"", "-wal", "-shm"} {
@@ -213,7 +224,11 @@ func evaluate(h Haystack, workdir string, limit int, keep bool, cfg mnemos.Provi
 
 	skipsBefore := pipeline.RelateSkips()
 	start := time.Now()
-	for _, s := range h.Sessions {
+	sessions := h.Sessions
+	if recallOnly {
+		sessions = nil
+	}
+	for _, s := range sessions {
 		content := "Session date: " + s.Date + "\n\n" + s.Text
 		err := mem.Remember(ctx, mnemos.Item{
 			Type:     "conversation",
