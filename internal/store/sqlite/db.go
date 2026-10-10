@@ -52,8 +52,17 @@ func open(path string) (*sql.DB, error) {
 // dsnFor is the driver DSN for the database at path, carrying the PRAGMAs
 // described in open. Tests that open a second connection to the same file use
 // it too, so they contend for locks exactly as a second process would.
+//
+// _txlock=immediate makes every transaction BEGIN IMMEDIATE: it takes the
+// write lock before its first read and waits through busy_timeout like any
+// other writer. Every transaction this store opens writes. A deferred
+// transaction reads first and upgrades on its first write; if another
+// connection committed in between, the upgrade fails at once with
+// SQLITE_BUSY_SNAPSHOT, which busy_timeout cannot wait out. Background
+// embedding (#450) made that routine: the next Remember's claim upsert
+// collided with the previous one's vector writes.
 func dsnFor(path string) string {
-	return path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	return path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate"
 }
 
 // Bootstrap applies the SQLite schema and runs migrations against
