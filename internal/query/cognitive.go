@@ -6,7 +6,8 @@ import (
 )
 
 // The cognitive retrieval behaviours (ADR 0013 §2/§4, ADR 0015 §4/§5, ADR 0016)
-// are ON unless explicitly disabled.
+// are ON unless explicitly disabled, except spreading activation, which is
+// opt-in since ADR 0030 (see SPREADING ACTIVATION IS OPT-IN below).
 //
 // # WHY ON BY DEFAULT
 //
@@ -30,6 +31,18 @@ import (
 // deployment (a replica, a forensic copy, a migration dry-run) is a real thing:
 //
 //	MNEMOS_HEBBIAN=false        # or 0 / no / off
+//
+// # SPREADING ACTIVATION IS OPT-IN (ADR 0030)
+//
+// Measured on LoCoMo (#441 Phase A, #456): with spreading activation on, the
+// belief containing the answer ranked in recall's top 5 for 15.6% of
+// answerable questions. With it off, the figure was 39.4%; switching off
+// salience, Hebbian, reconsolidation or inhibition changed nothing. Priming
+// re-sorts the retrieved beliefs by their supports edges to the top seeds,
+// and with up to 20 supports edges per belief (ADR 0027) that lifts whole
+// clusters about the same subject above the belief that answers the
+// question. It stays available (--prime, MNEMOS_SPREADING_ACTIVATION=true);
+// it becomes a default again only when a bounded form shows a measured gain.
 //
 // # WHAT THIS FIXES
 //
@@ -62,6 +75,16 @@ func cognitiveEnabled(name string) bool {
 	}
 }
 
+// cognitiveOptIn reports whether an opt-in behaviour has been turned on.
+func cognitiveOptIn(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 // WithCognitiveDefaults fills the five retrieval behaviours from the
 // environment, leaving every other field untouched. Call it on every
 // AnswerOptions built on a production read path; TestAnswerOptionsApplyCognitiveDefaults
@@ -70,7 +93,7 @@ func cognitiveEnabled(name string) bool {
 // A field already set to true stays true — a caller's explicit `--hebbian`
 // cannot be undone by an env var that merely fails to mention it.
 func (o AnswerOptions) WithCognitiveDefaults() AnswerOptions {
-	o.Prime = o.Prime || cognitiveEnabled(envSpreadingActivation)
+	o.Prime = o.Prime || cognitiveOptIn(envSpreadingActivation)
 	o.Salient = o.Salient || cognitiveEnabled(envSalience)
 	o.Hebbian = o.Hebbian || cognitiveEnabled(envHebbian)
 	o.Reconsolidate = o.Reconsolidate || cognitiveEnabled(envReconsolidate)
