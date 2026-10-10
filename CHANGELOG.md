@@ -8,6 +8,22 @@ notable changes.
 
 ## [Unreleased]
 
+### Security
+
+- **Four `net/http` vulnerabilities fixed** by building with Go 1.27.2 and
+  `golang.org/x/net` v0.60.0. All four are reachable through `mnemos serve`:
+  - [GO-2026-6617](https://pkg.go.dev/vuln/GO-2026-6617): an HTTP/2 server
+    crash from an HPACK encoder race;
+  - [GO-2026-6613](https://pkg.go.dev/vuln/GO-2026-6613): HTTP/1 connection
+    desynchronisation after a 2xx CONNECT;
+  - [GO-2026-6612](https://pkg.go.dev/vuln/GO-2026-6612): a double HTTP/2
+    flow-control refund;
+  - [GO-2026-6611](https://pkg.go.dev/vuln/GO-2026-6611): CPU exhaustion from
+    repeated initial-window changes.
+
+  v0.128.0 was built with Go 1.26.7 and `x/net` v0.58.0 and is affected.
+  Upgrade if you run `mnemos serve`.
+
 ## [0.128.0] — 2026-10-08
 
 The consolidation release (#382): one trust value per belief, bounded write and
