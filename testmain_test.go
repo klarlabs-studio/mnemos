@@ -32,9 +32,20 @@ func TestMain(m *testing.M) {
 		_ = os.Setenv("MNEMOS_DB_URL", "sqlite://"+filepath.Join(d, "mnemos.db"))
 	}
 
+	dataHome, err := os.MkdirTemp("", "mnemos-lib-test-xdg-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "testmain: create isolated data dir: %v\n", err)
+		os.Exit(1)
+	}
+	// The extraction cache resolves under XDG_DATA_HOME, which defaults to the
+	// developer's real ~/.local/share/mnemos. Tests wrote their fixture
+	// extractions there until this was isolated as well.
+	_ = os.Setenv("XDG_DATA_HOME", dataHome)
+
 	code := m.Run()
 
 	// os.Exit skips defers, so clean up explicitly.
+	_ = os.RemoveAll(dataHome)
 	if brainDir != "" {
 		_ = os.RemoveAll(brainDir)
 	}
