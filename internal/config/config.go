@@ -222,7 +222,8 @@ type Config struct {
 	// choice. Leave them unset to keep reads read-only.
 	Query struct {
 		// SpreadingActivation primes strongly-associated beliefs (ADR 0013 §2).
-		// Read-only ranking.
+		// Read-only ranking. Off unless set to true: it lowered recall
+		// quality on LoCoMo (ADR 0030).
 		SpreadingActivation scalar `yaml:"spreading_activation"`
 		// Salience blends a bounded stakes term into ranking (ADR 0013 §4).
 		// Read-only ranking.
