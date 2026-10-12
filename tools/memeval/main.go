@@ -71,12 +71,16 @@ type Answer struct {
 
 // Output is one line of the result file.
 type Output struct {
-	HaystackID  string   `json:"haystack_id"`
-	Claims      int      `json:"claims"`
-	IngestMS    int64    `json:"ingest_ms"`
-	RelateSkips int64    `json:"relate_skips"`
-	Answers     []Answer `json:"answers,omitempty"`
-	Error       string   `json:"error,omitempty"`
+	HaystackID  string `json:"haystack_id"`
+	Claims      int    `json:"claims"`
+	IngestMS    int64  `json:"ingest_ms"`
+	RelateSkips int64  `json:"relate_skips"`
+	// EmbedWaitMS is how long recall waited for background embeds to settle;
+	// UnembeddedClaims is how many beliefs still had no vector when it began.
+	EmbedWaitMS      int64    `json:"embed_wait_ms"`
+	UnembeddedClaims int      `json:"unembedded_claims"`
+	Answers          []Answer `json:"answers,omitempty"`
+	Error            string   `json:"error,omitempty"`
 }
 
 func main() {
@@ -254,6 +258,19 @@ func evaluate(h Haystack, workdir string, limit int, keep, recallOnly bool, cfg 
 		o.Claims = int(n)
 	}
 
+	// Remember embeds in the background, a few at a time, so a large haystack
+	// is still embedding when its last session returns. A user recalls long
+	// after writing; recalling at once would measure a half-embedded brain.
+	waited := time.Now()
+	if err := awaitEmbeddings(ctx, conn); err != nil {
+		o.Error = "await embeddings: " + err.Error()
+		return o
+	}
+	o.EmbedWaitMS = time.Since(waited).Milliseconds()
+	if missing, err := conn.Claims.ListIDsMissingEmbedding(ctx); err == nil {
+		o.UnembeddedClaims = len(missing)
+	}
+
 	for _, q := range h.Questions {
 		t := time.Now()
 		results, err := mem.Recall(ctx, mnemos.Query{Text: q.Text, Limit: limit})
@@ -277,6 +294,32 @@ func evaluate(h Haystack, workdir string, limit int, keep, recallOnly bool, cfg 
 		o.Answers = append(o.Answers, a)
 	}
 	return o
+}
+
+// embedSettle is how long the vector count must hold still before recall
+// starts; embedWaitMax bounds the wait if the embedder stalls.
+const (
+	embedSettle  = 15 * time.Second
+	embedWaitMax = 30 * time.Minute
+)
+
+// awaitEmbeddings waits until the brain's vector count stops growing.
+func awaitEmbeddings(ctx context.Context, conn *store.Conn) error {
+	deadline := time.Now().Add(embedWaitMax)
+	last, stableSince := int64(-1), time.Now()
+	for time.Now().Before(deadline) {
+		n, err := conn.Embeddings.CountAll(ctx)
+		if err != nil {
+			return err
+		}
+		if n != last {
+			last, stableSince = n, time.Now()
+		} else if time.Since(stableSince) >= embedSettle {
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return nil
 }
 
 type sessionSet struct{ ids, dates []string }
