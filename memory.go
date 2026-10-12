@@ -275,6 +275,13 @@ type Query struct {
 	// did not exist, which made inhibition unreachable from the embedded
 	// library entirely: the path every consuming product takes.
 	AgentConsumer bool
+
+	// Excerpts asks for each result's source excerpt (ADR 0031): the lines of
+	// the evidence the belief was extracted from that best match it, so a
+	// reader sees the original wording — dates, names, numbers — that the
+	// belief may have dropped. False (the default) leaves [Result.Excerpt]
+	// empty and costs nothing.
+	Excerpts bool
 }
 
 // Claim is the stable, read-only projection of a stored claim returned by
@@ -373,6 +380,12 @@ type Result struct {
 	// sourced from this project's events, or a registry URL for claims
 	// imported via federation. Empty when unknown.
 	Provenance string
+
+	// Excerpt is the part of the belief's evidence that best matches it, at
+	// most a few hundred characters: the source line and up to one neighbour
+	// on each side. Set only when [Query.Excerpts] is true; empty when the
+	// evidence shares no word with the belief.
+	Excerpt string
 }
 
 // RecallSufficiencyFloor is the aggregate-confidence threshold at or above
