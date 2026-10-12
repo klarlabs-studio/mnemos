@@ -75,7 +75,7 @@ func pruneSupports(args []string, f Flags) {
 		return
 	}
 	meta := map[string]string{"top_k": strconv.Itoa(o.topK), "apply": strconv.FormatBool(o.apply)}
-	err = runJobWithin(maintenanceJobTimeout(), "relate-prune-supports", meta, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+	err = runJob("relate-prune-supports", meta, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
 		rep, err := runPruneSupports(ctx, w.Conn().Claims, w.Conn().Relationships, o, func(r pruneSupportsReport) {
 			fmt.Fprintf(os.Stderr, "  %d claims scanned, %d over budget, %d edges %s\n",
 				r.claims, r.overBudget, r.dropped, map[bool]string{true: "deleted", false: "to remove"}[o.apply])
