@@ -1907,7 +1907,25 @@ func jobTimeout() time.Duration {
 }
 
 func runJob(kind string, scope map[string]string, verbose bool, fn func(context.Context, *workflow.Job, *govwrite.Writer) error) error {
-	return runJobWithin(jobTimeout(), kind, scope, verbose, fn)
+	return runJobWithin(timeoutFor(kind), kind, scope, verbose, fn)
+}
+
+// maintenanceKinds are the jobs that walk the whole brain, so their running
+// time grows with the brain rather than with one request. reembed over 163k
+// beliefs needs about 45 minutes against a local model; under the 10-minute
+// request bound it died at batch 30848 with a misleading "context deadline
+// exceeded" from the embedder (#440).
+var maintenanceKinds = map[string]bool{
+	"relate-prune-supports": true,
+	"reembed":               true,
+}
+
+// timeoutFor picks the per-attempt bound for a job kind.
+func timeoutFor(kind string) time.Duration {
+	if maintenanceKinds[kind] {
+		return maintenanceJobTimeout()
+	}
+	return jobTimeout()
 }
 
 // maintenanceJobTimeout bounds a whole-brain maintenance pass (`relate
