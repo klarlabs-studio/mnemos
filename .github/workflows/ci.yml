@@ -34,7 +34,11 @@ jobs:
     with:
       # go.mod requires >= 1.26.2; setup-go pins GOTOOLCHAIN=local, so the
       # shared default (1.25) can't auto-download a newer toolchain.
-      go-version: "1.26"
+      #
+      # Pinned to the patch release, not "1.26": setup-go satisfies a bare
+      # minor from the runner's tool cache, which served go1.26.8 and failed
+      # govulncheck on GO-2026-6612/6613/6617 (net/http, fixed in 1.26.9).
+      go-version: "1.26.9"
       # The org-pinned golangci-lint v2.7.2 release binary is built with
       # go1.25 and refuses to lint a go1.26.2 module ("build Go version is
       # lower than the targeted Go version"). v2.12.2 is built with go1.26.2.
