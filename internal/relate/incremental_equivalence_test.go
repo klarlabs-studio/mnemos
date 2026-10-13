@@ -31,22 +31,20 @@ func referenceDetectIncremental(e Engine, newClaims []domain.Claim, existingClai
 	rels := make([]domain.Relationship, 0)
 	now := e.now().UTC()
 
-	type analyzed struct {
-		text   string
-		tokens map[string]struct{}
-		neg    bool
-	}
-
-	newCache := make([]analyzed, len(newClaims))
+	// Since relate/v4 the oracle classifies each pair with classifyPair, the
+	// shared pair classifier, over every (new, existing) pair with no
+	// prefilter. What it still guards is the candidate index: any pair the
+	// index fails to surface shows up as a missing edge.
+	newCache := make([]*claimDerived, len(newClaims))
 	for i := range newClaims {
 		tokens, neg := contentTokensAndPolarity(newClaims[i].Text)
-		newCache[i] = analyzed{text: newClaims[i].Text, tokens: tokens, neg: neg}
+		newCache[i] = newClaimDerived(newClaims[i].Text, tokens, neg)
 	}
 
-	existCache := make([]analyzed, len(existingClaims))
+	existCache := make([]*claimDerived, len(existingClaims))
 	for i := range existingClaims {
 		tokens, neg := contentTokensAndPolarity(existingClaims[i].Text)
-		existCache[i] = analyzed{text: existingClaims[i].Text, tokens: tokens, neg: neg}
+		existCache[i] = newClaimDerived(existingClaims[i].Text, tokens, neg)
 	}
 
 	for i := 0; i < len(newClaims); i++ {
@@ -58,23 +56,12 @@ func referenceDetectIncremental(e Engine, newClaims []domain.Claim, existingClai
 				continue
 			}
 
-			relType, ok := inferRelationship(newCache[i].tokens, newCache[i].neg, existCache[j].tokens, existCache[j].neg)
-			if detectNumericDivergence(newCache[i].text, existCache[j].text, newCache[i].tokens, existCache[j].tokens) {
-				relType = domain.RelationshipTypeContradicts
-				ok = true
-			}
-			if !ok && detectEntityRoleDivergence(newCache[i].text, existCache[j].text, newCache[i].tokens, existCache[j].tokens) {
-				relType = domain.RelationshipTypeContradicts
-				ok = true
-			}
-			if !ok && detectTemporalDivergence(newCache[i].text, existCache[j].text, newCache[i].tokens, existCache[j].tokens) {
-				relType = domain.RelationshipTypeContradicts
-				ok = true
-			}
+			overlap := contentOverlap(newCache[i].tokens, existCache[j].tokens)
+			v, ok := classifyPair(newCache[i], existCache[j], overlap, newCache[i].enumerated && existCache[j].enumerated)
 			if !ok {
 				continue
 			}
-			if suppressAsSessionNoise(relType, newClaims[i], existingClaims[j]) {
+			if suppressAsSessionNoise(v.relType, newClaims[i], existingClaims[j]) {
 				continue
 			}
 
@@ -83,14 +70,8 @@ func referenceDetectIncremental(e Engine, newClaims []domain.Claim, existingClai
 				return nil, err
 			}
 
-			rels = append(rels, domain.Relationship{
-				DerivedBy:   ModelVersion,
-				ID:          id,
-				Type:        relType,
-				FromClaimID: newClaims[i].ID,
-				ToClaimID:   existingClaims[j].ID,
-				CreatedAt:   now,
-			})
+			c := candidateEdge{relType: v.relType, strength: v.strength, detector: v.detector}
+			rels = append(rels, c.relationship(id, newClaims[i].ID, existingClaims[j].ID, now))
 		}
 	}
 
@@ -480,7 +461,7 @@ func TestScanAndIndexPathsAgree(t *testing.T) {
 // It also returns the strength each pass reported per edge: the supports
 // budget ranks by it, so the two passes must agree on it exactly or the budget
 // would keep different edges depending on corpus size.
-func runPass(newClaims, existing []domain.Claim, pass func(Engine, []*claimDerived, []domain.Claim, func(int, int32, domain.RelationshipType, float64) error, *IncrementalStats) error) ([]domain.Relationship, []float64, IncrementalStats, error) {
+func runPass(newClaims, existing []domain.Claim, pass func(Engine, []*claimDerived, []domain.Claim, func(int, int32, pairVerdict) error, *IncrementalStats) error) ([]domain.Relationship, []float64, IncrementalStats, error) {
 	e := equivalenceEngine()
 	derived := make([]*claimDerived, len(newClaims))
 	for i := range newClaims {
@@ -490,13 +471,13 @@ func runPass(newClaims, existing []domain.Claim, pass func(Engine, []*claimDeriv
 	var out []domain.Relationship
 	var strengths []float64
 	stats := IncrementalStats{}
-	emit := func(i int, j int32, rt domain.RelationshipType, strength float64) error {
+	emit := func(i int, j int32, v pairVerdict) error {
 		id, err := e.nextID()
 		if err != nil {
 			return err
 		}
-		out = append(out, domain.Relationship{ID: id, Type: rt, FromClaimID: newClaims[i].ID, ToClaimID: existing[j].ID})
-		strengths = append(strengths, strength)
+		out = append(out, domain.Relationship{ID: id, Type: v.relType, FromClaimID: newClaims[i].ID, ToClaimID: existing[j].ID, DerivedBy: v.detector})
+		strengths = append(strengths, v.strength)
 		return nil
 	}
 	err := pass(e, derived, existing, emit, &stats)

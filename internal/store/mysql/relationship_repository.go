@@ -26,8 +26,8 @@ func (r RelationshipRepository) Upsert(ctx context.Context, relationships []doma
 	defer func() { _ = tx.Rollback() }()
 
 	stmt := `
-INSERT INTO relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by, strength)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
   type = VALUES(type),
   from_claim_id = VALUES(from_claim_id),
@@ -39,7 +39,7 @@ ON DUPLICATE KEY UPDATE
 		}
 		if _, err := tx.ExecContext(ctx, stmt,
 			rel.ID, string(rel.Type), rel.FromClaimID, rel.ToClaimID,
-			rel.CreatedAt.UTC(), actorOr(rel.CreatedBy), rel.DerivedBy,
+			rel.CreatedAt.UTC(), actorOr(rel.CreatedBy), rel.DerivedBy, rel.EffectiveStrength(),
 		); err != nil {
 			return fmt.Errorf("upsert relationship %s: %w", rel.ID, err)
 		}

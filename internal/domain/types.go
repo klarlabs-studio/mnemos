@@ -499,11 +499,20 @@ type Association struct {
 	// base 1.0 (one association) and StrengthenAssociations increments it; spreading
 	// activation weights each edge by it so well-worn associations prime more strongly.
 	// A zero value reads as the base 1.0 (unset), so pre-strength edges are neutral.
+	//
+	// Since relate/v4 an inferred contradiction starts at the detector's
+	// confidence in (0, 1] instead of the base: how well the two claims align
+	// on the subject they disagree about. Values up to 1.0 prime exactly like
+	// the base in spreading activation and are untouched by decay (both act
+	// only above 1.0), so the two meanings do not interfere: at or below 1.0 is
+	// the detector's confidence, above 1.0 is Hebbian reinforcement.
 	Strength float64
 	// DerivedBy names the rule set that inferred the edge (relate.ModelVersion,
 	// relate.CausalLLMVersion), so edges an older rule set produced can be
-	// found and re-derived when the rules change. Empty for edges a caller
-	// supplied explicitly and for edges written before the column existed.
+	// found and re-derived when the rules change. Since relate/v4 an inferred
+	// contradiction also names its detector ("relate/v4:polarity"). Empty for
+	// edges a caller supplied explicitly and for edges written before the
+	// column existed.
 	DerivedBy string
 }
 

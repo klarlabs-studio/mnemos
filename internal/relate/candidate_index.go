@@ -144,6 +144,22 @@ type claimDerived struct {
 	// them for pairs of very short claims, which is a small minority.
 	proper     map[string]struct{}
 	properDone bool
+
+	// enumerated marks a parallel list item ("Phase 1: ..."); two of them are
+	// never compared for value divergence.
+	enumerated bool
+
+	// contra is the contradiction-adjudication view, built only for claims
+	// that reach adjudication.
+	contra *contradictionView
+}
+
+// view returns the claim's contradiction-adjudication view, deriving it once.
+func (d *claimDerived) view() *contradictionView {
+	if d.contra == nil {
+		d.contra = newContradictionView(d.text)
+	}
+	return d.contra
 }
 
 func newClaimDerived(text string, tokens map[string]struct{}, neg bool) *claimDerived {
@@ -162,6 +178,8 @@ func newClaimDerived(text string, tokens map[string]struct{}, neg bool) *claimDe
 		anchor: anchor,
 		nums:   extractNumerics(text),
 		asp:    classifyAspect(text),
+
+		enumerated: isEnumeratedItem(text),
 	}
 }
 

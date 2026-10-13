@@ -266,6 +266,7 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 		return fmt.Errorf("upsert claim evidence: %w", err)
 	}
 
+	relationships, _ = CapStoredContradictions(ctx, conn.Relationships, relationships)
 	if err := conn.Relationships.Upsert(ctx, relationships); err != nil {
 		return fmt.Errorf("upsert relationships: %w", err)
 	}

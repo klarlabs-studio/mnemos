@@ -98,6 +98,16 @@ func entityRoleDivergesPre(aProperNouns, bProperNouns map[string]struct{}) bool 
 // token "now". Neither is followed by a copula; "Alice is the CEO" is.
 func properNounTokens(text string) map[string]struct{} {
 	out := map[string]struct{}{}
+	for _, lower := range properNounWords(text) {
+		out[stemWord(lower)] = struct{}{}
+	}
+	return out
+}
+
+// properNounWords returns the lowercased words properNounTokens reads as proper
+// nouns, before stemming.
+func properNounWords(text string) []string {
+	var out []string
 	words := strings.Fields(text)
 	sentenceStart := true
 	for i, w := range words {
@@ -136,7 +146,7 @@ func properNounTokens(text string) map[string]struct{} {
 		if _, isStop := stopWords[lower]; isStop {
 			continue
 		}
-		out[stemWord(lower)] = struct{}{}
+		out = append(out, lower)
 	}
 	return out
 }

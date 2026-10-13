@@ -45,6 +45,7 @@ func (r RelationshipRepository) Upsert(ctx context.Context, relationships []doma
 			CreatedAt:   rel.CreatedAt.UTC().Format(time.RFC3339Nano),
 			CreatedBy:   actorOr(rel.CreatedBy),
 			DerivedBy:   rel.DerivedBy,
+			Strength:    rel.EffectiveStrength(),
 		})
 		if err != nil {
 			return fmt.Errorf("upsert relationship %s: %w", rel.ID, err)

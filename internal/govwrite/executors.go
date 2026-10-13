@@ -161,13 +161,14 @@ func (e relationshipsExecutor) Execute(ctx context.Context, input any, _ axidoma
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("write_relationships: unexpected input %T", input)
 	}
-	if err := e.conn.Relationships.Upsert(ctx, in.Relationships); err != nil {
+	rels, overCap := pipeline.CapStoredContradictions(ctx, e.conn.Relationships, in.Relationships)
+	if err := e.conn.Relationships.Upsert(ctx, rels); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert relationships: %w", err)
 	}
 	return axidomain.ExecutionResult{
-		Data:    writeCount{Accepted: len(in.Relationships)},
-		Summary: fmt.Sprintf("upserted %d relationship(s)", len(in.Relationships)),
-	}, ev("mnemos.write.relationships", map[string]any{"count": len(in.Relationships)}), nil
+		Data:    writeCount{Accepted: len(rels)},
+		Summary: fmt.Sprintf("upserted %d relationship(s)", len(rels)),
+	}, ev("mnemos.write.relationships", map[string]any{"count": len(rels), "contradictions_over_cap": overCap}), nil
 }
 
 // Relationships upserts claim relationships (supports/contradicts).
