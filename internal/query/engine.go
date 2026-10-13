@@ -281,19 +281,69 @@ func (e Engine) AnswerWithOptions(ctx context.Context, question string, opts Ans
 // All three are opt-in, bounded, single-shot and best-effort: placed HERE, on the
 // finally-chosen answer, rather than inside answerWithEvents (which can run twice
 // under corrective retrieval) so each fires exactly once on what was returned.
+//
+// They also never hold the answer hostage. A read under SQLite's WAL never needs
+// the write lock; these writes do, and each one waits out busy_timeout (5s) when
+// another process holds it — a ctx deadline does not interrupt that wait. A
+// consolidation held the lock for over four hours, and every recall in that time
+// spent 20s on write-backs before returning, past the recall hook's 12s budget.
+// So the write-backs run on their own goroutine, the answer waits at most
+// retrievalWriteBackWait for them, and they stop at the first failed write. On
+// an uncontended store they finish in milliseconds, well inside the wait, so the
+// effect is visible to the next recall exactly as before.
 func (e Engine) applyRetrievalWriteBacks(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
+	if !opts.Hebbian && !opts.Reconsolidate && !opts.Inhibit {
+		return
+	}
+	// The caller owns ans once it is returned; the write-backs read only claim
+	// and verdict IDs, from copies of the two slices they walk.
+	ans.Claims = append([]domain.Claim(nil), ans.Claims...)
+	ans.Verdicts = append([]domain.Verdict(nil), ans.Verdicts...)
+	// Detached from the caller's cancellation (a CLI or hook returning must not
+	// abort a write mid-flight) but still bounded.
+	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), retrievalWriteBackTimeout)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer cancel()
+		e.runRetrievalWriteBacks(bg, opts, ans)
+	}()
+	wait := time.NewTimer(retrievalWriteBackWait)
+	defer wait.Stop()
+	select {
+	case <-done:
+	case <-wait.C:
+	case <-ctx.Done():
+	}
+}
+
+const (
+	// retrievalWriteBackWait is the longest an answer waits for its write-backs.
+	retrievalWriteBackWait = time.Second
+	// retrievalWriteBackTimeout bounds write-backs left running after the
+	// answer was returned.
+	retrievalWriteBackTimeout = 30 * time.Second
+)
+
+// runRetrievalWriteBacks applies the three write-backs in order and stops at the
+// first failed write: on a locked store every further write would wait out
+// busy_timeout only to fail the same way.
+func (e Engine) runRetrievalWriteBacks(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
 	// Hebbian co-activation (ADR 0015 §4): the beliefs returned together this query
 	// "fired together", so strengthen the existing association edges among them.
-	// Best-effort: never fails a read.
-	e.strengthenCoactivation(ctx, opts, ans)
+	if e.strengthenCoactivation(ctx, opts, ans) != nil {
+		return
+	}
 	// Reconsolidation (ADR 0015 §5): retrieval is a write opportunity — recalling a
 	// belief refreshes its liveness (the testing effect: retrieval practice keeps a
 	// memory alive).
-	e.reconsolidateRecalled(ctx, opts, ans)
+	if e.reconsolidateRecalled(ctx, opts, ans) != nil {
+		return
+	}
 	// Competitive inhibition (ADR 0016): recalling a decisive contradiction winner
 	// suppresses the retrievability of the rival it beat. Retrievability only,
 	// never trust.
-	e.inhibitLosers(ctx, opts, ans)
+	_ = e.inhibitLosers(ctx, opts, ans)
 }
 
 // resolveAnswer runs the recall pass and the corrective-retrieval fallback, returning
@@ -347,14 +397,14 @@ const (
 // type-asserted: a backend that cannot persist strength is skipped rather than
 // guessed at. It never creates edges — only ones that already connect two members of
 // the set are strengthened. Best-effort by design: a write failure must not fail the
-// read, so the error is intentionally dropped.
-func (e Engine) strengthenCoactivation(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
+// read; the error is returned only so the remaining write-backs can be skipped.
+func (e Engine) strengthenCoactivation(ctx context.Context, opts AnswerOptions, ans domain.Answer) error {
 	if !opts.Hebbian || len(ans.Claims) < 2 {
-		return
+		return nil
 	}
 	strengthener, ok := e.relationships.(ports.RelationshipStrengthener)
 	if !ok {
-		return
+		return nil
 	}
 	n := len(ans.Claims)
 	if n > hebbianCoactivationTopN {
@@ -364,19 +414,21 @@ func (e Engine) strengthenCoactivation(ctx context.Context, opts AnswerOptions, 
 	for _, c := range ans.Claims[:n] {
 		ids = append(ids, c.ID)
 	}
-	_, _ = strengthener.StrengthenAssociations(ctx, ids, hebbianDelta, hebbianMaxStrength)
+	_, err := strengthener.StrengthenAssociations(ctx, ids, hebbianDelta, hebbianMaxStrength)
+	return err
 }
 
 // reconsolidateRecalled refreshes the liveness of the top co-retrieved beliefs
 // (ADR 0015 §5): recalling a belief re-marks it verified-now, so retrieval keeps a
 // memory fresh against the decay that prunes the unused — the testing effect. Opt-in
 // via AnswerOptions.Reconsolidate, bounded to the same top-N focus as the Hebbian
-// write-back, and best-effort: a freshness-touch failure must never fail the read, so
-// the error is intentionally dropped. Passes half-life 0 so any per-claim override is
+// write-back, and best-effort: a freshness-touch failure must never fail the read. It
+// stops at the first failed touch and returns it, so a locked store costs one
+// busy_timeout, not one per belief. Passes half-life 0 so any per-claim override is
 // preserved (matching consolidation replay's rehearse).
-func (e Engine) reconsolidateRecalled(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
+func (e Engine) reconsolidateRecalled(ctx context.Context, opts AnswerOptions, ans domain.Answer) error {
 	if !opts.Reconsolidate || len(ans.Claims) == 0 {
-		return
+		return nil
 	}
 	now := time.Now().UTC()
 	n := len(ans.Claims)
@@ -384,8 +436,11 @@ func (e Engine) reconsolidateRecalled(ctx context.Context, opts AnswerOptions, a
 		n = hebbianCoactivationTopN
 	}
 	for _, c := range ans.Claims[:n] {
-		_ = e.claims.MarkVerified(ctx, c.ID, now, 0)
+		if err := e.claims.MarkVerified(ctx, c.ID, now, 0); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // inhibitLosers suppresses the retrievability of decisively-beaten contradiction losers
@@ -395,14 +450,14 @@ func (e Engine) reconsolidateRecalled(ctx context.Context, opts AnswerOptions, a
 // passing the loser's trust through UNCHANGED (retrievability only, never trust). It
 // reuses ports.BeliefCreditWriter (type-asserted; skipped if the backend can't persist
 // components) and protects promoted / high-salience losers. Opt-in, best-effort: a
-// suppression-write failure never fails the read, so errors are intentionally dropped.
-func (e Engine) inhibitLosers(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
+// suppression-write failure never fails the read; it stops at the first one.
+func (e Engine) inhibitLosers(ctx context.Context, opts AnswerOptions, ans domain.Answer) error {
 	if !opts.Inhibit || len(ans.Verdicts) == 0 {
-		return
+		return nil
 	}
 	writer, ok := e.claims.(ports.BeliefCreditWriter)
 	if !ok {
-		return
+		return nil
 	}
 	// Collect every decisive loser first and fetch them in ONE round trip: the
 	// per-verdict ListByIDs(ctx, []string{id}) this replaces called a batch API
@@ -421,11 +476,11 @@ func (e Engine) inhibitLosers(ctx context.Context, opts AnswerOptions, ans domai
 		loserIDs = append(loserIDs, v.LoserClaimID)
 	}
 	if len(loserIDs) == 0 {
-		return
+		return nil
 	}
 	losers, err := e.claims.ListByIDs(ctx, loserIDs)
 	if err != nil {
-		return
+		return err
 	}
 	for _, l := range losers {
 		if l.Lifecycle == domain.ClaimLifecyclePromoted {
@@ -443,8 +498,11 @@ func (e Engine) inhibitLosers(ctx context.Context, opts AnswerOptions, ans domai
 			next = inhibitionMax
 		}
 		merged[domain.InhibitionComponentKey] = next
-		_ = writer.ApplyBeliefCredit(ctx, l.ID, merged, l.TrustScore)
+		if err := writer.ApplyBeliefCredit(ctx, l.ID, merged, l.TrustScore); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // answerOnce runs a single recall pass and reports whether it took the native
