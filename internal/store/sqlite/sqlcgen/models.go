@@ -70,6 +70,7 @@ type Claim struct {
 	Lifecycle            string         `json:"lifecycle"`
 	SubjectClass         string         `json:"subject_class"`
 	Durability           string         `json:"durability"`
+	TextKey              string         `json:"text_key"`
 }
 
 type ClaimEntity struct {

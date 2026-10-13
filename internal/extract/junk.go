@@ -53,6 +53,11 @@ func isJunkClaim(text string) bool {
 	if statusChatterRE.MatchString(stripped) {
 		return true
 	}
+	// isCodeLine reads the un-stripped text for the same reason isLeadIn does:
+	// the symbols that mark code are what stripDecorations removes.
+	if isCodeLine(t) || isNarrationFragment(stripped) {
+		return true
+	}
 	if contentWordCount(stripped) < 2 {
 		return true
 	}

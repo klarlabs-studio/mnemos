@@ -65,7 +65,10 @@ CREATE TABLE IF NOT EXISTS claims (
   -- durability (ADR 0023): 'durable' | 'session' | '' (unknown). Unknown is
   -- treated as durable: the whole back catalogue predates the column, so
   -- absence of a verdict must never demote a belief.
-  durability TEXT NOT NULL DEFAULT ''
+  durability TEXT NOT NULL DEFAULT '',
+  -- text_key: domain.ClaimTextKey(text), the normalised-text identity the write
+  -- path's duplicate check looks up. '' only on rows a backfill has not reached.
+  text_key TEXT NOT NULL DEFAULT ''
 );
 
 -- No idx_claims_scope_service here: the runtime schema never created one, and
@@ -87,6 +90,9 @@ CREATE INDEX IF NOT EXISTS idx_claims_valid_to ON claims(valid_to);
 -- chosen for ListClaimsByTestRequirementRef.
 CREATE INDEX IF NOT EXISTS idx_claims_test_requirement_ref
   ON claims(test_requirement_ref, type);
+-- The write path's duplicate check (ListLiveByTextKeys) filters on text_key.
+-- Must match postMigrateIndexes in internal/store/sqlite/db.go.
+CREATE INDEX IF NOT EXISTS idx_claims_text_key ON claims(text_key);
 
 CREATE TABLE IF NOT EXISTS entities (
   id TEXT PRIMARY KEY,

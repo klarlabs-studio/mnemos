@@ -8,6 +8,32 @@ notable changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Capture no longer stores noise or the same belief twice.** Measured on a
+  real 111k-claim brain, 62.8% of live claims were exact duplicates of another
+  claim's text, and about two thirds of a random sample were noise.
+  - The capture hook skips compaction summaries whole (`isCompactSummary`,
+    `isMeta`, or the "This session is being continued…" preamble) and drops
+    their scaffolding lines ("Continue the conversation from where it left
+    off…", "Errors and fixes:", "All user messages") and subagent hand-back
+    frames. A summary restates a session capture already took.
+  - Both extractors, LLM and rule-based, reject source-code lines
+    (`type CompilationMachine interface {`, `ExpiresAt     time.Time`,
+    `// caller asks…`) and contentless narration (`Now the implementation`,
+    `Pushing the release`, `Good so what's the remaining gap`).
+  - A claim whose normalised text a live claim of the same scope and audience
+    already holds is not written again. Its evidence is linked to the held
+    claim instead, at most once per origin (the capture session, or the
+    content for sessionless input), so re-ingesting a transcript or a document
+    changes nothing and repetition does not raise trust (#443, #390). Captured
+    session chunks get content-derived episode ids, so a replay appends no
+    episode either. Existing duplicates are left in place.
+  - Every backend stores a `text_key` (`domain.ClaimTextKey`) on claims, with
+    an index, and backfills it for existing rows on open. The duplicate check
+    is one indexed lookup (`ClaimRepository.ListLiveByTextKeys`), not a load
+    of the whole brain.
+
 ## [0.128.1] — 2026-10-10
 
 A security patch, plus three fixes found while building the answer-quality

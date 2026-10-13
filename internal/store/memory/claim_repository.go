@@ -240,6 +240,34 @@ func (r ClaimRepository) ListByIDs(_ context.Context, claimIDs []string) ([]doma
 	return out, nil
 }
 
+// ListLiveByTextKeys implements ports.ClaimRepository. The key is derived from
+// the text on read; there is no stored column to keep in step with it.
+func (r ClaimRepository) ListLiveByTextKeys(_ context.Context, keys []string) ([]domain.Claim, error) {
+	if len(keys) == 0 {
+		return []domain.Claim{}, nil
+	}
+	want := make(map[string]struct{}, len(keys))
+	for _, k := range keys {
+		want[k] = struct{}{}
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	out := []domain.Claim{}
+	for _, sc := range r.state.claims {
+		c := sc.toDomain()
+		if _, ok := want[domain.ClaimTextKey(c.Text)]; ok && isLive(c) {
+			out = append(out, c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
 // RepointEvidence rewrites every (fromClaimID, eventID) link to
 // (toClaimID, eventID). Duplicates collapse via the dedup map key.
 func (r ClaimRepository) RepointEvidence(_ context.Context, fromClaimID, toClaimID string) error {

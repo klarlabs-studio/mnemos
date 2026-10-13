@@ -82,6 +82,16 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 		}
 	}
 
+	// Beliefs the brain already holds gain this write's evidence instead of a
+	// second row. Folded first, so relate, embedding and entity tagging below
+	// address the claim that is stored.
+	known, err := pipeline.CollapseKnownClaims(ctx, m.conn, events, claims, links)
+	if err != nil {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("collapse known claims: %w", err)
+	}
+	claims, links = known.Claims, known.Links
+	entities = pipeline.RemapEntities(entities, known.Remap)
+
 	rels, err := m.relator.Detect(claims)
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("relate: %w", err)

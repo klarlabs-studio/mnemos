@@ -764,6 +764,12 @@ type transcriptLine struct {
 	Role    string          `json:"role"`
 	Message json.RawMessage `json:"message"`
 	Content json.RawMessage `json:"content"`
+	// IsCompactSummary marks the message the harness writes when it compacts a
+	// session; IsMeta marks other harness-authored user-role messages (command
+	// expansions, local-command caveats, "Continue from where you left off.").
+	// Neither is conversation, so capture skips both whatever their text says.
+	IsCompactSummary bool `json:"isCompactSummary"`
+	IsMeta           bool `json:"isMeta"`
 }
 
 // extractTranscriptText pulls user prompts and assistant text out of a JSONL
@@ -833,6 +839,9 @@ func parseTranscriptLine(raw string) (string, bool) {
 	}
 	var line transcriptLine
 	if err := json.Unmarshal([]byte(raw), &line); err != nil {
+		return "", false
+	}
+	if line.IsCompactSummary || line.IsMeta {
 		return "", false
 	}
 	role := line.Role

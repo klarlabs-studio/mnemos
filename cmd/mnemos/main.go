@@ -1096,9 +1096,9 @@ func handleProcess(args []string, f Flags) {
 			printProgress("llm extraction: extracted %d claims", len(claims))
 		}
 
-		// Load the existing knowledge once: it feeds both cross-batch
-		// dedup (always) and incremental relate (unless --no-relate).
-		// Failure here is non-fatal — we still persist what we have.
+		// Load the existing knowledge once for incremental relate (unless
+		// --no-relate). Failure here is non-fatal — we still persist what
+		// we have.
 		var existingClaims []domain.Claim
 		{
 			claimRepo := conn.Claims
@@ -1112,13 +1112,19 @@ func handleProcess(args []string, f Flags) {
 			}
 		}
 
-		// Cross-batch dedup: collapse new claims that already exist by
-		// normalized text, rewriting evidence links to point at the
-		// canonical (existing) claim id. Without this, restating the
-		// same fact across chunks produces near-duplicate claim rows
-		// (#24).
+		// Cross-batch dedup: collapse new claims whose belief a live claim
+		// already holds, rewriting evidence links to point at that claim.
+		// Without this, restating the same fact across chunks produces
+		// near-duplicate claim rows (#24). The same fold the capture path
+		// and PersistArtifacts apply, so a re-ingested document gains no
+		// evidence from its own repeat (#443).
 		preDedup := len(claims)
-		claims, links = pipeline.DedupeAgainstExisting(claims, links, existingClaims)
+		known, err := pipeline.CollapseKnownClaims(ctx, conn, events, claims, links)
+		if err != nil {
+			return NewSystemError(err, "claim dedup failed")
+		}
+		claims, links = known.Claims, known.Links
+		entities = pipeline.RemapEntities(entities, known.Remap)
 		if dropped := preDedup - len(claims); dropped > 0 {
 			printProgress("dedup: collapsed %d claim(s) that match existing knowledge", dropped)
 		}
