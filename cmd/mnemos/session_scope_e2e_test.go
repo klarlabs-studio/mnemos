@@ -16,8 +16,12 @@ import (
 func TestE2E_SessionScopedCapture(t *testing.T) {
 	ctx := context.Background()
 
-	first := "The capture hook is broken and does not persist anything."
-	second := "The capture hook works now and persists every chunk."
+	// One subject, one value swapped for its antonym: a pair relate/v4 still
+	// reads as a contradiction. (The earlier pair changed two things at once —
+	// "broken and does not persist anything" vs "works now and persists every
+	// chunk" — which the precise detectors deliberately no longer judge.)
+	first := "The capture hook is broken."
+	second := "The capture hook works."
 
 	for _, tc := range []struct {
 		name    string

@@ -46,6 +46,9 @@ type IncrementalStats struct {
 	// SupportsOverBudget is the number of supports candidates the per-claim
 	// budget dropped (see DefaultSupportsBudget).
 	SupportsOverBudget int
+	// ContradictionsOverCap is the number of contradiction candidates the
+	// per-claim cap dropped (see MaxContradictionsPerClaim).
+	ContradictionsOverCap int
 }
 
 // DetectIncremental compares each new claim against all existing claims and
@@ -83,11 +86,11 @@ func (e Engine) DetectIncrementalWithStats(newClaims []domain.Claim, existingCla
 	// Candidates are collected first and IDs assigned only to the edges the
 	// supports budget keeps, so a dropped candidate consumes nothing.
 	var candidates []candidateEdge
-	emit := func(i int, j int32, relType domain.RelationshipType, strength float64) error {
-		if suppressAsSessionNoise(relType, newClaims[i], existingClaims[j]) {
+	emit := func(i int, j int32, v pairVerdict) error {
+		if suppressAsSessionNoise(v.relType, newClaims[i], existingClaims[j]) {
 			return nil
 		}
-		candidates = append(candidates, candidateEdge{from: i, to: int(j), relType: relType, strength: strength})
+		candidates = append(candidates, candidateEdge{from: i, to: int(j), relType: v.relType, strength: v.strength, detector: v.detector})
 		return nil
 	}
 
@@ -102,22 +105,25 @@ func (e Engine) DetectIncrementalWithStats(newClaims []domain.Claim, existingCla
 
 	keep := keepWithinBudget(candidates, e.budget())
 	for k, c := range candidates {
-		if !keep[k] {
+		if !keep[k] && c.relType == domain.RelationshipTypeSupports {
 			stats.SupportsOverBudget++
+		}
+	}
+	keepContradictionsWithinCap(candidates, keep, e.contradictionCap(),
+		func(i int) string { return newClaims[i].ID },
+		func(j int) string { return existingClaims[j].ID })
+	for k, c := range candidates {
+		if !keep[k] {
+			if c.relType == domain.RelationshipTypeContradicts {
+				stats.ContradictionsOverCap++
+			}
 			continue
 		}
 		id, err := e.nextID()
 		if err != nil {
 			return nil, stats, err
 		}
-		rels = append(rels, domain.Relationship{
-			DerivedBy:   ModelVersion,
-			ID:          id,
-			Type:        c.relType,
-			FromClaimID: newClaims[c.from].ID,
-			ToClaimID:   existingClaims[c.to].ID,
-			CreatedAt:   now,
-		})
+		rels = append(rels, c.relationship(id, newClaims[c.from].ID, existingClaims[c.to].ID, now))
 	}
 
 	// Citation edges from new claims to any known claim IDs in scope
@@ -156,7 +162,7 @@ func (e Engine) DetectIncrementalWithStats(newClaims []domain.Claim, existingCla
 
 // scanPass compares every new claim against every existing claim. It is the
 // reference behaviour: indexedPass must agree with it exactly.
-func (e Engine) scanPass(newDerived []*claimDerived, existingClaims []domain.Claim, emit func(int, int32, domain.RelationshipType, float64) error, stats *IncrementalStats) error {
+func (e Engine) scanPass(newDerived []*claimDerived, existingClaims []domain.Claim, emit func(int, int32, pairVerdict) error, stats *IncrementalStats) error {
 	existDerived := make([]*claimDerived, len(existingClaims))
 	for j := range existingClaims {
 		tokens, neg := contentTokensAndPolarity(existingClaims[j].Text)
@@ -173,12 +179,11 @@ func (e Engine) scanPass(newDerived []*claimDerived, existingClaims []domain.Cla
 			}
 			stats.PairsEvaluated++
 			overlap := contentOverlap(newDerived[i].tokens, existDerived[j].tokens)
-			relType, ok := evaluatePair(newDerived[i], existDerived[j], overlap)
+			v, ok := evaluatePair(newDerived[i], existDerived[j], overlap)
 			if !ok {
 				continue
 			}
-			strength := supportsStrength(overlap, len(newDerived[i].tokens), len(existDerived[j].tokens))
-			if err := emit(i, int32(j), relType, strength); err != nil {
+			if err := emit(i, int32(j), v); err != nil {
 				return err
 			}
 		}
@@ -188,7 +193,7 @@ func (e Engine) scanPass(newDerived []*claimDerived, existingClaims []domain.Cla
 
 // indexedPass narrows the candidate set with the inverted index before running
 // the pair evaluation. See candidateIndex for why that narrowing is exact.
-func (e Engine) indexedPass(newDerived []*claimDerived, existingClaims []domain.Claim, emit func(int, int32, domain.RelationshipType, float64) error, stats *IncrementalStats) error {
+func (e Engine) indexedPass(newDerived []*claimDerived, existingClaims []domain.Claim, emit func(int, int32, pairVerdict) error, stats *IncrementalStats) error {
 	ci := buildCandidateIndex(existingClaims)
 
 	counts := make([]int32, len(existingClaims))
@@ -236,11 +241,11 @@ func (e Engine) indexedPass(newDerived []*claimDerived, existingClaims []domain.
 				continue
 			}
 			stats.PairsEvaluated++
-			relType, ok := evaluatePair(nd, ed, int(counts[j]))
+			v, ok := evaluatePair(nd, ed, int(counts[j]))
 			if !ok {
 				continue
 			}
-			if err := emit(i, j, relType, supportsStrength(int(counts[j]), len(nd.tokens), len(ed.tokens))); err != nil {
+			if err := emit(i, j, v); err != nil {
 				return err
 			}
 		}
@@ -248,32 +253,16 @@ func (e Engine) indexedPass(newDerived []*claimDerived, existingClaims []domain.
 	return nil
 }
 
-// evaluatePair runs the four detection paths against one (new, existing) pair.
-// It is the single source of truth for pair classification; both the scan and
-// the index path funnel through it, so the prefilter cannot change the verdict
-// for a pair it lets through — only which pairs get here.
+// evaluatePair classifies one (new, existing) pair. It is the single source of
+// truth for the incremental passes; both the scan and the index path funnel
+// through it, so the prefilter cannot change the verdict for a pair it lets
+// through — only which pairs get here. It shares classifyPair with the batch
+// pass, so Detect and DetectIncremental judge a pair identically.
 //
 // overlap must be contentOverlap(a.tokens, b.tokens). The index already knows
 // it, so it is passed in rather than recomputed.
-func evaluatePair(a, b *claimDerived, overlap int) (domain.RelationshipType, bool) {
-	relType, ok := inferRelationshipFromOverlap(overlap, a.tokens, a.neg, b.tokens, b.neg)
-	// Numeric divergence runs unconditionally and OVERRIDES an earlier
-	// supports verdict: two claims that agree lexically but disagree on a
-	// number are in conflict, not corroborating.
-	if numericDivergesPre(a.nums, a.words, b.nums, b.words) {
-		relType = domain.RelationshipTypeContradicts
-		ok = true
-	}
-	if !ok && entityShapeAllows(len(a.tokens), len(b.tokens), overlap) &&
-		entityRoleDivergesPre(a.properNouns(), b.properNouns()) {
-		relType = domain.RelationshipTypeContradicts
-		ok = true
-	}
-	if !ok && temporalDivergesPre(a.asp, a.anchor, b.asp, b.anchor) {
-		relType = domain.RelationshipTypeContradicts
-		ok = true
-	}
-	return relType, ok
+func evaluatePair(a, b *claimDerived, overlap int) (pairVerdict, bool) {
+	return classifyPair(a, b, overlap, a.enumerated && b.enumerated)
 }
 
 // anyClaimCites reports whether any claim text references a claim ID.
@@ -338,6 +327,6 @@ func traceIncremental(s IncrementalStats) {
 		return
 	}
 	fmt.Fprintf(os.Stderr,
-		"relate.incremental path=%s new=%d existing=%d pairs_possible=%d pairs_probed=%d pairs_evaluated=%d rels=%d supports_over_budget=%d\n",
-		s.Path, s.NewClaims, s.ExistingClaims, s.PairsPossible, s.PairsProbed, s.PairsEvaluated, s.Relationships, s.SupportsOverBudget)
+		"relate.incremental path=%s new=%d existing=%d pairs_possible=%d pairs_probed=%d pairs_evaluated=%d rels=%d supports_over_budget=%d contradictions_over_cap=%d\n",
+		s.Path, s.NewClaims, s.ExistingClaims, s.PairsPossible, s.PairsProbed, s.PairsEvaluated, s.Relationships, s.SupportsOverBudget, s.ContradictionsOverCap)
 }

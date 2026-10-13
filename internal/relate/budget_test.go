@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 
 	"go.klarlabs.de/mnemos/internal/domain"
@@ -87,6 +88,11 @@ func TestDetectIncremental_SupportsBudgetKeepsTheStrongest(t *testing.T) {
 	for i := range newClaims {
 		newClaims[i].ID = fmt.Sprintf("cl_new_%04d", i)
 	}
+	// Generated text is word salad, which relate/v4 no longer reads as
+	// contradicting propositions; one genuine conflict keeps "contradictions
+	// are never budgeted" under test.
+	existing = append(existing, domain.Claim{ID: "cl_pg15", Text: "The deploy uses Postgres 15"})
+	newClaims = append(newClaims, domain.Claim{ID: "cl_new_pg16", Text: "The deploy uses Postgres 16"})
 	texts, order := map[string]string{}, map[string]int{}
 	for i, c := range existing {
 		texts[c.ID], order[c.ID] = c.Text, i
@@ -255,6 +261,16 @@ func TestEveryInferredEdgeIsStampedWithTheModelVersion(t *testing.T) {
 	kinds := map[domain.RelationshipType]bool{}
 	for _, r := range append(pairwise, incremental...) {
 		kinds[r.Type] = true
+		if r.Type == domain.RelationshipTypeContradicts {
+			// Contradictions name their detector and carry a real strength.
+			if !strings.HasPrefix(r.DerivedBy, ModelVersion+":") || len(r.DerivedBy) == len(ModelVersion)+1 {
+				t.Fatalf("contradicts edge %s->%s has DerivedBy %q, want %q", r.FromClaimID, r.ToClaimID, r.DerivedBy, ModelVersion+":<detector>")
+			}
+			if r.Strength <= 0 || r.Strength > 1 {
+				t.Fatalf("contradicts edge %s->%s has strength %v, want (0, 1]", r.FromClaimID, r.ToClaimID, r.Strength)
+			}
+			continue
+		}
 		if r.DerivedBy != ModelVersion {
 			t.Fatalf("%s edge %s->%s has DerivedBy %q, want %q", r.Type, r.FromClaimID, r.ToClaimID, r.DerivedBy, ModelVersion)
 		}

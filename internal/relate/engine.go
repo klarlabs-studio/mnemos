@@ -18,7 +18,10 @@ import (
 //	           column and carry "")
 //	relate/v2  per-claim supports budget (ADR 0027)
 //	relate/v3  candidate computation budget (ADR 0028)
-const ModelVersion = "relate/v3"
+//	relate/v4  precise contradictions: contentful endpoints, subject alignment,
+//	           incompatible values or polarity, a per-claim cap; contradiction
+//	           edges record their detector ("relate/v4:polarity") and strength
+const ModelVersion = "relate/v4"
 
 // CausalLLMVersion is stamped on causal edges the LLM detector infers.
 const CausalLLMVersion = "relate-llm-causal/v1"
@@ -30,6 +33,9 @@ type Engine struct {
 	// supportsBudget caps supports edges per source claim per pass; see
 	// DefaultSupportsBudget. 0 means the default, < 0 means unlimited.
 	supportsBudget int
+	// contradictionLimit caps contradiction edges per claim per pass; see
+	// MaxContradictionsPerClaim. 0 means the default, < 0 means unlimited.
+	contradictionLimit int
 }
 
 // NewEngine returns an Engine with default clock and ID generation.
@@ -148,22 +154,11 @@ func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 	now := e.now().UTC()
 	var candidates []candidateEdge
 
-	// Pre-compute normalized content tokens and polarity for each claim.
-	type analyzed struct {
-		text         string
-		tokens       map[string]struct{}
-		neg          bool
-		isEnumerated bool
-	}
-	cache := make([]analyzed, len(claims))
+	// Pre-compute everything the pair classifier needs, once per claim.
+	cache := make([]*claimDerived, len(claims))
 	for i := range claims {
 		tokens, neg := contentTokensAndPolarity(claims[i].Text)
-		cache[i] = analyzed{
-			text:         claims[i].Text,
-			tokens:       tokens,
-			neg:          neg,
-			isEnumerated: isEnumeratedItem(claims[i].Text),
-		}
+		cache[i] = newClaimDerived(claims[i].Text, tokens, neg)
 	}
 
 	for i := 0; i < len(claims); i++ {
@@ -174,54 +169,26 @@ func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 			if len(cache[j].tokens) == 0 {
 				continue
 			}
-
-			// Skip value-divergence for pairs of enumerated list items
-			// (Phase 1 vs Phase 2 are parallel, not competing).
-			bothEnumerated := cache[i].isEnumerated && cache[j].isEnumerated
-
-			relType, ok := inferRelationshipWithContext(cache[i].tokens, cache[i].neg, cache[j].tokens, cache[j].neg, bothEnumerated)
-			// Numeric-divergence path. Same-topic claims that share
-			// most tokens but disagree on a numeric value are a
-			// contradiction regardless of whether the overlap path
-			// would have called them supports — "12 refunds" vs
-			// "0 refunds" is a conflict, not a corroboration.
-			if !bothEnumerated && detectNumericDivergence(cache[i].text, cache[j].text, cache[i].tokens, cache[j].tokens) {
-				relType = domain.RelationshipTypeContradicts
-				ok = true
-			}
-			// Entity/role-divergence path. Short copular claims that
-			// share a role token but assign it to different proper
-			// nouns ("The CEO is Alice" vs "The CEO is Bob") are
-			// contradictions even though the overlap-based path
-			// rejects them as too short for value-divergence.
-			if !bothEnumerated && !ok && detectEntityRoleDivergence(cache[i].text, cache[j].text, cache[i].tokens, cache[j].tokens) {
-				relType = domain.RelationshipTypeContradicts
-				ok = true
-			}
-			// Temporal-aspect divergence path. Same-subject claims
-			// whose lexical aspects exclude each other ("migration
-			// completed Tuesday" vs "migration is still running")
-			// are contradictions even when the overlap is too low
-			// to trigger the polarity path.
-			if !ok && detectTemporalDivergence(cache[i].text, cache[j].text, cache[i].tokens, cache[j].tokens) {
-				relType = domain.RelationshipTypeContradicts
-				ok = true
-			}
+			overlap := contentOverlap(cache[i].tokens, cache[j].tokens)
+			// Pairs of enumerated list items (Phase 1 vs Phase 2) are
+			// parallel, not competing: no value or numeric divergence.
+			v, ok := classifyPair(cache[i], cache[j], overlap, cache[i].enumerated && cache[j].enumerated)
 			if !ok {
 				continue
 			}
-			if suppressAsSessionNoise(relType, claims[i], claims[j]) {
+			if suppressAsSessionNoise(v.relType, claims[i], claims[j]) {
 				continue
 			}
-			overlap := contentOverlap(cache[i].tokens, cache[j].tokens)
-			candidates = append(candidates, candidateEdge{from: i, to: j, relType: relType,
-				strength: supportsStrength(overlap, len(cache[i].tokens), len(cache[j].tokens))})
+			candidates = append(candidates, candidateEdge{from: i, to: j, relType: v.relType, strength: v.strength, detector: v.detector})
 		}
 	}
 
 	// Within a batch the same per-claim supports budget applies as against the
-	// corpus (DefaultSupportsBudget); IDs go only to the edges it keeps.
+	// corpus (DefaultSupportsBudget), and the same per-claim contradiction cap
+	// (MaxContradictionsPerClaim); IDs go only to the edges they keep.
 	keep := keepWithinBudget(candidates, e.budget())
+	claimKey := func(i int) string { return claims[i].ID }
+	keepContradictionsWithinCap(candidates, keep, e.contradictionCap(), claimKey, claimKey)
 	for k, c := range candidates {
 		if !keep[k] {
 			continue
@@ -230,14 +197,7 @@ func (e Engine) Detect(claims []domain.Claim) ([]domain.Relationship, error) {
 		if err != nil {
 			return nil, err
 		}
-		rels = append(rels, domain.Relationship{
-			DerivedBy:   ModelVersion,
-			ID:          id,
-			Type:        c.relType,
-			FromClaimID: claims[c.from].ID,
-			ToClaimID:   claims[c.to].ID,
-			CreatedAt:   now,
-		})
+		rels = append(rels, c.relationship(id, claims[c.from].ID, claims[c.to].ID, now))
 	}
 
 	// Explicit citations: if a claim text references another claim ID,
@@ -381,14 +341,20 @@ func (e Engine) DetectTestConflicts(claims []domain.Claim) ([]domain.Relationshi
 			if err != nil {
 				return nil, err
 			}
-			rels = append(rels, domain.Relationship{
+			rel := domain.Relationship{
 				DerivedBy:   ModelVersion,
 				ID:          id,
 				Type:        relType,
 				FromClaimID: a.ID,
 				ToClaimID:   b.ID,
 				CreatedAt:   now,
-			})
+			}
+			if relType == domain.RelationshipTypeContradicts {
+				// Structured evidence, not a lexical guess: full strength.
+				rel.DerivedBy = ContradictionDerivedBy(DetectorTestConflict)
+				rel.Strength = priorTestConflict
+			}
+			rels = append(rels, rel)
 		}
 	}
 	return rels, nil
@@ -669,20 +635,8 @@ func stemWord(word string) string {
 	return word
 }
 
-func inferRelationship(aTokens map[string]struct{}, aNeg bool, bTokens map[string]struct{}, bNeg bool) (domain.RelationshipType, bool) {
-	return inferRelationshipWithContext(aTokens, aNeg, bTokens, bNeg, false)
-}
-
 func inferRelationshipWithContext(aTokens map[string]struct{}, aNeg bool, bTokens map[string]struct{}, bNeg bool, skipValueDivergence bool) (domain.RelationshipType, bool) {
 	return inferRelationshipFromOverlapWithContext(contentOverlap(aTokens, bTokens), aTokens, aNeg, bTokens, bNeg, skipValueDivergence)
-}
-
-// inferRelationshipFromOverlap is inferRelationship with the content overlap
-// supplied by the caller. The candidate index computes the overlap as a side
-// effect of finding the candidate at all, so recomputing it here would be pure
-// duplicated work.
-func inferRelationshipFromOverlap(overlap int, aTokens map[string]struct{}, aNeg bool, bTokens map[string]struct{}, bNeg bool) (domain.RelationshipType, bool) {
-	return inferRelationshipFromOverlapWithContext(overlap, aTokens, aNeg, bTokens, bNeg, false)
 }
 
 func inferRelationshipFromOverlapWithContext(overlap int, aTokens map[string]struct{}, aNeg bool, bTokens map[string]struct{}, bNeg bool, skipValueDivergence bool) (domain.RelationshipType, bool) {

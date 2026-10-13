@@ -274,6 +274,7 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		for i := range rels {
 			rels[i].CreatedBy = m.actorID
 		}
+		rels, _ = pipeline.CapStoredContradictions(ctx, m.conn.Relationships, rels)
 		if uerr := m.conn.Relationships.Upsert(ctx, rels); uerr != nil {
 			skipErr = pipeline.SkipRelate(ctx, "remember_claim", 1, fmt.Errorf("persist relationships: %w", uerr))
 		} else {
