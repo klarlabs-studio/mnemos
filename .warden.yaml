@@ -25,7 +25,11 @@ commands:
   # so without this line, switching to warden/gate would delete it.
   vulns: "go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./..."
   lint: "golangci-lint run --allow-parallel-runners ./..."
-  test: "go test -race ./..."
+  # -timeout is per package. Go's default of 10m lost to a busy machine, not
+  # to a hang: cmd/mnemos takes ~8m under -race on its own and timed out at
+  # ~18x CPU oversubscription (2026-10-13). 30m survives that and still fails
+  # a genuinely hung test. Same fix as pet-medical f3bb671.
+  test: "go test -race -timeout 30m ./..."
   cross: "make cross"
   # The security gate. It ran only in the shared GitHub workflow; merges go
   # through warden, so without this line nothing scanned on the way to main —
