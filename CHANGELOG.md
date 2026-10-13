@@ -8,6 +8,19 @@ notable changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Recall's lexical (BM25) leg now matches questions.** Both full-text
+  backends ANDed every word of the query, so a record ranked only if it held
+  all of them, "when" and "did" included. A natural-language question
+  therefore matched almost nothing, and recall was in effect vector-only.
+  - SQLite/libSQL: the query is the question's content words, each quoted and
+    joined with `OR` (`internal/store/lexquery`). Punctuation inside a word
+    (`2.5`, `mg,`) no longer reaches FTS5. It used to raise a syntax error,
+    which recall swallowed as "no lexical hits".
+  - Postgres: `websearch_to_tsquery`'s `&` between words becomes `|`. Quoted
+    phrases and negations keep their meaning.
+
 ## [0.128.1] — 2026-10-10
 
 A security patch, plus three fixes found while building the answer-quality

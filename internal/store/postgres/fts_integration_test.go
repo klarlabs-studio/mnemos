@@ -57,6 +57,17 @@ func TestPostgres_FullTextSearch(t *testing.T) {
 		t.Fatalf("multi-term search = %+v, want ev-sha ranked first", hits)
 	}
 
+	// A question matches the record holding its content words even though the
+	// record lacks some of them ("what", "caused", "outage" are absent here);
+	// websearch_to_tsquery alone ANDs the words and returned nothing.
+	hits, err = searcher.SearchByText(ctx, "What caused the payments outage?", 10)
+	if err != nil {
+		t.Fatalf("SearchByText question: %v", err)
+	}
+	if len(hits) == 0 || hits[0].ID != "ev-sha" {
+		t.Fatalf("question search = %+v, want ev-sha ranked first", hits)
+	}
+
 	// websearch_to_tsquery must tolerate junk / operator input without erroring
 	// (this path runs on every query), and an all-stopword/empty query returns
 	// no rows rather than a parse error.

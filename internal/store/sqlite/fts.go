@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/store/lexquery"
 )
 
 // SearchByText runs an FTS5 BM25 query against the events_fts index
@@ -15,14 +16,11 @@ import (
 // An empty query short-circuits to an empty slice rather than
 // triggering an FTS5 syntax error.
 //
-// Quoting strategy: the query is wrapped with sanitizeFTSQuery to
-// strip the FTS5 control characters (", ', :, AND/OR/NOT keywords)
-// that would otherwise let an arbitrary user input cause a parse
-// error. We trade away advanced query syntax for robustness — the
-// query path is invoked for every search, and surfacing parse
-// errors instead of "no results" would be a worse default.
+// The query is natural language, not FTS5 syntax: ftsMatchQuery reduces
+// it to quoted content words joined with OR, so no input can raise a
+// parse error and a record need not contain every word to be ranked.
 func (r EventRepository) SearchByText(ctx context.Context, query string, limit int) ([]ports.TextHit, error) {
-	q := sanitizeFTSQuery(query)
+	q := ftsMatchQuery(query)
 	if q == "" {
 		return nil, nil
 	}
@@ -55,7 +53,7 @@ func (r EventRepository) SearchByText(ctx context.Context, query string, limit i
 // SearchByText is the claims counterpart to EventRepository.SearchByText.
 // Same semantics, against claims_fts.
 func (r ClaimRepository) SearchByText(ctx context.Context, query string, limit int) ([]ports.TextHit, error) {
-	q := sanitizeFTSQuery(query)
+	q := ftsMatchQuery(query)
 	if q == "" {
 		return nil, nil
 	}
@@ -91,42 +89,21 @@ func (r ClaimRepository) SearchByText(ctx context.Context, query string, limit i
 	return hits, rows.Err()
 }
 
-// sanitizeFTSQuery strips FTS5 syntax characters that would cause a
-// MATCH parse error on otherwise-fine user input. We treat the query
-// as a bag of bare terms — implicit AND of words — which matches
-// what most users expect from "type a question and get results".
+// ftsMatchQuery builds the FTS5 MATCH expression for a natural-language
+// query: the content words from [lexquery.Terms], each quoted as an FTS5
+// string so no word can act as an operator, joined with OR.
 //
-// Removed:
-//   - quotes (FTS5 phrase delimiter; mismatched quotes blow up the parser)
-//   - colons (column filter syntax)
-//   - asterisks (wildcard suffix; safe but rarely intended by humans)
-//   - parentheses (grouping)
-//   - dashes/plus signs (NOT/REQUIRE prefixes)
-//   - the bare keywords AND / OR / NOT (FTS5 logical operators)
-//
-// What's left: alphanumerics, underscores, and the spaces between
-// terms. FTS5 implicitly ANDs them, which is the sensible default.
-func sanitizeFTSQuery(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
+// OR, not FTS5's implicit AND of bare terms: bm25() ranks a record by the
+// query terms it holds, so a disjunction keeps the best record on top while
+// still matching records that lack some words. Under AND a question matched
+// only records containing every word of it, including "when" and "did".
+// Quoting also means punctuation never reaches the parser; "2.5" arrives as
+// the terms "2" and "5" instead of an FTS5 syntax error.
+func ftsMatchQuery(s string) string {
+	terms := lexquery.Terms(s)
+	quoted := make([]string, len(terms))
+	for i, t := range terms {
+		quoted[i] = `"` + t + `"`
 	}
-	const drop = "\"':*()[]{}+\\-^~?!"
-	cleaned := strings.Map(func(r rune) rune {
-		if strings.ContainsRune(drop, r) {
-			return ' '
-		}
-		return r
-	}, s)
-	// Drop bare logical operators by tokenising and filtering.
-	tokens := strings.Fields(cleaned)
-	out := tokens[:0]
-	for _, t := range tokens {
-		switch strings.ToUpper(t) {
-		case "AND", "OR", "NOT", "NEAR":
-			continue
-		}
-		out = append(out, t)
-	}
-	return strings.Join(out, " ")
+	return strings.Join(quoted, " OR ")
 }

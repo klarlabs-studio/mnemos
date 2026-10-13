@@ -22,6 +22,11 @@ import (
 // every search, so tolerating junk input beats surfacing a parse error. A query
 // that reduces to an empty tsquery (all stopwords / whitespace) simply matches
 // nothing and returns no rows.
+//
+// Its AND between bare words is then turned into OR (orTSQuery). Recall feeds
+// whole questions here, and under AND a record matched only if it held every
+// content word of the question; ts_rank_cd still puts the record holding the
+// most of them first. Quoted phrases and negations keep their meaning.
 func (r EventRepository) SearchByText(ctx context.Context, query string, limit int) ([]ports.TextHit, error) {
 	return searchByText(ctx, r.db, qualify(r.ns, "events"), "id", query, limit)
 }
@@ -42,15 +47,15 @@ func searchByText(ctx context.Context, db pgQuerier, table, idCol, query string,
 	if limit <= 0 {
 		limit = 50
 	}
-	// websearch_to_tsquery is evaluated once and reused for both the @@ filter
+	// The tsquery is evaluated once and reused for both the @@ filter
 	// (GIN-indexed) and the rank. ts_rank_cd rewards term proximity + density,
 	// a better default than ts_rank for short records.
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(
-		`SELECT %s, ts_rank_cd(search_tsv, websearch_to_tsquery('english', $1)) AS score
+		`SELECT %s, ts_rank_cd(search_tsv, %s) AS score
 		 FROM %s
-		 WHERE search_tsv @@ websearch_to_tsquery('english', $1)
+		 WHERE search_tsv @@ %s
 		 ORDER BY score DESC
-		 LIMIT $2`, idCol, table), q, limit)
+		 LIMIT $2`, idCol, orTSQuery, table, orTSQuery), q, limit)
 	if err != nil {
 		return nil, fmt.Errorf("fts search %s: %w", table, err)
 	}
@@ -65,3 +70,9 @@ func searchByText(ctx context.Context, db pgQuerier, table, idCol, query string,
 	}
 	return hits, rows.Err()
 }
+
+// orTSQuery parses $1 with websearch_to_tsquery and rewrites its top-level
+// AND (" & ") into OR (" | "). The rewrite is textual but safe: every lexeme
+// in a tsquery's text form is single-quoted, so " & " only ever appears as
+// the operator, and websearch_to_tsquery never emits a malformed query.
+const orTSQuery = `replace(websearch_to_tsquery('english', $1)::text, ' & ', ' | ')::tsquery`

@@ -2,29 +2,76 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
 
-func TestSanitizeFTSQuery(t *testing.T) {
+func TestFTSMatchQuery(t *testing.T) {
 	cases := map[string]string{
-		"simple words":          "simple words",
-		"":                      "",
-		"  spaced  ":            "spaced",
-		`"quoted phrase"`:       "quoted phrase",
-		"foo:bar":               "foo bar",
-		"a OR b AND c NOT d":    "a b c d",
-		"or AND not":            "",
-		"hello -world":          "hello world",
-		"PostgreSQL upgrade":    "PostgreSQL upgrade",
-		"what's the matter?":    "what s the matter",
-		"(grouped) [bracketed]": "grouped bracketed",
+		"":                       "",
+		"   ":                    "",
+		"PostgreSQL upgrade":     `"postgresql" OR "upgrade"`,
+		`"quoted" foo:bar (x)`:   `"quoted" OR "foo" OR "bar"`,
+		"what's the 2.5 matter?": `"2" OR "5" OR "matter"`,
+		"or AND not":             `"or" OR "and" OR "not"`,
 	}
 	for in, want := range cases {
-		if got := sanitizeFTSQuery(in); got != want {
-			t.Errorf("sanitizeFTSQuery(%q) = %q, want %q", in, got, want)
+		if got := ftsMatchQuery(in); got != want {
+			t.Errorf("ftsMatchQuery(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+// A natural-language question must reach the record that answers it. FTS5
+// ANDs bare terms, so the old query required "when" and "did" to appear in
+// the stored text and this returned nothing.
+func TestSearchByText_QuestionFindsAnsweringRecord(t *testing.T) {
+	db := seedEvents(t, map[string]string{
+		"ev1": "Caroline went to the LGBTQ support group on 7 May 2023",
+		"ev2": "Melanie painted a sunrise over the lake",
+	})
+	hits, err := NewEventRepository(db).SearchByText(context.Background(),
+		"When did Caroline go to the LGBTQ support group?", 10)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(hits) == 0 || hits[0].ID != "ev1" {
+		t.Fatalf("expected ev1 ranked first, got %+v", hits)
+	}
+}
+
+// Punctuation inside a token ("2.5", "mg,") used to reach FTS5 verbatim and
+// raise a syntax error, which recall swallowed as "no lexical hits".
+func TestSearchByText_PunctuationInsideTermsDoesNotError(t *testing.T) {
+	db := seedEvents(t, map[string]string{"ev1": "The vet prescribed 2.5 mg of meloxicam"})
+	hits, err := NewEventRepository(db).SearchByText(context.Background(), "how much meloxicam, 2.5 mg?", 10)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(hits) != 1 || hits[0].ID != "ev1" {
+		t.Fatalf("expected ev1, got %+v", hits)
+	}
+}
+
+func seedEvents(t *testing.T, contents map[string]string) *sql.DB {
+	t.Helper()
+	db, err := open(filepath.Join(t.TempDir(), "fts.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	now := nowRFC()
+	for id, content := range contents {
+		if _, err := db.Exec(
+			`INSERT INTO events (id, run_id, schema_version, content, source_input_id, timestamp, metadata_json, ingested_at)
+			 VALUES (?, 'r', 'v1', ?, 'src', ?, '{}', ?)`,
+			id, content, now, now,
+		); err != nil {
+			t.Fatalf("seed event %s: %v", id, err)
+		}
+	}
+	return db
 }
 
 func TestSearchByText_ReturnsRelevantEvents(t *testing.T) {
