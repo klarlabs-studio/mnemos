@@ -431,9 +431,15 @@ func handleIngest(args []string, f Flags) {
 }
 
 func handleQuery(args []string, f Flags) {
+	exitWithMnemosError(f.Verbose, runQuery(args, f))
+}
+
+// runQuery is `mnemos query` without the process exit, so the read path can be
+// exercised in-process.
+func runQuery(args []string, f Flags) error {
 	qa, err := parseQueryArgs(args)
 	if err != nil {
-		exitWithMnemosError(f.Verbose, err)
+		return err
 	}
 	question, runID, hops, minTrust := qa.question, qa.runID, qa.hops, qa.minTrust
 	asOf, includeHistory, entity := qa.asOf, qa.includeHistory, qa.entity
@@ -458,7 +464,7 @@ func handleQuery(args []string, f Flags) {
 		scope["why_wrong"] = "true"
 	}
 
-	err = runJob("query", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+	return runJob("query", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
 		conn := w.Conn()
 		if err := job.SetStatus("loading", ""); err != nil {
 			return err
@@ -628,7 +634,6 @@ func handleQuery(args []string, f Flags) {
 		}
 		return nil
 	})
-	exitWithMnemosError(f.Verbose, err)
 }
 
 // resolveContradictionClaimText ensures all claims referenced in contradictions
@@ -1940,6 +1945,20 @@ func maintenanceJobTimeout() time.Duration {
 	return 4 * time.Hour
 }
 
+// readOnlyJobKinds are the commands that only read the brain. They run as jobs
+// for the shared timeout, retry and status handling, but they do not write a
+// compilation_jobs row: nothing reads that row back, and writing it made every
+// read wait for the write lock. While `consolidate` held that lock for hours,
+// `query` and `quality` failed with SQLITE_BUSY before reading anything.
+var readOnlyJobKinds = map[string]bool{
+	"query":             true,
+	"quality":           true,
+	"metrics":           true,
+	"metrics-workspace": true,
+	"entities-list":     true,
+	"entities-show":     true,
+}
+
 // runJobWithin is runJob with an explicit per-attempt timeout.
 func runJobWithin(timeout time.Duration, kind string, scope map[string]string, verbose bool, fn func(context.Context, *workflow.Job, *govwrite.Writer) error) error {
 	// First-run detection still uses the resolved file path (a
@@ -1966,6 +1985,7 @@ func runJobWithin(timeout time.Duration, kind string, scope map[string]string, v
 	runner.Timeout = timeout
 	runner.MaxRetries = 1
 	runner.Verbose = verbose
+	runner.ReadOnly = readOnlyJobKinds[kind]
 
 	// CLI invocations have no caller deadline to inherit; the timeout
 	// (jobTimeout(): 10m by default, MNEMOS_JOB_TIMEOUT) is the bound.

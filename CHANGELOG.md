@@ -21,6 +21,23 @@ notable changes.
   - Postgres: `websearch_to_tsquery`'s `&` between words becomes `|`. Quoted
     phrases and negations keep their meaning.
 
+- **Recall answers while another process holds the write lock.** A
+  `mnemos consolidate` on a 2.6 GB SQLite brain held the write lock for over
+  four hours. During that time every read failed, even though WAL reads never
+  need that lock:
+  - `mnemos query` and `mnemos quality` wrote a `compilation_jobs` row before
+    reading, so they failed with `create job: … database is locked (SQLITE_BUSY)`.
+  - `query_knowledge` and the recall hook each spent about 20 s on their
+    post-answer cognitive write-backs, at 5 s of `busy_timeout` per write.
+
+  Read-only commands (`query`, `quality`, `metrics`, `entities list|show`) no
+  longer record a job. For every other command the job record is now
+  best-effort: if the first write fails, the failure is logged at debug and the
+  job keeps running without a record. The Hebbian, reconsolidation and
+  inhibition write-backs now run off the answer path. The answer waits for them
+  for at most one second, and they stop at the first failed write. Consolidate's
+  own locking is tracked in #466.
+
 ## [0.128.1] — 2026-10-10
 
 A security patch, plus three fixes found while building the answer-quality
