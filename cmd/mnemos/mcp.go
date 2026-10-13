@@ -1423,6 +1423,9 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 					events[i].Metadata = map[string]string{}
 				}
 				events[i].Metadata[pipeline.SessionMetadataKey] = input.SessionID
+				// Capturing the same chunk again names the episode already
+				// stored, so a replayed session appends nothing.
+				events[i].ID = pipeline.SessionEventID(input.SessionID, events[i].Content)
 			}
 			if input.Workspace != "" {
 				if events[i].Metadata == nil {
@@ -1441,10 +1444,18 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 			return err
 		}
 		_ = progress.Report(2, &total)
+		// Fold beliefs the brain already holds onto their claims before
+		// relating, embedding and tagging, so that work lands on the claim
+		// that is stored rather than on a duplicate that never will be.
+		known, err := pipeline.CollapseKnownClaims(ctx, conn, events, claims, links)
+		if err != nil {
+			return err
+		}
+		claims, links = known.Claims, known.Links
 		// MCP path defers entity materialisation to the
 		// post-PersistArtifacts step at the end of this handler so
 		// the audit/persist transaction stays focused on artifacts.
-		_ = mcpEntities
+		mcpEntities = pipeline.RemapEntities(mcpEntities, known.Remap)
 
 		if err := job.SetStatus("relating", ""); err != nil {
 			return err

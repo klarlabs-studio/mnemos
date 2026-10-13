@@ -47,10 +47,21 @@ func sqliteClaimColumns(t *testing.T) []string {
 // unreadColumns are declared on the MySQL claims table and deliberately absent
 // from claimColumnNames.
 //
-// Empty since #338 closed: every column this backend declares is read back.
-// The map stays as the documented place to record a deliberate omission —
-// with a reason, which an empty string is not.
-var unreadColumns = map[string]string{}
+// The map is the documented place to record a deliberate omission — with a
+// reason, which an empty string is not.
+var unreadColumns = map[string]string{
+	"text_key": derivedColumns["text_key"],
+}
+
+// derivedColumns are written by the claim upsert but computed there from
+// another column of the SAME write, never carried on domain.Claim. A
+// read-modify-write pass therefore cannot zero them — the upsert recomputes
+// them from the text it is given.
+var derivedColumns = map[string]string{
+	"text_key": "domain.ClaimTextKey(text), recomputed from `text` on every upsert. " +
+		"Only ListLiveByTextKeys's WHERE reads it; projecting it would carry a digest " +
+		"of `text` in every row.",
+}
 
 // unwrittenColumns are read back by claimColumnNames and deliberately absent
 // from the claim upsert's INSERT column list, because another statement owns
@@ -112,8 +123,9 @@ func TestClaimProjection_ReadsEveryDeclaredColumn(t *testing.T) {
 // from what the read returned — so a column that is written on conflict
 // but not read is silently zeroed across every row such a pass touches.
 //
-// There is no legitimate reason to be in this set and not in the
-// projection, which is why this check has no allowlist.
+// The only legitimate reason to be in this set and not in the projection is
+// that the upsert derives the value from the same write (derivedColumns), so
+// what a read returned never reaches it.
 func TestClaimProjection_ReadsEveryUpsertedColumn(t *testing.T) {
 	upserted, err := schemaguard.UpsertUpdateColumns(claimUpsertSQL)
 	if err != nil {
@@ -122,7 +134,10 @@ func TestClaimProjection_ReadsEveryUpsertedColumn(t *testing.T) {
 	if len(upserted) == 0 {
 		t.Fatal("no ON DUPLICATE KEY UPDATE columns parsed — the guard would be vacuous")
 	}
-	res := schemaguard.Check(upserted, claimColumnNames, nil)
+	res := schemaguard.Check(upserted, claimColumnNames, derivedColumns)
+	if len(res.StaleAllowances) > 0 {
+		t.Errorf("derivedColumns entries that no longer excuse anything: %v", res.StaleAllowances)
+	}
 	if len(res.Missing) > 0 {
 		t.Errorf("mysql claim upsert rewrites columns the read projection omits: %v\n"+
 			"A read-modify-write pass will zero these across every row it touches. "+

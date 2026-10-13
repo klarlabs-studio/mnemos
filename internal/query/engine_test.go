@@ -117,6 +117,10 @@ func (f fakeClaimRepo) ListEvidenceByClaimIDs(_ context.Context, claimIDs []stri
 func (f fakeClaimRepo) ListStatusHistoryByClaimID(_ context.Context, _ string) ([]domain.ClaimStatusTransition, error) {
 	return nil, nil
 }
+func (f fakeClaimRepo) ListLiveByTextKeys(context.Context, []string) ([]domain.Claim, error) {
+	return nil, nil
+}
+
 func (f fakeClaimRepo) ListByIDs(_ context.Context, claimIDs []string) ([]domain.Claim, error) {
 	wanted := map[string]struct{}{}
 	for _, id := range claimIDs {

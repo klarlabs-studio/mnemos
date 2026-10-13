@@ -1,8 +1,6 @@
 package pipeline
 
 import (
-	"strings"
-
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -74,14 +72,8 @@ func DedupeAgainstExisting(newClaims []domain.Claim, links []domain.ClaimEvidenc
 	return deduped, rewritten
 }
 
-// normalizeForDedupe mirrors the helper in internal/extract — kept
-// here as a private duplicate to avoid pulling the extract package
-// into pipeline (and the import cycle that would create with the
-// pipeline-uses-extract direction).
+// normalizeForDedupe is domain.NormalizeClaimText, the one definition of "same
+// text" that extraction, this pass and the write-time duplicate check share.
 func normalizeForDedupe(text string) string {
-	normalized := strings.ToLower(strings.TrimSpace(text))
-	replacer := strings.NewReplacer(",", "", ".", "", ";", "", ":", "", "!", "", "?", "", "\t", " ")
-	normalized = replacer.Replace(normalized)
-	normalized = strings.Join(strings.Fields(normalized), " ")
-	return normalized
+	return domain.NormalizeClaimText(text)
 }

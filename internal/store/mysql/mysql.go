@@ -175,6 +175,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("mysql: apply schema in %s: %w", parsed.Namespace, err)
 	}
+	backfillClaimTextKeys(ctx, db)
 
 	return &store.Conn{
 		Events:        EventRepository{db: db},
