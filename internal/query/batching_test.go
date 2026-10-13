@@ -123,7 +123,9 @@ func TestInhibitLosers_FetchesLosersInOneBatch(t *testing.T) {
 		{WinnerClaimID: "cl_w", LoserClaimID: "cl_loser_3"},
 		{WinnerClaimID: "cl_w", LoserClaimID: ""}, // escalation: no decisive loser
 	}}
-	engine.inhibitLosers(context.Background(), AnswerOptions{Inhibit: true}, ans)
+	if err := engine.inhibitLosers(context.Background(), AnswerOptions{Inhibit: true}, ans); err != nil {
+		t.Fatalf("inhibitLosers: %v", err)
+	}
 
 	if repo.listCalls != 1 {
 		t.Errorf("ListByIDs called %d times for 3 losers, want 1 (batch sizes %v)", repo.listCalls, repo.batchSizes)
@@ -145,7 +147,9 @@ func TestInhibitLosers_NoDecisiveLoserMakesNoQuery(t *testing.T) {
 
 	// Escalations only — nothing to suppress, so nothing to load.
 	ans := domain.Answer{Verdicts: []domain.Verdict{{WinnerClaimID: "cl_w", LoserClaimID: ""}}}
-	engine.inhibitLosers(context.Background(), AnswerOptions{Inhibit: true}, ans)
+	if err := engine.inhibitLosers(context.Background(), AnswerOptions{Inhibit: true}, ans); err != nil {
+		t.Fatalf("inhibitLosers: %v", err)
+	}
 
 	if repo.listCalls != 0 {
 		t.Errorf("escalation-only verdicts must not hit the store, got %d calls", repo.listCalls)
