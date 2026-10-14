@@ -23,9 +23,15 @@ type Runner struct {
 	Timeout    time.Duration
 	MaxRetries int
 	Verbose    bool
-	now        func() time.Time
-	nextID     func() (string, error)
-	logger     *bolt.Logger
+	// ReadOnly marks a job that only reads (query, quality, metrics). Its
+	// record is never written, so a read never needs the store's write lock:
+	// on SQLite a long consolidation holds that lock for hours, and a query
+	// that had to record itself first failed with SQLITE_BUSY before reading
+	// anything. Status transitions are still validated.
+	ReadOnly bool
+	now      func() time.Time
+	nextID   func() (string, error)
+	logger   *bolt.Logger
 }
 
 // Job represents a single in-flight compilation job managed by a Runner.
@@ -34,6 +40,11 @@ type Job struct {
 	runner *Runner
 	data   domain.CompilationJob
 	fsm    *statekit.Interpreter[struct{}]
+	// unrecorded stops persistence for the rest of the job: set for a
+	// read-only job, and after the first record write fails. Each failed write
+	// on a locked SQLite store costs a full busy_timeout, so trying again on
+	// every status change would turn one lost record into a stalled job.
+	unrecorded bool
 }
 
 // NewRunner returns a Runner with sensible defaults for timeout and retries.
@@ -68,17 +79,14 @@ func (r Runner) Run(parent context.Context, kind string, scope map[string]string
 		UpdatedAt: now,
 		Error:     "",
 	}
-	if err := r.Store.Upsert(context.Background(), jobData); err != nil {
-		return fmt.Errorf("create job: %w", err)
-	}
-
 	fsm, err := newStatusMachine()
 	if err != nil {
 		return fmt.Errorf("create workflow state machine: %w", err)
 	}
 	fsm.Start()
 
-	job := &Job{id: jobID, runner: &r, data: jobData, fsm: fsm}
+	job := &Job{id: jobID, runner: &r, data: jobData, fsm: fsm, unrecorded: r.ReadOnly}
+	job.record()
 	job.log("started", map[string]any{"attempt": 0})
 
 	var lastErr error
@@ -141,10 +149,29 @@ func (j *Job) SetStatus(status, errMsg string) error {
 	j.data.Status = status
 	j.data.Error = errMsg
 	j.data.UpdatedAt = j.runner.now().UTC()
-	if err := j.runner.Store.Upsert(context.Background(), j.data); err != nil {
-		return fmt.Errorf("update job %s status %s: %w", j.id, status, err)
-	}
+	j.record()
 	return nil
+}
+
+// record persists the job's current state, best-effort. The record is
+// bookkeeping — nothing reads it back to decide anything — so failing to write
+// it must never fail the work it describes. The first failure is logged at
+// debug and persistence stops for the rest of the job.
+func (j *Job) record() {
+	if j.unrecorded {
+		return
+	}
+	if err := j.runner.Store.Upsert(context.Background(), j.data); err != nil {
+		j.unrecorded = true
+		if j.runner.logger != nil {
+			j.runner.logger.Debug().
+				Str("job_id", j.id).
+				Str("kind", j.data.Kind).
+				Str("status", j.data.Status).
+				Str("error", err.Error()).
+				Msg("workflow: job record not written; continuing without it")
+		}
+	}
 }
 
 func (j *Job) log(stage string, fields map[string]any) {
