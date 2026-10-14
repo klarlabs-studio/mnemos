@@ -3,6 +3,7 @@ package relate
 import (
 	"cmp"
 	"slices"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -45,6 +46,57 @@ type candidateEdge struct {
 	from, to int
 	relType  domain.RelationshipType
 	strength float64
+	// detector names the contradiction detector that produced the edge;
+	// empty for every other edge type.
+	detector string
+}
+
+// relationship materialises a kept candidate. Contradiction edges record the
+// detector that produced them and their strength; every other inferred edge
+// carries ModelVersion and the base strength, exactly as before.
+func (c candidateEdge) relationship(id, from, to string, now time.Time) domain.Relationship {
+	r := domain.Relationship{
+		DerivedBy:   ModelVersion,
+		ID:          id,
+		Type:        c.relType,
+		FromClaimID: from,
+		ToClaimID:   to,
+		CreatedAt:   now,
+	}
+	if c.relType == domain.RelationshipTypeContradicts {
+		r.DerivedBy = ContradictionDerivedBy(c.detector)
+		r.Strength = c.strength
+	}
+	return r
+}
+
+// WithContradictionCap returns an engine whose passes keep at most n
+// contradiction edges per claim. n < 0 removes the cap; 0 means
+// MaxContradictionsPerClaim.
+func (e Engine) WithContradictionCap(n int) Engine {
+	e.contradictionLimit = n
+	return e
+}
+
+func (e Engine) contradictionCap() int {
+	if e.contradictionLimit == 0 {
+		return MaxContradictionsPerClaim
+	}
+	return e.contradictionLimit
+}
+
+// sortByStrength orders candidate indices strongest first; ties go to the
+// lower (from, to) pair so the outcome is deterministic.
+func sortByStrength(order []int, edges []candidateEdge) {
+	slices.SortStableFunc(order, func(x, y int) int {
+		if c := cmp.Compare(edges[y].strength, edges[x].strength); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(edges[x].from, edges[y].from); c != 0 {
+			return c
+		}
+		return cmp.Compare(edges[x].to, edges[y].to)
+	})
 }
 
 // supportsStrength is the Jaccard overlap of two token sets of sizes a and b

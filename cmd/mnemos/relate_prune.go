@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
@@ -69,7 +70,7 @@ func pruneStaleRelationships(dryRun bool, f Flags) {
 			orphaned := len(orphanEdges)
 
 			fmt.Printf("relationships:      %d total\n", len(rels))
-			fmt.Printf("stale contradicts:  %d (no longer produced by the current detectors)\n", len(dropped))
+			fmt.Printf("stale contradicts:  %d (no longer produced by the current detectors, or over the cap of %d per claim)\n", len(dropped), relate.MaxContradictionsPerClaim)
 			if orphaned > 0 {
 				fmt.Printf("orphaned endpoints: %d (claim deleted; edge dropped)\n", orphaned)
 			}
@@ -133,9 +134,16 @@ func pruneStaleRelationships(dryRun bool, f Flags) {
 // Re-evaluation runs each pair back through relate.Engine.Detect — the same
 // entry point production uses — so this can never drift from the real
 // detection logic the way a reimplementation would.
+//
+// The surviving contradictions are then held to relate.MaxContradictionsPerClaim
+// per claim, strongest (as re-derived now) first, exactly as a detection pass
+// would keep them. Without that, a hub claim whose edges each still pass the
+// detectors would keep all of them: the cap must apply to the stored graph,
+// not only to what one pass writes.
 func partitionStaleContradictions(rels []domain.Relationship, byID map[string]domain.Claim, sessionOf map[string]string) (keep, dropped, orphaned []domain.Relationship) {
 	engine := relate.NewEngine()
 	keep = make([]domain.Relationship, 0, len(rels))
+	var live []liveContradiction
 
 	for _, r := range rels {
 		from, okFrom := byID[r.FromClaimID]
@@ -156,31 +164,79 @@ func partitionStaleContradictions(rels []domain.Relationship, byID map[string]do
 			dropped = append(dropped, r)
 			continue
 		}
-		if stillContradicts(engine, from, to) {
-			keep = append(keep, r)
+		if strength, ok := stillContradicts(engine, from, to); ok {
+			live = append(live, liveContradiction{rel: r, strength: strength})
 			continue
 		}
 		dropped = append(dropped, r)
 	}
+
+	kept, overCap := capContradictions(live, relate.MaxContradictionsPerClaim)
+	keep = append(keep, kept...)
+	dropped = append(dropped, overCap...)
 	return keep, dropped, orphaned
 }
 
+// liveContradiction is a stored contradiction edge the detectors still produce,
+// with the strength they give it now.
+type liveContradiction struct {
+	rel      domain.Relationship
+	strength float64
+}
+
+// capContradictions keeps, per claim, at most limit of the live contradiction
+// edges: strongest first, ties by edge id, an edge kept only while both of its
+// endpoints are under the limit. Returned edges keep their input order.
+func capContradictions(live []liveContradiction, limit int) (kept, overCap []domain.Relationship) {
+	order := make([]int, len(live))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(x, y int) bool {
+		a, b := live[order[x]], live[order[y]]
+		if a.strength != b.strength {
+			return a.strength > b.strength
+		}
+		return a.rel.ID < b.rel.ID
+	})
+	keepIdx := make([]bool, len(live))
+	degree := map[string]int{}
+	for _, i := range order {
+		r := live[i].rel
+		if degree[r.FromClaimID] >= limit || degree[r.ToClaimID] >= limit {
+			continue
+		}
+		degree[r.FromClaimID]++
+		degree[r.ToClaimID]++
+		keepIdx[i] = true
+	}
+	for i, l := range live {
+		if keepIdx[i] {
+			kept = append(kept, l.rel)
+		} else {
+			overCap = append(overCap, l.rel)
+		}
+	}
+	return kept, overCap
+}
+
 // stillContradicts reports whether the engine, given just this pair, infers a
-// contradiction between them.
-func stillContradicts(engine relate.Engine, a, b domain.Claim) bool {
+// contradiction between them, and the strength it gives that contradiction.
+func stillContradicts(engine relate.Engine, a, b domain.Claim) (float64, bool) {
 	out, err := engine.Detect([]domain.Claim{a, b})
 	if err != nil {
 		// Fail closed: an evaluation error must never be read as "stale", or a
-		// transient fault would delete real edges.
+		// transient fault would delete real edges. Full strength, so the cap
+		// never drops an edge it could not evaluate in favour of one it could.
 		fmt.Fprintf(os.Stderr, "relate-prune: evaluating %s/%s: %v (keeping)\n", a.ID, b.ID, err)
-		return true
+		return 1, true
 	}
 	for _, r := range out {
 		if r.Type == domain.RelationshipTypeContradicts {
-			return true
+			return r.EffectiveStrength(), true
 		}
 	}
-	return false
+	return 0, false
 }
 
 func truncateClaim(s string) string {

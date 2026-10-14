@@ -29,8 +29,8 @@ func (r RelationshipRepository) Upsert(ctx context.Context, relationships []doma
 	defer func() { _ = tx.Rollback() }()
 
 	stmt := fmt.Sprintf(`
-INSERT INTO %s (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO %s (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by, strength)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (id) DO UPDATE SET
   type = EXCLUDED.type,
   from_claim_id = EXCLUDED.from_claim_id,
@@ -42,7 +42,7 @@ ON CONFLICT (id) DO UPDATE SET
 		}
 		if _, err := tx.ExecContext(ctx, stmt,
 			rel.ID, string(rel.Type), rel.FromClaimID, rel.ToClaimID,
-			rel.CreatedAt.UTC(), actorOr(rel.CreatedBy), rel.DerivedBy,
+			rel.CreatedAt.UTC(), actorOr(rel.CreatedBy), rel.DerivedBy, rel.EffectiveStrength(),
 		); err != nil {
 			return fmt.Errorf("upsert relationship %s: %w", rel.ID, err)
 		}

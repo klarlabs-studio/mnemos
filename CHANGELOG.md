@@ -38,6 +38,37 @@ notable changes.
   for at most one second, and they stop at the first failed write. Consolidate's
   own locking is tracked in #466.
 
+- **Contradiction detection is precise (`relate/v4`).** On a real brain 103k
+  open `contradicts` edges linked 111k live claims, and a hand-classified
+  sample of 20 held no genuine conflict: session-header fragments, code lines,
+  agreeing paraphrases and unrelated pairs. The dissonance vital read CRIT and
+  recall warned about contradictions on every prompt.
+  - Both claims must be contentful, standalone propositions. Junk, code lines
+    (`type CompilationMachine interface {`), transcript boilerplate
+    (`User messages in this session:`) and fragments (`The gate passed`) are
+    never an endpoint.
+  - The claims must be about the same subject and assert incompatible values
+    or polarity: a real negation operator on one side only, an antonym swap
+    (`enabled`/`disabled`), a named value swapped (`React`/`Vue`), a different
+    number, or an exclusive aspect. Shared vocabulary or a lexical negative
+    (`without`, `failed`) alone no longer qualifies.
+  - Paraphrases that agree are never flagged: `not enabled` vs `disabled`,
+    `pass` vs `green`, both sides negated.
+  - Two genuine conflicts that used to be filed as `supports` are now
+    contradictions: `enabled` vs `disabled`, `React` vs `Vue`.
+  - Every new contradiction records its detector in `derived_by`
+    (`relate/v4:polarity`, `:value`, `:numeric`, `:entity`, `:temporal`,
+    `:test-conflict`) and a strength in (0, 1] that reflects how well the two
+    claims align. Strengths at or below 1.0 leave spreading activation and
+    Hebbian decay unchanged.
+  - A claim keeps at most 5 contradictions (`MaxContradictionsPerClaim`):
+    per detection pass, against the edges already stored on every write path,
+    and in `relate --prune-stale`.
+- **Run `mnemos relate --prune-stale` once after upgrading.** It re-derives
+  every stored contradiction under the new rules, drops those no longer
+  produced, and holds each claim to the cap, strongest first. Edges it keeps
+  are not re-stamped; they keep their old `derived_by` and strength.
+
 ## [0.128.1] — 2026-10-10
 
 A security patch, plus three fixes found while building the answer-quality

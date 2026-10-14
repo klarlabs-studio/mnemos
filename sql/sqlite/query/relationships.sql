@@ -1,6 +1,6 @@
 -- name: UpsertRelationship :exec
-INSERT INTO relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by, strength)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(type, from_claim_id, to_claim_id) DO UPDATE SET
   created_at = excluded.created_at,
   created_by = excluded.created_by,

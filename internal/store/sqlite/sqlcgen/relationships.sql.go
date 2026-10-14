@@ -86,8 +86,8 @@ func (q *Queries) ListRelationshipsByClaim(ctx context.Context, arg ListRelation
 }
 
 const upsertRelationship = `-- name: UpsertRelationship :exec
-INSERT INTO relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by, strength)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(type, from_claim_id, to_claim_id) DO UPDATE SET
   created_at = excluded.created_at,
   created_by = excluded.created_by,
@@ -95,13 +95,14 @@ ON CONFLICT(type, from_claim_id, to_claim_id) DO UPDATE SET
 `
 
 type UpsertRelationshipParams struct {
-	ID          string `json:"id"`
-	Type        string `json:"type"`
-	FromClaimID string `json:"from_claim_id"`
-	ToClaimID   string `json:"to_claim_id"`
-	CreatedAt   string `json:"created_at"`
-	CreatedBy   string `json:"created_by"`
-	DerivedBy   string `json:"derived_by"`
+	ID          string  `json:"id"`
+	Type        string  `json:"type"`
+	FromClaimID string  `json:"from_claim_id"`
+	ToClaimID   string  `json:"to_claim_id"`
+	CreatedAt   string  `json:"created_at"`
+	CreatedBy   string  `json:"created_by"`
+	DerivedBy   string  `json:"derived_by"`
+	Strength    float64 `json:"strength"`
 }
 
 func (q *Queries) UpsertRelationship(ctx context.Context, arg UpsertRelationshipParams) error {
@@ -113,6 +114,7 @@ func (q *Queries) UpsertRelationship(ctx context.Context, arg UpsertRelationship
 		arg.CreatedAt,
 		arg.CreatedBy,
 		arg.DerivedBy,
+		arg.Strength,
 	)
 	return err
 }
