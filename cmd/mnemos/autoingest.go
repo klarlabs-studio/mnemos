@@ -282,6 +282,14 @@ func ingestSingleDoc(
 	if err != nil {
 		return fmt.Errorf("extract: %w", err)
 	}
+	// A re-ingested file restates what the brain already holds; fold it
+	// before relating and embedding so that work lands on the stored claims.
+	known, err := pipeline.CollapseKnownClaims(ctx, conn, events, claims, links)
+	if err != nil {
+		return fmt.Errorf("collapse known claims: %w", err)
+	}
+	claims, links = known.Claims, known.Links
+	autoEntities = pipeline.RemapEntities(autoEntities, known.Remap)
 	rels, err := relEngine.Detect(claims)
 	if err != nil {
 		return fmt.Errorf("relate: %w", err)

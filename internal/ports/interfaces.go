@@ -60,6 +60,14 @@ type ClaimRepository interface {
 	ListByIDs(ctx context.Context, claimIDs []string) ([]domain.Claim, error)
 	ListAll(ctx context.Context) ([]domain.Claim, error)
 
+	// ListLiveByTextKeys returns the live claims — valid time open, status not
+	// deprecated — whose domain.ClaimTextKey is one of keys, ordered by
+	// created_at then id, oldest first. It is the write path's duplicate check:
+	// one indexed lookup answers "does the brain already hold this belief?",
+	// where the CLI used to load every claim to answer it and the capture path
+	// did not ask at all. No keys returns no claims.
+	ListLiveByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error)
+
 	// ListByTestRequirementRef returns every test_result claim sharing the
 	// given TestRequirementRef, ordered by TestLastRunAt DESC then
 	// CreatedAt DESC. Drives `mnemos trust --test=<ref>` and the

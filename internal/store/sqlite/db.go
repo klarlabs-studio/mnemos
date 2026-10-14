@@ -139,7 +139,10 @@ CREATE TABLE IF NOT EXISTS claims (
 	subject_class TEXT NOT NULL DEFAULT '',
 	-- durability (ADR 0023): 'durable' | 'session' | '' (unknown). Unknown is
 	-- treated as durable: the whole back catalogue predates the column.
-	durability TEXT NOT NULL DEFAULT ''
+	durability TEXT NOT NULL DEFAULT '',
+	-- text_key: domain.ClaimTextKey(text), looked up by the write path's
+	-- duplicate check. Backfilled on open for rows written before it existed.
+	text_key TEXT NOT NULL DEFAULT ''
 );
 -- idx_claims_trust_score and idx_claims_valid_to are created by
 -- migrate() after the v1→v2 / v2→v3 ALTER TABLEs add the columns on
@@ -606,6 +609,14 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 			"error", err)
 	}
 
+	// Same rule for the text key: an unkeyed row is only invisible to the
+	// duplicate check, so a backfill that cannot finish is reported and resumed
+	// on the next open, never a reason to refuse the brain.
+	if err := backfillClaimTextKeys(db); err != nil {
+		slog.Warn("claim text keys not backfilled yet; older duplicates are not matched until a later open finishes",
+			"error", err)
+	}
+
 	return nil
 }
 
@@ -648,7 +659,11 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // v28 (#382 Phase 6) adds relationships.derived_by: the rule set that inferred
 // each edge (relate.ModelVersion), so edges an older rule set produced can be
 // found and re-derived. Existing edges backfill to ” (unknown/explicit).
-const currentSchemaVersion = 28
+// v29 adds claims.text_key and idx_claims_text_key, the normalised-text
+// identity the write path looks up so a repeated belief links new evidence to
+// the claim that already holds it instead of adding a row. Existing rows are
+// keyed by backfillClaimTextKeys, which runs on every open, not behind the gate.
+const currentSchemaVersion = 29
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -764,6 +779,9 @@ var expectedColumns = []addMissingColumn{
 	// v27 - trust cache provenance (ADR 0026 §5).
 	{"claims", "trust_computed_at", "TEXT NOT NULL DEFAULT ''"},
 	{"claims", "trust_model_version", "TEXT NOT NULL DEFAULT ''"},
+	// v29 - normalised-text identity for the write-time duplicate check.
+	// backfillClaimTextKeys fills it for rows written before it existed.
+	{"claims", "text_key", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for
@@ -930,6 +948,10 @@ CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 -- is never chosen for this query (verified with EXPLAIN QUERY PLAN).
 CREATE INDEX IF NOT EXISTS idx_claims_test_requirement_ref
   ON claims(test_requirement_ref, type);
+-- v29: the write path's duplicate check (ListLiveByTextKeys) looks claims up
+-- by normalised text on every capture. Unindexed it would scan the brain once
+-- per write — the cost it exists to avoid.
+CREATE INDEX IF NOT EXISTS idx_claims_text_key ON claims(text_key);
 `
 
 // ensurePostMigrateIndexes creates any missing post-migrate index. migrate

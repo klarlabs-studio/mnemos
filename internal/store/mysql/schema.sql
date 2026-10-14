@@ -144,6 +144,11 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS visibility           VARCHAR(32)   N
 -- IF NOT EXISTS in MySQL — a re-run's "duplicate key name" (1061) is swallowed
 -- by isBenignSchemaError, which is how this file stays idempotent.
 CREATE INDEX idx_claims_test_requirement_ref ON claims (test_requirement_ref, type);
+-- text_key: domain.ClaimTextKey(text), the normalised-text identity the write
+-- path's duplicate check (ListLiveByTextKeys) looks up. Computed in Go on every
+-- upsert; rows that predate it are keyed by backfillClaimTextKeys on open.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS text_key             CHAR(32)      NOT NULL DEFAULT '';
+CREATE INDEX idx_claims_text_key ON claims (text_key);
 
 CREATE TABLE IF NOT EXISTS entities (
   id              VARCHAR(190) NOT NULL,

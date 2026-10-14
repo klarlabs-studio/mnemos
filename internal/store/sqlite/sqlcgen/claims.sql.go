@@ -95,7 +95,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score, 
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle, subject_class, durability
+       visibility, confidence_components, lifecycle, subject_class, durability, text_key
 FROM claims
 ORDER BY created_at ASC
 `
@@ -149,6 +149,7 @@ func (q *Queries) ListAllClaims(ctx context.Context) ([]Claim, error) {
 			&i.Lifecycle,
 			&i.SubjectClass,
 			&i.Durability,
+			&i.TextKey,
 		); err != nil {
 			return nil, err
 		}
@@ -314,7 +315,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score, 
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle, subject_class, durability
+       visibility, confidence_components, lifecycle, subject_class, durability, text_key
 FROM claims
 WHERE type = 'test_result'
   AND test_requirement_ref = ?
@@ -374,6 +375,7 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 			&i.Lifecycle,
 			&i.SubjectClass,
 			&i.Durability,
+			&i.TextKey,
 		); err != nil {
 			return nil, err
 		}
@@ -475,8 +477,8 @@ func (q *Queries) UpdateClaimTrust(ctx context.Context, arg UpdateClaimTrustPara
 }
 
 const upsertClaim = `-- name: UpsertClaim :exec
-INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, text_key)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   text = excluded.text,
   type = excluded.type,
@@ -527,7 +529,10 @@ ON CONFLICT(id) DO UPDATE SET
   confidence_components = excluded.confidence_components,
   lifecycle = excluded.lifecycle,
   subject_class = excluded.subject_class,
-  durability = excluded.durability
+  durability = excluded.durability,
+  -- Always the incoming text's key: text is overwritten above, and a key left
+  -- behind would let the duplicate check match words the claim no longer says.
+  text_key = excluded.text_key
 `
 
 type UpsertClaimParams struct {
@@ -563,6 +568,7 @@ type UpsertClaimParams struct {
 	Lifecycle            string  `json:"lifecycle"`
 	SubjectClass         string  `json:"subject_class"`
 	Durability           string  `json:"durability"`
+	TextKey              string  `json:"text_key"`
 }
 
 // ON CONFLICT preserves trust_score and valid_to (computed/managed
@@ -615,6 +621,7 @@ func (q *Queries) UpsertClaim(ctx context.Context, arg UpsertClaimParams) error 
 		arg.Lifecycle,
 		arg.SubjectClass,
 		arg.Durability,
+		arg.TextKey,
 	)
 	return err
 }
