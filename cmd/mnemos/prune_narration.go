@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
@@ -153,17 +154,21 @@ func pct(n, total int) float64 {
 	return 100 * float64(n) / float64(total)
 }
 
-// handlePrune routes `mnemos prune <--narration|--session-noise> [--dry-run]`.
+// handlePrune routes `mnemos prune <--narration [--judge [--limit N]]|--session-noise|--session-local> [--dry-run]`.
 // The kind is a required flag rather than a default so a bare `prune` never
 // guesses at a destructive operation.
 func handlePrune(args []string, f Flags) {
-	target, err := parsePruneArgs(args)
+	opts, err := parsePruneOptions(args)
 	if err != nil {
 		exitWithMnemosError(f.Verbose, err)
 		return
 	}
-	switch target {
+	switch opts.target {
 	case "narration":
+		if opts.judge {
+			pruneNarrationJudged(f.DryRun, opts.limit, f)
+			return
+		}
 		pruneNarration(f.DryRun, f)
 	case "session-noise":
 		pruneSessionNoise(f.DryRun, f)
@@ -172,32 +177,69 @@ func handlePrune(args []string, f Flags) {
 	}
 }
 
+// pruneOptions is a parsed `prune` command line.
+type pruneOptions struct {
+	target string
+	// judge runs the LLM narration judge over captured claims instead of the
+	// rule-based filter alone. Only valid with --narration.
+	judge bool
+	// limit caps how many claims a judged pass reviews; 0 is no cap.
+	limit int
+}
+
 // parsePruneArgs resolves the prune target from its flags, separated from
 // execution so the flag contract is testable without the process-exiting error
 // path. A bare `prune` is an error, not a default: it must never guess at a
 // destructive operation.
 func parsePruneArgs(args []string) (target string, err error) {
+	opts, err := parsePruneOptions(args)
+	return opts.target, err
+}
+
+// parsePruneOptions is parsePruneArgs plus the judged-narration options.
+func parsePruneOptions(args []string) (pruneOptions, error) {
+	var opts pruneOptions
 	var targets []string
-	for _, a := range args {
-		switch a {
+	limitSet := false
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; a {
 		case "--narration":
 			targets = append(targets, "narration")
 		case "--session-noise":
 			targets = append(targets, "session-noise")
 		case "--session-local":
 			targets = append(targets, "session-local")
+		case "--judge":
+			opts.judge = true
+		case "--limit":
+			if i+1 >= len(args) {
+				return pruneOptions{}, NewUserError("--limit needs a number")
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n <= 0 {
+				return pruneOptions{}, NewUserError("--limit wants a positive number, got %q", args[i])
+			}
+			opts.limit, limitSet = n, true
 		default:
-			return "", NewUserError("unknown prune flag %q (want --narration|--session-noise|--session-local [--dry-run])", a)
+			return pruneOptions{}, NewUserError("unknown prune flag %q (want --narration [--judge [--limit N]]|--session-noise|--session-local [--dry-run])", a)
 		}
 	}
 	switch len(targets) {
 	case 0:
-		return "", NewUserError("prune requires a target: --narration (deprecate stored conversational pollution) or --session-noise (drop contradiction edges between two session-local claims)")
+		return pruneOptions{}, NewUserError("prune requires a target: --narration (deprecate stored conversational pollution) or --session-noise (drop contradiction edges between two session-local claims)")
 	case 1:
-		return targets[0], nil
+		opts.target = targets[0]
 	default:
 		// They deprecate claims and delete edges respectively; running both in
 		// one pass would report two sets of numbers under one job.
-		return "", NewUserError("prune takes one target at a time, got %d", len(targets))
+		return pruneOptions{}, NewUserError("prune takes one target at a time, got %d", len(targets))
 	}
+	if (opts.judge || limitSet) && opts.target != "narration" {
+		return pruneOptions{}, NewUserError("--judge and --limit apply only to --narration")
+	}
+	if limitSet && !opts.judge {
+		return pruneOptions{}, NewUserError("--limit applies only to a judged pass (--narration --judge)")
+	}
+	return opts, nil
 }

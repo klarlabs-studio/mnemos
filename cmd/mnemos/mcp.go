@@ -1443,6 +1443,14 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 		if err != nil {
 			return err
 		}
+		// A session is mostly the work narrating itself; drop what the
+		// narration judge reads as such before it is ever stored. Only for
+		// session captures, and only when an LLM is in use at all.
+		if input.SessionID != "" && input.UseLLM && narrationFilterEnabled() {
+			if judge, jerr := narrationJudgeFromEnv(); jerr == nil {
+				claims, links, mcpEntities = filterSessionNarration(ctx, judge, claims, links, mcpEntities)
+			}
+		}
 		_ = progress.Report(2, &total)
 		// Fold beliefs the brain already holds onto their claims before
 		// relating, embedding and tagging, so that work lands on the claim

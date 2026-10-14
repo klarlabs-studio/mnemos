@@ -10,6 +10,33 @@ notable changes.
 
 ### Fixed
 
+- **Captured sessions no longer store the work narrating itself as
+  knowledge.** On a hand-labelled sample of 120 claims captured from coding
+  sessions, 87 were narration ("Both PRs are green", "Fixing the assertion",
+  "That leaves four") and 33 were knowledge. The shape filters catch about
+  2.6% of it. The rest reads like any other sentence, and it was most of what
+  recall returned.
+  - A new narration judge (`internal/narration`) asks an LLM whether each
+    claim is still worth knowing next month. On a second, held-out sample of
+    120 it dropped 30 of 79 narration claims and 1 of 41 durable ones with
+    `llama3.1` 8B. It under-drops by design: an unreachable model, an
+    unparsable answer or a missing verdict all keep the claim.
+  - Capture runs the judge over the claims it extracts from a session before
+    storing them (`capture.narration_filter` / `MNEMOS_NARRATION_FILTER`, on by
+    default). It takes at most a minute, and at most half of what the capture
+    budget has left.
+  - `mnemos prune --narration --judge [--limit N] [--dry-run]` reviews the
+    claims capture already stored. It deprecates, never deletes, and records
+    the judge's model and prompt version in `claim_status_history`. It writes
+    one chunk per transaction, so it never holds the write lock for the whole
+    pass (#466). Verdicts are cached, so a pass cut short by its budget resumes
+    where it stopped. On a copy of a 41k-claim brain, the first 1,000 captured
+    claims took 27 minutes on a heavily loaded machine. 308 were deprecated, and
+    in a sample of 25 of those, 2 or 3 read as durable.
+  - The judge model is `llm.narration_model` / `MNEMOS_NARRATION_MODEL`. On
+    Ollama it defaults to `llama3.1`: the 3B extraction model kept 84 of 87
+    narration claims in the same test.
+
 - **Recall's lexical (BM25) leg now matches questions.** Both full-text
   backends ANDed every word of the query, so a record ranked only if it held
   all of them, "when" and "did" included. A natural-language question

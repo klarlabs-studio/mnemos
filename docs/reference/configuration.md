@@ -22,6 +22,7 @@ file, the code, or any `MNEMOS_*` name the code reads disagree.
 | `MNEMOS_LLM_CACHE_MAX_BYTES` | `llm.cache_max_bytes` | Caps the on-disk LLM response cache. Default 1 GiB; 0 disables the size sweep (unbounded cache). |
 | `MNEMOS_EXTRACT_MODEL` | `llm.extract_model` | Overrides llm.model for the extraction stage only, so a strong model can extract while a cheaper one does the rest. |
 | `MNEMOS_EXTRACT_BATCH_CHARS` | `llm.extract_batch_chars` | Bounds one extraction request. A whole transcript in a single prompt overran the per-request timeout on local models, so extraction silently fell back to rule-based; batching keeps each request completable. Raise it for fast/large-context providers. Default 24000 characters. |
+| `MNEMOS_NARRATION_MODEL` | `llm.narration_model` | Picks the model that judges whether a captured claim is knowledge or session narration. On Ollama it defaults to llama3.1, the model the judge was measured on; hosted providers keep llm.model. |
 | `MNEMOS_EMBED_PROVIDER` | `embed.provider` | Selects the embedding model behind semantic recall: openai, gemini, ollama or openai-compat. Unset, it falls back to the LLM provider (Anthropic has no embedding API) or a local Ollama. |
 | `MNEMOS_EMBED_API_KEY` | `embed.api_key` | Authenticates to the embedding provider; falls back to the LLM API key. Secret. |
 | `MNEMOS_EMBED_MODEL` | `embed.model` | Overrides the provider's default embedding model. |
@@ -61,6 +62,7 @@ file, the code, or any `MNEMOS_*` name the code reads disagree.
 | `MNEMOS_INHIBIT` | `query.inhibit` | Suppresses retrievability of a beaten contradiction loser (ADR 0016), never its trust. WRITES. |
 | `MNEMOS_CAPTURE_STRATEGY` | `capture.strategy` | Chooses when the capture hook ingests: auto, incremental, end or off. auto picks incremental for local inference and end for hosted providers; mnemos.example.yaml has the per-provider guidance. |
 | `MNEMOS_CAPTURE_TIMEOUT` | `capture.timeout` | Bounds one session's capture pipeline, as a Go duration. Default 4m. |
+| `MNEMOS_NARRATION_FILTER` | `capture.narration_filter` | Runs the narration judge over the claims capture extracts from a session and drops session narration before it is stored. On by default; off disables it. It fails open: any judge error keeps the claim. |
 | `MNEMOS_FLOATBACK_ON_CAPTURE` | `floatback.on_capture` | Also floats repo learnings to the personal brain at session end. Off by default. |
 | `MNEMOS_PLASTICITY_SENSITIVITY` | `plasticity.sensitivity` | Scales surprise-driven learning-rate gain. Default 1.0; 0 disables neuromodulation only. |
 | `MNEMOS_EPISODIC_EVENTS` | `pipeline.episodic_events` | Types operational events (deploys, releases, merges, incidents) at ingest. Off by default. |

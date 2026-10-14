@@ -715,7 +715,7 @@ func captureTextCtx(ctx context.Context, ev hookEvent, text string) bool {
 	useLLM := llmConfigured()
 	ok := false
 	write := func() {
-		_, err := mcpRunProcessText(ctx, "claude-code", mcpProcessTextInput{
+		_, err := mcpRunProcessText(ctx, captureActor, mcpProcessTextInput{
 			Text:          text,
 			UseLLM:        useLLM,
 			UseEmbeddings: useLLM,
