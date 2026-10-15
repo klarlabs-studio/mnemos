@@ -50,6 +50,18 @@ var unreadColumns = map[string]string{
 	"search_tsv": "GENERATED ALWAYS AS (to_tsvector('english', text)) STORED — a derived " +
 		"full-text accelerator with no domain field. Postgres rejects writes to it, and " +
 		"reading it would only duplicate `text` in every row.",
+	"text_key": derivedColumns["text_key"],
+}
+
+// derivedColumns are written by the claim upsert but computed there from
+// another column of the SAME write, never carried on domain.Claim. A
+// read-modify-write pass therefore cannot zero them — the upsert recomputes
+// them from the text it is given — which is the hazard
+// TestClaimProjection_ReadsEveryUpsertedColumn guards against.
+var derivedColumns = map[string]string{
+	"text_key": "domain.ClaimTextKey(text), recomputed from `text` on every upsert. " +
+		"Only ListLiveByTextKeys's WHERE reads it; projecting it would carry a digest " +
+		"of `text` in every row.",
 }
 
 // unwrittenColumns are read back by claimColumnNames and deliberately absent
@@ -108,8 +120,9 @@ func TestClaimProjection_ReadsEveryDeclaredColumn(t *testing.T) {
 // the read returned — so a column that is written on conflict but not
 // read is silently zeroed across every row such a pass touches.
 //
-// There is no legitimate reason to be in this set and not in the
-// projection, which is why this check has no allowlist.
+// The only legitimate reason to be in this set and not in the projection is
+// that the upsert derives the value from the same write (derivedColumns), so
+// what a read returned never reaches it.
 func TestClaimProjection_ReadsEveryUpsertedColumn(t *testing.T) {
 	upserted, err := schemaguard.UpsertUpdateColumns(claimUpsertSQL(""))
 	if err != nil {
@@ -118,7 +131,10 @@ func TestClaimProjection_ReadsEveryUpsertedColumn(t *testing.T) {
 	if len(upserted) == 0 {
 		t.Fatal("no ON CONFLICT update columns parsed — the guard would be vacuous")
 	}
-	res := schemaguard.Check(upserted, claimColumnNames, nil)
+	res := schemaguard.Check(upserted, claimColumnNames, derivedColumns)
+	if len(res.StaleAllowances) > 0 {
+		t.Errorf("derivedColumns entries that no longer excuse anything: %v", res.StaleAllowances)
+	}
 	if len(res.Missing) > 0 {
 		t.Errorf("postgres claim upsert rewrites columns the read projection omits: %v\n"+
 			"A read-modify-write pass will zero these across every row it touches. "+

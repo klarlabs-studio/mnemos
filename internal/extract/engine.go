@@ -199,7 +199,7 @@ func cleanMarkdown(text string) string {
 
 func splitCandidates(content string) []string {
 	// Pre-clean markdown formatting.
-	cleaned := cleanMarkdown(content)
+	cleaned := cleanMarkdown(dropCodeLines(content))
 
 	raw := sentenceSplitRE.Split(cleaned, -1)
 	out := make([]string, 0, len(raw))
@@ -215,12 +215,32 @@ func splitCandidates(content string) []string {
 		if len(candidate) < 4 {
 			continue
 		}
-		if isStructuralNoise(candidate) {
+		if isStructuralNoise(candidate) || isNoiseFragment(candidate) {
 			continue
 		}
 		out = append(out, candidate)
 	}
 	return out
+}
+
+// dropCodeLines removes whole source lines before sentence splitting. The
+// splitter breaks on '!' and '?', so judged after it "if err != nil {" became
+// the candidate "if err", which no longer looks like code.
+func dropCodeLines(content string) string {
+	if !strings.Contains(content, "\n") {
+		if isCodeLine(content) {
+			return ""
+		}
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if !isCodeLine(line) {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
 }
 
 func trimLeadingListMarker(s string) string {
@@ -378,12 +398,11 @@ func isStructuralNoise(text string) bool {
 	return false
 }
 
+// normalizeForDedupe is domain.NormalizeClaimText, so a text extraction
+// collapses within a batch is the same text the write path collapses onto a
+// stored claim.
 func normalizeForDedupe(text string) string {
-	normalized := strings.ToLower(strings.TrimSpace(text))
-	replacer := strings.NewReplacer(",", "", ".", "", ";", "", ":", "", "!", "", "?", "", "\t", " ")
-	normalized = replacer.Replace(normalized)
-	normalized = strings.Join(strings.Fields(normalized), " ")
-	return normalized
+	return domain.NormalizeClaimText(text)
 }
 
 // contestedAnchorRatio is the share of the shorter claim's tokens that two

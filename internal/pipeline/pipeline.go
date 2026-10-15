@@ -172,6 +172,18 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 		tagEventEpisodes(events, claims, links)
 	}
 
+	// A belief the brain already holds gains this batch's evidence instead of a
+	// second row (see known_claims.go). Applied here, at the one write every
+	// ingest path shares, so no path can store a duplicate; callers that work on
+	// the claims after persisting collapse first and pass the result, which
+	// makes this a no-op for them.
+	known, err := CollapseKnownClaims(ctx, conn, events, claims, links)
+	if err != nil {
+		return fmt.Errorf("persist artifacts: %w", err)
+	}
+	claims, links = known.Claims, known.Links
+	relationships = remapRelationships(relationships, known.Remap)
+
 	for _, event := range events {
 		if err := conn.Events.Append(ctx, event); err != nil {
 			return fmt.Errorf("append event %s: %w", event.ID, err)
@@ -266,6 +278,7 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 		return fmt.Errorf("upsert claim evidence: %w", err)
 	}
 
+	relationships, _ = CapStoredContradictions(ctx, conn.Relationships, relationships)
 	if err := conn.Relationships.Upsert(ctx, relationships); err != nil {
 		return fmt.Errorf("upsert relationships: %w", err)
 	}

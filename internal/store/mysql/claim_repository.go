@@ -51,10 +51,10 @@ const claimUpsertSQL = `
 INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, half_life_days, subject_class, durability, confidence_components,
                     test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
                     scope_service, scope_env, scope_team,
-                    source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, visibility, half_life_classifier)
+                    source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, visibility, half_life_classifier, text_key)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE
   text = VALUES(text),
   type = VALUES(type),
@@ -85,7 +85,10 @@ ON DUPLICATE KEY UPDATE
   last_executed = CASE WHEN VALUES(last_executed) IS NOT NULL THEN VALUES(last_executed) ELSE last_executed END,
   citation_count = CASE WHEN VALUES(citation_count) > 0 THEN VALUES(citation_count) ELSE citation_count END,
   provenance_rationale = CASE WHEN VALUES(provenance_rationale) <> '' THEN VALUES(provenance_rationale) ELSE provenance_rationale END,
-  visibility = CASE WHEN VALUES(visibility) <> '' THEN VALUES(visibility) ELSE visibility END`
+  visibility = CASE WHEN VALUES(visibility) <> '' THEN VALUES(visibility) ELSE visibility END,
+  -- Always the incoming text's key: text is overwritten above, and a stale key
+  -- would let the duplicate check match words the claim no longer says.
+  text_key = VALUES(text_key)`
 
 // Upsert is the no-reason variant; status_history rows lose their
 // reason/changed_by attribution.
@@ -155,6 +158,7 @@ VALUES (?, ?, ?, ?, ?, ?)`
 			// an empty audience.
 			string(claim.Visibility),
 			claim.HalfLifeClassifier,
+			domain.ClaimTextKey(claim.Text),
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
 		}

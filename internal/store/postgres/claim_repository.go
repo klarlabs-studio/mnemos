@@ -54,10 +54,10 @@ func claimUpsertSQL(ns string) string {
 INSERT INTO %s (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, half_life_days, lifecycle, subject_class, durability, confidence_components,
                 test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
                 scope_service, scope_env, scope_team,
-                source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, visibility, half_life_classifier)
+                source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, visibility, half_life_classifier, text_key)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
         $21, $22, $23,
-        $24, $25, $26, $27, $28, $29, $30, $31, $32)
+        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
 ON CONFLICT (id) DO UPDATE SET
   text = EXCLUDED.text,
   type = EXCLUDED.type,
@@ -89,7 +89,10 @@ ON CONFLICT (id) DO UPDATE SET
   last_executed = CASE WHEN EXCLUDED.last_executed IS NOT NULL THEN EXCLUDED.last_executed ELSE claims.last_executed END,
   citation_count = CASE WHEN EXCLUDED.citation_count > 0 THEN EXCLUDED.citation_count ELSE claims.citation_count END,
   provenance_rationale = CASE WHEN EXCLUDED.provenance_rationale <> '' THEN EXCLUDED.provenance_rationale ELSE claims.provenance_rationale END,
-  visibility = CASE WHEN EXCLUDED.visibility <> '' THEN EXCLUDED.visibility ELSE claims.visibility END`, qualify(ns, "claims"))
+  visibility = CASE WHEN EXCLUDED.visibility <> '' THEN EXCLUDED.visibility ELSE claims.visibility END,
+  -- Always the incoming text's key: text is overwritten above, and a stale key
+  -- would let the duplicate check match words the claim no longer says.
+  text_key = EXCLUDED.text_key`, qualify(ns, "claims"))
 }
 
 // Upsert satisfies the corresponding ports method.
@@ -160,6 +163,7 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 			// an empty audience.
 			string(claim.Visibility),
 			claim.HalfLifeClassifier,
+			domain.ClaimTextKey(claim.Text),
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
 		}

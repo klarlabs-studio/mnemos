@@ -174,6 +174,14 @@ func ingestGhPRs(ctx context.Context, w *govwrite.Writer, repoRoot string, limit
 		return ingested, skipped, nil
 	}
 
+	// Fold beliefs already held before relating and embedding (see
+	// pipeline.CollapseKnownClaims).
+	known, err := pipeline.CollapseKnownClaims(ctx, conn, newEvents, newClaims, newLinks)
+	if err != nil {
+		return 0, skipped, fmt.Errorf("collapse known claims: %w", err)
+	}
+	newClaims, newLinks = known.Claims, known.Links
+
 	rels, relErr := relEngine.Detect(newClaims)
 	if relErr != nil {
 		fmt.Fprintf(os.Stderr, "git-prs: detect relationships: %v\n", relErr)

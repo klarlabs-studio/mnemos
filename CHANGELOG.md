@@ -8,6 +8,91 @@ notable changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Recall's lexical (BM25) leg now matches questions.** Both full-text
+  backends ANDed every word of the query, so a record ranked only if it held
+  all of them, "when" and "did" included. A natural-language question
+  therefore matched almost nothing, and recall was in effect vector-only.
+  - SQLite/libSQL: the query is the question's content words, each quoted and
+    joined with `OR` (`internal/store/lexquery`). Punctuation inside a word
+    (`2.5`, `mg,`) no longer reaches FTS5. It used to raise a syntax error,
+    which recall swallowed as "no lexical hits".
+  - Postgres: `websearch_to_tsquery`'s `&` between words becomes `|`. Quoted
+    phrases and negations keep their meaning.
+
+- **Recall answers while another process holds the write lock.** A
+  `mnemos consolidate` on a 2.6 GB SQLite brain held the write lock for over
+  four hours. During that time every read failed, even though WAL reads never
+  need that lock:
+  - `mnemos query` and `mnemos quality` wrote a `compilation_jobs` row before
+    reading, so they failed with `create job: … database is locked (SQLITE_BUSY)`.
+  - `query_knowledge` and the recall hook each spent about 20 s on their
+    post-answer cognitive write-backs, at 5 s of `busy_timeout` per write.
+
+  Read-only commands (`query`, `quality`, `metrics`, `entities list|show`) no
+  longer record a job. For every other command the job record is now
+  best-effort: if the first write fails, the failure is logged at debug and the
+  job keeps running without a record. The Hebbian, reconsolidation and
+  inhibition write-backs now run off the answer path. The answer waits for them
+  for at most one second, and they stop at the first failed write. Consolidate's
+  own locking is tracked in #466.
+
+- **Contradiction detection is precise (`relate/v4`).** On a real brain 103k
+  open `contradicts` edges linked 111k live claims, and a hand-classified
+  sample of 20 held no genuine conflict: session-header fragments, code lines,
+  agreeing paraphrases and unrelated pairs. The dissonance vital read CRIT and
+  recall warned about contradictions on every prompt.
+  - Both claims must be contentful, standalone propositions. Junk, code lines
+    (`type CompilationMachine interface {`), transcript boilerplate
+    (`User messages in this session:`) and fragments (`The gate passed`) are
+    never an endpoint.
+  - The claims must be about the same subject and assert incompatible values
+    or polarity: a real negation operator on one side only, an antonym swap
+    (`enabled`/`disabled`), a named value swapped (`React`/`Vue`), a different
+    number, or an exclusive aspect. Shared vocabulary or a lexical negative
+    (`without`, `failed`) alone no longer qualifies.
+  - Paraphrases that agree are never flagged: `not enabled` vs `disabled`,
+    `pass` vs `green`, both sides negated.
+  - Two genuine conflicts that used to be filed as `supports` are now
+    contradictions: `enabled` vs `disabled`, `React` vs `Vue`.
+  - Every new contradiction records its detector in `derived_by`
+    (`relate/v4:polarity`, `:value`, `:numeric`, `:entity`, `:temporal`,
+    `:test-conflict`) and a strength in (0, 1] that reflects how well the two
+    claims align. Strengths at or below 1.0 leave spreading activation and
+    Hebbian decay unchanged.
+  - A claim keeps at most 5 contradictions (`MaxContradictionsPerClaim`):
+    per detection pass, against the edges already stored on every write path,
+    and in `relate --prune-stale`.
+- **Run `mnemos relate --prune-stale` once after upgrading.** It re-derives
+  every stored contradiction under the new rules, drops those no longer
+  produced, and holds each claim to the cap, strongest first. Edges it keeps
+  are not re-stamped; they keep their old `derived_by` and strength.
+
+- **Capture no longer stores noise or the same belief twice.** Measured on a
+  real 111k-claim brain, 62.8% of live claims were exact duplicates of another
+  claim's text, and about two thirds of a random sample were noise.
+  - The capture hook skips compaction summaries whole (`isCompactSummary`,
+    `isMeta`, or the "This session is being continued…" preamble) and drops
+    their scaffolding lines ("Continue the conversation from where it left
+    off…", "Errors and fixes:", "All user messages") and subagent hand-back
+    frames. A summary restates a session capture already took.
+  - Both extractors, LLM and rule-based, reject source-code lines
+    (`type CompilationMachine interface {`, `ExpiresAt     time.Time`,
+    `// caller asks…`) and contentless narration (`Now the implementation`,
+    `Pushing the release`, `Good so what's the remaining gap`).
+  - A claim whose normalised text a live claim of the same scope and audience
+    already holds is not written again. Its evidence is linked to the held
+    claim instead, at most once per origin (the capture session, or the
+    content for sessionless input), so re-ingesting a transcript or a document
+    changes nothing and repetition does not raise trust (#443, #390). Captured
+    session chunks get content-derived episode ids, so a replay appends no
+    episode either. Existing duplicates are left in place.
+  - Every backend stores a `text_key` (`domain.ClaimTextKey`) on claims, with
+    an index, and backfills it for existing rows on open. The duplicate check
+    is one indexed lookup (`ClaimRepository.ListLiveByTextKeys`), not a load
+    of the whole brain.
+
 ## [0.128.1] — 2026-10-10
 
 A security patch, plus three fixes found while building the answer-quality

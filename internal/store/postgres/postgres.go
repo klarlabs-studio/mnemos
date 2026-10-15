@@ -210,6 +210,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 	// existence rather than re-probing the type, so a race or a manual drop
 	// can't leave Upsert writing to a missing column.
 	vectorEnabled := embeddingVectorColumnExists(ctx, db, parsed.Namespace)
+	backfillClaimTextKeys(ctx, db, parsed.Namespace)
 
 	return newStoreConn(db, parsed.Namespace, vectorEnabled, db, db.Close), nil
 }
@@ -302,6 +303,10 @@ func openSharedTenantConn(ctx context.Context, parsed DSN) (*store.Conn, error) 
 		_, _ = conn.ExecContext(rctx, "RESET mnemos.tenant")
 		return conn.Close()
 	}
+	// The shared pool bootstraps once, as the default tenant, and row security
+	// hides every other tenant's rows from that pass, so each tenant's rows are
+	// keyed on its own connection.
+	backfillClaimTextKeys(ctx, conn, parsed.Namespace)
 	return newStoreConn(conn, parsed.Namespace, sp.vectorEnabled, conn, closer), nil
 }
 

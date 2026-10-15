@@ -431,9 +431,15 @@ func handleIngest(args []string, f Flags) {
 }
 
 func handleQuery(args []string, f Flags) {
+	exitWithMnemosError(f.Verbose, runQuery(args, f))
+}
+
+// runQuery is `mnemos query` without the process exit, so the read path can be
+// exercised in-process.
+func runQuery(args []string, f Flags) error {
 	qa, err := parseQueryArgs(args)
 	if err != nil {
-		exitWithMnemosError(f.Verbose, err)
+		return err
 	}
 	question, runID, hops, minTrust := qa.question, qa.runID, qa.hops, qa.minTrust
 	asOf, includeHistory, entity := qa.asOf, qa.includeHistory, qa.entity
@@ -458,7 +464,7 @@ func handleQuery(args []string, f Flags) {
 		scope["why_wrong"] = "true"
 	}
 
-	err = runJob("query", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
+	return runJob("query", scope, f.Verbose, func(ctx context.Context, job *workflow.Job, w *govwrite.Writer) error {
 		conn := w.Conn()
 		if err := job.SetStatus("loading", ""); err != nil {
 			return err
@@ -628,7 +634,6 @@ func handleQuery(args []string, f Flags) {
 		}
 		return nil
 	})
-	exitWithMnemosError(f.Verbose, err)
 }
 
 // resolveContradictionClaimText ensures all claims referenced in contradictions
@@ -1096,9 +1101,9 @@ func handleProcess(args []string, f Flags) {
 			printProgress("llm extraction: extracted %d claims", len(claims))
 		}
 
-		// Load the existing knowledge once: it feeds both cross-batch
-		// dedup (always) and incremental relate (unless --no-relate).
-		// Failure here is non-fatal — we still persist what we have.
+		// Load the existing knowledge once for incremental relate (unless
+		// --no-relate). Failure here is non-fatal — we still persist what
+		// we have.
 		var existingClaims []domain.Claim
 		{
 			claimRepo := conn.Claims
@@ -1112,13 +1117,19 @@ func handleProcess(args []string, f Flags) {
 			}
 		}
 
-		// Cross-batch dedup: collapse new claims that already exist by
-		// normalized text, rewriting evidence links to point at the
-		// canonical (existing) claim id. Without this, restating the
-		// same fact across chunks produces near-duplicate claim rows
-		// (#24).
+		// Cross-batch dedup: collapse new claims whose belief a live claim
+		// already holds, rewriting evidence links to point at that claim.
+		// Without this, restating the same fact across chunks produces
+		// near-duplicate claim rows (#24). The same fold the capture path
+		// and PersistArtifacts apply, so a re-ingested document gains no
+		// evidence from its own repeat (#443).
 		preDedup := len(claims)
-		claims, links = pipeline.DedupeAgainstExisting(claims, links, existingClaims)
+		known, err := pipeline.CollapseKnownClaims(ctx, conn, events, claims, links)
+		if err != nil {
+			return NewSystemError(err, "claim dedup failed")
+		}
+		claims, links = known.Claims, known.Links
+		entities = pipeline.RemapEntities(entities, known.Remap)
 		if dropped := preDedup - len(claims); dropped > 0 {
 			printProgress("dedup: collapsed %d claim(s) that match existing knowledge", dropped)
 		}
@@ -1907,7 +1918,25 @@ func jobTimeout() time.Duration {
 }
 
 func runJob(kind string, scope map[string]string, verbose bool, fn func(context.Context, *workflow.Job, *govwrite.Writer) error) error {
-	return runJobWithin(jobTimeout(), kind, scope, verbose, fn)
+	return runJobWithin(timeoutFor(kind), kind, scope, verbose, fn)
+}
+
+// maintenanceKinds are the jobs that walk the whole brain, so their running
+// time grows with the brain rather than with one request. reembed over 163k
+// beliefs needs about 45 minutes against a local model; under the 10-minute
+// request bound it died at batch 30848 with a misleading "context deadline
+// exceeded" from the embedder (#440).
+var maintenanceKinds = map[string]bool{
+	"relate-prune-supports": true,
+	"reembed":               true,
+}
+
+// timeoutFor picks the per-attempt bound for a job kind.
+func timeoutFor(kind string) time.Duration {
+	if maintenanceKinds[kind] {
+		return maintenanceJobTimeout()
+	}
+	return jobTimeout()
 }
 
 // maintenanceJobTimeout bounds a whole-brain maintenance pass (`relate
@@ -1920,6 +1949,20 @@ func maintenanceJobTimeout() time.Duration {
 		return jobTimeout()
 	}
 	return 4 * time.Hour
+}
+
+// readOnlyJobKinds are the commands that only read the brain. They run as jobs
+// for the shared timeout, retry and status handling, but they do not write a
+// compilation_jobs row: nothing reads that row back, and writing it made every
+// read wait for the write lock. While `consolidate` held that lock for hours,
+// `query` and `quality` failed with SQLITE_BUSY before reading anything.
+var readOnlyJobKinds = map[string]bool{
+	"query":             true,
+	"quality":           true,
+	"metrics":           true,
+	"metrics-workspace": true,
+	"entities-list":     true,
+	"entities-show":     true,
 }
 
 // runJobWithin is runJob with an explicit per-attempt timeout.
@@ -1948,6 +1991,7 @@ func runJobWithin(timeout time.Duration, kind string, scope map[string]string, v
 	runner.Timeout = timeout
 	runner.MaxRetries = 1
 	runner.Verbose = verbose
+	runner.ReadOnly = readOnlyJobKinds[kind]
 
 	// CLI invocations have no caller deadline to inherit; the timeout
 	// (jobTimeout(): 10m by default, MNEMOS_JOB_TIMEOUT) is the bound.

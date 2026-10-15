@@ -161,3 +161,99 @@ func TestStripHarnessText_KeepsCommandMentions(t *testing.T) {
 		t.Errorf("dropped a real sentence about commands: %q", got)
 	}
 }
+
+// compactionSummaryText is the shape of the user-role message Claude Code
+// writes when it compacts a session: a preamble, the whole earlier session
+// restated as numbered sections, and a closing instruction. Every line below
+// reached a real brain as a claim, many hundreds of times over.
+const compactionSummaryText = `This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Summary:
+1. Primary Request and Intent:
+   The user asked to move the release pipeline to kiln.
+2. Files and Code Sections:
+   - internal/store/sqlite/db.go
+3. Errors and fixes:
+   - The migration lock was still held.
+6. All user messages:
+   - "Switch to rollops"
+   (No new user messages were sent during this session.)
+
+Continue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with "I'll continue" or similar. Pick up the last task as if the break never happened.`
+
+// A compaction summary restates a session capture has already taken. Read as
+// conversation, it re-ingested the whole earlier session on every compaction,
+// and its scaffolding lines became the most-copied claims in the brain.
+func TestStripHarnessText_DropsCompactionSummaryWhole(t *testing.T) {
+	if got := stripHarnessText(compactionSummaryText); got != "" {
+		t.Errorf("compaction summary survived as conversation:\n%q", got)
+	}
+}
+
+// The transcript flags the summary message itself; capture must skip the line
+// even when its text carries no recognisable preamble.
+func TestParseTranscriptLine_SkipsCompactSummaryAndMetaLines(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "compact summary flag",
+			raw:  `{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"Summary:\n1. Primary Request and Intent:\n   Ship the release."}}`,
+		},
+		{
+			name: "harness meta message",
+			raw:  `{"type":"user","isMeta":true,"message":{"role":"user","content":"Continue from where you left off."}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, ok := parseTranscriptLine(tt.raw); ok || got != "" {
+				t.Errorf("parseTranscriptLine() = %q, %v; want skipped", got, ok)
+			}
+		})
+	}
+}
+
+// Boilerplate lines that arrive outside a flagged summary — an older harness, a
+// quoted summary, a subagent hand-back frame — are dropped line by line.
+func TestStripHarnessText_DropsHarnessBoilerplateLines(t *testing.T) {
+	boilerplate := []string{
+		"Continue the conversation from where it left off without asking the user any further questions.",
+		"Please continue the conversation from where we left it off without asking the user any further questions.",
+		"Pick up the last task as if the break never happened.",
+		"Resume directly — do not acknowledge the summary, do not recap what was happening",
+		"Errors and fixes:",
+		"3. Errors and fixes:",
+		"Files and Code Sections:",
+		"No new user messages were sent during this session.",
+		"(No new user messages were sent during this session; it was autonomous continuation.)",
+		"User messages in this session:",
+		"6. **All user messages:**",
+		"All user messages",
+		"[Subagent hand-back] The text below is the final report of a subagent this session delegated to. The report follows:",
+		"The report follows:",
+	}
+	const real = "The deploy failed because the migration lock was still held."
+	for _, line := range boilerplate {
+		if got := stripHarnessText(real + "\n" + line); got != real {
+			t.Errorf("boilerplate %q survived:\n got: %q\nwant: %q", line, got, real)
+		}
+	}
+}
+
+// Sentences that merely talk about summaries, user messages or reports are
+// conversation and must survive.
+func TestStripHarnessText_KeepsSentencesAboutSummaries(t *testing.T) {
+	keep := []string{
+		"The summary below the fold lists every failed deploy.",
+		"All user messages are encrypted at rest with a per-tenant key.",
+		"Errors and fixes are tracked in the incident log.",
+		"Continue the rollout once the canary is healthy.",
+	}
+	for _, s := range keep {
+		if got := stripHarnessText(s); got != s {
+			t.Errorf("dropped real content:\n got: %q\nwant: %q", got, s)
+		}
+	}
+}

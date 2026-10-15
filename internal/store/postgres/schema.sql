@@ -121,6 +121,11 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS last_executed         timestamptz;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS citation_count        integer          NOT NULL DEFAULT 0;
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS provenance_rationale  text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS visibility            text             NOT NULL DEFAULT 'team';
+-- text_key: domain.ClaimTextKey(text), the normalised-text identity the write
+-- path's duplicate check (ListLiveByTextKeys) looks up. Computed in Go on every
+-- upsert; rows that predate it are keyed by backfillClaimTextKeys on open.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS text_key              text             NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_claims_text_key ON claims(text_key);
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);
 CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 -- ListByTestRequirementRef filters `type = 'test_result' AND

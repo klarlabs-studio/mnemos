@@ -23,6 +23,9 @@ import (
 type backendConn struct {
 	name string
 	conn *store.Conn
+	// dsn reopens the same store, for tests that need a fresh Open over
+	// existing rows (schema migrations and backfills).
+	dsn string
 }
 
 // namespacedDSN appends a per-test namespace to a live-server DSN so parallel
@@ -72,7 +75,7 @@ func openBackends(t *testing.T) []backendConn {
 			}
 			_ = conn.Close()
 		})
-		out = append(out, backendConn{name: d.name, conn: conn})
+		out = append(out, backendConn{name: d.name, conn: conn, dsn: d.dsn})
 	}
 	return out
 }

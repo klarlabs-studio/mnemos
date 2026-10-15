@@ -58,3 +58,6 @@ ai.inventory.json
 # lives in GitHub issues. Git history keeps the old snapshots.
 .roady/
 .relicta/
+
+# Phase A benchmark data (#441): downloaded, pinned by sha256 in phase_a/datasets.py
+benchmarks/data/phase_a/

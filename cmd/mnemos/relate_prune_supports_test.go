@@ -126,3 +126,17 @@ func TestPruneSupports_RunsUnderTheMaintenanceTimeout(t *testing.T) {
 		t.Errorf("explicit MNEMOS_JOB_TIMEOUT ignored: got %s", got)
 	}
 }
+
+// Whole-brain passes get the maintenance bound; a request-sized job keeps the
+// 10-minute one. reembed was missing from the first group (#440).
+func TestTimeoutFor_WholeBrainPassesGetTheMaintenanceBound(t *testing.T) {
+	t.Setenv("MNEMOS_JOB_TIMEOUT", "")
+	for _, kind := range []string{"reembed", "relate-prune-supports"} {
+		if got := timeoutFor(kind); got < time.Hour {
+			t.Errorf("timeoutFor(%q) = %s, want at least an hour", kind, got)
+		}
+	}
+	if got := timeoutFor("process"); got != 10*time.Minute {
+		t.Errorf("timeoutFor(process) = %s, want the 10-minute request bound", got)
+	}
+}
