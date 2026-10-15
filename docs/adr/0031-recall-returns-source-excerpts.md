@@ -1,7 +1,7 @@
 # ADR 0031: Recall can return each belief's source excerpt
 
-- **Status:** Proposed (2026-10-12), Cognitive quality milestone. Accepted once
-  measured on the #441 harness (see Validation).
+- **Status:** Accepted (2026-10-15), Cognitive quality milestone. Proposed
+  2026-10-12; accepted on the #441 LoCoMo result (see Validation).
 - **Date:** 2026-10-12
 - **Deciders:** Felix Geelhaar
 
@@ -86,3 +86,38 @@ judges.
   zero. The hypothesis to test is that it closes most of the gap to BM25.
 - **Otherwise,** record the negative result here and keep the field
   experimental.
+
+### Result (2026-10-15): accepted
+
+LoCoMo Phase A on the #441 harness: 1,540 questions, the pre-registered #441
+configuration, both judges, 4,000-token budget.
+
+| System | Correct |
+|---|---|
+| Full context | 62.5% |
+| Mnemos recall with excerpts | 50.1% |
+| BM25 over raw conversation turns | 49.5% |
+| Mnemos recall | 38.3% |
+
+- **Against Mnemos without excerpts:** +11.8 pp, paired bootstrap 95% CI
+  [+9.4, +14.0]. The CI excludes zero, so the acceptance criterion is met.
+- **Against BM25:** +0.5 pp, CI [−1.9, +3.0]. This is a tie: excerpts close
+  the gap to BM25 but do not pass it.
+
+By question type (excerpts / plain / BM25):
+
+| Type | Excerpts | Plain | BM25 |
+|---|---|---|---|
+| Single-hop | 66.8% | 51.0% | 68.1% |
+| Multi-hop | 39.0% | 31.6% | 33.0% |
+| Temporal | 24.6% | 16.5% | 24.3% |
+| Open-domain | 20.8% | 19.8% | 19.8% |
+
+Both Mnemos arms recalled identical claim-ID lists for every question; only
+the rendering differs. The gain comes from the excerpt, not from selection.
+
+The trade-off is budget. An excerpt averages about 318 characters per belief,
+so about 38 beliefs fit the 4,000 tokens instead of about 99, and evidence
+recall drops from 97.2% to 92.9%. Excerpts therefore stay opt-in
+(`Query.Excerpts`). A top-k rendering experiment is running and will be
+reported on #441.
