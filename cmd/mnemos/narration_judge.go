@@ -11,6 +11,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/narration"
+	"go.klarlabs.de/mnemos/internal/pipeline"
 )
 
 // captureActor is the actor the capture hook writes as. Claims it created are
@@ -43,6 +44,16 @@ func narrationJudgeFromEnv() (*narration.Judge, error) {
 	}
 	return narration.New(client, narrationCacheDir()), nil
 }
+
+// newCaptureNarrationJudge builds the judge process_text runs over a session
+// capture. A variable so a test can stand in a judge that needs no LLM.
+var newCaptureNarrationJudge = func() (narrationClassifier, error) {
+	return narrationJudgeFromEnv()
+}
+
+// newProcessTextExtractor builds process_text's claim extractor. A variable so
+// a test can drive the LLM path of process_text without an LLM.
+var newProcessTextExtractor = pipeline.NewExtractor
 
 // narrationCacheDir is where judge verdicts are cached, beside the durability
 // cache (see cache_dirs.go for why both resolve against dataDir).

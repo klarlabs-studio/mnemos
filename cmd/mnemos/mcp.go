@@ -1435,7 +1435,7 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 			}
 		}
 
-		ext, err := pipeline.NewExtractor(input.UseLLM)
+		ext, err := newProcessTextExtractor(input.UseLLM)
 		if err != nil {
 			return err
 		}
@@ -1447,7 +1447,7 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 		// narration judge reads as such before it is ever stored. Only for
 		// session captures, and only when an LLM is in use at all.
 		if input.SessionID != "" && input.UseLLM && narrationFilterEnabled() {
-			if judge, jerr := narrationJudgeFromEnv(); jerr == nil {
+			if judge, jerr := newCaptureNarrationJudge(); jerr == nil {
 				claims, links, mcpEntities = filterSessionNarration(ctx, judge, claims, links, mcpEntities)
 			}
 		}
