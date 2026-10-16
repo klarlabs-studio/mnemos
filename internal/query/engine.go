@@ -224,6 +224,16 @@ type AnswerOptions struct {
 	// losers are protected. Only meaningful for a ConsumerAgent query (which resolves
 	// contradiction winners/losers).
 	Inhibit bool
+	// SkipAnswerText makes the query retrieval-only: the engine ranks, admits,
+	// expands and resolves claims exactly as it would for an answer, but does
+	// not synthesise Answer.AnswerText — neither the LLM-grounded answer (one
+	// paid completion carrying every returned claim) nor the template. Set it
+	// on every path that reads only the claims (mnemos.Recall and its variants,
+	// the /v1/query search endpoint); see #472. Nothing in ranking, the
+	// corrective-retrieval gate or the write-backs reads the answer text, so
+	// the returned claims, order and confidence are identical either way. The
+	// fixed status strings for an empty corpus or an unknown run are still set.
+	SkipAnswerText bool
 }
 
 // Answer searches all stored events for the best answer to the given question.
@@ -864,8 +874,11 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 	provenance := e.computeClaimProvenance(ctx, claims, topEvents)
 	narratives := e.buildClaimNarratives(ctx, claims)
 
-	answerText := e.generateAnswer(ctx, q, claims, contradictions, len(topEvents), provenance, narratives)
-	if opts.Hops > 0 {
+	answerText := ""
+	if !opts.SkipAnswerText {
+		answerText = e.generateAnswer(ctx, q, claims, contradictions, len(topEvents), provenance, narratives)
+	}
+	if opts.Hops > 0 && !opts.SkipAnswerText {
 		expandedCount := 0
 		for _, c := range claims {
 			if hopDistance[c.ID] > 0 {

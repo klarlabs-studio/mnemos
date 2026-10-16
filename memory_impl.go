@@ -557,6 +557,11 @@ func (m *memory) recall(ctx context.Context, q Query) ([]Result, domain.Answer, 
 		IncludeHistory: q.IncludeHistory,
 		Lifecycle:      domain.ClaimLifecycle(q.Lifecycle),
 		Consumer:       consumerMode(q.AgentConsumer),
+		// Recall returns ranked beliefs only; it never reads AnswerText, so it
+		// must not pay for one (#472). Without this, a memory with a language
+		// model made one grounded-answer completion per recall — prompted with
+		// every claim, before Query.Limit trimmed them — and discarded it.
+		SkipAnswerText: true,
 	}.WithCognitiveDefaults()
 
 	var ans domain.Answer

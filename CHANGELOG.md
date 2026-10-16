@@ -10,6 +10,16 @@ notable changes.
 
 ### Fixed
 
+- **Recall no longer pays for an answer it discards (#472).** With a language
+  model configured (enhanced mode, or shared mode with a text generator), every
+  `Recall` made one grounded-answer completion carrying every retrieved claim,
+  before `Query.Limit` trimmed them, and threw the text away; an escalated
+  `RecallWithEffort` paid twice. `/v1/search`, which returns claims only, did
+  the same on every request. Both now ask the query engine for retrieval only
+  (`AnswerOptions.SkipAnswerText`). Returned claims, order and confidence are
+  unchanged. `mnemos query`, `query_knowledge` and `recall_at_time`, which
+  show the answer, still generate it.
+
 - **Recall's lexical (BM25) leg now matches questions.** Both full-text
   backends ANDed every word of the query, so a record ranked only if it held
   all of them, "when" and "did" included. A natural-language question
