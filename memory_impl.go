@@ -591,10 +591,11 @@ func (m *memory) recall(ctx context.Context, q Query) ([]Result, domain.Answer, 
 	if q.Limit > 0 && len(results) > q.Limit {
 		results = results[:q.Limit]
 	}
-	// Suppress unused-context: the underlying engine is sync today; ctx
-	// is reserved for future cancellation propagation through the
-	// query.Engine surface.
-	_ = ctx
+	if q.Excerpts {
+		if err := m.attachExcerpts(ctx, results); err != nil {
+			return nil, domain.Answer{}, err
+		}
+	}
 	return results, ans, nil
 }
 

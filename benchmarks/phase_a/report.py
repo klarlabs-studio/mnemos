@@ -15,6 +15,19 @@ from . import stats, systems
 
 JUDGES = ("judge_mistral", "judge_qwen")
 
+# Paired comparisons (a − b), each reported where both systems ran.
+COMPARISONS = (
+    ("mnemos", "bm25"),
+    ("mnemos", "full-context"),
+    ("mnemos-excerpts", "bm25"),
+    ("mnemos-excerpts", "full-context"),
+    ("mnemos-excerpts", "mnemos"),
+    ("mnemos-excerpts-top10", "bm25"),
+    ("mnemos-excerpts-top10", "mnemos-excerpts"),
+    ("mnemos-excerpts-top20", "bm25"),
+    ("mnemos-excerpts-top20", "mnemos-excerpts"),
+)
+
 
 def _read(path: Path) -> list[dict]:
     return [json.loads(l) for l in path.read_text().splitlines() if l.strip()] if path.exists() else []
@@ -72,10 +85,10 @@ def build(d: Path, models: dict, extractor: str, spent: float) -> dict:
                 "evidence_recall": _mean([len(set(r["evidence_sessions"]) & set(r["context_sessions"])) / len(r["evidence_sessions"]) for r in ev_rows]),
                 "evidence_any_hit": _mean([bool(set(r["evidence_sessions"]) & set(r["context_sessions"])) for r in ev_rows]),
             }
-        for base in ("bm25", "full-context"):
-            if "mnemos" in bench["systems"] and base in bench["systems"]:
-                bench["comparisons"][f"mnemos_vs_{base}"] = stats.paired_bootstrap(
-                    [verdict(("mnemos", q)) for q in complete], [verdict((base, q)) for q in complete])
+        for a, base in COMPARISONS:
+            if a in bench["systems"] and base in bench["systems"]:
+                bench["comparisons"][f"{a}_vs_{base}"] = stats.paired_bootstrap(
+                    [verdict((a, q)) for q in complete], [verdict((base, q)) for q in complete])
         out["benchmarks"][b] = bench
         out["summary"][b] = {
             s: round(m["accuracy"], 3) for s, m in bench["systems"].items()
