@@ -14,6 +14,10 @@ and reports which sessions that context drew on, for retrieval recall:
 - mnemos-excerpts-top10 / -top20: the same recall, but only the first k
   beliefs carry their excerpt; the rest are plain belief lines (#441,
   pre-registered deviation 3).
+- mnemos-excerpts-anchored: the mnemos-excerpts rendering over brains whose
+  sessions were written with their date as Item.At (tools/memeval
+  -session-time), so beliefs carry resolved relative dates ("yesterday
+  (2 July 2023)"; #441, pre-registered deviation 4).
 
 The two retrieval systems get the same context budget, so neither wins by
 handing the answerer more text.

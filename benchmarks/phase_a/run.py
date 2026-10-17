@@ -20,7 +20,9 @@ against brains kept by a memeval -keep run. Recall writes back to a brain
 (reinforcement, reconsolidation), so recall against a copy of the brains, and
 recall a control (-recall-only without -excerpts) from an identical copy to
 confirm both arms recalled the same claim IDs. The -topK variants render that
-same file and need no extra recall.
+same file and need no extra recall. mnemos-excerpts-anchored reads
+mnemos-excerpts-anchored.jsonl: memeval -recall-only -excerpts against brains
+kept by a memeval -keep -session-time ingest.
 
 OPENROUTER_API_KEY must be set. Raw outputs go to --out (default: a directory
 outside the repository), never to the repository.
@@ -52,17 +54,21 @@ MODELS = {
     "judge_qwen": Model("qwen/qwen3-30b-a3b-instruct-2507", "nebius/fp8", max_tokens=5),
 }
 EXTRACTOR = "google/gemini-2.5-flash-lite"  # Mnemos's own client; OpenRouter routes within Google.
-SYSTEMS = ["mnemos", "mnemos-excerpts", "mnemos-excerpts-top10", "mnemos-excerpts-top20", "bm25", "full-context"]
+SYSTEMS = ["mnemos", "mnemos-excerpts", "mnemos-excerpts-top10", "mnemos-excerpts-top20",
+           "mnemos-excerpts-anchored", "bm25", "full-context"]
 
 # Systems built from a tools/memeval output: the file in the run directory and
 # how its recall becomes the answerer's context. A system whose file is absent
 # is skipped. mnemos-excerpts is memeval -recall-only -excerpts (ADR 0031);
 # the -topK variants render that same recall with only the first K excerpted.
+# mnemos-excerpts-anchored is the same rendering over brains ingested with
+# memeval -session-time, whose beliefs carry resolved dates (#441, deviation 4).
 MNEMOS_SYSTEMS = {
     "mnemos": ("mnemos.jsonl", systems.mnemos),
     "mnemos-excerpts": ("mnemos-excerpts.jsonl", systems.mnemos_excerpts),
     "mnemos-excerpts-top10": ("mnemos-excerpts.jsonl", systems.mnemos_excerpts_top(10)),
     "mnemos-excerpts-top20": ("mnemos-excerpts.jsonl", systems.mnemos_excerpts_top(20)),
+    "mnemos-excerpts-anchored": ("mnemos-excerpts-anchored.jsonl", systems.mnemos_excerpts),
 }
 
 

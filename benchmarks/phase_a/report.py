@@ -26,6 +26,8 @@ COMPARISONS = (
     ("mnemos-excerpts-top10", "mnemos-excerpts"),
     ("mnemos-excerpts-top20", "bm25"),
     ("mnemos-excerpts-top20", "mnemos-excerpts"),
+    ("mnemos-excerpts-anchored", "bm25"),
+    ("mnemos-excerpts-anchored", "mnemos-excerpts"),
 )
 
 

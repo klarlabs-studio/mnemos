@@ -7,6 +7,10 @@
 // evidence came from (for retrieval recall). Answering and judging happen in
 // the Python harness (benchmarks/), identically for every system under test.
 //
+// With -session-time, each session's date is passed as Item.At, so Mnemos
+// resolves relative dates ("yesterday", "last week") in the beliefs it
+// extracts against the day the session took place.
+//
 // Every brain is a throwaway SQLite file under -workdir. The tool refuses a
 // workdir inside the default brain directory, because the library's default
 // DSN resolution would otherwise point at a real brain.
@@ -94,15 +98,16 @@ func main() {
 	keep := flag.Bool("keep", false, "keep each brain's database after use")
 	recallOnly := flag.Bool("recall-only", false, "skip ingest; recall against brains kept by an earlier -keep run")
 	excerpts := flag.Bool("excerpts", false, "ask recall for each belief's source excerpt (Query.Excerpts, ADR 0031)")
+	sessionAt := flag.Bool("session-time", false, "pass each session's date as Item.At, so relative dates in beliefs are resolved against it")
 	flag.Parse()
 	if *in == "" || *out == "" || *workdir == "" {
-		fmt.Fprintln(os.Stderr, "usage: memeval -in FILE -out FILE -workdir DIR [-workers N] [-limit N] [-keep] [-recall-only] [-excerpts]")
+		fmt.Fprintln(os.Stderr, "usage: memeval -in FILE -out FILE -workdir DIR [-workers N] [-limit N] [-keep] [-recall-only] [-excerpts] [-session-time]")
 		os.Exit(2)
 	}
 	if *recallOnly {
 		*keep = true
 	}
-	opts := options{limit: *limit, keep: *keep, recallOnly: *recallOnly, excerpts: *excerpts}
+	opts := options{limit: *limit, keep: *keep, recallOnly: *recallOnly, excerpts: *excerpts, sessionTime: *sessionAt}
 	if err := run(*in, *out, *workdir, *workers, opts); err != nil {
 		fmt.Fprintln(os.Stderr, "memeval:", err)
 		os.Exit(1)
@@ -111,10 +116,11 @@ func main() {
 
 // options are the per-haystack evaluation settings.
 type options struct {
-	limit      int
-	keep       bool
-	recallOnly bool
-	excerpts   bool
+	limit       int
+	keep        bool
+	recallOnly  bool
+	excerpts    bool
+	sessionTime bool
 }
 
 func run(in, out, workdir string, workers int, opts options) error {
@@ -246,12 +252,16 @@ func evaluate(h Haystack, workdir string, opts options, cfg mnemos.ProviderConfi
 	}
 	for _, s := range sessions {
 		content := "Session date: " + s.Date + "\n\n" + s.Text
-		err := mem.Remember(ctx, mnemos.Item{
+		item := mnemos.Item{
 			Type:     "conversation",
 			Content:  content,
 			Source:   "memeval",
 			Metadata: map[string]string{"session_id": s.ID, "session_date": s.Date},
-		})
+		}
+		if opts.sessionTime {
+			item.At, _ = sessionTime(s.Date)
+		}
+		err := mem.Remember(ctx, item)
 		if err != nil {
 			o.Error = fmt.Sprintf("remember %s: %v", s.ID, err)
 			return o
@@ -332,6 +342,22 @@ func awaitEmbeddings(ctx context.Context, conn *store.Conn) error {
 		time.Sleep(time.Second)
 	}
 	return nil
+}
+
+// sessionLayouts are the benchmarks' session date formats: LoCoMo
+// ("1:56 pm on 8 May, 2023") and LongMemEval ("2023/05/20 (Sat) 02:21").
+var sessionLayouts = []string{"3:04 pm on 2 January, 2006", "2006/01/02 (Mon) 15:04"}
+
+// sessionTime parses a session date. A date in no known format is not
+// guessed: the session is then written without Item.At.
+func sessionTime(date string) (time.Time, bool) {
+	d := strings.TrimSpace(date)
+	for _, layout := range sessionLayouts {
+		if t, err := time.Parse(layout, d); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 type sessionSet struct{ ids, dates []string }
