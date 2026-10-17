@@ -11,6 +11,7 @@ import (
 	axidomain "go.klarlabs.de/axi/domain"
 	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/ingest"
 	"go.klarlabs.de/mnemos/internal/parser"
 	"go.klarlabs.de/mnemos/internal/pipeline"
@@ -80,6 +81,10 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 		if item.Type != "" {
 			claims[i].Type = domain.ClaimType(item.Type)
 		}
+		// Resolve "yesterday" and the like against when the content was
+		// said, before the known-claim fold, so "yesterday" from two
+		// different sessions stays two different beliefs.
+		claims[i].Text = extract.AnchorRelativeDates(claims[i].Text, item.At)
 	}
 
 	// Beliefs the brain already holds gain this write's evidence instead of a

@@ -2341,7 +2341,11 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 		}
 
 		// Same defaults as MCP and the CLI: a hosted brain is still a brain.
-		opts := query.AnswerOptions{MinTrust: req.MinTrust}.WithCognitiveDefaults()
+		//
+		// SkipAnswerText: the response carries claims, never an answer text, so
+		// the engine must not pay for one — a configured LLM was called once per
+		// search and its answer discarded (#472).
+		opts := query.AnswerOptions{MinTrust: req.MinTrust, SkipAnswerText: true}.WithCognitiveDefaults()
 		if req.AsOf != "" {
 			t, err := parseTimeFlexible(req.AsOf)
 			if err != nil {

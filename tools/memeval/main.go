@@ -7,6 +7,10 @@
 // evidence came from (for retrieval recall). Answering and judging happen in
 // the Python harness (benchmarks/), identically for every system under test.
 //
+// With -session-time, each session's date is passed as Item.At, so Mnemos
+// resolves relative dates ("yesterday", "last week") in the beliefs it
+// extracts against the day the session took place.
+//
 // Every brain is a throwaway SQLite file under -workdir. The tool refuses a
 // workdir inside the default brain directory, because the library's default
 // DSN resolution would otherwise point at a real brain.
@@ -60,6 +64,8 @@ type Recalled struct {
 	Trust      float64  `json:"trust"`
 	SessionIDs []string `json:"session_ids"`
 	Dates      []string `json:"dates"`
+	// Excerpt is the belief's source excerpt (ADR 0031), set with -excerpts.
+	Excerpt string `json:"excerpt,omitempty"`
 }
 
 // Answer is the recall for one question.
@@ -91,21 +97,33 @@ func main() {
 	limit := flag.Int("limit", 50, "beliefs recalled per question")
 	keep := flag.Bool("keep", false, "keep each brain's database after use")
 	recallOnly := flag.Bool("recall-only", false, "skip ingest; recall against brains kept by an earlier -keep run")
+	excerpts := flag.Bool("excerpts", false, "ask recall for each belief's source excerpt (Query.Excerpts, ADR 0031)")
+	sessionAt := flag.Bool("session-time", false, "pass each session's date as Item.At, so relative dates in beliefs are resolved against it")
 	flag.Parse()
 	if *in == "" || *out == "" || *workdir == "" {
-		fmt.Fprintln(os.Stderr, "usage: memeval -in FILE -out FILE -workdir DIR [-workers N] [-limit N]")
+		fmt.Fprintln(os.Stderr, "usage: memeval -in FILE -out FILE -workdir DIR [-workers N] [-limit N] [-keep] [-recall-only] [-excerpts] [-session-time]")
 		os.Exit(2)
 	}
 	if *recallOnly {
 		*keep = true
 	}
-	if err := run(*in, *out, *workdir, *workers, *limit, *keep, *recallOnly); err != nil {
+	opts := options{limit: *limit, keep: *keep, recallOnly: *recallOnly, excerpts: *excerpts, sessionTime: *sessionAt}
+	if err := run(*in, *out, *workdir, *workers, opts); err != nil {
 		fmt.Fprintln(os.Stderr, "memeval:", err)
 		os.Exit(1)
 	}
 }
 
-func run(in, out, workdir string, workers, limit int, keep, recallOnly bool) error {
+// options are the per-haystack evaluation settings.
+type options struct {
+	limit       int
+	keep        bool
+	recallOnly  bool
+	excerpts    bool
+	sessionTime bool
+}
+
+func run(in, out, workdir string, workers int, opts options) error {
 	if err := guardWorkdir(workdir); err != nil {
 		return err
 	}
@@ -138,7 +156,7 @@ func run(in, out, workdir string, workers, limit int, keep, recallOnly bool) err
 		go func() {
 			defer wg.Done()
 			for h := range jobs {
-				o := evaluate(h, workdir, limit, keep, recallOnly, cfg)
+				o := evaluate(h, workdir, opts, cfg)
 				line, _ := json.Marshal(o)
 				mu.Lock()
 				_, _ = f.Write(append(line, '\n'))
@@ -199,11 +217,11 @@ func providerConfig() (mnemos.ProviderConfig, error) {
 	return cfg, nil
 }
 
-func evaluate(h Haystack, workdir string, limit int, keep, recallOnly bool, cfg mnemos.ProviderConfig) Output {
+func evaluate(h Haystack, workdir string, opts options, cfg mnemos.ProviderConfig) Output {
 	o := Output{HaystackID: h.ID}
 	ctx := context.Background()
 	path := filepath.Join(workdir, sanitize(h.ID)+".db")
-	if recallOnly {
+	if opts.recallOnly {
 		if _, err := os.Stat(path); err != nil {
 			o.Error = "recall-only: no kept brain: " + err.Error()
 			return o
@@ -211,7 +229,7 @@ func evaluate(h Haystack, workdir string, limit int, keep, recallOnly bool, cfg 
 	} else {
 		_ = os.Remove(path)
 	}
-	if !keep {
+	if !opts.keep {
 		defer func() {
 			for _, suffix := range []string{"", "-wal", "-shm"} {
 				_ = os.Remove(path + suffix)
@@ -229,17 +247,21 @@ func evaluate(h Haystack, workdir string, limit int, keep, recallOnly bool, cfg 
 	skipsBefore := pipeline.RelateSkips()
 	start := time.Now()
 	sessions := h.Sessions
-	if recallOnly {
+	if opts.recallOnly {
 		sessions = nil
 	}
 	for _, s := range sessions {
 		content := "Session date: " + s.Date + "\n\n" + s.Text
-		err := mem.Remember(ctx, mnemos.Item{
+		item := mnemos.Item{
 			Type:     "conversation",
 			Content:  content,
 			Source:   "memeval",
 			Metadata: map[string]string{"session_id": s.ID, "session_date": s.Date},
-		})
+		}
+		if opts.sessionTime {
+			item.At, _ = sessionTime(s.Date)
+		}
+		err := mem.Remember(ctx, item)
 		if err != nil {
 			o.Error = fmt.Sprintf("remember %s: %v", s.ID, err)
 			return o
@@ -273,7 +295,7 @@ func evaluate(h Haystack, workdir string, limit int, keep, recallOnly bool, cfg 
 
 	for _, q := range h.Questions {
 		t := time.Now()
-		results, err := mem.Recall(ctx, mnemos.Query{Text: q.Text, Limit: limit})
+		results, err := mem.Recall(ctx, mnemos.Query{Text: q.Text, Limit: opts.limit, Excerpts: opts.excerpts})
 		if err != nil {
 			o.Error = fmt.Sprintf("recall %s: %v", q.ID, err)
 			return o
@@ -288,7 +310,7 @@ func evaluate(h Haystack, workdir string, limit int, keep, recallOnly bool, cfg 
 			src := sources[r.ClaimID]
 			a.Recalled = append(a.Recalled, Recalled{
 				ClaimID: r.ClaimID, Text: r.Text, Trust: r.TrustScore,
-				SessionIDs: src.ids, Dates: src.dates,
+				SessionIDs: src.ids, Dates: src.dates, Excerpt: r.Excerpt,
 			})
 		}
 		o.Answers = append(o.Answers, a)
@@ -320,6 +342,22 @@ func awaitEmbeddings(ctx context.Context, conn *store.Conn) error {
 		time.Sleep(time.Second)
 	}
 	return nil
+}
+
+// sessionLayouts are the benchmarks' session date formats: LoCoMo
+// ("1:56 pm on 8 May, 2023") and LongMemEval ("2023/05/20 (Sat) 02:21").
+var sessionLayouts = []string{"3:04 pm on 2 January, 2006", "2006/01/02 (Mon) 15:04"}
+
+// sessionTime parses a session date. A date in no known format is not
+// guessed: the session is then written without Item.At.
+func sessionTime(date string) (time.Time, bool) {
+	d := strings.TrimSpace(date)
+	for _, layout := range sessionLayouts {
+		if t, err := time.Parse(layout, d); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 type sessionSet struct{ ids, dates []string }

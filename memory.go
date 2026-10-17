@@ -218,6 +218,15 @@ type Item struct {
 	// RunID groups related items together for scoped recall. Optional;
 	// when empty, the item is associated with the implicit default run.
 	RunID string
+
+	// At is when the content was said or written: a conversation's session
+	// date, a document's date. When set, relative time expressions in the
+	// beliefs extracted from it ("yesterday", "last Friday", "two days ago",
+	// "last month") are resolved against At, and the resolved date is
+	// written into the belief after the expression ("yesterday
+	// (2 July 2023)"). Optional; zero means the time is unknown, and beliefs
+	// keep their wording as extracted.
+	At time.Time
 }
 
 // Query describes what to recall.
@@ -275,6 +284,13 @@ type Query struct {
 	// did not exist, which made inhibition unreachable from the embedded
 	// library entirely: the path every consuming product takes.
 	AgentConsumer bool
+
+	// Excerpts asks for each result's source excerpt (ADR 0031): the lines of
+	// the evidence the belief was extracted from that best match it, so a
+	// reader sees the original wording — dates, names, numbers — that the
+	// belief may have dropped. False (the default) leaves [Result.Excerpt]
+	// empty and costs nothing.
+	Excerpts bool
 }
 
 // Claim is the stable, read-only projection of a stored claim returned by
@@ -373,6 +389,12 @@ type Result struct {
 	// sourced from this project's events, or a registry URL for claims
 	// imported via federation. Empty when unknown.
 	Provenance string
+
+	// Excerpt is the part of the belief's evidence that best matches it, at
+	// most a few hundred characters: the source line and up to one neighbour
+	// on each side. Set only when [Query.Excerpts] is true; empty when the
+	// evidence shares no word with the belief.
+	Excerpt string
 }
 
 // RecallSufficiencyFloor is the aggregate-confidence threshold at or above

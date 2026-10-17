@@ -8,7 +8,31 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`Item.At` resolves relative dates in remembered beliefs.** A belief keeps
+  the speaker's wording, so "Melanie signed up for a pottery class yesterday"
+  meant nothing once it was recalled weeks later. On LoCoMo, 55 of the 81
+  temporal questions full context answered and Mnemos with excerpts missed had
+  the evidence in context with only a relative date ("last Friday", "two days
+  ago"). When `Item.At` (when the content was said) is set, `Remember` writes
+  the resolved date after each relative expression: "yesterday (2 July 2023)",
+  "last week (the week before 6 July 2023)", "five years ago (around 2018)".
+  Resolution is deterministic (`internal/extract.AnchorRelativeDates`). It
+  needs no model call and leaves vague wording alone. Without `At`, beliefs are
+  stored as before. `tools/memeval -session-time` passes each session's date.
+
 ### Fixed
+
+- **Recall no longer pays for an answer it discards (#472).** With a language
+  model configured (enhanced mode, or shared mode with a text generator), every
+  `Recall` made one grounded-answer completion carrying every retrieved claim,
+  before `Query.Limit` trimmed them, and threw the text away; an escalated
+  `RecallWithEffort` paid twice. `/v1/search`, which returns claims only, did
+  the same on every request. Both now ask the query engine for retrieval only
+  (`AnswerOptions.SkipAnswerText`). Returned claims, order and confidence are
+  unchanged. `mnemos query`, `query_knowledge` and `recall_at_time`, which
+  show the answer, still generate it.
 
 - **Captured sessions no longer store the work narrating itself as
   knowledge.** On a hand-labelled sample of 120 claims captured from coding

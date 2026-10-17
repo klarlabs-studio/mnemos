@@ -14,6 +14,17 @@ Stages, each resumable from its output file:
     python -m benchmarks.phase_a.run judge   --run smoke
     python -m benchmarks.phase_a.run report  --run smoke
 
+The mnemos-excerpts systems (ADR 0031) read mnemos-excerpts.jsonl, which
+ingest does not write. Produce it with tools/memeval -recall-only -excerpts
+against brains kept by a memeval -keep run. Recall writes back to a brain
+(reinforcement, reconsolidation), so recall against a copy of the brains, and
+recall a control (-recall-only without -excerpts) from an identical copy to
+confirm both arms recalled the same claim IDs. The -topK variants render that
+same file and need no extra recall. mnemos-excerpts-anchored reads
+mnemos-excerpts-anchored.jsonl: memeval -recall-only -excerpts against brains
+kept by a memeval -keep -session-time ingest. Its control,
+mnemos-excerpts-reingest, is the same without -session-time.
+
 OPENROUTER_API_KEY must be set. Raw outputs go to --out (default: a directory
 outside the repository), never to the repository.
 """
@@ -44,7 +55,25 @@ MODELS = {
     "judge_qwen": Model("qwen/qwen3-30b-a3b-instruct-2507", "nebius/fp8", max_tokens=5),
 }
 EXTRACTOR = "google/gemini-2.5-flash-lite"  # Mnemos's own client; OpenRouter routes within Google.
-SYSTEMS = ["mnemos", "bm25", "full-context"]
+SYSTEMS = ["mnemos", "mnemos-excerpts", "mnemos-excerpts-top10", "mnemos-excerpts-top20",
+           "mnemos-excerpts-anchored", "mnemos-excerpts-reingest", "bm25", "full-context"]
+
+# Systems built from a tools/memeval output: the file in the run directory and
+# how its recall becomes the answerer's context. A system whose file is absent
+# is skipped. mnemos-excerpts is memeval -recall-only -excerpts (ADR 0031);
+# the -topK variants render that same recall with only the first K excerpted.
+# mnemos-excerpts-anchored is the same rendering over brains ingested with
+# memeval -session-time, whose beliefs carry resolved dates (#441, deviation 4);
+# mnemos-excerpts-reingest is its control, ingested by the same code without
+# -session-time.
+MNEMOS_SYSTEMS = {
+    "mnemos": ("mnemos.jsonl", systems.mnemos),
+    "mnemos-excerpts": ("mnemos-excerpts.jsonl", systems.mnemos_excerpts),
+    "mnemos-excerpts-top10": ("mnemos-excerpts.jsonl", systems.mnemos_excerpts_top(10)),
+    "mnemos-excerpts-top20": ("mnemos-excerpts.jsonl", systems.mnemos_excerpts_top(20)),
+    "mnemos-excerpts-anchored": ("mnemos-excerpts-anchored.jsonl", systems.mnemos_excerpts),
+    "mnemos-excerpts-reingest": ("mnemos-excerpts-reingest.jsonl", systems.mnemos_excerpts),
+}
 
 
 def run_dir(args) -> Path:
@@ -147,7 +176,10 @@ def cmd_answer(args) -> None:
     d = run_dir(args)
     client = Client(str(Path(args.out) / "llm-cache.sqlite"), args.budget)
     haystacks = load_selected(d)
-    mn = systems.load_mnemos(d / "mnemos.jsonl") if (d / "mnemos.jsonl").exists() else {"answers": {}, "failed": []}
+    recalls = {
+        s: systems.load_mnemos(d / f)["answers"] if (d / f).exists() else {}
+        for s, (f, _) in MNEMOS_SYSTEMS.items()
+    }
     out = d / "answers.jsonl"
     done = {(r["system"], r["question_id"]) for r in map(json.loads, out.read_text().splitlines())} if out.exists() else set()
     lock = threading.Lock()
@@ -158,10 +190,10 @@ def cmd_answer(args) -> None:
             for s in args.systems:
                 if (s, q.id) in done:
                     continue
-                if s == "mnemos":
-                    if q.id not in mn["answers"]:
+                if s in MNEMOS_SYSTEMS:
+                    if q.id not in recalls[s]:
                         continue
-                    ctx = systems.mnemos(mn["answers"][q.id])
+                    ctx = MNEMOS_SYSTEMS[s][1](recalls[s][q.id])
                 elif s == "bm25":
                     ctx = systems.bm25(index, q)
                 else:

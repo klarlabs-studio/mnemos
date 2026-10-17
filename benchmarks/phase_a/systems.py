@@ -1,4 +1,4 @@
-"""The three systems under test (#441 Phase A).
+"""The systems under test (#441 Phase A).
 
 Each system turns (haystack, question) into the context the answerer sees,
 and reports which sessions that context drew on, for retrieval recall:
@@ -9,6 +9,17 @@ and reports which sessions that context drew on, for retrieval recall:
   what an agent with files and search does, and H1's baseline.
 - mnemos: the beliefs Mnemos recalls (tools/memeval), each with the dates of
   the sessions its evidence came from.
+- mnemos-excerpts: the same, recalled with Query.Excerpts (ADR 0031), each
+  belief followed by its source excerpt (tools/memeval -excerpts).
+- mnemos-excerpts-top10 / -top20: the same recall, but only the first k
+  beliefs carry their excerpt; the rest are plain belief lines (#441,
+  pre-registered deviation 3).
+- mnemos-excerpts-anchored: the mnemos-excerpts rendering over brains whose
+  sessions were written with their date as Item.At (tools/memeval
+  -session-time), so beliefs carry resolved relative dates ("yesterday
+  (2 July 2023)"; #441, pre-registered deviation 4).
+- mnemos-excerpts-reingest: its control, the same rendering over brains the
+  same code ingested without -session-time.
 
 The two retrieval systems get the same context budget, so neither wins by
 handing the answerer more text.
@@ -147,3 +158,32 @@ def mnemos(recall: dict, budget: int = CONTEXT_BUDGET_TOKENS) -> Context:
         sessions.update(r.get("session_ids") or [])
         used += t
     return Context(text="\n".join(picked), sessions=sorted(sessions), tokens=used)
+
+
+def mnemos_excerpts(recall: dict, budget: int = CONTEXT_BUDGET_TOKENS, top: int | None = None) -> Context:
+    """Mnemos with source excerpts (ADR 0031): each belief's line, then the
+    evidence wording it was extracted from, indented beneath it. Same budget
+    and the same greedy rule as mnemos(): a belief whose entry does not fit is
+    skipped, and later, shorter ones may still go in.
+
+    With top=k, only the first k beliefs in recall order carry their excerpt;
+    the rest are plain belief lines, as in mnemos(). An excerpt costs about
+    80 tokens, so excerpting every belief fits far fewer beliefs in the budget."""
+    picked, sessions, used = [], set(), 0
+    for i, r in enumerate(recall.get("recalled") or []):
+        dates = ", ".join(d for d in r.get("dates") or [] if d) or "date unknown"
+        entry = f"- [{dates}] {r['text']}"
+        if r.get("excerpt") and (top is None or i < top):
+            entry += "\n  Source: " + r["excerpt"].replace("\n", "\n  ")
+        t = tokens(entry)
+        if used + t > budget:
+            continue
+        picked.append(entry)
+        sessions.update(r.get("session_ids") or [])
+        used += t
+    return Context(text="\n".join(picked), sessions=sorted(sessions), tokens=used)
+
+
+def mnemos_excerpts_top(k: int):
+    """The mnemos_excerpts renderer with only the first k beliefs excerpted."""
+    return lambda recall, budget=CONTEXT_BUDGET_TOKENS: mnemos_excerpts(recall, budget, top=k)
