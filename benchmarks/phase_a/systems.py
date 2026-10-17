@@ -18,6 +18,8 @@ and reports which sessions that context drew on, for retrieval recall:
   sessions were written with their date as Item.At (tools/memeval
   -session-time), so beliefs carry resolved relative dates ("yesterday
   (2 July 2023)"; #441, pre-registered deviation 4).
+- mnemos-excerpts-reingest: its control, the same rendering over brains the
+  same code ingested without -session-time.
 
 The two retrieval systems get the same context budget, so neither wins by
 handing the answerer more text.
