@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Incremental capture (ADR-adjacent to the SessionEnd capture in hook.go).
@@ -130,6 +132,30 @@ func extractTranscriptTextFrom(path string, offset int64, maxBytes int) (string,
 	text, consumed := transcriptTextFromLines(string(data), maxBytes)
 	lastSpan.set(string(data[:min(consumed, len(data))]))
 	return text, offset + int64(consumed)
+}
+
+// spanTime is when the conversation in a span was said: the timestamp of its
+// first conversational line, the anchor for relative dates in what it captures.
+// Zero when no such line carries one, which leaves relative dates as written —
+// guessing "now" would misdate a backlog captured days after it was said.
+func spanTime(span string) time.Time {
+	for _, raw := range strings.Split(span, "\n") {
+		if _, ok := parseTranscriptLine(raw); !ok {
+			continue
+		}
+		var line struct {
+			Timestamp string `json:"timestamp"`
+		}
+		if json.Unmarshal([]byte(raw), &line) != nil {
+			return time.Time{}
+		}
+		at, err := time.Parse(time.RFC3339Nano, line.Timestamp)
+		if err != nil {
+			return time.Time{}
+		}
+		return at
+	}
+	return time.Time{}
 }
 
 // lastSpan carries the raw JSONL that the most recent extract actually
@@ -254,7 +280,7 @@ func captureRangeCtx(ctx context.Context, ev hookEvent, maxBytes int) bool {
 	if strings.TrimSpace(text) == "" {
 		return false
 	}
-	if !captureTextCtx(ctx, ev, text) {
+	if !captureTextCtx(ctx, ev, text, spanTime(span)) {
 		return false // leave the offset alone so the next run retries this span
 	}
 	// Feed the action/outcome layer from the same span. Best-effort and after

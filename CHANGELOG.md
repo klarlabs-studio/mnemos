@@ -21,6 +21,12 @@ notable changes.
   Resolution is deterministic (`internal/extract.AnchorRelativeDates`). It
   needs no model call and leaves vague wording alone. Without `At`, beliefs are
   stored as before. `tools/memeval -session-time` passes each session's date.
+- **Claude Code captures resolve relative dates too.** The capture hook now
+  passes each transcript chunk's time (the timestamp of its first
+  conversational line) through `process_text`, so "yesterday" in a captured
+  session is stored as "yesterday (2 July 2023)" like `Remember` does. A chunk
+  without a timestamp is stored as written. The hosted edition's process API
+  does not carry the time yet.
 
 ### Fixed
 
