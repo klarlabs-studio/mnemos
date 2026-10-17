@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -107,7 +108,9 @@ func TestAnswerWithOptions_SkipAnswerTextMakesNoCompletion(t *testing.T) {
 					t.Fatalf("claims = %v, want %v (ranking changed)", got, want)
 				}
 			}
-			if retrieved.Confidence != withAnswer.Confidence {
+			// Confidence decays with wall-clock time, and the two answers are
+			// computed moments apart, so equal means equal to within that drift.
+			if math.Abs(retrieved.Confidence-withAnswer.Confidence) > 1e-6 {
 				t.Fatalf("Confidence = %v, want %v", retrieved.Confidence, withAnswer.Confidence)
 			}
 		})
