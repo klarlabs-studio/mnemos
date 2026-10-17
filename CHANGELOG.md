@@ -8,8 +8,29 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.129.0] — 2026-10-17
+
+Recall quality, measured on the answer-quality evaluation (#441). On LoCoMo
+(1,540 questions, two judges, 4,000-token budget) Mnemos goes from 38.3% to
+54.6%. That is +5.1 pp over BM25 on raw turns ([+2.4, +7.7]) and 7.9 pp
+below full context. Capture also stores less noise, and contradiction
+detection is precise. After upgrading, run `mnemos relate --prune-stale` once
+(see Fixed).
+
 ### Added
 
+- **`Query.Excerpts` returns each belief's source excerpt (ADR 0031, #463).**
+  A belief drops the detail questions ask for, such as dates, names and
+  numbers. With `Excerpts: true`, each result carries `Result.Excerpt`: the
+  evidence line that best matches the belief, plus at most one neighbouring
+  line on each side, capped at 400 characters. It is attached after `Limit`
+  with one evidence lookup and one event lookup. On LoCoMo it lifts Mnemos
+  from 38.3% to 50.1% (+11.8 pp [+9.4, +14.0]). It is off by default: excerpts
+  cut the beliefs that fit a 4,000-token budget from about 99 to about 38.
+- **Answer-quality evaluation harness (#461).** `benchmarks/phase_a` runs
+  Mnemos, BM25 and full context on LoCoMo and LongMemEval. Answers are judged
+  by two LLM judges and compared with a paired bootstrap, against hypotheses
+  pre-registered on #441. `tools/memeval` drives Mnemos through it.
 - **`Item.At` resolves relative dates in remembered beliefs.** A belief keeps
   the speaker's wording, so "Melanie signed up for a pottery class yesterday"
   meant nothing once it was recalled weeks later. On LoCoMo, 55 of the 81
@@ -30,6 +51,21 @@ notable changes.
 
 ### Fixed
 
+- **Recall gathers candidates at the belief level (ADR 0030, #459).** Recall
+  used to consider only beliefs from the top 5 episodes, about 10% of a
+  conversation. It now also pulls the 50 nearest beliefs by vector and the 50
+  best by BM25 across the brain. The share of answerable LoCoMo questions with
+  the answer in the top 5 went from 15.6% to 49.4%. Spreading activation is
+  now opt-in: on its own it cut that figure from 39.4% to 15.6%.
+- **Background embedding is bounded and its failures are counted (#458).** At
+  most 4 background embeds per memory call the provider at once. Unbounded, a
+  LoCoMo ingest left 21% of claims without a vector. Failures now count in
+  `mnemos_embed_failed_total` and are logged at warning level instead of
+  disappearing.
+- **`mnemos reembed` finishes on a large brain (#462).** It ran under the
+  10-minute request timeout and died partway through a 163k-belief brain.
+  Whole-brain passes (`reembed`, `relate-prune-supports`) now get the 4-hour
+  maintenance bound, or `MNEMOS_JOB_TIMEOUT` when set.
 - **Recall no longer pays for an answer it discards (#472).** With a language
   model configured (enhanced mode, or shared mode with a text generator), every
   `Recall` made one grounded-answer completion carrying every retrieved claim,
