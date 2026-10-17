@@ -8,6 +8,20 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`Item.At` resolves relative dates in remembered beliefs.** A belief keeps
+  the speaker's wording, so "Melanie signed up for a pottery class yesterday"
+  meant nothing once it was recalled weeks later. On LoCoMo, 55 of the 81
+  temporal questions full context answered and Mnemos with excerpts missed had
+  the evidence in context with only a relative date ("last Friday", "two days
+  ago"). When `Item.At` (when the content was said) is set, `Remember` writes
+  the resolved date after each relative expression: "yesterday (2 July 2023)",
+  "last week (the week before 6 July 2023)", "five years ago (around 2018)".
+  Resolution is deterministic (`internal/extract.AnchorRelativeDates`). It
+  needs no model call and leaves vague wording alone. Without `At`, beliefs are
+  stored as before. `tools/memeval -session-time` passes each session's date.
+
 ### Fixed
 
 - **Recall no longer pays for an answer it discards (#472).** With a language

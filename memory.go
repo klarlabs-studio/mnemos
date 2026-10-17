@@ -218,6 +218,15 @@ type Item struct {
 	// RunID groups related items together for scoped recall. Optional;
 	// when empty, the item is associated with the implicit default run.
 	RunID string
+
+	// At is when the content was said or written: a conversation's session
+	// date, a document's date. When set, relative time expressions in the
+	// beliefs extracted from it ("yesterday", "last Friday", "two days ago",
+	// "last month") are resolved against At, and the resolved date is
+	// written into the belief after the expression ("yesterday
+	// (2 July 2023)"). Optional; zero means the time is unknown, and beliefs
+	// keep their wording as extracted.
+	At time.Time
 }
 
 // Query describes what to recall.
