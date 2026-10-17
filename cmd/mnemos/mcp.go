@@ -1435,13 +1435,21 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 			}
 		}
 
-		ext, err := pipeline.NewExtractor(input.UseLLM)
+		ext, err := newProcessTextExtractor(input.UseLLM)
 		if err != nil {
 			return err
 		}
 		claims, links, mcpEntities, err := ext.ExtractFn(ctx, events)
 		if err != nil {
 			return err
+		}
+		// A session is mostly the work narrating itself; drop what the
+		// narration judge reads as such before it is ever stored. Only for
+		// session captures, and only when an LLM is in use at all.
+		if input.SessionID != "" && input.UseLLM && narrationFilterEnabled() {
+			if judge, jerr := newCaptureNarrationJudge(); jerr == nil {
+				claims, links, mcpEntities = filterSessionNarration(ctx, judge, claims, links, mcpEntities)
+			}
 		}
 		_ = progress.Report(2, &total)
 		// Fold beliefs the brain already holds onto their claims before

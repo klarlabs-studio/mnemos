@@ -85,6 +85,10 @@ type Config struct {
 		// request completable. Raise it for fast/large-context providers.
 		// Default 24000 characters.
 		ExtractBatchChars scalar `yaml:"extract_batch_chars"`
+		// NarrationModel picks the model that judges whether a captured claim
+		// is knowledge or session narration. On Ollama it defaults to llama3.1,
+		// the model the judge was measured on; hosted providers keep llm.model.
+		NarrationModel scalar `yaml:"narration_model"`
 	} `yaml:"llm"`
 
 	Embed struct {
@@ -251,6 +255,11 @@ type Config struct {
 		// Timeout bounds one session's capture pipeline, as a Go duration.
 		// Default 4m.
 		Timeout scalar `yaml:"timeout"`
+		// NarrationFilter runs the narration judge over the claims capture
+		// extracts from a session and drops session narration before it is
+		// stored. On by default; off disables it. It fails open: any judge
+		// error keeps the claim.
+		NarrationFilter scalar `yaml:"narration_filter"`
 	} `yaml:"capture"`
 
 	// Floatback tunes the local upward flow that promotes important repo/workspace
@@ -331,6 +340,7 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_LLM_CACHE_MAX_BYTES", c.LLM.CacheMaxBytes},
 		{"MNEMOS_EXTRACT_MODEL", c.LLM.ExtractModel},
 		{"MNEMOS_EXTRACT_BATCH_CHARS", c.LLM.ExtractBatchChars},
+		{"MNEMOS_NARRATION_MODEL", c.LLM.NarrationModel},
 
 		{"MNEMOS_EMBED_PROVIDER", c.Embed.Provider},
 		{"MNEMOS_EMBED_API_KEY", c.Embed.APIKey},
@@ -382,6 +392,7 @@ func (c *Config) EnvOverrides() map[string]string {
 
 		{"MNEMOS_CAPTURE_STRATEGY", c.Capture.Strategy},
 		{"MNEMOS_CAPTURE_TIMEOUT", c.Capture.Timeout},
+		{"MNEMOS_NARRATION_FILTER", c.Capture.NarrationFilter},
 
 		{"MNEMOS_FLOATBACK_ON_CAPTURE", c.Floatback.OnCapture},
 

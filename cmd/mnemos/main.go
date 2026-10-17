@@ -1544,6 +1544,7 @@ func printUsage() {
 	fmt.Println("    [--batch N]                        (every row predating the #331 fix); never overwrites a value already set")
 	fmt.Println("  dedup [--threshold T] [--force]      Merge near-duplicate claims by embedding similarity (dry-run by default)")
 	fmt.Println("  prune --narration [--dry-run]        Deprecate stored conversational pollution the extraction filter now catches")
+	fmt.Println("  prune --narration --judge [--limit N] [--dry-run]  Deprecate captured claims an LLM judge reads as session narration (resumable)")
 	fmt.Println("  prune --session-noise [--dry-run]    Drop contradiction edges where an LLM judges both claims session-local (edges only)")
 	fmt.Println("  prune --session-local [--dry-run]    Deprecate beliefs already judged session-local (claims, not just edges)")
 	fmt.Println("  classify-durability [--limit N]      Record whether a belief outlives its session; targets the highest-trust unclassified ones")
@@ -1928,6 +1929,7 @@ func runJob(kind string, scope map[string]string, verbose bool, fn func(context.
 // exceeded" from the embedder (#440).
 var maintenanceKinds = map[string]bool{
 	"relate-prune-supports": true,
+	"prune-narration-judge": true,
 	"reembed":               true,
 }
 
