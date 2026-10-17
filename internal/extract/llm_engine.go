@@ -643,6 +643,11 @@ func sanitizeLLMJSON(content string) string {
 	return content
 }
 
+// SanitizeLLMJSON is sanitizeLLMJSON for other packages that parse a model's
+// JSON answer, so every caller tolerates the same reasoning blocks, fences and
+// surrounding prose.
+func SanitizeLLMJSON(content string) string { return sanitizeLLMJSON(content) }
+
 // extractFirstJSONValue scans s for the first balanced JSON array or
 // object and returns it. Tracks string boundaries so braces inside
 // strings don't confuse the depth counter.
