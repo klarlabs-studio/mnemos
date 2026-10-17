@@ -685,7 +685,10 @@ func captureDrain(ev hookEvent, maxBytes int) {
 // It takes the caller's context so a multi-chunk drain can hold ONE budget
 // across every chunk instead of granting each chunk a fresh one (which would
 // let a drain run N × the budget and blow past the Claude Code hook timeout).
-func captureTextCtx(ctx context.Context, ev hookEvent, text string) bool {
+//
+// at is when the text was said (see spanTime); zero leaves relative dates as
+// written. The hosted edition's process API has no field for it yet.
+func captureTextCtx(ctx context.Context, ev hookEvent, text string, at time.Time) bool {
 	if hostedConfigured() {
 		// Repo-first routing, hosted edition: a session inside a workspace/repo
 		// captures to that tenant (keeping its knowledge scoped), otherwise the
@@ -724,6 +727,7 @@ func captureTextCtx(ctx context.Context, ev hookEvent, text string) bool {
 			// in one project never contradicts one captured in another. Empty
 			// outside a registered workspace, which suppresses nothing.
 			Workspace: captureWorkspace(ev.Cwd),
+			At:        at,
 		})
 		ok = err == nil
 	}

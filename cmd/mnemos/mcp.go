@@ -19,6 +19,7 @@ import (
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ingest"
 	"go.klarlabs.de/mnemos/internal/llm"
@@ -92,6 +93,11 @@ type mcpProcessTextInput struct {
 	// numbers from a genuine disagreement. Optional; empty means the ingestion
 	// is not workspace-scoped and nothing is suppressed.
 	Workspace string `json:"workspace,omitempty" jsonschema:"description=Workspace/project name; suppresses contradictions between claims from different projects"`
+	// At is when the text was said. Relative dates in the extracted claims
+	// ("yesterday", "last week") are resolved against it, so the same phrase
+	// from two sessions stays two beliefs. Zero leaves them as written. Set by
+	// the capture hook from the transcript; not part of the MCP tool schema.
+	At time.Time `json:"-"`
 }
 
 type mcpProcessTextOutput struct {
@@ -1442,6 +1448,11 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 		claims, links, mcpEntities, err := ext.ExtractFn(ctx, events)
 		if err != nil {
 			return err
+		}
+		// Before the known-claim fold, as Remember does, so "yesterday" from
+		// two different sessions never folds into one belief.
+		for i := range claims {
+			claims[i].Text = extract.AnchorRelativeDates(claims[i].Text, input.At)
 		}
 		// A session is mostly the work narrating itself; drop what the
 		// narration judge reads as such before it is ever stored. Only for
