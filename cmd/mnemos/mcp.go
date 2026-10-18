@@ -335,7 +335,7 @@ func handleMCP(args []string) {
 		mcp.WithDescription("Query and update evidence-backed local knowledge with Mnemos."),
 		mcp.WithWebsiteURL("https://github.com/klarlabs-studio/mnemos"),
 		mcp.WithBuildInfo(commit, buildDate),
-		mcp.WithInstructions("Use query_knowledge to read the knowledge base, process_text to ingest raw text, and watch_file to keep a specific file's claims fresh as it changes. Prefer process_text before querying when no knowledge exists yet."),
+		mcp.WithInstructions("Use query_knowledge to read the knowledge base, process_text to ingest raw text, and watch_file to keep a specific file's claims fresh as it changes. Prefer process_text before querying when no knowledge exists yet. When recalled beliefs lack a detail a question needs (a name, a date, the exact wording), search_passages returns the stored lines verbatim."),
 	)
 
 	// watch_file uses a long-lived DB connection separate from the
