@@ -27,6 +27,13 @@ notable changes.
   episodes; a run-scoped token must name one of its runs, since passages are
   raw episode text. gRPC stays a recorded gap.
 
+### Fixed
+
+- **The brain-health alerting log names only failing signals.** It also
+  listed signals graded unknown for lack of data, such as `calibration` and
+  `skill_coverage` on a brain that records no predictions or actions, so the
+  line pointed on-call at signals that were not the cause.
+
 ## [0.129.0] — 2026-10-17
 
 Recall quality, measured on the answer-quality evaluation (#441). On LoCoMo

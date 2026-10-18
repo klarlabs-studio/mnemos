@@ -198,6 +198,7 @@ func sampleProductMetrics(ctx context.Context, conn *store.Conn, mem mnemos.Memo
 
 // logHealthDegradation emits the ADR-0021 alerting log when the brain is not healthy:
 // warn when degraded, error when unhealthy, carrying only the failing vitals/pathologies.
+// Unknown is not failing — the signal has no data yet — so it is left out.
 // A no-op when healthy or when no logger is wired.
 func logHealthDegradation(logger *bolt.Logger, h mnemos.BrainHealth) {
 	if logger == nil || h.Status == mnemos.HealthOK {
@@ -209,16 +210,21 @@ func logHealthDegradation(logger *bolt.Logger, h mnemos.BrainHealth) {
 	}
 	ev = ev.Str("status", string(h.Status))
 	for _, v := range h.Vitals {
-		if v.Status != mnemos.HealthOK {
+		if healthFailing(v.Status) {
 			ev = ev.Float64(v.Name, v.Value)
 		}
 	}
 	for _, p := range h.Pathologies {
-		if p.Status != mnemos.HealthOK {
+		if healthFailing(p.Status) {
 			ev = ev.Int(p.Kind, p.Count)
 		}
 	}
 	ev.Msg("mnemos: brain health degraded")
+}
+
+// healthFailing reports whether a signal is degraded or unhealthy.
+func healthFailing(s mnemos.HealthStatus) bool {
+	return s == mnemos.HealthDegraded || s == mnemos.HealthUnhealthy
 }
 
 func healthStatusCode(s mnemos.HealthStatus) float64 {
