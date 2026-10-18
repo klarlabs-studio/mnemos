@@ -42,6 +42,8 @@ func mcpTools() []kernel.Action {
 			Description: "Store a temporal event (deployment, incident, decision, ...) with a wall-clock timestamp."},
 		{Name: "timeline_query", Effect: domain.EffectReadLocal, Idempotent: true,
 			Description: "Return events filtered by time range, type, and run, sorted chronologically."},
+		{Name: "search_passages", Effect: domain.EffectReadLocal, Idempotent: true,
+			Description: "Return the stored conversation lines that best match a query, verbatim with their episode and time. Use it when recalled beliefs lack the detail a question asks for."},
 		{Name: "recall_at_time", Effect: domain.EffectReadLocal, Idempotent: true,
 			Description: "Answer a question as of a historical instant (time-travel retrieval)."},
 	}
@@ -146,6 +148,9 @@ func mcpExecutorMap(actor string, getWatcher func() (*Watcher, error)) map[strin
 		"exec.timeline_query": toolExecutor[mcpTimelineQueryInput, mcpTimelineQueryOutput]{run: func(ctx context.Context, in mcpTimelineQueryInput) (mcpTimelineQueryOutput, error) {
 			return mcpRunTimelineQuery(ctx, in)
 		}, summary: timelineQuerySummary},
+		"exec.search_passages": toolExecutor[mcpSearchPassagesInput, mcpSearchPassagesOutput]{run: func(ctx context.Context, in mcpSearchPassagesInput) (mcpSearchPassagesOutput, error) {
+			return mcpRunSearchPassages(ctx, in)
+		}, summary: searchPassagesSummary},
 		"exec.recall_at_time": toolExecutor[mcpRecallAtTimeInput, mcpQueryOutput]{run: func(ctx context.Context, in mcpRecallAtTimeInput) (mcpQueryOutput, error) {
 			return mcpRunRecallAtTime(ctx, in)
 		}, summary: querySummary},
@@ -262,6 +267,10 @@ func rememberEventSummary(out mcpRememberEventOutput) string {
 
 func timelineQuerySummary(out mcpTimelineQueryOutput) string {
 	return fmt.Sprintf("%d event(s)", len(out.Events))
+}
+
+func searchPassagesSummary(out mcpSearchPassagesOutput) string {
+	return fmt.Sprintf("%d passage(s)", len(out.Passages))
 }
 
 func listClaimsSummary(out mcpListClaimsOutput) string {

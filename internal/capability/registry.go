@@ -310,10 +310,10 @@ var Registry = []Capability{
 		ID: "recall.passages", Effect: Read,
 		Summary: "Return the stored episode passages that best match a query (BM25)",
 		On: map[Transport]Binding{
-			Go: Has("Passages"), REST: Gap("no passages endpoint"), GRPC: Gap("no passages RPC"),
-			MCP: Gap("no passages tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no passages endpoint to call"),
+			Go: Has("Passages"), REST: Has("GET /v1/passages"), GRPC: Gap("no passages RPC"),
+			MCP: Has("search_passages"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Passages"),
 		},
-		Notes: "Library first: measured on the answer-quality evaluation (#441) before it is exposed remotely.",
+		Notes: "Measured on the answer-quality evaluation (#441, deviation 6) before it was exposed remotely. A run-scoped token must name one of its runs.",
 	},
 	{
 		ID: "recall.context_block", Effect: Read,

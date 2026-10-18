@@ -137,6 +137,7 @@ block, err := c.Context(ctx, "chat-session-1", client.ContextOptions{})
 | `c.SetExpectation` / `RecordObservation` / `Expectation` | `/v1/beliefs/{id}/expectation`, `/v1/beliefs/{id}/observation` |
 | `c.RecordAction` / `RecordActionOutcome` / `Synthesize` | `/v1/actions`, `/v1/actions/{id}/outcome`, `/v1/synthesize` |
 | `c.Timeline` / `c.Signals` | `/v1/timeline`, `/v1/signals` |
+| `c.Passages` | `GET /v1/passages` |
 
 The Go method names still say `Events` / `Claims` / `Relationships`; the paths
 they hit were renamed to the brain vocabulary in v0.85.0. Pass a token with

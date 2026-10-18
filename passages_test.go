@@ -108,3 +108,41 @@ func TestPassages_UsesTheEpisodeIndexOnSQLite(t *testing.T) {
 		t.Errorf("first passage = %q from %q, want the Paris/Rome lines", got[0].Text, got[0].EpisodeID)
 	}
 }
+
+// A run filter is what lets a transport answer a token limited to some runs:
+// the best passage overall must not come back when it belongs to another run.
+func TestPassages_RunIDRestrictsToThatRun(t *testing.T) {
+	for _, k := range []string{"MNEMOS_STORAGE", "MNEMOS_MODE", "MNEMOS_LLM_PROVIDER", "MNEMOS_API_KEY"} {
+		t.Setenv(k, "")
+	}
+	for name, storage := range map[string]string{
+		"memory": "memory://",
+		"sqlite": "sqlite://" + filepath.Join(t.TempDir(), "runs.db"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			mem, err := New(WithStorage(storage), WithPassiveMode())
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			t.Cleanup(func() { _ = mem.Close() })
+			ctx := context.Background()
+			for _, ev := range []Event{
+				{ID: "ev-a", RunID: "run-a", At: time.Now().UTC(), Type: "conversation", Content: otherConversation},
+				{ID: "ev-b", RunID: "run-b", At: time.Now().UTC(), Type: "conversation", Content: "Jon: Paris was too expensive this year.\nGina: Then go to Rome."},
+			} {
+				if err := mem.RememberEvent(ctx, ev); err != nil {
+					t.Fatalf("RememberEvent: %v", err)
+				}
+			}
+			got, err := mem.Passages(ctx, PassageQuery{Text: "Paris or Rome?", RunID: "run-b"})
+			if err != nil || len(got) == 0 {
+				t.Fatalf("Passages = %d, %v", len(got), err)
+			}
+			for _, p := range got {
+				if p.EpisodeID != "ev-b" {
+					t.Errorf("passage %q from %q, want only run-b's episode", p.Text, p.EpisodeID)
+				}
+			}
+		})
+	}
+}

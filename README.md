@@ -138,6 +138,8 @@ a bucket — at parity with the HTTP and gRPC transports:
 - **Working memory + skill/temporal loops** — `get_blocks`, `set_block`,
   `signals`, `record_action`, `record_outcome`, `synthesize_schemas`,
   `synthesize_reflexes`, `timeline_query`
+- **Passages** — `search_passages` returns the stored conversation lines that
+  best match a query, for detail a belief dropped
 
 (The brain-native tool names landed in v0.85.0: `list_claims` → `list_beliefs`,
 `get_claim` → `get_belief`, `analogous_claims` → `analogous_beliefs`,
@@ -354,6 +356,7 @@ by default (see "Authentication" below).
 | `/v1/actions` | POST | JWT `claims:write` | Record an action; `/v1/actions/{id}/outcome` records its result |
 | `/v1/synthesize` | POST | JWT `claims:write` | Derive schemas + reflexes |
 | `/v1/timeline`, `/v1/signals` | GET | JWT | Temporal timeline and detected patterns |
+| `/v1/passages` | GET | JWT | Stored episode lines that best match `?query` (BM25); a run-scoped token must pass `run_id` |
 | `/v1/who-knows`, `/v1/knowledge-gaps`, `/v1/calibration`, `/v1/hypercorrections`, `/v1/recombinations` | GET | JWT | Connected-brain reads |
 | `/v1/incidents`, `/v1/incidents/{id}[/resolve\|/why-wrong]` | GET POST | JWT | Incident records and post-mortem analysis |
 | `/v1/federation/export` | GET | JWT | Anonymized reflex export. Returns `501` unless `MNEMOS_FEDERATION_ENABLED=true` |

@@ -120,7 +120,7 @@ func TestCapabilityRegistry_MCPToolNamesMeanOneThing(t *testing.T) {
 // change to this file rather than drift.
 func TestCapabilityRegistry_GapsAreCounted(t *testing.T) {
 	gaps := capability.Gaps(capability.Registry)
-	const want = 88
+	const want = 85
 	if len(gaps) != want {
 		t.Errorf("acknowledged gaps: %d, pinned at %d — update the pin with the change that opened or closed one:\n  %s",
 			len(gaps), want, strings.Join(gaps, "\n  "))

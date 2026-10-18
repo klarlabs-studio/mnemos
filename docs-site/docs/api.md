@@ -50,6 +50,7 @@ by default, reads included.
 | `POST` | `/v1/actions`, `/v1/actions/{id}/outcome` | JWT | Skill loop |
 | `POST` | `/v1/synthesize` | JWT | Derive schemas + reflexes |
 | `GET` | `/v1/timeline`, `/v1/signals` | JWT | Temporal timeline / detected patterns |
+| `GET` | `/v1/passages` | JWT | Stored episode lines matching a query |
 | `GET` | `/v1/who-knows`, `/v1/knowledge-gaps`, `/v1/calibration`, `/v1/hypercorrections`, `/v1/recombinations` | JWT | Connected-brain reads |
 | `GET` `POST` | `/v1/incidents`, `/v1/incidents/{id}[/resolve\|/why-wrong]` | JWT | Incidents + post-mortem |
 | `GET` | `/v1/federation/export` | JWT | Anonymized reflex export; `501` unless `MNEMOS_FEDERATION_ENABLED=true` |

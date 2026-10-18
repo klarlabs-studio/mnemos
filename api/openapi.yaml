@@ -950,6 +950,32 @@ paths:
                   events:
                     type: array
                     items: { $ref: "#/components/schemas/TimelineEvent" }
+  /v1/passages:
+    get:
+      summary: Stored passages matching a query
+      description: |
+        The stored episode lines (a turn and its reply) that best match a
+        query, ranked by BM25, verbatim with their episode and time. Use it
+        when recalled beliefs lack the detail a question asks for. A
+        run-scoped token must name one of its runs in run_id.
+      tags: [cognitive]
+      parameters:
+        - { name: query, in: query, required: true, schema: { type: string } }
+        - { name: run_id, in: query, schema: { type: string }, description: "Restrict to one run's episodes." }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1 }, description: "Max passages (default 10)." }
+      responses:
+        "200":
+          description: Passages, best first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passages:
+                    type: array
+                    items: { $ref: "#/components/schemas/Passage" }
+        "400": { description: query is missing }
+        "403": { description: The token is run-scoped and run_id is missing or not allowed }
   /v1/signals:
     get:
       summary: Temporal signals
@@ -1331,6 +1357,17 @@ components:
           type: object
           additionalProperties: { type: string }
       required: [id, type, content]
+    Passage:
+      type: object
+      properties:
+        episode_id: { type: string }
+        text: { type: string }
+        at: { type: string, format: date-time }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        score: { type: number, format: double, description: "BM25 score; higher is better." }
+      required: [episode_id, text, score]
     Signal:
       type: object
       properties:

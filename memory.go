@@ -299,6 +299,8 @@ type PassageQuery struct {
 	Text string
 	// Limit caps how many passages return; zero means 10.
 	Limit int
+	// RunID, when set, restricts the passages to that run's episodes.
+	RunID string
 }
 
 // Passage is a run of consecutive lines from one stored episode (a turn and

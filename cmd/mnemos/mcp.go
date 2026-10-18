@@ -751,6 +751,16 @@ func handleMCP(args []string) {
 			return mcpRunTimelineQuery(ctx, input)
 		})
 
+	srv.Tool("search_passages").
+		Description("Return the stored conversation lines that best match a query, verbatim with their episode and time. Use it when recalled beliefs lack the detail a question asks for.").
+		OutputSchema(mcpSearchPassagesOutput{}).
+		Handler(func(ctx context.Context, input mcpSearchPassagesInput) (mcpSearchPassagesOutput, error) {
+			if kernel != nil {
+				return dispatchAxiTool[mcpSearchPassagesOutput](ctx, kernel, nil, "search_passages", input)
+			}
+			return mcpRunSearchPassages(ctx, input)
+		})
+
 	srv.Tool("recall_at_time").
 		Description("Answer a question against the state of the knowledge base at a historical instant.").
 		OutputSchema(mcpQueryOutput{}).

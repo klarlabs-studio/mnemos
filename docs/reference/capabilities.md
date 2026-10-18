@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-75 capabilities, 88 acknowledged gaps.
+75 capabilities, 85 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -53,7 +53,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`recall.search`](#recallsearch) | read | — | ✓ | GAP | ✓ | — | — | ✓ |
 | [`recall.at_time`](#recallat_time) | read | — | — | — | ✓ | — | — | — |
 | [`recall.advanced`](#recalladvanced) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`recall.passages`](#recallpassages) | read | ✓ | GAP | GAP | GAP | — | — | GAP |
+| [`recall.passages`](#recallpassages) | read | ✓ | ✓ | GAP | ✓ | — | — | ✓ |
 | [`recall.context_block`](#recallcontext_block) | read | GAP | ✓ | GAP | ✓ | — | — | ✓ |
 | [`brain.who_knows`](#brainwho_knows) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.knowledge_gaps`](#brainknowledge_gaps) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -592,14 +592,14 @@ Return the stored episode passages that best match a query (BM25) (read).
 | Transport | Binding |
 |---|---|
 | go | `Passages` |
-| rest | **GAP** — no passages endpoint |
+| rest | `GET /v1/passages` |
 | grpc | **GAP** — no passages RPC |
-| mcp | **GAP** — no passages tool |
+| mcp | `search_passages` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no passages endpoint to call |
+| client | `Passages` |
 
-> Library first: measured on the answer-quality evaluation (#441) before it is exposed remotely.
+> Measured on the answer-quality evaluation (#441, deviation 6) before it was exposed remotely. A run-scoped token must name one of its runs.
 
 ### recall.context_block
 
