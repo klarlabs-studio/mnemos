@@ -8,6 +8,14 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.130.0] — 2026-10-18
+
+Passages: when a belief drops the detail a question asks for, Mnemos returns
+the stored conversation lines verbatim. On LoCoMo (#441) this takes Mnemos from
+54.6% to 57.3% (+2.7 pp [+0.8, +4.6]) and puts it +7.8 pp [+5.3, +10.3] over
+BM25, the first Phase A result whose whole interval clears the +5 pp target. Served
+from the library, REST, MCP and the Go client.
+
 ### Added
 
 - **`Memory.Passages` returns the stored wording that best matches a query.**
