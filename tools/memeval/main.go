@@ -68,10 +68,21 @@ type Recalled struct {
 	Excerpt string `json:"excerpt,omitempty"`
 }
 
+// Passage is one stored passage Mnemos returned for a question, set with
+// -passages (Memory.Passages).
+type Passage struct {
+	EpisodeID string  `json:"episode_id"`
+	Text      string  `json:"text"`
+	SessionID string  `json:"session_id,omitempty"`
+	Date      string  `json:"date,omitempty"`
+	Score     float64 `json:"score"`
+}
+
 // Answer is the recall for one question.
 type Answer struct {
 	QuestionID string     `json:"question_id"`
 	Recalled   []Recalled `json:"recalled"`
+	Passages   []Passage  `json:"passages,omitempty"`
 	RecallMS   int64      `json:"recall_ms"`
 }
 
@@ -99,15 +110,16 @@ func main() {
 	recallOnly := flag.Bool("recall-only", false, "skip ingest; recall against brains kept by an earlier -keep run")
 	excerpts := flag.Bool("excerpts", false, "ask recall for each belief's source excerpt (Query.Excerpts, ADR 0031)")
 	sessionAt := flag.Bool("session-time", false, "pass each session's date as Item.At, so relative dates in beliefs are resolved against it")
+	passages := flag.Int("passages", 0, "also return this many stored passages per question (Memory.Passages); 0 is off")
 	flag.Parse()
 	if *in == "" || *out == "" || *workdir == "" {
-		fmt.Fprintln(os.Stderr, "usage: memeval -in FILE -out FILE -workdir DIR [-workers N] [-limit N] [-keep] [-recall-only] [-excerpts] [-session-time]")
+		fmt.Fprintln(os.Stderr, "usage: memeval -in FILE -out FILE -workdir DIR [-workers N] [-limit N] [-keep] [-recall-only] [-excerpts] [-session-time] [-passages N]")
 		os.Exit(2)
 	}
 	if *recallOnly {
 		*keep = true
 	}
-	opts := options{limit: *limit, keep: *keep, recallOnly: *recallOnly, excerpts: *excerpts, sessionTime: *sessionAt}
+	opts := options{limit: *limit, keep: *keep, recallOnly: *recallOnly, excerpts: *excerpts, sessionTime: *sessionAt, passages: *passages}
 	if err := run(*in, *out, *workdir, *workers, opts); err != nil {
 		fmt.Fprintln(os.Stderr, "memeval:", err)
 		os.Exit(1)
@@ -121,6 +133,7 @@ type options struct {
 	recallOnly  bool
 	excerpts    bool
 	sessionTime bool
+	passages    int
 }
 
 func run(in, out, workdir string, workers int, opts options) error {
@@ -313,6 +326,20 @@ func evaluate(h Haystack, workdir string, opts options, cfg mnemos.ProviderConfi
 				SessionIDs: src.ids, Dates: src.dates, Excerpt: r.Excerpt,
 			})
 		}
+		if opts.passages > 0 {
+			ps, err := mem.Passages(ctx, mnemos.PassageQuery{Text: q.Text, Limit: opts.passages})
+			if err != nil {
+				o.Error = fmt.Sprintf("passages %s: %v", q.ID, err)
+				return o
+			}
+			for _, p := range ps {
+				a.Passages = append(a.Passages, Passage{
+					EpisodeID: p.EpisodeID, Text: p.Text, Score: p.Score,
+					SessionID: p.Metadata["input_session_id"], Date: p.Metadata["input_session_date"],
+				})
+			}
+		}
+		a.RecallMS = time.Since(t).Milliseconds()
 		o.Answers = append(o.Answers, a)
 	}
 	return o

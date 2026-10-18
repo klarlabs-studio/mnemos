@@ -24,6 +24,10 @@ same file and need no extra recall. mnemos-excerpts-anchored reads
 mnemos-excerpts-anchored.jsonl: memeval -recall-only -excerpts against brains
 kept by a memeval -keep -session-time ingest. Its control,
 mnemos-excerpts-reingest, is the same without -session-time.
+mnemos-excerpts-anchored-passages reads mnemos-excerpts-anchored-passages.jsonl:
+memeval -recall-only -excerpts -passages 30 against a fresh copy of the same
+kept -session-time brains. Confirm its recalled claim IDs match
+mnemos-excerpts-anchored.jsonl, so the passages are the only difference.
 
 OPENROUTER_API_KEY must be set. Raw outputs go to --out (default: a directory
 outside the repository), never to the repository.
@@ -56,7 +60,8 @@ MODELS = {
 }
 EXTRACTOR = "google/gemini-2.5-flash-lite"  # Mnemos's own client; OpenRouter routes within Google.
 SYSTEMS = ["mnemos", "mnemos-excerpts", "mnemos-excerpts-top10", "mnemos-excerpts-top20",
-           "mnemos-excerpts-anchored", "mnemos-excerpts-reingest", "bm25", "full-context"]
+           "mnemos-excerpts-anchored", "mnemos-excerpts-reingest", "mnemos-excerpts-anchored-passages",
+           "bm25", "full-context"]
 
 # Systems built from a tools/memeval output: the file in the run directory and
 # how its recall becomes the answerer's context. A system whose file is absent
@@ -73,6 +78,7 @@ MNEMOS_SYSTEMS = {
     "mnemos-excerpts-top20": ("mnemos-excerpts.jsonl", systems.mnemos_excerpts_top(20)),
     "mnemos-excerpts-anchored": ("mnemos-excerpts-anchored.jsonl", systems.mnemos_excerpts),
     "mnemos-excerpts-reingest": ("mnemos-excerpts-reingest.jsonl", systems.mnemos_excerpts),
+    "mnemos-excerpts-anchored-passages": ("mnemos-excerpts-anchored-passages.jsonl", systems.mnemos_excerpts_passages),
 }
 
 

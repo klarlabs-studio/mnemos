@@ -30,6 +30,9 @@ COMPARISONS = (
     ("mnemos-excerpts-anchored", "mnemos-excerpts"),
     ("mnemos-excerpts-anchored", "mnemos-excerpts-reingest"),
     ("mnemos-excerpts-reingest", "mnemos-excerpts"),
+    ("mnemos-excerpts-anchored-passages", "mnemos-excerpts-anchored"),
+    ("mnemos-excerpts-anchored-passages", "bm25"),
+    ("mnemos-excerpts-anchored-passages", "full-context"),
 )
 
 

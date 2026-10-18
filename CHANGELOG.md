@@ -8,6 +8,21 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`Memory.Passages` returns the stored wording that best matches a query.**
+  A belief can drop the detail a question asks for, or rank past a reader's
+  budget. `Passages` cuts the episodes the text index picks into passages of
+  two lines (a turn and its reply) and ranks them by BM25. Each passage
+  carries its episode id, time and metadata. On LoCoMo (#441), rendering
+  passages in the last quarter of a 4,000-token budget, after the excerpts,
+  raises the share of single-hop evidence turns in context from 81.8% to
+  93.0% (multi-hop 56.9% to 63.4%, temporal 78.9% to 87.7%), with the same
+  beliefs. Answer accuracy (pre-registered deviation 6): 57.3% against
+  54.6%, +2.7 pp [+0.8, +4.6], with single-hop +4.9 pp; +7.8 pp
+  [+5.3, +10.3] over BM25. Library only for now; the capability registry
+  records the remote transports as gaps.
+
 ## [0.129.0] — 2026-10-17
 
 Recall quality, measured on the answer-quality evaluation (#441). On LoCoMo
