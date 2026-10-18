@@ -20,6 +20,10 @@ and reports which sessions that context drew on, for retrieval recall:
   (2 July 2023)"; #441, pre-registered deviation 4).
 - mnemos-excerpts-reingest: its control, the same rendering over brains the
   same code ingested without -session-time.
+- mnemos-excerpts-anchored-passages: mnemos-excerpts-anchored in three
+  quarters of the budget, then the stored passages Mnemos returns for the
+  question (Memory.Passages, tools/memeval -passages) in the rest, skipping
+  any passage the excerpts already show (#441, pre-registered deviation 6).
 
 The two retrieval systems get the same context budget, so neither wins by
 handing the answerer more text.
@@ -187,3 +191,30 @@ def mnemos_excerpts(recall: dict, budget: int = CONTEXT_BUDGET_TOKENS, top: int 
 def mnemos_excerpts_top(k: int):
     """The mnemos_excerpts renderer with only the first k beliefs excerpted."""
     return lambda recall, budget=CONTEXT_BUDGET_TOKENS: mnemos_excerpts(recall, budget, top=k)
+
+
+# Share of the budget mnemos_excerpts_passages gives to stored passages.
+PASSAGE_SHARE = 0.25
+
+
+def mnemos_excerpts_passages(recall: dict, budget: int = CONTEXT_BUDGET_TOKENS, share: float = PASSAGE_SHARE) -> Context:
+    """Excerpts first, in (1 - share) of the budget, then Mnemos's stored
+    passages (Memory.Passages) in what is left, in Mnemos's order. A passage
+    whose every line the excerpts already show adds nothing and is skipped;
+    the excerpts' unused budget carries over to the passages."""
+    head = mnemos_excerpts(recall, int(budget * (1 - share)))
+    picked, sessions, used = [], set(head.sessions), head.tokens
+    for p in recall.get("passages") or []:
+        lines = [l for l in p["text"].split("\n") if l.strip()]
+        if all(l in head.text for l in lines):
+            continue
+        entry = f"[{p.get('date') or 'date unknown'}] (session {p.get('session_id') or '?'})\n{p['text']}"
+        t = tokens(entry)
+        if used + t > budget:
+            continue
+        picked.append(entry)
+        if p.get("session_id"):
+            sessions.add(p["session_id"])
+        used += t
+    text = head.text + ("\n\nOriginal conversation:\n" + "\n\n".join(picked) if picked else "")
+    return Context(text=text, sessions=sorted(sessions), tokens=used)

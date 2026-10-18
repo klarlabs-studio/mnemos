@@ -293,6 +293,29 @@ type Query struct {
 	Excerpts bool
 }
 
+// PassageQuery asks [Memory.Passages] for stored passages.
+type PassageQuery struct {
+	// Text is the query, in natural language. Required.
+	Text string
+	// Limit caps how many passages return; zero means 10.
+	Limit int
+}
+
+// Passage is a run of consecutive lines from one stored episode (a turn and
+// its reply), returned by [Memory.Passages].
+type Passage struct {
+	// EpisodeID is the episode the passage was cut from.
+	EpisodeID string
+	// Text is the passage verbatim, lines joined by newlines.
+	Text string
+	// At is when the episode happened.
+	At time.Time
+	// Metadata is the episode's metadata, such as a session id.
+	Metadata map[string]string
+	// Score is the passage's BM25 score against the query; higher is better.
+	Score float64
+}
+
 // Claim is the stable, read-only projection of a stored claim returned by
 // [Memory.Get] and [Memory.Scan]. It mirrors the spec's Claim shape:
 // Statement is the asserted fact, ValidFrom/ValidUntil are the valid-time
@@ -1159,6 +1182,12 @@ type Memory interface {
 	// no embeddings are configured) and may include claims reached by
 	// graph expansion when [Query.Hops] > 0.
 	Recall(ctx context.Context, q Query) ([]Result, error)
+
+	// Passages returns the stored episode passages that best match a query,
+	// ranked by BM25: the original wording, not beliefs extracted from it.
+	// It complements Recall when a belief dropped the detail a question
+	// asks for, or ranked past a reader's budget.
+	Passages(ctx context.Context, q PassageQuery) ([]Passage, error)
 
 	// RecallWithSufficiency is Recall plus a "feeling of knowing": a
 	// deterministic verdict on whether the memory Mnemos holds is strong

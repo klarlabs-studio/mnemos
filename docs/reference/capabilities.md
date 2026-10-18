@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-74 capabilities, 84 acknowledged gaps.
+75 capabilities, 88 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -53,6 +53,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`recall.search`](#recallsearch) | read | — | ✓ | GAP | ✓ | — | — | ✓ |
 | [`recall.at_time`](#recallat_time) | read | — | — | — | ✓ | — | — | — |
 | [`recall.advanced`](#recalladvanced) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`recall.passages`](#recallpassages) | read | ✓ | GAP | GAP | GAP | — | — | GAP |
 | [`recall.context_block`](#recallcontext_block) | read | GAP | ✓ | GAP | ✓ | — | — | ✓ |
 | [`brain.who_knows`](#brainwho_knows) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.knowledge_gaps`](#brainknowledge_gaps) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -583,6 +584,22 @@ Recall with sufficiency, effort, context, conflicts or iteration (read).
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `Recall` |
+
+### recall.passages
+
+Return the stored episode passages that best match a query (BM25) (read).
+
+| Transport | Binding |
+|---|---|
+| go | `Passages` |
+| rest | **GAP** — no passages endpoint |
+| grpc | **GAP** — no passages RPC |
+| mcp | **GAP** — no passages tool |
+| mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| client | **GAP** — no passages endpoint to call |
+
+> Library first: measured on the answer-quality evaluation (#441) before it is exposed remotely.
 
 ### recall.context_block
 
