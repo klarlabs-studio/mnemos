@@ -42,7 +42,7 @@ func (m *memory) Passages(ctx context.Context, q PassageQuery) ([]Passage, error
 	if limit <= 0 {
 		limit = defaultPassageLimit
 	}
-	episodes, err := m.passageCandidates(ctx, text)
+	episodes, err := m.passageCandidates(ctx, text, strings.TrimSpace(q.RunID))
 	if err != nil {
 		return nil, err
 	}
@@ -104,10 +104,20 @@ func rankPassages(episodes []domain.Event, query string) []Passage {
 	return out
 }
 
-// passageCandidates returns the episodes whose passages are ranked: the index's
-// best matches, or every episode on a backend without an episode text index
-// (the in-memory store), where ranking them all is the same answer.
-func (m *memory) passageCandidates(ctx context.Context, text string) ([]domain.Event, error) {
+// passageCandidates returns the episodes whose passages are ranked: every
+// episode of the run when one is named, else the index's best matches, or
+// every episode on a backend without an episode text index (the in-memory
+// store), where ranking them all is the same answer. A run is ranked whole
+// rather than filtered from the index's matches, which may all belong to
+// other runs.
+func (m *memory) passageCandidates(ctx context.Context, text, runID string) ([]domain.Event, error) {
+	if runID != "" {
+		episodes, err := m.conn.Events.ListByRunID(ctx, runID)
+		if err != nil {
+			return nil, fmt.Errorf("mnemos: Passages: list run episodes: %w", err)
+		}
+		return episodes, nil
+	}
 	searcher, ok := m.conn.Events.(ports.TextSearcher)
 	if !ok {
 		all, err := m.conn.Events.ListAll(ctx)

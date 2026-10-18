@@ -335,7 +335,7 @@ func handleMCP(args []string) {
 		mcp.WithDescription("Query and update evidence-backed local knowledge with Mnemos."),
 		mcp.WithWebsiteURL("https://github.com/klarlabs-studio/mnemos"),
 		mcp.WithBuildInfo(commit, buildDate),
-		mcp.WithInstructions("Use query_knowledge to read the knowledge base, process_text to ingest raw text, and watch_file to keep a specific file's claims fresh as it changes. Prefer process_text before querying when no knowledge exists yet."),
+		mcp.WithInstructions("Use query_knowledge to read the knowledge base, process_text to ingest raw text, and watch_file to keep a specific file's claims fresh as it changes. Prefer process_text before querying when no knowledge exists yet. When recalled beliefs lack a detail a question needs (a name, a date, the exact wording), search_passages returns the stored lines verbatim."),
 	)
 
 	// watch_file uses a long-lived DB connection separate from the
@@ -749,6 +749,16 @@ func handleMCP(args []string) {
 				return dispatchAxiTool[mcpTimelineQueryOutput](ctx, kernel, nil, "timeline_query", input)
 			}
 			return mcpRunTimelineQuery(ctx, input)
+		})
+
+	srv.Tool("search_passages").
+		Description("Return the stored conversation lines that best match a query, verbatim with their episode and time. Use it when recalled beliefs lack the detail a question asks for.").
+		OutputSchema(mcpSearchPassagesOutput{}).
+		Handler(func(ctx context.Context, input mcpSearchPassagesInput) (mcpSearchPassagesOutput, error) {
+			if kernel != nil {
+				return dispatchAxiTool[mcpSearchPassagesOutput](ctx, kernel, nil, "search_passages", input)
+			}
+			return mcpRunSearchPassages(ctx, input)
 		})
 
 	srv.Tool("recall_at_time").

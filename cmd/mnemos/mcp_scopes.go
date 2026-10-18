@@ -49,6 +49,7 @@ var mcpToolScopes = map[string]string{
 	"memory_context":      "",
 	"search_memory":       "",
 	"timeline_query":      "",
+	"search_passages":     "",
 	"recall_at_time":      "",
 	"who_knows":           "",
 	"knowledge_gaps":      "",

@@ -20,8 +20,19 @@ notable changes.
   93.0% (multi-hop 56.9% to 63.4%, temporal 78.9% to 87.7%), with the same
   beliefs. Answer accuracy (pre-registered deviation 6): 57.3% against
   54.6%, +2.7 pp [+0.8, +4.6], with single-hop +4.9 pp; +7.8 pp
-  [+5.3, +10.3] over BM25. Library only for now; the capability registry
-  records the remote transports as gaps.
+  [+5.3, +10.3] over BM25.
+- **Passages over REST, MCP and the Go client.** `GET /v1/passages?query=`,
+  the MCP tool `search_passages` and `client.Passages` serve
+  `Memory.Passages`. `PassageQuery.RunID` restricts passages to one run's
+  episodes; a run-scoped token must name one of its runs, since passages are
+  raw episode text. gRPC stays a recorded gap.
+
+### Fixed
+
+- **The brain-health alerting log names only failing signals.** It also
+  listed signals graded unknown for lack of data, such as `calibration` and
+  `skill_coverage` on a brain that records no predictions or actions, so the
+  line pointed on-call at signals that were not the cause.
 
 ## [0.129.0] — 2026-10-17
 

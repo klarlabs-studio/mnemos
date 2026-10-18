@@ -62,3 +62,30 @@ func TestLogHealthDegradation(t *testing.T) {
 		t.Errorf("degradation line should omit healthy signals, got %q", out)
 	}
 }
+
+// A vital nobody has fed is graded unknown, not failing. Naming it in the
+// alerting line sent on-call after calibration and skill_coverage on a brain
+// that records no predictions or actions, while trust_decay was the cause.
+func TestLogHealthDegradation_OmitsUnknownSignals(t *testing.T) {
+	var buf bytes.Buffer
+	logHealthDegradation(bolt.New(bolt.NewJSONHandler(&buf)), mnemos.BrainHealth{
+		Status: mnemos.HealthUnhealthy,
+		Vitals: []mnemos.Vital{
+			{Name: "calibration", Value: 0, Status: mnemos.HealthUnknown},
+			{Name: "skill_coverage", Value: 0, Status: mnemos.HealthUnknown},
+			{Name: "trust_decay", Value: 0.44, Status: mnemos.HealthUnhealthy},
+		},
+		Pathologies: []mnemos.Pathology{
+			{Kind: "stale_expectations", Count: 0, Status: mnemos.HealthUnknown},
+		},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "trust_decay") {
+		t.Errorf("degradation line should name trust_decay, got %q", out)
+	}
+	for _, unknown := range []string{"calibration", "skill_coverage", "stale_expectations"} {
+		if strings.Contains(out, unknown) {
+			t.Errorf("degradation line names %s, which is unknown rather than failing: %q", unknown, out)
+		}
+	}
+}

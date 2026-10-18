@@ -82,6 +82,16 @@ type TimelineEvent struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
+// Passage is a run of consecutive lines from one stored episode
+// (GET /v1/passages).
+type Passage struct {
+	EpisodeID string            `json:"episode_id"`
+	Text      string            `json:"text"`
+	At        string            `json:"at,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	Score     float64           `json:"score"`
+}
+
 // Signal is a detected temporal pattern (GET /v1/signals).
 type Signal struct {
 	Pattern     string  `json:"pattern"`
