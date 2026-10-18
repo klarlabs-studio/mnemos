@@ -305,7 +305,8 @@ type Belief struct {
 	// Read with HalfLifeDays, the two columns give four distinct states:
 	//
 	//	""              + 0   unknown — nobody has looked
-	//	""              + >0  human override via MarkVerified
+	//	""              + >0  explicit override: MarkVerified, or a writer's
+	//	                      half_life_days on POST /v1/beliefs
 	//	"volatility/v1" + 0   classified DURABLE — decays at the default by decision
 	//	"volatility/v1" + 14  classified volatile
 	//

@@ -8,6 +8,16 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **`POST /v1/beliefs` takes `valid_from`, `valid_to` and `half_life_days`**,
+  and belief reads return them (`client.Claim` too). A service writing dated
+  records can give them a long trust constant instead of the 90-day default,
+  and close a state belief (a condition that resolved, a medication that
+  stopped) by re-appending it with `valid_to`. `valid_to` goes through the
+  governed validity write, so a re-append that omits it never reopens a
+  closed belief.
+
 ## [0.130.0] — 2026-10-18
 
 Passages: when a belief drops the detail a question asks for, Mnemos returns

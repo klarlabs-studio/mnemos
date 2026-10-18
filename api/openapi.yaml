@@ -1139,6 +1139,9 @@ components:
         source_authority: { type: number, format: double }
         liveness: { type: string }
         visibility: { type: string, enum: [personal, team, org], description: "Defaults to team when omitted." }
+        valid_from: { type: string, format: date-time, description: "When the belief's content became true." }
+        valid_to: { type: string, format: date-time, description: "When it stopped being true. On append it closes the belief, including one already stored (re-append with the same id); omitting it never reopens one." }
+        half_life_days: { type: number, format: double, minimum: 0, description: "Trust freshness time constant for this belief, e.g. long for a dated record that stays true. 0 keeps the default, and on re-append the stored value." }
         similarity: { type: number, format: double, description: "Cosine similarity — present only on the ?similar_to= branch." }
       required: [id, text, type]
     Association:
