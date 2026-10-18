@@ -41,6 +41,15 @@ type Claim struct {
 	// Visibility gates audience access: personal | team | org.
 	// Omitted values are treated as "team" by the server.
 	Visibility string `json:"visibility,omitempty"`
+	// ValidFrom / ValidTo (RFC3339) bound when the claim's content is true.
+	// On Append, a ValidTo closes the claim, including one already stored:
+	// append it again with the same ID.
+	ValidFrom string `json:"valid_from,omitempty"`
+	ValidTo   string `json:"valid_to,omitempty"`
+	// HalfLifeDays overrides the trust freshness constant for this claim,
+	// e.g. a long one for a dated record that stays true. Zero keeps the
+	// server default (and, on re-append, the stored value).
+	HalfLifeDays float64 `json:"half_life_days,omitempty"`
 }
 
 // Expectation is a structured forward expectation attached to a claim (T1.1):

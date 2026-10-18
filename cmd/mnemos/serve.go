@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/mail"
@@ -1008,6 +1009,15 @@ type claimDTO struct {
 	// Visibility gates audience access: personal | team | org.
 	// Defaults to "team" when omitted.
 	Visibility string `json:"visibility,omitempty"`
+	// ValidFrom / ValidTo bound when the belief's content is true (RFC3339).
+	// On append, a valid_to closes the belief, including one already stored:
+	// re-post it with the same id.
+	ValidFrom string `json:"valid_from,omitempty"`
+	ValidTo   string `json:"valid_to,omitempty"`
+	// HalfLifeDays overrides the trust freshness constant for this belief,
+	// e.g. a long one for a dated record that stays true. Zero keeps the
+	// default (and, on re-append, the stored value).
+	HalfLifeDays float64 `json:"half_life_days,omitempty"`
 	// Similarity is populated only by the semantic-search branch
 	// (?similar_to=...); it carries the cosine similarity (1.0 =
 	// identical) between the query embedding and this claim's
@@ -1125,6 +1135,9 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 			CreatedBy:            c.CreatedBy,
 			Visibility:           string(c.Visibility),
 			ConfidenceComponents: c.ConfidenceComponents,
+			ValidFrom:            rfc3339OrEmpty(c.ValidFrom),
+			ValidTo:              rfc3339OrEmpty(c.ValidTo),
+			HalfLifeDays:         c.HalfLifeDays,
 		})
 		ids = append(ids, c.ID)
 	}
@@ -1515,6 +1528,35 @@ func appendEventsHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusCreated, appendResponse{Accepted: accepted})
 }
 
+// claimClose is a valid_to an append sets on a belief.
+type claimClose struct {
+	id string
+	at time.Time
+}
+
+// parseClaimValidity reads beliefs[i]'s valid_from, valid_to and half-life,
+// writing a 400 and returning false when one is malformed.
+func parseClaimValidity(w http.ResponseWriter, i int, c claimDTO) (from, to time.Time, ok bool) {
+	from, err := parseTimeFlexible(c.ValidFrom)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("beliefs[%d].valid_from: %v", i, err))
+		return from, to, false
+	}
+	if to, err = parseTimeFlexible(c.ValidTo); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("beliefs[%d].valid_to: %v", i, err))
+		return from, to, false
+	}
+	if !from.IsZero() && !to.IsZero() && to.Before(from) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("beliefs[%d].valid_to is before valid_from", i))
+		return from, to, false
+	}
+	if c.HalfLifeDays < 0 || math.IsNaN(c.HalfLifeDays) || math.IsInf(c.HalfLifeDays, 0) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("beliefs[%d].half_life_days must be a non-negative number", i))
+		return from, to, false
+	}
+	return from, to, true
+}
+
 type appendClaimsRequest struct {
 	Claims   []claimDTO          `json:"beliefs"`
 	Evidence []claimEvidenceItem `json:"evidence,omitempty"`
@@ -1674,6 +1716,7 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 	}
 
 	claims := make([]domain.Claim, 0, len(req.Claims))
+	var closes []claimClose
 	now := time.Now().UTC()
 	actor := actorFromContext(r.Context())
 	for i, c := range req.Claims {
@@ -1707,6 +1750,13 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("claims[%d].test_last_run_at: %v", i, err))
 			return
 		}
+		validFrom, validTo, ok := parseClaimValidity(w, i, c)
+		if !ok {
+			return
+		}
+		if !validTo.IsZero() {
+			closes = append(closes, claimClose{id: c.ID, at: validTo})
+		}
 		// Per-claim author override (mnemos ClaimItem.CreatedBy): a trusted
 		// service attributes on behalf of its sub-actor (worker/coach). Absent
 		// → the request's token actor.
@@ -1735,6 +1785,8 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 			TestFailCount:        c.TestFailCount,
 			Visibility:           domain.Visibility(c.Visibility),
 			ConfidenceComponents: c.ConfidenceComponents,
+			ValidFrom:            validFrom,
+			HalfLifeDays:         c.HalfLifeDays,
 		}
 		claims = append(claims, claim)
 	}
@@ -1771,6 +1823,14 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 	}); err != nil {
 		writeInternalError(w, "upsert claims", err)
 		return
+	}
+	// valid_to has its own governed write (the upsert never touches it), so a
+	// re-append cannot reopen a closed belief by omitting the field.
+	for _, c := range closes {
+		if err := gw.SetValidity(ctx, c.id, c.at); err != nil {
+			writeInternalError(w, "set valid_to", err)
+			return
+		}
 	}
 
 	if len(req.Evidence) > 0 {
