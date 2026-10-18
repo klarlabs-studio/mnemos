@@ -129,6 +129,8 @@ var upsertIgnoredFields = map[string]string{
 		"backends never write trust_model_version from an upsert",
 	"LastConfirmed": "it is owned by MarkConfirmed (ADR 0026): re-extracting a claim " +
 		"is not a confirmation, and the SQL backends never write last_confirmed from an upsert",
+	"ValidTo": "it is owned by SetValidity: the SQL backends insert NULL and never write " +
+		"valid_to on conflict, so a re-append cannot reopen a closed belief",
 }
 
 // The round trip must also hold through the repository, not just the record

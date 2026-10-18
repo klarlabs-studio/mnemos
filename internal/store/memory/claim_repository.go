@@ -101,7 +101,12 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 		stored.LastVerified, stored.VerifyCount, stored.LastConfirmed = time.Time{}, 0, time.Time{}
 		// The trust stamp is owned by the recompute (ADR 0026 §5), likewise.
 		stored.TrustComputedAt, stored.TrustModelVersion = time.Time{}, ""
+		// valid_to is owned by SetValidity: the SQL backends insert NULL and
+		// leave it alone on conflict. Writing it through here meant a re-append
+		// that omitted valid_to reopened a closed belief on memory:// only.
+		stored.ValidTo = time.Time{}
 		if existing, ok := r.state.claims[claim.ID]; ok {
+			stored.ValidTo = existing.ValidTo
 			stored.TrustComputedAt = existing.TrustComputedAt
 			stored.TrustModelVersion = existing.TrustModelVersion
 			stored.LastVerified = existing.LastVerified

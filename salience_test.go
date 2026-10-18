@@ -113,10 +113,15 @@ func TestConsolidate_SalienceRaisesReplayPriority(t *testing.T) {
 	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{{
 		ID: "invalid_high", Text: "claim invalid_high", Type: domain.ClaimTypeFact,
 		Confidence: 0.8, Status: domain.ClaimStatusActive,
-		CreatedAt: now, ValidFrom: now, ValidTo: now, // invalidated
+		CreatedAt: now, ValidFrom: now,
 		ConfidenceComponents: map[string]float64{domain.SalienceComponentKey: 0.99},
 	}}); err != nil {
 		t.Fatalf("seed invalid_high: %v", err)
+	}
+	// Invalidate it the way production does: valid_to is owned by SetValidity,
+	// and Upsert never writes it on any backend.
+	if err := m.conn.Claims.SetValidity(ctx, "invalid_high", now); err != nil {
+		t.Fatalf("invalidate invalid_high: %v", err)
 	}
 
 	// Rehearse exactly one: stakes must pick the high-salience VALID belief.
