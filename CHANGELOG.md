@@ -8,6 +8,13 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.131.0] — 2026-10-18
+
+Beliefs written over REST can say how long they stay true. A service writing
+dated records (pet-medical's health history) can give them a long trust
+constant instead of the 90-day default, and end a belief that stopped being
+true.
+
 ### Added
 
 - **`POST /v1/beliefs` takes `valid_from`, `valid_to` and `half_life_days`**,
