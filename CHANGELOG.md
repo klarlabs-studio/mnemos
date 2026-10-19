@@ -16,6 +16,24 @@ notable changes.
   or infinite half-life, is `InvalidArgument`), and `valid_to` goes through the
   governed validity write.
 
+### Changed
+
+- **Brain-health trust vitals separate age from untrust** (ADR 0032, #481). A
+  steadily fed brain of single-evidence beliefs read unhealthy by construction:
+  freshness bottoms out at 0.30, so every belief with confidence below 1.0 aged
+  into `low_trust` for good, and ~28% of trusted beliefs crossed that floor in
+  any month, past `trust_decay`'s fixed 0.20 critical line.
+  - `low_trust` grades age-neutral trust (as of the belief's evidence date):
+    low confidence or negative credit, never age alone.
+  - `staleness` measures from the belief's own evidence, confirmation or
+    verification against its own half-life, so a backfilled old record is not
+    fresh and a ten-year record is not stale at 90 days. Undated beliefs keep
+    the 90-day rule.
+  - `trust_decay` is now a ratio: beliefs reaching the freshness floor within
+    30 days over what a steady flow would bring. ~1.0 is normal; warn at 1.5,
+    critical at 3.0; unknown below one expected crossing. Its value is no
+    longer in [0, 1].
+
 ### Fixed
 
 - **Re-appending a belief on `memory://` no longer reopens it.** The SQL
