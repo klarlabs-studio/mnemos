@@ -101,21 +101,24 @@ func printBrainHealthExplain() {
     worst-wins — the single worst line sets the overall status, so one sick vital is
     never hidden by healthy neighbours.
 
-    vitals — each is 0..1, higher is worse, with its own warn and critical line
+    vitals — each is 0..1 (trust_decay is a ratio), higher is worse, with its own
+    warn and critical line
       free_energy   aggregate prediction-error signal, and a pointer to the layer
                     most wrong. The headline number; the rest explain it.
       calibration   when the brain says it is 80% sure, is it right about 80% of the
                     time? Confidently wrong is worse than unsure.
       dissonance    active, high-stakes contradictions per belief — conflicts between
                     beliefs established enough that a disagreement means something.
-      low_trust     share of currently-valid beliefs whose trust has decayed below a
-                    floor as their evidence ages without re-verification.
-      staleness     share of valid beliefs not seen or re-verified within the horizon
-                    — "still load-bearing, or just still present?"
-      trust_decay   share of still-trusted beliefs that fall below the same floor
-                    within a month if nobody re-verifies them, each decaying at its
-                    own half-life. low_trust is what has already gone; this is what
-                    is going. A month of re-verification work, named in advance.
+      low_trust     share of currently-valid beliefs untrusted on their merits: low
+                    confidence or negative credit, judged as of their evidence date.
+                    Age alone never counts here; that is staleness.
+      staleness     share of valid beliefs whose freshness has bottomed out with no
+                    re-verification, each at its own half-life — "still
+                    load-bearing, or just still present?"
+      trust_decay   beliefs reaching the freshness floor within a month, as a ratio
+                    to what a steadily fed brain would show. ~1.0 is normal flow;
+                    higher means a backlog aging out together or intake that
+                    stopped. A month of re-verification work, named in advance.
       skill_coverage share of recorded actions whose outcome was ever observed — an
                     action with no outcome teaches the brain nothing.
 

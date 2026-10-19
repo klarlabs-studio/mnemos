@@ -3,6 +3,8 @@ package mnemos
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,38 +108,59 @@ func TestTrustDecay_FreshBrainIsNotDecaying(t *testing.T) {
 	}
 }
 
-// The vital is a RATE, and it has to move with the data rather than flip. Two
-// beliefs about to fall through the floor is twice the outflow of one, and the
-// second crosses the critical line the first only warns at.
-func TestTrustDecay_TracksTheShareAboutToFallThroughTheFloor(t *testing.T) {
-	m := decayMem(t, "decay-rate")
-	// 65 days old at the default half-life: still above the trust floor today,
-	// below it a horizon from now. Neither figure is asserted here — both come
-	// out of the store's own trust recomputation over the stored evidence.
-	const aging = 65 * 24 * time.Hour
-	const fresh = 3 * 24 * time.Hour
-	for i := 0; i < 8; i++ {
+// floorAgeDefault is how old a default-τ belief is when its freshness reaches
+// the floor: τ·ln(1/floor), ~108 days.
+var floorAgeDefault = trust.FreshnessHalfLifeDays * math.Log(1/trust.FreshnessFloor)
+
+// #481: a brain fed at a steady rate is doing what it should, and has to read
+// healthy. Under the old fixed 0.20 share it read unhealthy by construction:
+// ~30 of every 108 days' worth of beliefs reach the floor in any month. As a
+// ratio to the steady-state rate it reads ~1.0.
+func TestTrustDecay_SteadyFlowReadsAboutOne(t *testing.T) {
+	m := decayMem(t, "decay-steady")
+	const n = 40
+	for i := 0; i < n; i++ {
+		age := (float64(i) + 0.5) * floorAgeDefault / n
+		rememberAged(t, m, fmt.Sprintf("the ledger reconciles nightly in region %d", i), time.Duration(age*24*float64(time.Hour)))
+	}
+
+	v := trustDecay(t, m)
+	if v.Value < 0.8 || v.Value > 1.2 {
+		t.Errorf("trust_decay over a steady flow = %v, want ~1.0 (%s)", v.Value, v.Detail)
+	}
+	if v.Status != HealthOK {
+		t.Errorf("a steadily fed brain must read %q, got %q (%s)", HealthOK, v.Status, v.Detail)
+	}
+}
+
+// The vital has to move with the data rather than flip: a brain whose intake
+// stalled has most of its beliefs aging toward the floor together, and the
+// further the crossings outrun the steady rate, the worse the grade.
+func TestTrustDecay_StalledIntakeRaisesTheRatio(t *testing.T) {
+	m := decayMem(t, "decay-stalled")
+	const fresh = 5 * 24 * time.Hour
+	const aging = 85 * 24 * time.Hour // reaches the floor (~108 days) within 30
+	for i := 0; i < 10; i++ {
 		rememberAged(t, m, fmt.Sprintf("the ledger reconciles nightly in region %d", i), fresh)
 	}
-	rememberAged(t, m, "the reconciliation window closes at midnight UTC", aging)
-	rescoreTrust(t, m)
-
-	one := trustDecay(t, m)
-	if one.Value <= 0 {
-		t.Fatalf("one aging belief in nine should register: got %v (%s)", one.Value, one.Detail)
-	}
-	if one.Status != HealthDegraded {
-		t.Errorf("one in nine = %v should warn, got %q (%s)", one.Value, one.Status, one.Detail)
+	for i := 0; i < 20; i++ {
+		rememberAged(t, m, fmt.Sprintf("the settlement batch starts at hour %d", i), aging)
 	}
 
-	rememberAged(t, m, "the settlement batch starts after the window shuts", aging)
-	rescoreTrust(t, m)
-	two := trustDecay(t, m)
-	if !(two.Value > one.Value) {
-		t.Fatalf("a second decaying belief must raise the rate: %v then %v", one.Value, two.Value)
+	backlog := trustDecay(t, m)
+	if backlog.Status != HealthDegraded {
+		t.Errorf("20 of 30 aging out together = %v should warn, got %q (%s)", backlog.Value, backlog.Status, backlog.Detail)
 	}
-	if two.Status != HealthUnhealthy {
-		t.Errorf("two in ten = %v should be critical, got %q (%s)", two.Value, two.Status, two.Detail)
+
+	for i := 0; i < 60; i++ {
+		rememberAged(t, m, fmt.Sprintf("the export worker drains queue %d", i), aging)
+	}
+	stalled := trustDecay(t, m)
+	if !(stalled.Value > backlog.Value) {
+		t.Fatalf("more beliefs aging out together must raise the ratio: %v then %v", backlog.Value, stalled.Value)
+	}
+	if stalled.Status != HealthUnhealthy {
+		t.Errorf("80 of 90 aging out together = %v should be critical, got %q (%s)", stalled.Value, stalled.Status, stalled.Detail)
 	}
 }
 
@@ -179,12 +202,20 @@ func TestTrustDecay_HonoursPerClaimHalfLife(t *testing.T) {
 		t.Fatalf("precondition: stored trust must be equal, got %v and %v", byID[volatile], byID[durable])
 	}
 
-	v := trustDecay(t, m)
-	if v.Value != 0.5 {
-		t.Errorf("trust_decay = %v, want 0.5 — only the volatile belief decays through the floor (%s)", v.Value, v.Detail)
+	// Only the volatile belief reaches the floor within the horizon, and the
+	// steady-state expectation is built from each belief's own time constant:
+	// a 14-day belief always crosses within a month, a 365-day one rarely.
+	h, err := m.BrainHealth(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if v.Status != HealthUnhealthy {
-		t.Errorf("half the trusted corpus decaying within the horizon = %q, want %q", v.Status, HealthUnhealthy)
+	v := vitalByName(h, "trust_decay")
+	if !strings.HasPrefix(v.Detail, "1 of 2 beliefs") {
+		t.Errorf("only the volatile belief should reach the floor: %s", v.Detail)
+	}
+	expected := 1 + healthTrustDecayHorizonDays/(365*math.Log(1/trust.FreshnessFloor))
+	if !approx(v.Value, 1/expected, 1e-6) {
+		t.Errorf("trust_decay = %v, want %v: crossings over expectations from each belief's own τ (%s)", v.Value, 1/expected, v.Detail)
 	}
 }
 
@@ -205,11 +236,11 @@ func TestTrustDecay_EmptyBrainIsUnknown(t *testing.T) {
 	}
 }
 
-// A brain whose beliefs have ALREADY fallen below the floor has no trust left
-// to lose there — reporting a healthy 0 would read as "nothing is decaying"
-// when the truth is "everything already has". low_trust owns that state, and it
-// must be the vital raising the alarm.
-func TestTrustDecay_AlreadyDecayedBrainIsUnknownAndLowTrustCatchesIt(t *testing.T) {
+// A brain whose beliefs have all aged onto the freshness floor has nothing left
+// on its way there, so trust_decay is unknown, not a reassuring zero. Aging is
+// not untrust (ADR 0032): low_trust stays clear, and staleness is the vital
+// that raises the alarm.
+func TestTrustDecay_AgedOutBrainIsUnknownAndStalenessCatchesIt(t *testing.T) {
 	m := decayMem(t, "decay-spent")
 	for i := 0; i < 4; i++ {
 		rememberAged(t, m, fmt.Sprintf("the importer accepted fixed-width files in region %d", i), 3*365*24*time.Hour)
@@ -221,9 +252,12 @@ func TestTrustDecay_AlreadyDecayedBrainIsUnknownAndLowTrustCatchesIt(t *testing.
 		t.Fatal(err)
 	}
 	if v := vitalByName(h, "trust_decay"); v.Status != HealthUnknown {
-		t.Errorf("trust_decay with no belief left above the floor = %q, want %q (%s)", v.Status, HealthUnknown, v.Detail)
+		t.Errorf("trust_decay with nothing left on its way to the floor = %q, want %q (%s)", v.Status, HealthUnknown, v.Detail)
 	}
-	if lt := vitalByName(h, "low_trust"); lt.Value == 0 || lt.Status == HealthOK {
-		t.Errorf("low_trust must own the already-decayed state, got %+v", lt)
+	if lt := vitalByName(h, "low_trust"); lt.Value != 0 {
+		t.Errorf("aged-out beliefs are stale, not untrusted: low_trust = %+v", lt)
+	}
+	if st := vitalByName(h, "staleness"); st.Status != HealthUnhealthy {
+		t.Errorf("staleness must own the aged-out state, got %+v", st)
 	}
 }

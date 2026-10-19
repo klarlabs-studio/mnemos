@@ -2,6 +2,7 @@
 
 - **Status:** Accepted (2026-10-04). Implementation is tracked in #386 under the
   consolidation program (#382, Phase 2).
+- **Amended by:** ADR 0032 (the health vitals read age-neutral trust for `low_trust`).
 - **Date:** 2026-10-04
 - **Deciders:** Felix Geelhaar
 - **Supersedes:** the "Known limit" in ADR 0019 (stored trust uses a global
