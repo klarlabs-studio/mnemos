@@ -8,6 +8,21 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **gRPC `AppendBeliefs` takes `valid_from`, `valid_to` and `half_life_days`**,
+  and `ListBeliefs` returns them, matching `POST /v1/beliefs` (0.131.0). The
+  same validation applies (`valid_to` before `valid_from`, or a negative, NaN
+  or infinite half-life, is `InvalidArgument`), and `valid_to` goes through the
+  governed validity write.
+
+### Fixed
+
+- **Re-appending a belief on `memory://` no longer reopens it.** The SQL
+  backends never write `valid_to` from an upsert (it belongs to
+  `SetValidity`), but the memory backend wrote it through, so a re-append that
+  omitted `valid_to` reopened a closed belief on that backend only.
+
 ## [0.131.0] — 2026-10-18
 
 Beliefs written over REST can say how long they stay true. A service writing

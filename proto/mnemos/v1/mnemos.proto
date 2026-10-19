@@ -190,6 +190,15 @@ message Belief {
   // visibility gates audience access: personal | team | org.
   // Empty string is treated as "team" by the server.
   string    visibility = 7;
+  // valid_from / valid_to bound when the belief's content is true. On
+  // append, valid_to closes the belief, including one already stored; an
+  // append that omits it never reopens a closed belief.
+  google.protobuf.Timestamp valid_from = 8;
+  google.protobuf.Timestamp valid_to   = 9;
+  // half_life_days overrides the trust freshness constant for this belief:
+  // a dated record stays trustworthy far longer than a passing remark.
+  // Zero keeps the server default; negative is rejected.
+  double    half_life_days = 10;
 }
 
 message BeliefEvidence {

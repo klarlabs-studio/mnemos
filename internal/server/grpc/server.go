@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -825,6 +826,7 @@ func (s *Server) AppendBeliefs(ctx context.Context, req *mnemosv1.AppendBeliefsR
 	}
 
 	claims := make([]domain.Claim, 0, len(req.Beliefs))
+	var closes []beliefClose
 	now := time.Now().UTC()
 	actor := actorFromContext(ctx)
 	for i, c := range req.Beliefs {
@@ -837,19 +839,28 @@ func (s *Server) AppendBeliefs(ctx context.Context, req *mnemosv1.AppendBeliefsR
 		if c.Visibility != "" && !validClaimVisibility(c.Visibility) {
 			return nil, status.Errorf(codes.InvalidArgument, "beliefs[%d].visibility %q invalid; must be personal, team, or org", i, c.Visibility)
 		}
+		validFrom, validTo, err := beliefValidity(i, c)
+		if err != nil {
+			return nil, err
+		}
+		if !validTo.IsZero() {
+			closes = append(closes, beliefClose{id: c.Id, at: validTo})
+		}
 		created := now
 		if c.CreatedAt != nil {
 			created = c.CreatedAt.AsTime()
 		}
 		claims = append(claims, domain.Claim{
-			ID:         c.Id,
-			Text:       c.Text,
-			Type:       domain.ClaimType(c.Type),
-			Confidence: c.Confidence,
-			Status:     domain.ClaimStatus(c.Status),
-			CreatedAt:  created,
-			CreatedBy:  actor,
-			Visibility: domain.Visibility(c.Visibility),
+			ID:           c.Id,
+			Text:         c.Text,
+			Type:         domain.ClaimType(c.Type),
+			Confidence:   c.Confidence,
+			Status:       domain.ClaimStatus(c.Status),
+			CreatedAt:    created,
+			CreatedBy:    actor,
+			Visibility:   domain.Visibility(c.Visibility),
+			ValidFrom:    validFrom,
+			HalfLifeDays: c.HalfLifeDays,
 		})
 	}
 
@@ -887,6 +898,14 @@ func (s *Server) AppendBeliefs(ctx context.Context, req *mnemosv1.AppendBeliefsR
 	}); err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert beliefs: %v", err)
 	}
+	// valid_to has its own governed write (the upsert never touches it), so a
+	// re-append cannot reopen a closed belief by omitting the field. Same as
+	// POST /v1/beliefs.
+	for _, c := range closes {
+		if err := s.writerFor(ctx).SetValidity(ctx, c.id, c.at); err != nil {
+			return nil, status.Errorf(codes.Internal, "set valid_to: %v", err)
+		}
+	}
 
 	if len(req.Evidence) > 0 {
 		links := make([]domain.ClaimEvidence, 0, len(req.Evidence))
@@ -898,6 +917,31 @@ func (s *Server) AppendBeliefs(ctx context.Context, req *mnemosv1.AppendBeliefsR
 		}
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(len(claims))}, nil
+}
+
+// beliefClose is a valid_to to apply after the upsert.
+type beliefClose struct {
+	at time.Time
+	id string
+}
+
+// beliefValidity reads a belief's validity window and half-life, rejecting
+// what POST /v1/beliefs rejects: valid_to before valid_from, and a negative,
+// NaN or infinite half-life.
+func beliefValidity(i int, b *mnemosv1.Belief) (from, to time.Time, err error) {
+	if b.ValidFrom != nil {
+		from = b.ValidFrom.AsTime().UTC()
+	}
+	if b.ValidTo != nil {
+		to = b.ValidTo.AsTime().UTC()
+	}
+	if !from.IsZero() && !to.IsZero() && to.Before(from) {
+		return from, to, status.Errorf(codes.InvalidArgument, "beliefs[%d].valid_to is before valid_from", i)
+	}
+	if h := b.HalfLifeDays; h < 0 || math.IsNaN(h) || math.IsInf(h, 0) {
+		return from, to, status.Errorf(codes.InvalidArgument, "beliefs[%d].half_life_days must be a non-negative number", i)
+	}
+	return from, to, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -1286,13 +1330,16 @@ func episodeToProto(e domain.Event) *mnemosv1.Episode {
 
 func beliefToProto(c domain.Claim) *mnemosv1.Belief {
 	return &mnemosv1.Belief{
-		Id:         c.ID,
-		Text:       c.Text,
-		Type:       string(c.Type),
-		Confidence: c.Confidence,
-		Status:     string(c.Status),
-		CreatedAt:  timestamppb.New(c.CreatedAt.UTC()),
-		Visibility: string(c.Visibility),
+		Id:           c.ID,
+		Text:         c.Text,
+		Type:         string(c.Type),
+		Confidence:   c.Confidence,
+		Status:       string(c.Status),
+		CreatedAt:    timestamppb.New(c.CreatedAt.UTC()),
+		Visibility:   string(c.Visibility),
+		ValidFrom:    timestampOrNil(c.ValidFrom),
+		ValidTo:      timestampOrNil(c.ValidTo),
+		HalfLifeDays: c.HalfLifeDays,
 	}
 }
 
