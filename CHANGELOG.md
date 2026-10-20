@@ -8,6 +8,13 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.132.0] — 2026-10-19
+
+Brain health stops grading a steadily fed brain unhealthy for growing older.
+Low trust, staleness and trust decay each answer one question, and a belief's
+age is counted once, against its own half-life. gRPC writers can now set
+belief validity like REST ones.
+
 ### Added
 
 - **gRPC `AppendBeliefs` takes `valid_from`, `valid_to` and `half_life_days`**,
