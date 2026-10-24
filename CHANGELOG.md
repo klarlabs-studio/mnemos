@@ -8,6 +8,30 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.132.1] — 2026-10-24
+
+A security patch, and system errors that say what went wrong.
+
+### Security
+
+- **[GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) fixed** by building
+  with Go 1.27.3 (#489). `crypto/x509` trusted intermediate certificates that
+  have since been compromised. That affects every TLS connection Mnemos makes
+  or accepts: `mnemos serve` and `mcp --http` with TLS, and outbound calls to
+  LLM, embedding and database endpoints. v0.132.0 and earlier were built with
+  an affected toolchain. Upgrade.
+
+### Fixed
+
+- **System errors name their cause without `--verbose`** (#440, #488). The
+  cause was printed only under `--verbose`, and nothing said so. Twice it was
+  the whole diagnosis: `error: backfill trust` hid `SQLITE_BUSY` from a
+  concurrent writer. Causes are now classified (`database is locked`,
+  `disk full`, `permission denied`, `timed out`, `network unreachable`) and
+  appended to the message, with one line of advice. Every error that withholds
+  a cause ends with `Re-run with --verbose for the full cause.` The raw cause
+  stays behind `--verbose`, since it can carry paths and driver internals.
+
 ## [0.132.0] — 2026-10-19
 
 Brain health stops grading a steadily fed brain unhealthy for growing older.
