@@ -162,7 +162,7 @@ type mcpRecordActionInput struct {
 	Actor    string            `json:"actor,omitempty" jsonschema:"description=User or agent id that performed the action"`
 	RunID    string            `json:"runId,omitempty" jsonschema:"description=Optional run id for scoped storage"`
 	At       string            `json:"at,omitempty" jsonschema:"description=When the action happened (RFC3339 / YYYY-MM-DD / 'now', defaults to now)"`
-	Metadata map[string]string `json:"metadata,omitempty" jsonschema:"description=Free-form string metadata for the action"`
+	Metadata map[string]string `json:"metadata,omitempty" jsonschema:"description=Free-form string metadata for the action. The keys env and team scope the lessons synthesis learns from it so staging and prod are never merged"`
 }
 
 type mcpRecordActionOutput struct {

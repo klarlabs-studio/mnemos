@@ -1493,6 +1493,7 @@ func printUsage() {
 	fmt.Println("  decision record --statement <s> ...  Record an agent decision (plan/reasoning/risk/beliefs)")
 	fmt.Println("  decision list|show|attach-outcome    List, show, or attach an outcome to a decision")
 	fmt.Println("  action record --kind <k> [...]       Record an operational action")
+	fmt.Println("                                       (--metadata env=<e>,team=<t> scopes the lessons it teaches)")
 	fmt.Println("  action list [--subject S] [--run R]  List recorded actions")
 	fmt.Println("  outcome record --action <id> [...]   Record the observed outcome of an action")
 	fmt.Println("  outcome list [--action <id>]         List recorded outcomes")
