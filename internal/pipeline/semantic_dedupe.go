@@ -3,10 +3,8 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"go.klarlabs.de/mnemos/internal/domain"
-	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/relate"
 	"go.klarlabs.de/mnemos/internal/store"
 )
@@ -107,24 +105,13 @@ func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64
 		return SemanticDedupePlan{}, err
 	}
 
-	// Pairwise similarity. O(n²) with no computation budget yet — that is
-	// tracked separately (#382 Phase 5.3); this pass only fixes what may merge.
-	maxSim := make(map[[2]int]float32)
-	var candidates []simPair
-	for i := 0; i < len(pool); i++ {
-		for j := i + 1; j < len(pool); j++ {
-			if len(pool[i].vec) != len(pool[j].vec) {
-				continue
-			}
-			sim, err := embedding.CosineSimilarity(pool[i].vec, pool[j].vec)
-			if err != nil {
-				continue
-			}
-			if float64(sim) >= threshold {
-				maxSim[[2]int{i, j}] = sim
-				candidates = append(candidates, simPair{i: i, j: j, sim: sim})
-			}
-		}
+	candidates, err := candidatePairs(ctx, pool, threshold)
+	if err != nil {
+		return SemanticDedupePlan{}, err
+	}
+	maxSim := make(map[[2]int]float32, len(candidates))
+	for _, c := range candidates {
+		maxSim[[2]int{c.i, c.j}] = c.sim
 	}
 
 	// Clustering is COMPLETE-linkage under cannot-link constraints, not
@@ -136,10 +123,9 @@ func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64
 	//
 	// Two clusters join only when EVERY cross pair is itself above threshold
 	// and no cross pair is forbidden by mayMerge. Pairs are taken strongest
-	// first, so the most certain duplicates claim each other before a weaker
-	// link can pull a member elsewhere; ties fall back to index order, which
-	// keeps the plan deterministic.
-	sort.SliceStable(candidates, func(a, b int) bool { return candidates[a].sim > candidates[b].sim })
+	// first (candidatePairs' order), so the most certain duplicates claim each
+	// other before a weaker link can pull a member elsewhere; ties fall back to
+	// index order, which keeps the plan deterministic.
 	parent := make([]int, len(pool))
 	members := make(map[int][]int, len(pool))
 	for i := range parent {
