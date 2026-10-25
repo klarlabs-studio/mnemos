@@ -61,6 +61,7 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [ADR 0031: Recall can return each belief's source excerpt](adr/0031-recall-returns-source-excerpts.md)
 - [ADR 0032: Trust vitals separate age from untrust](adr/0032-vitals-separate-age-from-untrust.md)
 - [ADR 0033: Merged beliefs become redirects](adr/0033-merged-beliefs-become-redirects.md)
+- [ADR 0034: Three ways a belief retires, and predictions that cannot be edited](adr/0034-time-axes-and-immutable-predictions.md)
 
 ## Working notes
 
