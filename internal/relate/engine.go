@@ -385,6 +385,18 @@ func testNetResult(c domain.Claim) int {
 // than false negatives. When the heuristic is uncertain (e.g. shared
 // entities but no timestamp ordering), no edge is emitted; the LLM
 // extractor (DetectCausalLLM) is the path for ambiguous cases.
+//
+// NOT WIRED into Detect or DetectIncremental, deliberately. Measured on
+// 3,000 random live beliefs of a real 66k-belief brain (2026-10-25): it
+// drew 1,838 edges at a token overlap of 1, and none of 30 sampled was
+// causal. At an overlap of 2 it drew 313, about one in 22 plausible.
+// Shared words plus an action verb are co-occurrence, not cause, and a
+// brain of session narration is full of both. Causal knowledge comes from
+// recorded interventions instead: an Action linked to its Outcome
+// (action_of / outcome_of, internal/autoedge) and a Decision's outcome
+// validating or refuting the beliefs it rested on. Do not wire this
+// without repeating that measurement; TestDetect_NeverEmitsCausalEdges
+// fails if it is wired.
 func (e Engine) DetectCausal(claims []domain.Claim) ([]domain.Relationship, error) {
 	if len(claims) < 2 {
 		return nil, nil
@@ -515,13 +527,12 @@ func claimEffectiveTime(c domain.Claim) time.Time {
 }
 
 // plausibleCausalOrdering returns true when the cause time precedes
-// the effect time within causalTimeTolerance. Zero-valued timestamps
-// fall through as "no signal, allow it" — extraction often loses
-// timestamps and we don't want to drop every causal pair just because
-// the upstream data was thin.
+// the effect time within causalTimeTolerance. A missing timestamp is no
+// signal, so it returns false: with no ordering there is nothing to
+// infer a direction from, which is what DetectCausal's contract says.
 func plausibleCausalOrdering(causeAt, effectAt time.Time) bool {
 	if causeAt.IsZero() || effectAt.IsZero() {
-		return true
+		return false
 	}
 	if !causeAt.Before(effectAt) && !causeAt.Equal(effectAt) {
 		return false

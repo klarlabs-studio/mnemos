@@ -5,12 +5,18 @@
 # Heuristic ground rules (see internal/relate/engine.go):
 #  - One claim must look like an action (deploy, rollback, scale, ...).
 #  - The other must look like a state change (latency, error rate, ...).
-#  - Shared content tokens >= 2 (rough entity overlap proxy).
-#  - Action timestamp must precede the state change within 48h when both
-#    are populated; missing timestamps fall through as "allowed".
+#  - Shared non-generic content tokens >= minCausalEntityOverlap (1).
+#  - Action timestamp must precede the state change within 48h; a missing
+#    timestamp means no edge.
 #
 # Cases are intentionally short — they target the heuristic, not full
 # extraction quality.
+#
+# This suite checks the heuristic against its own rules; it is NOT evidence
+# that the edges it draws are causal. Several gold pairs ("deploy, then a
+# latency spike") are co-occurrence. Measured on a real brain the heuristic
+# was nearly always wrong, and it is not wired into relate (see the
+# DetectCausal doc comment).
 
 test_cases:
   # === True causal pairs (should detect causes edge) ===
