@@ -41,7 +41,7 @@ func TestEnsureRepoGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gitignore not written: %v", err)
 	}
-	for _, want := range []string{".mnemos/mnemos.db", ".mnemos/.*.sha"} {
+	for _, want := range []string{".mnemos/mnemos.db", ".mnemos/.*.sha", ".mnemos/.*.block"} {
 		if !strings.Contains(string(first), want) {
 			t.Errorf("gitignore missing %q:\n%s", want, first)
 		}

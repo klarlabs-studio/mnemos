@@ -103,7 +103,7 @@ func (c *AnthropicClient) Complete(ctx context.Context, messages []Message) (Res
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return Response{}, fmt.Errorf("anthropic returned status %d: %s", resp.StatusCode, withoutSecret(string(respBody), c.apiKey))
+		return Response{}, &StatusError{Provider: "anthropic", Status: resp.StatusCode, Body: withoutSecret(string(respBody), c.apiKey)}
 	}
 
 	var result anthropicResponse
