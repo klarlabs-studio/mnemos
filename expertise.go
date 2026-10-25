@@ -99,7 +99,7 @@ func (m *memory) WhoKnowsBounded(ctx context.Context, query string, limit int) (
 	}
 	byAuthor := map[string]*agg{}
 	for _, c := range all {
-		if !c.ValidTo.IsZero() {
+		if !c.IsCurrent() {
 			continue // only currently-valid knowledge
 		}
 		bounds.Scanned++

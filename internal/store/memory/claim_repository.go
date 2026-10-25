@@ -112,8 +112,11 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 		// leave it alone on conflict. Writing it through here meant a re-append
 		// that omitted valid_to reopened a closed belief on memory:// only.
 		stored.ValidTo = time.Time{}
+		// archived_at is owned by Archive/Unarchive (ADR 0034), likewise.
+		stored.ArchivedAt = time.Time{}
 		if existing, ok := r.state.claims[claim.ID]; ok {
 			stored.ValidTo = existing.ValidTo
+			stored.ArchivedAt = existing.ArchivedAt
 			stored.TrustComputedAt = existing.TrustComputedAt
 			stored.TrustModelVersion = existing.TrustModelVersion
 			stored.LastVerified = existing.LastVerified
@@ -549,6 +552,39 @@ func (r ClaimRepository) SetValidity(_ context.Context, claimID string, validTo 
 	return nil
 }
 
+// Archive stops surfacing a claim from at (ADR 0034).
+func (r ClaimRepository) Archive(_ context.Context, claimID string, at time.Time) error {
+	if at.IsZero() {
+		return fmt.Errorf("archive %s: zero time", claimID)
+	}
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	c, ok := r.state.claims[claimID]
+	if !ok {
+		return nil
+	}
+	c.ArchivedAt = at.UTC()
+	r.state.claims[claimID] = c
+	return nil
+}
+
+// Unarchive clears ArchivedAt on whichever of ids are archived.
+func (r ClaimRepository) Unarchive(_ context.Context, ids []string) (int, error) {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	n := 0
+	for _, id := range ids {
+		c, ok := r.state.claims[id]
+		if !ok || c.ArchivedAt.IsZero() {
+			continue
+		}
+		c.ArchivedAt = time.Time{}
+		r.state.claims[id] = c
+		n++
+	}
+	return n, nil
+}
+
 // SetLifecycle transitions a claim's promotion state in place.
 func (r ClaimRepository) SetLifecycle(_ context.Context, claimID string, lifecycle domain.ClaimLifecycle) error {
 	r.state.mu.Lock()
@@ -733,6 +769,13 @@ func isLive(c domain.Claim) bool {
 	return c.ValidTo.IsZero() && c.Status != domain.ClaimStatusDeprecated
 }
 
+// isCurrentLive is the population brain health measures: held (isLive) and
+// not archived. The duplicate check keeps isLive, so a restatement can fold
+// onto an archived belief and bring it back (ADR 0034).
+func isCurrentLive(c domain.Claim) bool {
+	return isLive(c) && !c.IsArchived()
+}
+
 // CountLiveClaims implements ports.HealthSampler.
 func (r ClaimRepository) CountLiveClaims(ctx context.Context) (int, error) {
 	all, err := r.ListAll(ctx)
@@ -741,7 +784,7 @@ func (r ClaimRepository) CountLiveClaims(ctx context.Context) (int, error) {
 	}
 	n := 0
 	for _, c := range all {
-		if isLive(c) {
+		if isCurrentLive(c) {
 			n++
 		}
 	}
@@ -758,7 +801,7 @@ func (r ClaimRepository) CountLiveOrphans(ctx context.Context) (int, error) {
 	defer r.state.mu.RUnlock()
 	n := 0
 	for _, c := range all {
-		if isLive(c) && len(r.state.evidence[c.ID]) == 0 {
+		if isCurrentLive(c) && len(r.state.evidence[c.ID]) == 0 {
 			n++
 		}
 	}
@@ -790,7 +833,7 @@ func (r ClaimRepository) SampleLiveClaims(ctx context.Context, n int, seed uint6
 	byID := map[string]domain.Claim{}
 	var ids []string
 	for _, c := range all {
-		if isLive(c) {
+		if isCurrentLive(c) {
 			byID[c.ID] = c
 			ids = append(ids, c.ID)
 		}
@@ -825,7 +868,7 @@ func (r ClaimRepository) CountHypercorrections(_ context.Context, floor float64)
 			continue
 		}
 		a, b := sa.toDomain(), sb.toDomain()
-		if !isLive(a) || !isLive(b) ||
+		if !isCurrentLive(a) || !isCurrentLive(b) ||
 			a.Lifecycle == domain.ClaimLifecycleSuperseded || b.Lifecycle == domain.ClaimLifecycleSuperseded {
 			continue
 		}

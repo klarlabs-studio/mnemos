@@ -694,8 +694,10 @@ type ConsolidateOptions struct {
 	// strictly below this floor — the brain's offline pruning: a memory that has
 	// decayed (low confidence × corroboration × freshness) and is no longer
 	// reinforced stops surfacing. Forgetting is reduced retrievability, NOT
-	// erasure: valid-time is closed (SetValidity) and the history is kept. Status
-	// is NOT touched — a swept claim stays `active`. PROMOTED (human-endorsed)
+	// erasure: the claim is ARCHIVED (Claims.Archive, ADR 0034) and its history
+	// is kept. Valid time and status are NOT touched — a swept claim stays
+	// `active` and valid, and a write that restates or corroborates it brings it
+	// back. PROMOTED (human-endorsed)
 	// claims are NEVER forgotten, regardless of trust. 0 (the default) disables
 	// forgetting — dedupe only.
 	//
@@ -703,23 +705,25 @@ type ConsolidateOptions struct {
 	// comment said "marked deprecated" for long enough to mislead an ADR's gap
 	// analysis and to cause a real measurement bug in the evaluation harness,
 	// whose census counted Status and so read a pass reporting `forgotten: 4` as
-	// zero movement. They are orthogonal:
+	// zero movement. ADR 0034 separates three retirements:
 	//
-	//	valid-time closure   automatic sweeps (here, ForgetRefuted, supersedes, TTL)
-	//	Status → deprecated  deliberate acts (MCP forget, memory_deprecate,
-	//	                     contradiction losers, prune --narration, tombstones)
+	//	archived (archived_at)  automatic sweeps (here, ForgetRefuted): not surfaced
+	//	ended (valid_to)        the world changed: supersedes, TTL, explicit valid_to
+	//	Status → deprecated     deliberate acts (MCP forget, memory_deprecate,
+	//	                        contradiction losers, prune --narration, tombstones)
 	//
-	// They are also not equally hard to escape, which matters when reasoning about
-	// recall: the valid-time filter sits behind `IncludeHistory`, so `--at` and
-	// `--include-history` see through it, whereas excludeDeprecated has no bypass
-	// at all (internal/query/admission.go). A swept claim is the SOFTER retirement.
+	// They are not equally hard to escape, which matters when reasoning about
+	// recall: default recall drops archived and ended claims; `--include-history`
+	// sees both, and `--at` sees an archived claim (it was still valid) but not
+	// an ended one, whereas excludeDeprecated has no bypass at all
+	// (internal/query/admission.go). An archived claim is the SOFTEST retirement.
 	ForgetBelowTrust float64
 
 	// ForgetRefuted actively forgets claims that an observed outcome later REFUTED
 	// (a refutes edge, minted when a decision's failing outcome is attached) — the
 	// prediction-error loop closing on itself: a belief reality contradicted should
 	// stop surfacing, not linger at whatever trust it had. Like ForgetBelowTrust it
-	// invalidates (valid-time closed, history kept), never erases; PROMOTED claims
+	// archives (valid time and history kept), never erases; PROMOTED claims
 	// are exempt (a refuted human belief surfaces as a Hypercorrection for review
 	// instead). Off by default. Independent of ForgetBelowTrust — a claim can be
 	// refuted while still nominally trusted.
@@ -842,11 +846,11 @@ type ConsolidateResult struct {
 	// TrustRefreshed is the number of claims whose trust score was recomputed
 	// after the merge (evidence counts changed, so freshness/corroboration shift).
 	TrustRefreshed int
-	// Forgotten is the number of stale, low-trust, non-promoted claims marked
-	// deprecated (excluded from recall, history kept) — 0 unless ForgetBelowTrust
-	// was set, and 0 on a dry run.
+	// Forgotten is the number of stale, low-trust, non-promoted claims archived
+	// (excluded from default recall, valid time and history kept) — 0 unless
+	// ForgetBelowTrust was set, and 0 on a dry run.
 	Forgotten int
-	// Refuted is the number of non-promoted claims invalidated because an observed
+	// Refuted is the number of non-promoted claims archived because an observed
 	// outcome refuted them — 0 unless ForgetRefuted was set, and 0 on a dry run.
 	Refuted int
 	// Validated is the number of claims freshened because their latest outcome

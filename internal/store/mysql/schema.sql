@@ -152,6 +152,9 @@ CREATE INDEX idx_claims_text_key ON claims (text_key);
 -- merged_into (#387, ADR 0033): the claim that absorbed this one in a
 -- semantic-dedupe merge; the row stays as a deprecated redirect.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS merged_into          VARCHAR(190)  NOT NULL DEFAULT '';
+-- archived_at (ADR 0034): when an automatic sweep stopped surfacing this
+-- claim; NULL when it is surfaced. Owned by Archive/Unarchive, never the upsert.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS archived_at          DATETIME(6)   NULL;
 
 CREATE TABLE IF NOT EXISTS entities (
   id              VARCHAR(190) NOT NULL,

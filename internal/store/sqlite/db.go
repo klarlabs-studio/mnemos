@@ -145,7 +145,11 @@ CREATE TABLE IF NOT EXISTS claims (
 	text_key TEXT NOT NULL DEFAULT '',
 	-- merged_into (#387, ADR 0033): the claim that absorbed this one in a
 	-- semantic-dedupe merge; the row stays as a deprecated redirect.
-	merged_into TEXT NOT NULL DEFAULT ''
+	merged_into TEXT NOT NULL DEFAULT '',
+	-- archived_at (ADR 0034): when an automatic sweep stopped surfacing
+	-- this claim; '' when it is surfaced. Retrieval only: valid time and status
+	-- are untouched, and the upsert never writes it.
+	archived_at TEXT NOT NULL DEFAULT ''
 );
 -- idx_claims_trust_score and idx_claims_valid_to are created by
 -- migrate() after the v1→v2 / v2→v3 ALTER TABLEs add the columns on
@@ -659,7 +663,10 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // v30 (#387, ADR 0033) adds claims.merged_into: a semantic-dedupe merge keeps
 // the losing claim as a deprecated redirect to the winner instead of deleting
 // it. Existing rows default to the empty string (not merged).
-const currentSchemaVersion = 30
+// v31 (ADR 0034) adds claims.archived_at: automatic forgetting stops
+// surfacing a belief instead of closing its valid time. Existing rows default
+// to the empty string (not archived).
+const currentSchemaVersion = 31
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -771,6 +778,7 @@ var expectedColumns = []addMissingColumn{
 	// add columns to a table that already exists.
 	{"claims", "half_life_classifier", "TEXT NOT NULL DEFAULT ''"},
 	{"claims", "merged_into", "TEXT NOT NULL DEFAULT ''"},
+	{"claims", "archived_at", "TEXT NOT NULL DEFAULT ''"},
 	// v26 - explicit confirmation time (ADR 0026), read by canonical trust.
 	{"claims", "last_confirmed", "TEXT NOT NULL DEFAULT ''"},
 	// v27 - trust cache provenance (ADR 0026 §5).

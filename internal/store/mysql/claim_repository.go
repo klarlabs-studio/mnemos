@@ -545,6 +545,34 @@ func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, 
 	return nil
 }
 
+// Archive stops surfacing a claim from at (ADR 0034); valid time and status
+// are untouched.
+func (r ClaimRepository) Archive(ctx context.Context, claimID string, at time.Time) error {
+	if at.IsZero() {
+		return fmt.Errorf("archive %s: zero time", claimID)
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE claims SET archived_at = ? WHERE id = ?`, at.UTC(), claimID); err != nil {
+		return fmt.Errorf("archive %s: %w", claimID, err)
+	}
+	return nil
+}
+
+// Unarchive clears archived_at on whichever of ids are archived and returns
+// how many were.
+func (r ClaimRepository) Unarchive(ctx context.Context, ids []string) (int, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	placeholders, args := inPlaceholders(ids)
+	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
+	res, err := r.db.ExecContext(ctx, `UPDATE claims SET archived_at = NULL WHERE archived_at IS NOT NULL AND id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return 0, fmt.Errorf("unarchive claims: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 // SetValidity updates the claim's valid_to.
 func (r ClaimRepository) SetValidity(ctx context.Context, claimID string, validTo time.Time) error {
 	var args []any
@@ -799,7 +827,7 @@ var claimColumnNames = []string{
 	"scope_service", "scope_env", "scope_team",
 	"source_document", "source_type", "source_authority", "liveness",
 	"last_executed", "citation_count", "provenance_rationale", "visibility",
-	"merged_into",
+	"merged_into", "archived_at",
 }
 
 // claimColumns renders the shared projection, optionally table-qualified
@@ -858,6 +886,7 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	var confidenceComponents sql.NullString
 	var validFrom sql.NullTime
 	var validTo sql.NullTime
+	var archivedAt sql.NullTime
 	// last_verified is NULL until the first MarkVerified, and NULL is the
 	// cross-backend "never verified" sentinel — scanning it into a NullTime
 	// keeps the zero time rather than inventing an instant.
@@ -881,7 +910,7 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 		&scopeService, &scopeEnv, &scopeTeam,
 		&sourceDocument, &sourceType, &c.SourceAuthority, &liveness,
 		&lastExecuted, &c.CitationCount, &provenanceRationale, &visibility,
-		&c.MergedInto,
+		&c.MergedInto, &archivedAt,
 	); err != nil {
 		return domain.Claim{}, fmt.Errorf("scan claim row: %w", err)
 	}
@@ -905,6 +934,9 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	}
 	if validTo.Valid {
 		c.ValidTo = validTo.Time
+	}
+	if archivedAt.Valid {
+		c.ArchivedAt = archivedAt.Time
 	}
 	if lastVerified.Valid {
 		c.LastVerified = lastVerified.Time

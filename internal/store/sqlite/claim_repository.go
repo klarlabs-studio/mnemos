@@ -240,7 +240,7 @@ func (r ClaimRepository) listByEventIDsChunk(ctx context.Context, eventIDs []str
 	}
 
 	query := fmt.Sprintf(`
-SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.trust_computed_at, c.trust_model_version, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.last_confirmed, c.half_life_days, c.half_life_classifier, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class, c.durability, c.merged_into
+SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.trust_computed_at, c.trust_model_version, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.last_confirmed, c.half_life_days, c.half_life_classifier, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class, c.durability, c.merged_into, c.archived_at
 FROM claims c
 JOIN claim_evidence ce ON ce.claim_id = c.id
 WHERE ce.event_id IN (%s)
@@ -355,7 +355,7 @@ WHERE claim_id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201
 }
 
 // scanClaimColumns is the projection scanClaim reads, in its order.
-const scanClaimColumns = `id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version, valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, merged_into`
+const scanClaimColumns = `id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version, valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, merged_into, archived_at`
 
 // ListByIDs returns the claims with the given IDs (in unspecified order).
 // Used by the query engine for hop-expanded claim lookup — given a set of
@@ -410,6 +410,42 @@ func (r ClaimRepository) SetValidity(ctx context.Context, claimID string, validT
 		ID:      claimID,
 	})
 }
+
+// Archive stops surfacing a claim from at (ADR 0034); valid time and status
+// are untouched. Raw exec, like SetLifecycle.
+func (r ClaimRepository) Archive(ctx context.Context, claimID string, at time.Time) error {
+	if at.IsZero() {
+		return fmt.Errorf("archive %s: zero time", claimID)
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE claims SET archived_at = ? WHERE id = ?`, at.UTC().Format(time.RFC3339Nano), claimID); err != nil {
+		return fmt.Errorf("archive %s: %w", claimID, err)
+	}
+	return nil
+}
+
+// Unarchive clears archived_at on whichever of ids are archived and returns
+// how many were.
+func (r ClaimRepository) Unarchive(ctx context.Context, ids []string) (int, error) {
+	total := 0
+	for start := 0; start < len(ids); start += unarchiveBatch {
+		chunk := ids[start:min(start+unarchiveBatch, len(ids))]
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
+		}
+		res, err := r.db.ExecContext(ctx, `UPDATE claims SET archived_at = '' WHERE archived_at <> '' AND id IN (`+placeholders(len(chunk))+`)`, args...)
+		if err != nil {
+			return total, fmt.Errorf("unarchive claims: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+	}
+	return total, nil
+}
+
+// unarchiveBatch keeps each Unarchive statement under SQLite's bound-variable
+// limit.
+const unarchiveBatch = 500
 
 // SetLifecycle transitions a claim's promotion state in place. Raw exec
 // (not sqlc) so a single-column update needs no query regeneration.
@@ -941,6 +977,11 @@ func mapSQLClaim(row sqlcgen.Claim) (domain.Claim, error) {
 		Durability:           domain.Durability(row.Durability),
 		MergedInto:           row.MergedInto,
 	}
+	if aa, perr := parseOptionalTime(row.ArchivedAt); perr != nil {
+		return domain.Claim{}, fmt.Errorf("parse claim archived_at: %w", perr)
+	} else {
+		claim.ArchivedAt = aa
+	}
 	if lv, perr := parseOptionalTime(row.LastVerified); perr != nil {
 		return domain.Claim{}, fmt.Errorf("parse claim last_verified: %w", perr)
 	} else {
@@ -1049,6 +1090,7 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		lifecycle            string
 		subjectClass         string
 		durability           string
+		archivedAt           string
 	)
 
 	if err := scanner.Scan(
@@ -1092,8 +1134,14 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		&subjectClass,
 		&durability,
 		&claim.MergedInto,
+		&archivedAt,
 	); err != nil {
 		return domain.Claim{}, err
+	}
+	if aa, perr := parseOptionalTime(archivedAt); perr != nil {
+		return domain.Claim{}, fmt.Errorf("parse claim archived_at: %w", perr)
+	} else {
+		claim.ArchivedAt = aa
 	}
 	claim.VerifyCount = int(verifyCount)
 	claim.HalfLifeDays = halfLifeDays

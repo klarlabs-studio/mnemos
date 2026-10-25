@@ -64,7 +64,7 @@ func (m *memory) KnowledgeGapsBounded(ctx context.Context, limit int) (GapReport
 	now := time.Now().UTC()
 	var gaps []Gap
 	for _, c := range all {
-		if !c.ValidTo.IsZero() {
+		if !c.IsCurrent() {
 			continue // only live knowledge
 		}
 		bounds.Scanned++
@@ -193,7 +193,7 @@ func (m *memory) gapInputsFull(ctx context.Context, resolved map[string]struct{}
 
 	open := 0
 	for _, c := range all {
-		if c.ValidTo.IsZero() {
+		if c.IsCurrent() {
 			open++
 		}
 	}

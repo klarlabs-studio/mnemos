@@ -8,9 +8,10 @@ import (
 	"go.klarlabs.de/mnemos/internal/ports"
 )
 
-// openValiditySQL is the population knowledge gaps sweep: valid time open.
-// Unlike brain health's live beliefs it keeps deprecated claims.
-const openValiditySQL = `(valid_to IS NULL OR valid_to = '')`
+// openValiditySQL is the population knowledge gaps sweep: valid time open and
+// not archived (ADR 0034). Unlike brain health's live beliefs it keeps
+// deprecated claims.
+const openValiditySQL = `(valid_to IS NULL OR valid_to = '') AND archived_at = ''`
 
 // gapScanFraction is the share of open claims above which the candidates are
 // read with one ordered scan instead of fetched by id. On a contradiction-dense

@@ -109,7 +109,7 @@ func (m *memory) RecombinationsBounded(ctx context.Context, limit int) (Recombin
 	}
 	var cands []cand
 	for _, c := range all {
-		if !c.ValidTo.IsZero() {
+		if !c.IsCurrent() {
 			continue
 		}
 		sal := trust.SalienceOf(c, evidenceCount[c.ID])

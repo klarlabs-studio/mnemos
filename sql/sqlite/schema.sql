@@ -71,7 +71,11 @@ CREATE TABLE IF NOT EXISTS claims (
   text_key TEXT NOT NULL DEFAULT '',
   -- merged_into (#387, ADR 0033): the claim that absorbed this one in a
   -- semantic-dedupe merge; the row stays as a deprecated redirect.
-  merged_into TEXT NOT NULL DEFAULT ''
+  merged_into TEXT NOT NULL DEFAULT '',
+  -- archived_at (ADR 0034): when an automatic sweep stopped surfacing this
+  -- claim; '' when it is surfaced. Retrieval only: valid time and status are
+  -- untouched, and the upsert never writes it.
+  archived_at TEXT NOT NULL DEFAULT ''
 );
 
 -- No idx_claims_scope_service here: the runtime schema never created one, and

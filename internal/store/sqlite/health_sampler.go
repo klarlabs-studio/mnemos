@@ -9,10 +9,16 @@ import (
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
-// liveClaimSQL is the live-belief predicate: valid time open, not deprecated.
-// It must match idx_claims_live's WHERE clause exactly, and mnemos's
-// isLiveBelief in meaning (TestHealthSampler_* checks both).
+// liveClaimSQL is the held-belief predicate: valid time open, not deprecated.
+// It must match idx_claims_live's WHERE clause exactly. The write path's
+// duplicate check uses it as is, so a restatement can fold onto an archived
+// belief and bring it back (ADR 0034).
 const liveClaimSQL = `(valid_to IS NULL OR valid_to = '') AND status <> 'deprecated'`
+
+// currentClaimSQL is the population brain health measures: held and not
+// archived, mnemos's isLiveBelief in meaning (TestHealthSampler_* checks it).
+// It extends liveClaimSQL, so a query on it can still use idx_claims_live.
+const currentClaimSQL = liveClaimSQL + ` AND archived_at = ''`
 
 // liveIndex pins idx_claims_live. Left to itself the planner prefers
 // idx_claims_valid_to, reads every row to check status and sorts the ids in a
@@ -22,14 +28,14 @@ const liveIndex = `INDEXED BY idx_claims_live`
 // CountLiveClaims implements ports.HealthSampler.
 func (r ClaimRepository) CountLiveClaims(ctx context.Context) (int, error) {
 	var n int
-	err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM claims `+liveIndex+` WHERE `+liveClaimSQL).Scan(&n)
+	err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM claims `+liveIndex+` WHERE `+currentClaimSQL).Scan(&n)
 	return n, err
 }
 
 // CountLiveOrphans implements ports.HealthSampler.
 func (r ClaimRepository) CountLiveOrphans(ctx context.Context) (int, error) {
 	var n int
-	err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM claims c `+liveIndex+` WHERE `+liveClaimSQL+`
+	err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM claims c `+liveIndex+` WHERE `+currentClaimSQL+`
 		AND NOT EXISTS (SELECT 1 FROM claim_evidence e WHERE e.claim_id = c.id)`).Scan(&n)
 	return n, err
 }
@@ -48,7 +54,7 @@ func (r ClaimRepository) CountDanglingRelationships(ctx context.Context) (int, e
 // those claims. Ordered by id, so the result depends on nothing but the data
 // and the seed.
 func (r ClaimRepository) SampleLiveClaims(ctx context.Context, n int, seed uint64) ([]domain.Claim, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id FROM claims `+liveIndex+` WHERE `+liveClaimSQL+` ORDER BY id`)
+	rows, err := r.db.QueryContext(ctx, `SELECT id FROM claims `+liveIndex+` WHERE `+currentClaimSQL+` ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("list live claim ids: %w", err)
 	}
@@ -101,6 +107,7 @@ func (r ClaimRepository) CountHypercorrections(ctx context.Context, floor float6
 			JOIN claims b ON b.id = r.to_claim_id
 			WHERE r.type = 'contradicts'
 			  AND (a.valid_to IS NULL OR a.valid_to = '') AND (b.valid_to IS NULL OR b.valid_to = '')
+			  AND a.archived_at = '' AND b.archived_at = ''
 			  AND a.status <> 'deprecated' AND b.status <> 'deprecated'
 			  AND a.lifecycle <> 'superseded' AND b.lifecycle <> 'superseded'
 		)

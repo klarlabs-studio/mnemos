@@ -41,17 +41,21 @@ func TestConsolidate_ForgetsRefuted(t *testing.T) {
 		t.Fatalf("Refuted = %d, want 1 (only c1; c2 validated, c3 promoted-exempt)", res.Refuted)
 	}
 
-	// Verify valid-time: c1 closed, c2 + c3 still open.
+	// Verify retrieval: c1 archived, c2 + c3 still surfaced; valid time stays
+	// open on all three, since a refutation archives rather than ends (ADR 0034).
 	claims, err := m.conn.Claims.ListByIDs(ctx, []string{"c1", "c2", "c3"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]bool{} // id -> invalidated?
+	got := map[string]bool{} // id -> archived?
 	for _, c := range claims {
-		got[c.ID] = !c.ValidTo.IsZero()
+		got[c.ID] = c.IsArchived()
+		if !c.ValidTo.IsZero() {
+			t.Errorf("%s: forgetting closed valid time (%v); it must archive", c.ID, c.ValidTo)
+		}
 	}
 	if !got["c1"] {
-		t.Error("c1 (refuted) must be invalidated")
+		t.Error("c1 (refuted) must be archived")
 	}
 	if got["c2"] {
 		t.Error("c2 (validated) must remain valid")

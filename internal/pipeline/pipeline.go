@@ -293,8 +293,17 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 	// made a write cost grow with the brain: on an 11k-claim store every
 	// capture rewrote every row, and under -race that eventually exceeded the
 	// governed-write budget and failed the write outright.
+	affected := trustAffectedClaimIDs(enriched, links)
+
+	// A write that restates an archived belief, or adds evidence to it, brings
+	// it back (ADR 0034): it was archived for going unreinforced, and this is
+	// the reinforcement. The fold above routed the restatement onto it.
+	if _, err := conn.Claims.Unarchive(ctx, affected); err != nil {
+		return fmt.Errorf("unarchive reinforced claims: %w", err)
+	}
+
 	if scoped, ok := conn.Claims.(ports.ScopedTrustScorer); ok {
-		if _, err := scoped.RecomputeTrustForClaims(ctx, trustAffectedClaimIDs(enriched, links), defaultTrustScorer()); err != nil {
+		if _, err := scoped.RecomputeTrustForClaims(ctx, affected, defaultTrustScorer()); err != nil {
 			return fmt.Errorf("recompute trust: %w", err)
 		}
 		return nil

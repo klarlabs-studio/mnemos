@@ -111,7 +111,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score, 
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into
+       visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into, archived_at
 FROM claims
 ORDER BY created_at ASC;
 
@@ -127,7 +127,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score, 
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into
+       visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into, archived_at
 FROM claims
 WHERE type = 'test_result'
   AND test_requirement_ref = ?

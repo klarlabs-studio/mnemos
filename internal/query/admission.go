@@ -176,15 +176,16 @@ func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []dom
 	}
 
 	// Temporal filter: by default, exclude claims that have been
-	// superseded (valid_to in the past). Callers asking for history
-	// (--include-history) opt out; --at <date> queries swap the
-	// cutoff for a point-in-time check.
+	// superseded (valid_to in the past) and claims a sweep archived. Callers
+	// asking for history (--include-history) opt out; --at <date> queries swap
+	// the cutoff for a point-in-time check on valid time alone, because an
+	// archived belief was still valid then (ADR 0034).
 	if !opts.IncludeHistory {
-		asOf := opts.AsOf
-		if asOf.IsZero() {
-			asOf = now
+		if opts.AsOf.IsZero() {
+			out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(now) && !c.IsArchived() })
+		} else {
+			out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(opts.AsOf) })
 		}
-		out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(asOf) })
 	}
 
 	// Ingestion-time filter (the second axis of the bi-temporal

@@ -251,8 +251,8 @@ func measureCensus(ctx context.Context, dsn, dbPath string) ([]Metric, []string,
 
 	// Two distinct notions of "gone" have to be counted separately, because the
 	// consolidation stages use different ones and a census that tracks only
-	// status is blind to half of them. Forgetting closes VALID TIME
-	// (Claims.SetValidity) and leaves status untouched; the narration prune and
+	// status is blind to half of them. Forgetting ARCHIVES (Claims.Archive,
+	// ADR 0034) and leaves status untouched; the narration prune and
 	// contradiction demotion move STATUS. Counting only status made a pass that
 	// reported "forgotten: 4" show zero movement in every census metric — the
 	// process was working and the measurement could not see it.
@@ -268,11 +268,11 @@ func measureCensus(ctx context.Context, dsn, dbPath string) ([]Metric, []string,
 		case domain.ClaimStatusContested:
 			contested++
 		}
-		// A claim counts as surviving only if BOTH gates are open: valid time
-		// still open (not forgotten) and status not deprecated (not pruned or
-		// demoted). Checking one alone lets the other stage's removals pass as
-		// survival.
-		if !c.ValidTo.IsZero() || c.Status == domain.ClaimStatusDeprecated {
+		// A claim counts as surviving only if BOTH gates are open: current
+		// (valid time open and not archived, i.e. not forgotten) and status not
+		// deprecated (not pruned or demoted). Checking one alone lets the other
+		// stage's removals pass as survival.
+		if !c.IsCurrent() || c.Status == domain.ClaimStatusDeprecated {
 			invalidated++
 			continue
 		}

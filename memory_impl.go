@@ -387,7 +387,7 @@ func (m *memory) RecallWithConflicts(ctx context.Context, q Query) ([]Result, []
 		}
 		if claims, cerr := m.conn.Claims.ListByIDs(ctx, list); cerr == nil {
 			for _, c := range claims {
-				if c.ValidTo.IsZero() && c.Lifecycle != domain.ClaimLifecycleSuperseded {
+				if c.IsCurrent() && c.Lifecycle != domain.ClaimLifecycleSuperseded {
 					valid[c.ID] = c
 				}
 			}
@@ -1396,7 +1396,7 @@ func (m *memory) rankForReplay(ctx context.Context, surpriseByClaim map[string]f
 	}
 	ranked := make([]pri, 0, len(all))
 	for _, c := range all {
-		if !c.ValidTo.IsZero() {
+		if !c.IsCurrent() {
 			continue // only rehearse currently-valid memories
 		}
 		// Priority = intrinsic importance (trust.Salience) × recency × a bounded
@@ -1536,8 +1536,8 @@ func (m *memory) reinforceValidatedClaims(ctx context.Context) (int, error) {
 	now := time.Now().UTC()
 	n := 0
 	for _, c := range all {
-		if !c.ValidTo.IsZero() {
-			continue // skip invalidated claims
+		if !c.IsCurrent() {
+			continue // skip ended and archived claims
 		}
 		refuted, ok := verdicts[c.ID]
 		if !ok || refuted {
@@ -1890,8 +1890,8 @@ func (m *memory) forgetRefutedClaims(ctx context.Context) (int, error) {
 	now := time.Now().UTC()
 	n := 0
 	for _, c := range all {
-		if !c.ValidTo.IsZero() {
-			continue // already invalidated
+		if !c.IsCurrent() {
+			continue // already ended or archived
 		}
 		if c.Lifecycle == domain.ClaimLifecyclePromoted {
 			continue // human-endorsed: surfaces as a hypercorrection, never silently forgotten
@@ -1899,8 +1899,10 @@ func (m *memory) forgetRefutedClaims(ctx context.Context) (int, error) {
 		if _, ok := refuted[c.ID]; !ok {
 			continue
 		}
-		if err := m.conn.Claims.SetValidity(ctx, c.ID, now); err != nil {
-			return n, fmt.Errorf("invalidate refuted claim %s: %w", c.ID, err)
+		// Archived, not ended: the refutes edge records the verdict, and
+		// declaring the belief never true is a deliberate act (ADR 0034).
+		if err := m.conn.Claims.Archive(ctx, c.ID, now); err != nil {
+			return n, fmt.Errorf("archive refuted claim %s: %w", c.ID, err)
 		}
 		n++
 	}
@@ -1954,8 +1956,8 @@ func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64, prot
 	forgotten := 0
 	protectedSkipped := 0
 	for _, c := range all {
-		if !c.ValidTo.IsZero() {
-			continue // already invalidated (superseded or previously forgotten)
+		if !c.IsCurrent() {
+			continue // already superseded or previously forgotten
 		}
 		if c.Lifecycle == domain.ClaimLifecyclePromoted {
 			continue // never forget human-endorsed knowledge
@@ -1978,8 +1980,8 @@ func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64, prot
 			protectedSkipped++
 			continue
 		}
-		if err := m.conn.Claims.SetValidity(ctx, c.ID, now); err != nil {
-			return forgotten, protectedSkipped, fmt.Errorf("invalidate stale claim %s: %w", c.ID, err)
+		if err := m.conn.Claims.Archive(ctx, c.ID, now); err != nil {
+			return forgotten, protectedSkipped, fmt.Errorf("archive stale claim %s: %w", c.ID, err)
 		}
 		forgotten++
 	}
@@ -2069,9 +2071,9 @@ func (m *memory) hypercorrectionList(ctx context.Context, h *healthCorpus) ([]Hy
 		if !aok || !bok {
 			continue
 		}
-		// Only currently-valid claims: a contradiction of an already-forgotten
-		// belief (valid-time closed) is history, not a live alert.
-		if !a.ValidTo.IsZero() || !b.ValidTo.IsZero() {
+		// Only current claims: a contradiction of an already-forgotten (archived)
+		// or ended belief is history, not a live alert.
+		if !a.IsCurrent() || !b.IsCurrent() {
 			continue
 		}
 		// Deprecated is the other way a belief is retired. It closes status
@@ -2274,10 +2276,10 @@ func (m *memory) hypercorrectionCount(ctx context.Context, h *healthCorpus) (int
 }
 
 // isLiveBelief is the population every brain-health rate is a fraction of: a
-// belief neither forgotten (valid time closed) nor deprecated. The low-trust,
-// staleness and trust-decay loop in BrainHealth applies the same two checks.
+// belief neither ended, archived (forgotten) nor deprecated. The low-trust,
+// staleness and trust-decay loop in BrainHealth applies the same checks.
 func isLiveBelief(c domain.Claim) bool {
-	return c.ValidTo.IsZero() && c.Status != domain.ClaimStatusDeprecated
+	return c.IsCurrent() && c.Status != domain.ClaimStatusDeprecated
 }
 
 // liveBeliefCount counts the beliefs [isLiveBelief] admits.
