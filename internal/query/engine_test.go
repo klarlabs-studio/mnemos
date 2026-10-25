@@ -120,6 +120,9 @@ func (f fakeClaimRepo) ListStatusHistoryByClaimID(_ context.Context, _ string) (
 func (f fakeClaimRepo) ListLiveByTextKeys(context.Context, []string) ([]domain.Claim, error) {
 	return nil, nil
 }
+func (f fakeClaimRepo) ListMergedByTextKeys(context.Context, []string) ([]domain.Claim, error) {
+	return nil, nil
+}
 
 func (f fakeClaimRepo) ListByIDs(_ context.Context, claimIDs []string) ([]domain.Claim, error) {
 	wanted := map[string]struct{}{}

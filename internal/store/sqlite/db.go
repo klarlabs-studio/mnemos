@@ -668,7 +668,7 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // keyed by backfillClaimTextKeys, which runs on every open, not behind the gate.
 // v30 (#387, ADR 0033) adds claims.merged_into: a semantic-dedupe merge keeps
 // the losing claim as a deprecated redirect to the winner instead of deleting
-// it. Existing rows default to '' (not merged).
+// it. Existing rows default to the empty string (not merged).
 const currentSchemaVersion = 30
 
 // addMissingColumn declares one defensive column-add. Each entry is
