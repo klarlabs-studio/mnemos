@@ -350,25 +350,11 @@ CREATE INDEX IF NOT EXISTS idx_claim_entities_entity_id ON claim_entities(entity
 CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(event_id UNINDEXED, content, tokenize = 'porter unicode61');
 CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(claim_id UNINDEXED, text, tokenize = 'porter unicode61');
 
-CREATE TRIGGER IF NOT EXISTS events_ai_fts AFTER INSERT ON events BEGIN
-	INSERT INTO events_fts(event_id, content) VALUES (new.id, new.content);
-END;
-CREATE TRIGGER IF NOT EXISTS events_ad_fts AFTER DELETE ON events BEGIN
-	DELETE FROM events_fts WHERE event_id = old.id;
-END;
-CREATE TRIGGER IF NOT EXISTS events_au_fts AFTER UPDATE OF content ON events BEGIN
-	UPDATE events_fts SET content = new.content WHERE event_id = old.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS claims_ai_fts AFTER INSERT ON claims BEGIN
-	INSERT INTO claims_fts(claim_id, text) VALUES (new.id, new.text);
-END;
-CREATE TRIGGER IF NOT EXISTS claims_ad_fts AFTER DELETE ON claims BEGIN
-	DELETE FROM claims_fts WHERE claim_id = old.id;
-END;
-CREATE TRIGGER IF NOT EXISTS claims_au_fts AFTER UPDATE OF text ON claims BEGIN
-	UPDATE claims_fts SET text = new.text WHERE claim_id = old.id;
-END;
+-- claim_id → claims_fts rowid (and event_id → events_fts rowid), so the FTS
+-- triggers find a row by point lookup instead of scanning the UNINDEXED id
+-- column. The triggers themselves are installed by ensureFTSMaps.
+CREATE TABLE IF NOT EXISTS events_fts_map (event_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS claims_fts_map (claim_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL);
 
 -- Phase 2: actions + outcomes
 CREATE TABLE IF NOT EXISTS actions (
@@ -599,6 +585,10 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 
 	if err := migrate(db); err != nil {
 		return fmt.Errorf("schema migration: %w", err)
+	}
+
+	if err := ensureFTSMaps(db); err != nil {
+		return fmt.Errorf("fts triggers: %w", err)
 	}
 
 	// The token index is an accelerator, never a precondition: until it is
@@ -910,6 +900,14 @@ INSERT INTO claims_fts(claim_id, text) SELECT id, text FROM claims;
 `
 		if _, err := db.Exec(rebuildFTS); err != nil {
 			return fmt.Errorf("rebuild FTS with porter tokenizer: %w", err)
+		}
+	}
+
+	if userVersion < 18 {
+		// Both blocks above write the FTS tables directly, behind the
+		// triggers' back, so the rowid maps no longer describe them.
+		if err := reconcileFTSMaps(db); err != nil {
+			return err
 		}
 	}
 
