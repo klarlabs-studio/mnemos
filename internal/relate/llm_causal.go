@@ -21,6 +21,9 @@ import (
 //
 // Falls back to heuristic-only output when the LLM client is nil so
 // callers can swap LLM on/off without restructuring the pipeline.
+//
+// Not wired into any production path, like DetectCausal: see its doc for
+// the measurement.
 func (e Engine) DetectCausalLLM(ctx context.Context, claims []domain.Claim, client llm.Client) ([]domain.Relationship, error) {
 	if client == nil {
 		return e.DetectCausal(claims)
