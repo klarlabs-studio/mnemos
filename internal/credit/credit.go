@@ -211,19 +211,28 @@ func Assign(decisions []domain.Decision, exps map[string]domain.Expectation) map
 // grows. The magnitude is drawn from [domain.Expectation.Surprise], already
 // normalized to tolerance units. Result is in [-Step, +Step].
 func decisionDelta(exp domain.Expectation) (float64, bool) {
-	s, ok := exp.Surprise()
+	confirmed, ok := exp.Confirmed()
 	if !ok {
 		return 0, false
 	}
-	if s <= 1 { // within tolerance → the prediction was borne out (validated)
-		return Step * (1 - s), true // s in [0,1] → magnitude in [0, Step]
+	// The sign is the expectation's verdict, the one reconciliation records
+	// (#395); surprise only sets the magnitude.
+	if confirmed {
+		s, _ := exp.Surprise()
+		return Step * (1 - math.Min(s, 1)), true // s in [0,1] → magnitude in [0, Step]
 	}
-	over := s - 1 // tolerance units past the confirmed band
+	over, _ := exp.ExcessSurprise() // past the confirmed band, in surprise units
 	if over > refuteSaturation {
 		over = refuteSaturation
 	}
-	return -Step * (over / refuteSaturation), true
+	// A refutation always costs something, however close to the band.
+	return -Step * math.Max(over/refuteSaturation, minRefuteFraction), true
 }
+
+// minRefuteFraction is the smallest share of Step a refuted prediction
+// costs. Without it, an observation a hair outside the band scored as
+// zero credit: neither validated nor refuted.
+const minRefuteFraction = 0.01
 
 // SumFor returns the net credit a set of contributions imply for one belief,
 // clamped to ±CreditCap. The clamp is the accumulation bound: however many

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -67,14 +66,8 @@ func (m *memory) ReconcileExpectations(ctx context.Context) ([]Reconciliation, e
 		if !exp.HasObservation {
 			continue // unobserved (even past horizon) stays unconfirmed — never refuted
 		}
-		diff := math.Abs(exp.Predicted - exp.Observed)
-		confirmed := diff <= exp.Tolerance
-		scale := exp.Tolerance
-		if scale <= 0 {
-			if scale = math.Abs(exp.Predicted); scale == 0 {
-				scale = 1
-			}
-		}
+		confirmed, _ := exp.Confirmed()
+		surprise, _ := exp.Surprise()
 		// Emit the verdict edge so the existing routing (ForgetRefuted /
 		// ReinforceValidated) acts on it — the prediction loop closing on itself.
 		kind := domain.RelationshipTypeRefutes
@@ -103,7 +96,7 @@ func (m *memory) ReconcileExpectations(ctx context.Context) ([]Reconciliation, e
 			ClaimID:   exp.ClaimID,
 			Predicted: exp.Predicted,
 			Observed:  exp.Observed,
-			Surprise:  diff / scale,
+			Surprise:  surprise,
 			Confirmed: confirmed,
 		})
 	}

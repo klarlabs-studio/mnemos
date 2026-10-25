@@ -204,7 +204,8 @@ func (e LLMEngine) extractBatch(ctx context.Context, b promptBatch, usage *Token
 	// Rule-based fallback for just this batch. It produces no entities, and is
 	// pure CPU work, so it still succeeds on an expired context — which is what
 	// lets a timed-out capture persist something instead of nothing.
-	fallback := func() ([]domain.Claim, []domain.ClaimEvidence) {
+	fallback := func(reason string, cause error) ([]domain.Claim, []domain.ClaimEvidence) {
+		recordFallback(reason, cause, len(b.events))
 		c, l, err := e.fallback.Extract(ctx, b.events)
 		if err != nil {
 			return nil, nil
@@ -216,7 +217,7 @@ func (e LLMEngine) extractBatch(ctx context.Context, b promptBatch, usage *Token
 	if rawClaims, ok := e.loadCachedClaims(cacheKey); ok {
 		claims, links, ents, err := e.buildClaims(rawClaims, b.events)
 		if err != nil {
-			c, l := fallback()
+			c, l := fallback("cached_claims_unusable", err)
 			return c, l, nil
 		}
 		return claims, links, ents
@@ -242,13 +243,20 @@ func (e LLMEngine) extractBatch(ctx context.Context, b promptBatch, usage *Token
 		BackoffPolicy: retry.BackoffExponential,
 		Jitter:        true,
 		Logger:        slog.New(slog.NewJSONHandler(os.Stderr, nil)),
+		// A rejected key, an exhausted account or a wrong endpoint does not
+		// heal in a second; retrying it only multiplies the failed calls.
+		IsRetryable: func(err error) bool { return !llm.IsPermanent(err) },
 	})
 
 	resp, err := retrier.Execute(bctx, func(ctx context.Context) (llm.Response, error) {
 		return e.client.Complete(ctx, messages)
 	})
 	if err != nil {
-		c, l := fallback()
+		reason := "llm_error"
+		if llm.IsPermanent(err) {
+			reason = "llm_rejected"
+		}
+		c, l := fallback(reason, err)
 		return c, l, nil
 	}
 
@@ -260,7 +268,7 @@ func (e LLMEngine) extractBatch(ctx context.Context, b promptBatch, usage *Token
 
 	rawClaims, err := parseLLMResponse(resp.Content)
 	if err != nil {
-		c, l := fallback()
+		c, l := fallback("unparseable_response", err)
 		return c, l, nil
 	}
 	if cacheKey != "" {
@@ -272,7 +280,7 @@ func (e LLMEngine) extractBatch(ctx context.Context, b promptBatch, usage *Token
 
 	claims, links, ents, err := e.buildClaims(rawClaims, b.events)
 	if err != nil {
-		c, l := fallback()
+		c, l := fallback("claims_unusable", err)
 		return c, l, nil
 	}
 	return claims, links, ents

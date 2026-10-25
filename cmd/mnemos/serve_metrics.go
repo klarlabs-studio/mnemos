@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"go.klarlabs.de/mnemos/internal/embedding"
+	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 )
 
@@ -61,10 +62,18 @@ var (
 		Name: "mnemos_embed_failed_total",
 		Help: "Background embeds that stored no vector, leaving the item recallable by text only.",
 	}, func() float64 { return float64(embedding.Failures()) })
+
+	// extractFallbackTotal exposes extract.Fallbacks (#451): a non-zero rate
+	// means beliefs are being stored by the rule-based extractor although an
+	// LLM is configured — a wrong endpoint, a rejected key or an outage.
+	extractFallbackTotal = prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Name: "mnemos_extract_fallback_total",
+		Help: "LLM extraction batches that fell back to rule-based extraction.",
+	}, func() float64 { return float64(extract.Fallbacks()) })
 )
 
 func init() {
-	mnemosRegistry.MustRegister(httpRequestsTotal, httpRequestDuration, httpInFlight, relateSkippedTotal, embedFailedTotal)
+	mnemosRegistry.MustRegister(httpRequestsTotal, httpRequestDuration, httpInFlight, relateSkippedTotal, embedFailedTotal, extractFallbackTotal)
 }
 
 // metricsMiddleware records RED telemetry (rate, errors, duration) for
