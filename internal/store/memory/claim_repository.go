@@ -112,8 +112,11 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 		// leave it alone on conflict. Writing it through here meant a re-append
 		// that omitted valid_to reopened a closed belief on memory:// only.
 		stored.ValidTo = time.Time{}
+		// archived_at is owned by Archive/Unarchive (ADR 0034), likewise.
+		stored.ArchivedAt = time.Time{}
 		if existing, ok := r.state.claims[claim.ID]; ok {
 			stored.ValidTo = existing.ValidTo
+			stored.ArchivedAt = existing.ArchivedAt
 			stored.TrustComputedAt = existing.TrustComputedAt
 			stored.TrustModelVersion = existing.TrustModelVersion
 			stored.LastVerified = existing.LastVerified
@@ -547,6 +550,39 @@ func (r ClaimRepository) SetValidity(_ context.Context, claimID string, validTo 
 	}
 	r.state.claims[claimID] = c
 	return nil
+}
+
+// Archive stops surfacing a claim from at (ADR 0034).
+func (r ClaimRepository) Archive(_ context.Context, claimID string, at time.Time) error {
+	if at.IsZero() {
+		return fmt.Errorf("archive %s: zero time", claimID)
+	}
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	c, ok := r.state.claims[claimID]
+	if !ok {
+		return nil
+	}
+	c.ArchivedAt = at.UTC()
+	r.state.claims[claimID] = c
+	return nil
+}
+
+// Unarchive clears ArchivedAt on whichever of ids are archived.
+func (r ClaimRepository) Unarchive(_ context.Context, ids []string) (int, error) {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	n := 0
+	for _, id := range ids {
+		c, ok := r.state.claims[id]
+		if !ok || c.ArchivedAt.IsZero() {
+			continue
+		}
+		c.ArchivedAt = time.Time{}
+		r.state.claims[id] = c
+		n++
+	}
+	return n, nil
 }
 
 // SetLifecycle transitions a claim's promotion state in place.

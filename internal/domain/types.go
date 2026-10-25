@@ -323,6 +323,14 @@ type Belief struct {
 	// A target may itself have been merged since; follow the chain.
 	MergedInto string
 
+	// ArchivedAt is when an automatic sweep stopped surfacing this claim, or
+	// zero. Archiving is about retrieval, not truth (ADR 0034): the belief is
+	// still held and still valid, so as-of queries (IsValidAt) and
+	// --include-history see it, while default recall does not. Owned by
+	// ClaimRepository.Archive/Unarchive; the upsert never writes it, and a
+	// write that adds evidence to an archived claim un-archives it.
+	ArchivedAt time.Time
+
 	// Scope optionally narrows the claim to a specific operational
 	// context (service, env, team). Empty scope (the zero value)
 	// means "applies everywhere". The query engine filters by scope
@@ -465,6 +473,19 @@ func (c Belief) IsValidAt(t time.Time) bool {
 		return false
 	}
 	return true
+}
+
+// IsArchived reports whether an automatic sweep stopped surfacing the claim.
+func (c Belief) IsArchived() bool {
+	return !c.ArchivedAt.IsZero()
+}
+
+// IsCurrent reports whether the claim is in force now and still surfaced:
+// its valid time is open and it is not archived. It is the check for "a belief
+// the brain currently works with". Status is separate: a deprecated claim can
+// be current by this test and is excluded by its own check.
+func (c Belief) IsCurrent() bool {
+	return c.ValidTo.IsZero() && c.ArchivedAt.IsZero()
 }
 
 // IsSuperseded reports whether the claim has been replaced by another

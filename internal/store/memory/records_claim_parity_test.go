@@ -131,6 +131,8 @@ var upsertIgnoredFields = map[string]string{
 		"is not a confirmation, and the SQL backends never write last_confirmed from an upsert",
 	"ValidTo": "it is owned by SetValidity: the SQL backends insert NULL and never write " +
 		"valid_to on conflict, so a re-append cannot reopen a closed belief",
+	"ArchivedAt": "it is owned by Archive/Unarchive (ADR 0034): re-extracting a claim " +
+		"neither archives it nor brings it back, and no SQL backend writes archived_at from an upsert",
 }
 
 // The round trip must also hold through the repository, not just the record

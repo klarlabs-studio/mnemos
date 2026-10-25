@@ -72,6 +72,7 @@ type Claim struct {
 	Durability           string         `json:"durability"`
 	TextKey              string         `json:"text_key"`
 	MergedInto           string         `json:"merged_into"`
+	ArchivedAt           string         `json:"archived_at"`
 }
 
 type ClaimEntity struct {

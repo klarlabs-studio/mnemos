@@ -78,6 +78,9 @@ var unwrittenColumns = map[string]string{
 		"would describe a score that was never computed.",
 	"trust_model_version": "Owned by the trust recompute (ADR 0026 §5), alongside " +
 		"trust_computed_at; an upsert stamping it would claim a model computed a score it did not.",
+	"archived_at": "Owned by Archive/Unarchive (ADR 0034). The ingest upsert must never " +
+		"write it: re-extracting a claim neither archives it nor brings it back, and " +
+		"un-archiving is a separate statement keyed on the claims a write added evidence to.",
 	"last_confirmed": "Owned by MarkConfirmed (ADR 0026). Re-extracting a claim is not " +
 		"a confirmation, and an ingest that wrote it would reset the explicit-confirmation " +
 		"time canonical trust reads.",

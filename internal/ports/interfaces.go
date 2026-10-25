@@ -84,6 +84,13 @@ type ClaimRepository interface {
 	ListStatusHistoryByClaimID(ctx context.Context, claimID string) ([]domain.ClaimStatusTransition, error)
 	SetValidity(ctx context.Context, claimID string, validTo time.Time) error
 
+	// Archive stops surfacing a claim from at (ADR 0034). Valid time and
+	// status are untouched: an archived belief is still held. Unarchive
+	// clears archived_at on whichever of ids are archived and returns how many
+	// were. Neither creates a claim; an unknown id is ignored.
+	Archive(ctx context.Context, claimID string, at time.Time) error
+	Unarchive(ctx context.Context, ids []string) (int, error)
+
 	// SetLifecycle transitions an existing claim's promotion state
 	// (candidate/promoted/superseded, or empty). It is the in-place
 	// counterpart to writing Lifecycle on Upsert: a candidate claim a
