@@ -27,7 +27,7 @@ func TestClaims_ArchiveRoundTripsOnEveryBackend(t *testing.T) {
 		if err := b.conn.Claims.Upsert(ctx, claims); err != nil {
 			t.Fatalf("%s: upsert: %v", b.name, err)
 		}
-		if err := b.conn.Claims.Archive(ctx, "c-arch-a", archivedAt); err != nil {
+		if err := b.conn.Claims.Archive(ctx, "c-arch-a", archivedAt, domain.ChangeNote{}); err != nil {
 			t.Fatalf("%s: archive: %v", b.name, err)
 		}
 
@@ -46,7 +46,7 @@ func TestClaims_ArchiveRoundTripsOnEveryBackend(t *testing.T) {
 			t.Fatalf("%s: an upsert changed archived_at to %v", b.name, got.ArchivedAt)
 		}
 
-		n, err := b.conn.Claims.Unarchive(ctx, []string{"c-arch-a", "c-arch-b", "c-arch-missing"})
+		n, err := b.conn.Claims.Unarchive(ctx, []string{"c-arch-a", "c-arch-b", "c-arch-missing"}, domain.ChangeNote{})
 		if err != nil {
 			t.Fatalf("%s: unarchive: %v", b.name, err)
 		}
@@ -56,7 +56,7 @@ func TestClaims_ArchiveRoundTripsOnEveryBackend(t *testing.T) {
 		if got := readClaim(t, b, "c-arch-a"); got.IsArchived() {
 			t.Fatalf("%s: still archived after Unarchive (%v)", b.name, got.ArchivedAt)
 		}
-		if n, err := b.conn.Claims.Unarchive(ctx, nil); err != nil || n != 0 {
+		if n, err := b.conn.Claims.Unarchive(ctx, nil, domain.ChangeNote{}); err != nil || n != 0 {
 			t.Fatalf("%s: unarchive of nothing = %d, %v", b.name, n, err)
 		}
 	}

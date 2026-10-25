@@ -73,6 +73,7 @@ func (w *Writer) MarkVerified(ctx context.Context, claimID string, verifiedAt ti
 type setValidityInput struct {
 	ClaimID string
 	ValidTo time.Time
+	Why     ClaimReason
 }
 
 type setValidityExecutor struct{ conn *store.Conn }
@@ -83,7 +84,8 @@ func (e setValidityExecutor) Execute(ctx context.Context, input any, _ axidomain
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("set_validity: unexpected input %T", input)
 	}
-	if err := e.conn.Claims.SetValidity(ctx, in.ClaimID, in.ValidTo); err != nil {
+	note := domain.ChangeNote{Reason: in.Why.Reason, ChangedBy: in.Why.ChangedBy}
+	if err := e.conn.Claims.SetValidity(ctx, in.ClaimID, in.ValidTo, note); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("set validity: %w", err)
 	}
 	return axidomain.ExecutionResult{
@@ -91,14 +93,16 @@ func (e setValidityExecutor) Execute(ctx context.Context, input any, _ axidomain
 		Summary: fmt.Sprintf("set valid_to on claim %s", in.ClaimID),
 	}, ev("mnemos.write.set_validity", map[string]any{
 		"claim_id": in.ClaimID, "valid_to": in.ValidTo.Format(time.RFC3339),
+		"reason": in.Why.Reason, "changed_by": in.Why.ChangedBy,
 	}), nil
 }
 
 // SetValidity closes a claim's validity interval at validTo (or clears
-// it when validTo is the zero value).
-func (w *Writer) SetValidity(ctx context.Context, claimID string, validTo time.Time) error {
+// it when validTo is the zero value). why is recorded with the change in the
+// claim's validity history (ADR 0034).
+func (w *Writer) SetValidity(ctx context.Context, claimID string, validTo time.Time, why ClaimReason) error {
 	_, err := dispatch[string](ctx, w, actionSetValidity, setValidityInput{
-		ClaimID: claimID, ValidTo: validTo,
+		ClaimID: claimID, ValidTo: validTo, Why: why,
 	})
 	return err
 }

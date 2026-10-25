@@ -82,14 +82,22 @@ type ClaimRepository interface {
 	// rather than O(total claims).
 	ListByTestRequirementRef(ctx context.Context, ref string) ([]domain.Claim, error)
 	ListStatusHistoryByClaimID(ctx context.Context, claimID string) ([]domain.ClaimStatusTransition, error)
-	SetValidity(ctx context.Context, claimID string, validTo time.Time) error
+
+	// SetValidity, Archive and Unarchive each append a ValidityChange with
+	// note's who and why in the same transaction as the update, and append
+	// nothing when the value does not change (ADR 0034).
+	SetValidity(ctx context.Context, claimID string, validTo time.Time, note domain.ChangeNote) error
 
 	// Archive stops surfacing a claim from at (ADR 0034). Valid time and
 	// status are untouched: an archived belief is still held. Unarchive
 	// clears archived_at on whichever of ids are archived and returns how many
 	// were. Neither creates a claim; an unknown id is ignored.
-	Archive(ctx context.Context, claimID string, at time.Time) error
-	Unarchive(ctx context.Context, ids []string) (int, error)
+	Archive(ctx context.Context, claimID string, at time.Time, note domain.ChangeNote) error
+	Unarchive(ctx context.Context, ids []string, note domain.ChangeNote) (int, error)
+
+	// ListValidityHistory returns claimID's validity changes oldest first, or
+	// every claim's when claimID is empty.
+	ListValidityHistory(ctx context.Context, claimID string) ([]domain.ValidityChange, error)
 
 	// SetLifecycle transitions an existing claim's promotion state
 	// (candidate/promoted/superseded, or empty). It is the in-place
@@ -134,6 +142,7 @@ type ClaimRepository interface {
 	//
 	//	claim_evidence
 	//	claim_status_history
+	//	claim_validity_history (every backend)
 	//	claim_versions
 	//	claim_feedback
 	//	claim_expectations

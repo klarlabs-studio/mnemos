@@ -330,6 +330,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	for _, q := range []string{
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_evidence")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_status_history")),
+		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_validity_history")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_expectations")),
 		fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, qualify(r.ns, "claims")),
 	} {
@@ -422,6 +423,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claim_status_history"))); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claim_validity_history"))); err != nil {
+		return fmt.Errorf("delete claim_validity_history: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claims"))); err != nil {
 		return fmt.Errorf("delete claims: %w", err)
@@ -538,56 +542,6 @@ func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, conf
 		return fmt.Errorf("mark confirmed %s: %w", claimID, err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
-	}
-	return nil
-}
-
-// Archive stops surfacing a claim from at (ADR 0034); valid time and status
-// are untouched.
-func (r ClaimRepository) Archive(ctx context.Context, claimID string, at time.Time) error {
-	if at.IsZero() {
-		return fmt.Errorf("archive %s: zero time", claimID)
-	}
-	stmt := fmt.Sprintf(`UPDATE %s SET archived_at = $1 WHERE id = $2`, qualify(r.ns, "claims"))
-	if _, err := r.db.ExecContext(ctx, stmt, at.UTC(), claimID); err != nil {
-		return fmt.Errorf("archive %s: %w", claimID, err)
-	}
-	return nil
-}
-
-// Unarchive clears archived_at on whichever of ids are archived and returns
-// how many were.
-func (r ClaimRepository) Unarchive(ctx context.Context, ids []string) (int, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	stmt := fmt.Sprintf(`UPDATE %s SET archived_at = NULL WHERE archived_at IS NOT NULL AND id = ANY($1)`, qualify(r.ns, "claims"))
-	res, err := r.db.ExecContext(ctx, stmt, pgArray(ids))
-	if err != nil {
-		return 0, fmt.Errorf("unarchive claims: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
-}
-
-// SetValidity satisfies the corresponding ports method.
-func (r ClaimRepository) SetValidity(ctx context.Context, claimID string, validTo time.Time) error {
-	var args []any
-	var stmt string
-	if validTo.IsZero() {
-		stmt = fmt.Sprintf(`UPDATE %s SET valid_to = NULL WHERE id = $1`, qualify(r.ns, "claims"))
-		args = []any{claimID}
-	} else {
-		stmt = fmt.Sprintf(`UPDATE %s SET valid_to = $1 WHERE id = $2`, qualify(r.ns, "claims"))
-		args = []any{validTo.UTC(), claimID}
-	}
-	res, err := r.db.ExecContext(ctx, stmt, args...)
-	if err != nil {
-		return fmt.Errorf("set validity for %s: %w", claimID, err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
 		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
 	}
 	return nil

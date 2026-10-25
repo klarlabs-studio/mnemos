@@ -902,7 +902,7 @@ func (s *Server) AppendBeliefs(ctx context.Context, req *mnemosv1.AppendBeliefsR
 	// re-append cannot reopen a closed belief by omitting the field. Same as
 	// POST /v1/beliefs.
 	for _, c := range closes {
-		if err := s.writerFor(ctx).SetValidity(ctx, c.id, c.at); err != nil {
+		if err := s.writerFor(ctx).SetValidity(ctx, c.id, c.at, govwrite.ClaimReason{Reason: "grpc: AppendBeliefs valid_to", ChangedBy: actor}); err != nil {
 			return nil, status.Errorf(codes.Internal, "set valid_to: %v", err)
 		}
 	}

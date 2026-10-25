@@ -26,6 +26,9 @@ type auditWhoExport struct {
 	Relationships []auditWhoRelationship `json:"associations"`
 	Embeddings    []auditWhoEmbedding    `json:"embeddings"`
 	Transitions   []auditWhoTransition   `json:"status_transitions"`
+	// ValidityChanges are the principal's changes to a belief's valid time or
+	// archive state (ADR 0034).
+	ValidityChanges []auditWhoValidityChange `json:"validity_changes"`
 }
 
 type auditWhoCounts struct {
@@ -34,6 +37,7 @@ type auditWhoCounts struct {
 	Relationships int `json:"associations"`
 	Embeddings    int `json:"embeddings"`
 	Transitions   int `json:"status_transitions"`
+	Validity      int `json:"validity_changes"`
 }
 
 type auditWhoEvent struct {
@@ -66,6 +70,15 @@ type auditWhoEmbedding struct {
 	Model      string `json:"model"`
 	Dimensions int    `json:"dimensions"`
 	CreatedAt  string `json:"created_at"`
+}
+
+type auditWhoValidityChange struct {
+	ClaimID   string `json:"belief_id"`
+	Field     string `json:"field"`
+	From      string `json:"from,omitempty"`
+	To        string `json:"to,omitempty"`
+	ChangedAt string `json:"changed_at"`
+	Reason    string `json:"reason"`
 }
 
 type auditWhoTransition struct {
@@ -153,6 +166,8 @@ func buildAuditWhoExport(ctx context.Context, conn *store.Conn, principal string
 		Relationships: []auditWhoRelationship{},
 		Embeddings:    []auditWhoEmbedding{},
 		Transitions:   []auditWhoTransition{},
+
+		ValidityChanges: []auditWhoValidityChange{},
 	}
 	if !since.IsZero() {
 		export.Since = since.Format(time.RFC3339)
@@ -258,12 +273,34 @@ func buildAuditWhoExport(ctx context.Context, conn *store.Conn, principal string
 		})
 	}
 
+	validity, err := conn.Claims.ListValidityHistory(ctx, "")
+	if err != nil {
+		return export, fmt.Errorf("list validity history: %w", err)
+	}
+	for _, v := range validity {
+		if v.ChangedBy != principal {
+			continue
+		}
+		if !since.IsZero() && v.ChangedAt.Before(since) {
+			continue
+		}
+		export.ValidityChanges = append(export.ValidityChanges, auditWhoValidityChange{
+			ClaimID:   v.ClaimID,
+			Field:     string(v.Field),
+			From:      rfc3339OrEmpty(v.From),
+			To:        rfc3339OrEmpty(v.To),
+			ChangedAt: v.ChangedAt.UTC().Format(time.RFC3339Nano),
+			Reason:    v.Reason,
+		})
+	}
+
 	export.Counts = auditWhoCounts{
 		Events:        len(export.Events),
 		Claims:        len(export.Claims),
 		Relationships: len(export.Relationships),
 		Embeddings:    len(export.Embeddings),
 		Transitions:   len(export.Transitions),
+		Validity:      len(export.ValidityChanges),
 	}
 	return export, nil
 }
@@ -295,6 +332,9 @@ func printAuditWhoHuman(e auditWhoExport) {
 	for _, t := range e.Transitions {
 		rows = append(rows, row{t.ChangedAt, "status", t.ClaimID, fmt.Sprintf("%s → %s (%s)", t.FromStatus, t.ToStatus, t.Reason)})
 	}
+	for _, v := range e.ValidityChanges {
+		rows = append(rows, row{v.ChangedAt, "validity", v.ClaimID, fmt.Sprintf("%s %s → %s (%s)", v.Field, orDash(v.From), orDash(v.To), v.Reason)})
+	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].At < rows[j].At })
 
 	fmt.Printf("audit: principal=%s", e.Principal)
@@ -302,8 +342,8 @@ func printAuditWhoHuman(e auditWhoExport) {
 		fmt.Printf(" since=%s", e.Since)
 	}
 	fmt.Println()
-	fmt.Printf("counts: events=%d claims=%d rels=%d embed=%d transitions=%d\n\n",
-		e.Counts.Events, e.Counts.Claims, e.Counts.Relationships, e.Counts.Embeddings, e.Counts.Transitions)
+	fmt.Printf("counts: events=%d claims=%d rels=%d embed=%d transitions=%d validity=%d\n\n",
+		e.Counts.Events, e.Counts.Claims, e.Counts.Relationships, e.Counts.Embeddings, e.Counts.Transitions, e.Counts.Validity)
 	if len(rows) == 0 {
 		fmt.Println("(no writes attributed to this principal)")
 		return
@@ -312,4 +352,12 @@ func printAuditWhoHuman(e auditWhoExport) {
 	for _, r := range rows {
 		fmt.Printf("%-30s %-8s %-26s %s\n", r.At, r.Kind, r.ID, r.Note)
 	}
+}
+
+// orDash renders an unset value in the human audit table.
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }

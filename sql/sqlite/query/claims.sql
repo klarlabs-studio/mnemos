@@ -1,6 +1,6 @@
 -- name: UpsertClaim :exec
 -- ON CONFLICT preserves trust_score and valid_to (computed/managed
--- separately via UpdateClaimTrust and SetClaimValidity), but does
+-- separately via UpdateClaimTrust and ClaimRepository.SetValidity), but does
 -- refresh valid_from: re-extracting a claim with newer evidence is
 -- a legitimate "this fact is observed again from <ts>" signal.
 --
@@ -74,12 +74,6 @@ ON CONFLICT(id) DO UPDATE SET
   -- Always the incoming text's key: text is overwritten above, and a key left
   -- behind would let the duplicate check match words the claim no longer says.
   text_key = excluded.text_key;
-
--- name: SetClaimValidity :exec
--- Atomic supersession primitive: mark a claim as no longer valid as
--- of the given timestamp. Pass NULL to clear valid_to (un-supersede
--- the claim), useful when a resolution is reverted.
-UPDATE claims SET valid_to = ? WHERE id = ?;
 
 -- name: MarkClaimConfirmed :exec
 -- Records an EXPLICIT confirmation (ADR 0026). Deliberately separate from

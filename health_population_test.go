@@ -29,7 +29,7 @@ func retiredCorpus(t *testing.T, m *memory, n int) {
 	}
 	putClaims(t, m, cs)
 	for i := 1; i < n; i += 2 {
-		if err := m.conn.Claims.SetValidity(ctx, fmt.Sprintf("retired-%04d", i), now); err != nil {
+		if err := m.conn.Claims.SetValidity(ctx, fmt.Sprintf("retired-%04d", i), now, domain.ChangeNote{}); err != nil {
 			t.Fatalf("close validity: %v", err)
 		}
 	}

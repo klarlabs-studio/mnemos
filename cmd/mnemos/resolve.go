@@ -203,7 +203,7 @@ func runSupersession(ctx context.Context, w *govwrite.Writer, newID, oldID, reas
 		cutoff = time.Now().UTC()
 	}
 
-	if err := w.SetValidity(ctx, oldClaim.ID, cutoff); err != nil {
+	if err := w.SetValidity(ctx, oldClaim.ID, cutoff, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "set valid_to on superseded claim"))
 		return
 	}

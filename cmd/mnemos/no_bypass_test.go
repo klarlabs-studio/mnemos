@@ -42,7 +42,7 @@ var storageReadMethods = map[string]bool{
 	"ListByTrigger": true, "ListByRiskLevel": true, "ListByStatus": true,
 	"ListBySeverity": true, "ListByType": true, "ListByTestRequirementRef": true,
 	"ListStatusHistoryByClaimID": true, "ListAllEvidence": true,
-	"ListAllStatusHistory": true, "ListEvidence": true, "ListBeliefs": true,
+	"ListAllStatusHistory": true, "ListValidityHistory": true, "ListEvidence": true, "ListBeliefs": true,
 	"ListLessons": true, "ListVersions": true, "ListClaimsForEntity": true,
 	"ListEntitiesForClaim": true, "ListByEntityType": true,
 	"ListIDsMissingEmbedding": true, "ClaimIDsMissingEntityLinks": true,

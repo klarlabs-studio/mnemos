@@ -239,6 +239,20 @@ CREATE TABLE IF NOT EXISTS claim_status_history (
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_claim_id   ON claim_status_history(claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_changed_at ON claim_status_history(changed_at);
 
+-- claim_validity_history (ADR 0034): every change to a claim's valid_to or
+-- archived_at, with who and why. NULL from/to means the field was unset.
+CREATE TABLE IF NOT EXISTS claim_validity_history (
+  id          bigserial   PRIMARY KEY,
+  claim_id    text        NOT NULL REFERENCES claims(id),
+  field       text        NOT NULL,
+  from_value  timestamptz,
+  to_value    timestamptz,
+  changed_at  timestamptz NOT NULL,
+  reason      text        NOT NULL DEFAULT '',
+  changed_by  text        NOT NULL DEFAULT '<system>'
+);
+CREATE INDEX IF NOT EXISTS idx_claim_validity_history_claim_id ON claim_validity_history(claim_id);
+
 -- Embeddings: bytea matches the SQLite BLOB shape and stays the portable
 -- source of truth. When pgvector is installed, a nullable `embedding
 -- public.vector` accelerator column is added below (see the $mnemos_pgvector$
@@ -516,7 +530,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'events','claims','entities','claim_entities','claim_evidence','relationships',
-    'compilation_jobs','claim_status_history','embeddings','agents','actions',
+    'compilation_jobs','claim_status_history','claim_validity_history','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
     'entity_relationships','working_memory_blocks','claim_expectations',

@@ -346,6 +346,7 @@ func (r ClaimRepository) DeleteCascade(_ context.Context, claimID string) error 
 	}
 	delete(r.state.evidence, claimID)
 	delete(r.state.statusHistory, claimID)
+	r.dropValidityHistoryLocked(claimID)
 	delete(r.state.claimVersions, claimID)
 	delete(r.state.feedback, claimID)
 	delete(r.state.expectations, claimID)
@@ -432,6 +433,7 @@ func (r ClaimRepository) DeleteAll(_ context.Context) error {
 	r.state.claimOrder = nil
 	r.state.evidence = map[string]map[string]struct{}{}
 	r.state.statusHistory = map[string][]storedTransition{}
+	r.state.validityHistory = nil
 	return nil
 }
 
@@ -535,41 +537,46 @@ func (r ClaimRepository) MarkVerified(_ context.Context, claimID string, verifie
 }
 
 // SetValidity sets (or, with a zero validTo, clears) the claim's
-// upper validity bound. Returns an error if the claim does not exist.
-func (r ClaimRepository) SetValidity(_ context.Context, claimID string, validTo time.Time) error {
+// upper validity bound and records the change (ADR 0034). Returns an error if
+// the claim does not exist.
+func (r ClaimRepository) SetValidity(_ context.Context, claimID string, validTo time.Time, note domain.ChangeNote) error {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
 	c, ok := r.state.claims[claimID]
 	if !ok {
 		return fmt.Errorf("claim %s: not found", claimID)
 	}
-	if validTo.IsZero() {
-		c.ValidTo = time.Time{}
-	} else {
-		c.ValidTo = validTo.UTC()
+	if !validTo.IsZero() {
+		validTo = validTo.UTC()
 	}
+	if c.ValidTo.Equal(validTo) {
+		return nil
+	}
+	r.recordValidityChangeLocked(claimID, domain.ValidityFieldValidTo, c.ValidTo, validTo, note)
+	c.ValidTo = validTo
 	r.state.claims[claimID] = c
 	return nil
 }
 
 // Archive stops surfacing a claim from at (ADR 0034).
-func (r ClaimRepository) Archive(_ context.Context, claimID string, at time.Time) error {
+func (r ClaimRepository) Archive(_ context.Context, claimID string, at time.Time, note domain.ChangeNote) error {
 	if at.IsZero() {
 		return fmt.Errorf("archive %s: zero time", claimID)
 	}
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
 	c, ok := r.state.claims[claimID]
-	if !ok {
+	if !ok || c.ArchivedAt.Equal(at.UTC()) {
 		return nil
 	}
+	r.recordValidityChangeLocked(claimID, domain.ValidityFieldArchivedAt, c.ArchivedAt, at.UTC(), note)
 	c.ArchivedAt = at.UTC()
 	r.state.claims[claimID] = c
 	return nil
 }
 
 // Unarchive clears ArchivedAt on whichever of ids are archived.
-func (r ClaimRepository) Unarchive(_ context.Context, ids []string) (int, error) {
+func (r ClaimRepository) Unarchive(_ context.Context, ids []string, note domain.ChangeNote) (int, error) {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
 	n := 0
@@ -578,11 +585,48 @@ func (r ClaimRepository) Unarchive(_ context.Context, ids []string) (int, error)
 		if !ok || c.ArchivedAt.IsZero() {
 			continue
 		}
+		r.recordValidityChangeLocked(id, domain.ValidityFieldArchivedAt, c.ArchivedAt, time.Time{}, note)
 		c.ArchivedAt = time.Time{}
 		r.state.claims[id] = c
 		n++
 	}
 	return n, nil
+}
+
+// ListValidityHistory returns claimID's validity changes oldest first, or
+// every claim's when claimID is empty.
+func (r ClaimRepository) ListValidityHistory(_ context.Context, claimID string) ([]domain.ValidityChange, error) {
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	var out []domain.ValidityChange
+	for _, c := range r.state.validityHistory {
+		if claimID == "" || c.ClaimID == claimID {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+func (r ClaimRepository) recordValidityChangeLocked(claimID string, field domain.ValidityField, from, to time.Time, note domain.ChangeNote) {
+	by := note.ChangedBy
+	if by == "" {
+		by = domain.SystemUser
+	}
+	r.state.validityHistory = append(r.state.validityHistory, domain.ValidityChange{
+		ClaimID: claimID, Field: field, From: from, To: to,
+		ChangedAt: time.Now().UTC(), Reason: note.Reason, ChangedBy: by,
+	})
+}
+
+// dropValidityHistoryLocked removes claimID's validity changes.
+func (r ClaimRepository) dropValidityHistoryLocked(claimID string) {
+	kept := r.state.validityHistory[:0]
+	for _, c := range r.state.validityHistory {
+		if c.ClaimID != claimID {
+			kept = append(kept, c)
+		}
+	}
+	r.state.validityHistory = kept
 }
 
 // SetLifecycle transitions a claim's promotion state in place.

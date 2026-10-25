@@ -250,6 +250,22 @@ CREATE TABLE IF NOT EXISTS claim_status_history (
   CONSTRAINT fk_claim_status_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- claim_validity_history (ADR 0034): every change to a claim's valid_to or
+-- archived_at, with who and why. NULL from/to means the field was unset.
+CREATE TABLE IF NOT EXISTS claim_validity_history (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  claim_id    VARCHAR(190)    NOT NULL,
+  field       VARCHAR(32)     NOT NULL,
+  from_value  DATETIME(6)     NULL,
+  to_value    DATETIME(6)     NULL,
+  changed_at  DATETIME(6)     NOT NULL,
+  reason      MEDIUMTEXT      NOT NULL,
+  changed_by  VARCHAR(190)    NOT NULL DEFAULT '<system>',
+  PRIMARY KEY (id),
+  KEY idx_claim_validity_history_claim_id (claim_id),
+  CONSTRAINT fk_claim_validity_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS embeddings (
   entity_id   VARCHAR(190) NOT NULL,
   entity_type VARCHAR(64)  NOT NULL,
