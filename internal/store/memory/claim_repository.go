@@ -91,6 +91,13 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 				stored.HalfLifeClassifier = existing.HalfLifeClassifier
 			}
 		}
+		// A merge redirect survives a write that carries none (#387), matching
+		// the SQL backends' `CASE WHEN excluded.merged_into <> ''` rule.
+		if claim.MergedInto == "" {
+			if existing, ok := r.state.claims[claim.ID]; ok {
+				stored.MergedInto = existing.MergedInto
+			}
+		}
 		// last_verified / verify_count are owned by MarkVerified and
 		// last_confirmed by MarkConfirmed (ADR 0026). The SQL backends never
 		// write any of them from an upsert, so neither does this one: a
@@ -248,8 +255,18 @@ func (r ClaimRepository) ListByIDs(_ context.Context, claimIDs []string) ([]doma
 // ListLiveByTextKeys implements ports.ClaimRepository. The key is derived from
 // the text on read; there is no stored column to keep in step with it.
 func (r ClaimRepository) ListLiveByTextKeys(_ context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(keys, isLive), nil
+}
+
+// ListMergedByTextKeys implements ports.ClaimRepository: the merge redirects
+// whose text key is one of keys, oldest first.
+func (r ClaimRepository) ListMergedByTextKeys(_ context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(keys, func(c domain.Claim) bool { return c.MergedInto != "" }), nil
+}
+
+func (r ClaimRepository) listByTextKeys(keys []string, keep func(domain.Claim) bool) []domain.Claim {
 	if len(keys) == 0 {
-		return []domain.Claim{}, nil
+		return []domain.Claim{}
 	}
 	want := make(map[string]struct{}, len(keys))
 	for _, k := range keys {
@@ -260,7 +277,7 @@ func (r ClaimRepository) ListLiveByTextKeys(_ context.Context, keys []string) ([
 	out := []domain.Claim{}
 	for _, sc := range r.state.claims {
 		c := sc.toDomain()
-		if _, ok := want[domain.ClaimTextKey(c.Text)]; ok && isLive(c) {
+		if _, ok := want[domain.ClaimTextKey(c.Text)]; ok && keep(c) {
 			out = append(out, c)
 		}
 	}
@@ -270,7 +287,7 @@ func (r ClaimRepository) ListLiveByTextKeys(_ context.Context, keys []string) ([
 		}
 		return out[i].ID < out[j].ID
 	})
-	return out, nil
+	return out
 }
 
 // RepointEvidence rewrites every (fromClaimID, eventID) link to

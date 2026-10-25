@@ -315,6 +315,14 @@ type Belief struct {
 	// on day one cannot be rolled back by reverting a binary.
 	HalfLifeClassifier string
 
+	// MergedInto is the id of the claim that absorbed this one, or empty. A
+	// semantic-dedupe merge keeps the losing claim as a deprecated redirect
+	// instead of deleting it (#387, ADR 0033), as Wikidata keeps a merged item:
+	// its history stays readable, its id never resolves to nothing, and a later
+	// restatement of its text is routed to the claim that holds the belief now.
+	// A target may itself have been merged since; follow the chain.
+	MergedInto string
+
 	// Scope optionally narrows the claim to a specific operational
 	// context (service, env, team). Empty scope (the zero value)
 	// means "applies everywhere". The query engine filters by scope

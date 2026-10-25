@@ -72,7 +72,7 @@ inventory.
 | `internal/ingest/` | Multi-format input → events |
 | `internal/parser/` | Input normalization |
 | `internal/extract/` | Rule-based and LLM-powered claim extraction |
-| `internal/relate/` | Pairwise relationship detection with stop-word filtering and overlap thresholds; `DetectCausal` heuristic + `DetectCausalLLM` LLM augmentation for borderline pairs |
+| `internal/relate/` | Pairwise relationship detection with stop-word filtering and overlap thresholds. `DetectCausal` / `DetectCausalLLM` exist but are deliberately **not wired**: on a real brain they labelled co-occurrence as cause in nearly every pair. Causal edges come from recorded interventions (action→outcome, decision outcomes); `TestDetect_NeverEmitsCausalEdges` fails if they are wired |
 | `internal/query/` | Question answering with ranking (embeddings or token overlap fallback); scope filter; stale-claim surfacing |
 | `internal/embedding/` | Vector embedding client abstraction (openai, gemini, ollama, openai-compat) |
 | `internal/llm/` | LLM client abstraction (anthropic, openai, gemini, ollama, openai-compat) |

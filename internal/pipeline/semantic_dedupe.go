@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 
@@ -327,19 +326,12 @@ func pickWinner(pool []indexedClaim, members []int) int {
 }
 
 // DedupeTombstoneReason is the audit reason on the status_history row written
-// when a losing claim is retired by a merge. It is also what an operator greps
-// for when a merge could not remove the row and left a tombstone behind.
+// when a losing claim is retired by a merge.
 const DedupeTombstoneReason = "semantic dedupe: merged into the canonical claim"
 
 // claimEntityUnlinker is the optional capability a backend may expose to drop a
-// claim's rows in the claim↔entity link table.
-//
-// That table is the one claim dependent no port method can currently reach, and
-// it is not inert: on FK-enforcing backends a surviving claim_entities row makes
-// the final `DELETE FROM claims` fail outright, which is precisely how a merge
-// used to abandon a stripped loser. When a backend grows the method this
-// assertion starts succeeding and the merge completes the delete; until then the
-// merge falls back to leaving an auditable tombstone (see [ApplySemanticDedupe]).
+// claim's rows in the claim↔entity link table. The winner inherits the loser's
+// entity links, so the redirect does not need its own.
 type claimEntityUnlinker interface {
 	UnlinkClaim(ctx context.Context, claimID string) error
 }
@@ -347,10 +339,16 @@ type claimEntityUnlinker interface {
 // ApplySemanticDedupe executes the plan through port-typed
 // repository methods so it works against every storage backend.
 //
-// A merge is a move, not a delete: EVERY row hanging off the losing claim has
-// to end up on the winner or be cleaned, or it survives pointing at a claim
-// that is no longer reachable. The dependents of a claim, and what happens to
-// each:
+// A merge moves what the losing claim supports onto the winner and keeps the
+// loser as a deprecated redirect (Claim.MergedInto), never deleting it (#387,
+// ADR 0033). A similarity score is evidence of identity, not proof of it
+// (Halpin et al., "When owl:sameAs isn't the Same", ISWC 2010), so a merge must
+// stay auditable: Wikidata keeps a merged item as a redirect for the same
+// reason, and so its id never resolves to nothing. The redirect keeps its
+// claim_versions and claim_status_history, and the write path routes a later
+// restatement of its text to the winner (CollapseKnownClaims).
+//
+// The dependents of a claim, and what happens to each:
 //
 //   - claim_evidence     → repointed to the winner (Claims.RepointEvidence),
 //     so the winner ends up with the UNION of both claims' evidence rather
@@ -366,19 +364,13 @@ type claimEntityUnlinker interface {
 //     winner's row.
 //   - embeddings         → the loser's vector is deleted; the winner keeps its
 //     own (the plan chose it as canonical).
-//   - claim_evidence, claim_status_history, claim_versions
-//     → removed with the row by ClaimRepository.DeleteCascade.
+//   - claim_status_history, claim_versions → kept on the redirect.
 //
-// Ordering is deliberate. The loser is DEPRECATED before anything is moved off
-// it: repository calls commit independently, so without a tombstone a failure
-// after the evidence repoint left an ACTIVE claim with no evidence and no edges
-// — an unsupported belief that still scored and that recall could still
-// surface. With the tombstone the worst reachable end state is a retired row.
-//
-// A loser whose row cannot be deleted (a residual dependent this pass cannot
-// reach) stays tombstoned and is reported in the returned error rather than
-// silently abandoned; the merge continues so one stubborn claim cannot block
-// the rest of the plan. Every step is idempotent, so a re-run converges.
+// Ordering is deliberate. The loser becomes a redirect BEFORE anything is moved
+// off it: repository calls commit independently, so a failure part-way through
+// leaves a retired row, never an active claim with no evidence that still scores
+// and that recall could surface. Every step is idempotent, so a re-run
+// converges.
 func ApplySemanticDedupe(ctx context.Context, conn *store.Conn, plan SemanticDedupePlan) (int, error) {
 	if len(plan.Merges) == 0 {
 		return 0, nil
@@ -388,83 +380,69 @@ func ApplySemanticDedupe(ctx context.Context, conn *store.Conn, plan SemanticDed
 	}
 
 	merged := 0
-	var tombstoned []string
-	var causes []error
 	for _, m := range plan.Merges {
 		for _, dupID := range m.DuplicateIDs {
-			cause, err := mergeClaimInto(ctx, conn, dupID, m.WinnerID)
-			if err != nil {
+			if err := mergeClaimInto(ctx, conn, dupID, m.WinnerID); err != nil {
 				return merged, err
 			}
 			merged++
-			if cause != nil {
-				tombstoned = append(tombstoned, dupID)
-				causes = append(causes, cause)
-			}
 		}
-	}
-	if len(tombstoned) > 0 {
-		return merged, fmt.Errorf(
-			"merged %d claim(s), but %d could not be removed and remain as deprecated tombstones %v (re-run to resume): %w",
-			merged, len(tombstoned), tombstoned, errors.Join(causes...))
 	}
 	return merged, nil
 }
 
-// mergeClaimInto folds dupID into winnerID. A non-nil first return is the
-// reason the losing row survived as a tombstone (the merge itself succeeded);
-// a non-nil error means the merge could not even get that far.
-func mergeClaimInto(ctx context.Context, conn *store.Conn, dupID, winnerID string) (tombstoneCause, err error) {
-	if err := tombstoneMergedClaim(ctx, conn, dupID); err != nil {
-		return nil, err
+// mergeClaimInto folds dupID into winnerID and leaves dupID as a redirect.
+func mergeClaimInto(ctx context.Context, conn *store.Conn, dupID, winnerID string) error {
+	if err := redirectMergedClaim(ctx, conn, dupID, winnerID); err != nil {
+		return err
 	}
 	// Additive first: the winner gains everything before the loser loses it, so
 	// an interrupted merge duplicates knowledge rather than destroying it.
 	if err := repointEntityLinks(ctx, conn, dupID, winnerID); err != nil {
-		return nil, err
+		return err
 	}
 	if err := repointExpectation(ctx, conn, dupID, winnerID); err != nil {
-		return nil, err
+		return err
 	}
 	if err := mergeFeedback(ctx, conn, dupID, winnerID); err != nil {
-		return nil, err
+		return err
 	}
 	if err := conn.Claims.RepointEvidence(ctx, dupID, winnerID); err != nil {
-		return nil, fmt.Errorf("repoint evidence %s→%s: %w", dupID, winnerID, err)
+		return fmt.Errorf("repoint evidence %s→%s: %w", dupID, winnerID, err)
 	}
 	if err := conn.Relationships.RepointEndpoint(ctx, dupID, winnerID); err != nil {
-		return nil, fmt.Errorf("repoint relationships %s→%s: %w", dupID, winnerID, err)
+		return fmt.Errorf("repoint relationships %s→%s: %w", dupID, winnerID, err)
 	}
 	if err := conn.Embeddings.Delete(ctx, dupID, "claim"); err != nil {
-		return nil, fmt.Errorf("delete embedding for %s: %w", dupID, err)
+		return fmt.Errorf("delete embedding for %s: %w", dupID, err)
 	}
 	if unlinker, ok := conn.Entities.(claimEntityUnlinker); ok {
 		if err := unlinker.UnlinkClaim(ctx, dupID); err != nil {
-			return nil, fmt.Errorf("unlink entities for %s: %w", dupID, err)
+			return fmt.Errorf("unlink entities for %s: %w", dupID, err)
 		}
 	}
-	if err := conn.Claims.DeleteCascade(ctx, dupID); err != nil {
-		// The loser is already retired and its knowledge is on the winner. Keep
-		// the tombstone and report the cause upward rather than aborting the plan.
-		return fmt.Errorf("delete merged claim %s: %w", dupID, err), nil
-	}
-	return nil, nil
+	return nil
 }
 
-// tombstoneMergedClaim deprecates the losing claim before any of its rows move,
-// so a failure part-way through can never leave an active un-evidenced belief.
-func tombstoneMergedClaim(ctx context.Context, conn *store.Conn, dupID string) error {
+// redirectMergedClaim deprecates the losing claim and points it at the winner,
+// before any of its rows move, so a failure part-way through can never leave an
+// active un-evidenced belief.
+func redirectMergedClaim(ctx context.Context, conn *store.Conn, dupID, winnerID string) error {
 	existing, err := conn.Claims.ListByIDs(ctx, []string{dupID})
 	if err != nil {
 		return fmt.Errorf("read claim %s before merge: %w", dupID, err)
 	}
-	if len(existing) != 1 || existing[0].Status == domain.ClaimStatusDeprecated {
+	if len(existing) != 1 {
 		return nil
 	}
-	tomb := existing[0]
-	tomb.Status = domain.ClaimStatusDeprecated
-	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{tomb}, DedupeTombstoneReason, domain.SystemUser); err != nil {
-		return fmt.Errorf("tombstone claim %s before merge: %w", dupID, err)
+	redirect := existing[0]
+	if redirect.Status == domain.ClaimStatusDeprecated && redirect.MergedInto == winnerID {
+		return nil
+	}
+	redirect.Status = domain.ClaimStatusDeprecated
+	redirect.MergedInto = winnerID
+	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{redirect}, DedupeTombstoneReason, domain.SystemUser); err != nil {
+		return fmt.Errorf("redirect claim %s to %s before merge: %w", dupID, winnerID, err)
 	}
 	return nil
 }

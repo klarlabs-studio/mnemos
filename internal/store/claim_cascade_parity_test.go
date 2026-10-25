@@ -110,17 +110,12 @@ func TestEntityRepository_UnlinkClaimIsReachableThroughThePort(t *testing.T) {
 	}
 }
 
-// The decisive test for the unlink: drive the REAL merge and require that it
-// completes. This exercises the type assertion in
-// pipeline.mergeClaimInto rather than re-declaring it — with the method
-// absent (or mis-signed) the assertion fails, the loser keeps its
-// claim_entities row, and the final DELETE FROM claims trips the foreign key,
-// so ApplySemanticDedupe returns the "remain as deprecated tombstones" error
-// with the loser's evidence already moved to the winner.
-//
-// The memory backend has no foreign keys, so the delete would SUCCEED there
-// while leaving an orphan link — which is why this also asserts the link row
-// itself is gone, not just that the merge returned nil.
+// The decisive test for the unlink: drive the REAL merge and require that the
+// loser's entity link moves to the winner and is removed from the loser. This
+// exercises the type assertion in pipeline.mergeClaimInto rather than
+// re-declaring it. The loser itself survives as a deprecated redirect to the
+// winner (#387, ADR 0033); a link left on it would keep the retired claim
+// reachable through entity lookups.
 func TestSemanticDedupe_MergeRemovesTheLosersEntityLink(t *testing.T) {
 	backends := openBackends(t)
 	ctx := context.Background()
@@ -146,9 +141,8 @@ func TestSemanticDedupe_MergeRemovesTheLosersEntityLink(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: read back loser: %v", b.name, err)
 		}
-		if len(rows) != 0 {
-			t.Errorf("%s: the losing claim survived the merge as a %s tombstone; "+
-				"the delete could not complete", b.name, rows[0].Status)
+		if len(rows) != 1 || rows[0].Status != domain.ClaimStatusDeprecated || rows[0].MergedInto != "c-winner" {
+			t.Errorf("%s: the loser should be a deprecated redirect to c-winner, got %+v", b.name, rows)
 		}
 
 		ents, _, err := b.conn.Entities.ListEntitiesForClaim(ctx, "c-loser")
@@ -156,7 +150,7 @@ func TestSemanticDedupe_MergeRemovesTheLosersEntityLink(t *testing.T) {
 			t.Fatalf("%s: list entities for loser: %v", b.name, err)
 		}
 		if len(ents) != 0 {
-			t.Errorf("%s: %d claim_entities row(s) still point at the deleted loser", b.name, len(ents))
+			t.Errorf("%s: %d claim_entities row(s) still point at the merged loser", b.name, len(ents))
 		}
 
 		// The merge is a MOVE: the winner must have inherited the mention.

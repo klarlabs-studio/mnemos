@@ -2298,9 +2298,10 @@ func (m *memory) liveBeliefCount(ctx context.Context, h *healthCorpus) (int, err
 	return n, nil
 }
 
-// Brain-health thresholds (ADR 0019). All five vitals are "higher is worse" rates or
-// errors in [0,1], so one direction suffices: value >= crit → unhealthy, >= warn →
-// degraded, else healthy.
+// Brain-health thresholds (ADR 0019, ADR 0032). The rate vitals are "higher is
+// worse" values in [0,1]; trust_decay is a ratio against the steady-state rate
+// (1.0 = normal flow). One direction suffices for both: value >= crit →
+// unhealthy, >= warn → degraded, else healthy.
 const (
 	healthFreeEnergyWarn, healthFreeEnergyCrit   = 0.40, 0.70
 	healthCalibrationWarn, healthCalibrationCrit = 0.15, 0.30
@@ -2308,32 +2309,38 @@ const (
 	healthLowTrustWarn, healthLowTrustCrit       = 0.30, 0.60
 	healthStalenessWarn, healthStalenessCrit     = 0.40, 0.70
 
-	// healthLowTrustFloor is the trust below which a belief counts toward low_trust.
+	// healthLowTrustFloor is the age-neutral trust below which a belief counts
+	// toward low_trust (ADR 0032): trust at its own evidence date, so a belief
+	// that merely aged onto the freshness floor is stale, not untrusted.
 	healthLowTrustFloor = 0.30
 	// healthSkillCoverage* grade the share of actions with NO observed outcome.
 	// Generous thresholds: a run still in flight legitimately has unobserved
 	// actions, so this is meant to catch a loop that never closes, not one
 	// mid-cycle.
 	healthSkillCoverageWarn, healthSkillCoverageCrit = 0.50, 0.90
-	// healthStalenessHorizonDays: a currently-valid belief not verified/created within
-	// this window counts toward staleness (a recency proxy for freshness decay).
+	// healthStalenessHorizonDays: a currently-valid belief WITHOUT dated evidence
+	// that was not verified/created within this window counts toward staleness.
+	// A dated belief is stale once its freshness reaches the floor (ADR 0032).
 	healthStalenessHorizonDays = 90.0
 
 	// healthTrustDecayHorizonDays is how far ahead the trust_decay vital projects.
 	// A month, for two reasons: it is the natural cadence at which anyone reviews
 	// a brain, and it is shorter than every half-life in play (the 90-day default,
-	// the 14-day volatile one), so the vital leads low_trust and staleness rather
-	// than restating them after the fact.
+	// the 14-day volatile one), so the vital leads staleness rather than
+	// restating it after the fact.
 	healthTrustDecayHorizonDays = 30.0
-	// healthTrustDecay{Warn,Crit} are DERIVED, not chosen: they are the outflow
-	// which, sustained over a quarter (three horizons), carries an entirely
-	// trusted brain to low_trust's own warn / crit line on its own. Expressing
-	// them as a share of the low_trust thresholds keeps the pair consistent —
-	// re-tuning the floor's thresholds re-tunes the rate that fills it, instead
-	// of leaving two constants to drift apart. (Approximate: it ignores the
-	// compounding as the trusted base shrinks, which errs toward warning early.)
-	healthTrustDecayWarn = healthLowTrustWarn / 3
-	healthTrustDecayCrit = healthLowTrustCrit / 3
+	// healthTrustDecay{Warn,Crit} grade trust_decay as a RATIO of observed to
+	// steady-state crossings (ADR 0032). A brain fed at a steady rate reads ~1.0
+	// whatever its half-lives; 1.5× is a backlog worth noticing, 3× is a burst of
+	// beliefs aging out together or a brain that stopped receiving input. The
+	// old fixed 0.20 share graded every steady default-τ brain unhealthy (#481):
+	// ~30 of every 108 days' worth of beliefs reach the floor in any month.
+	healthTrustDecayWarn = 1.5
+	healthTrustDecayCrit = 3.0
+	// healthTrustDecayMinExpected: below this many expected crossings the ratio
+	// is noise (one crossing against 0.2 expected reads 5×), so the vital is
+	// unknown rather than alarming on a handful of beliefs.
+	healthTrustDecayMinExpected = 1.0
 	// healthStaleExpectationCrit: an open-expectation backlog past this many overdue is
 	// critical (the prediction loop is stalling).
 	healthStaleExpectationCrit = 25
@@ -2418,52 +2425,82 @@ func (m *memory) skillCoverageVital(ctx context.Context) Vital {
 	return Vital{name, rate, gradeHigherWorse(1-rate, healthSkillCoverageWarn, healthSkillCoverageCrit), detail}
 }
 
-// projectTrustDecay reports whether a belief is trusted now and whether it
-// falls through the low-trust floor by horizon, both from trust.At on the
-// belief's canonical inputs (ADR 0026). This vital used to run its own variant
-// of the formula — per-claim half-life, but a ValidFrom/LastVerified reference
-// and a raw evidence count — so it and low_trust applied one floor to two
-// different numbers, and a belief could be counted by neither. Both now read
-// the same function at two instants.
-//
-// A belief with no dated evidence and no confirmation cannot be projected: its
-// freshness is undefined rather than perfect, so it is excluded from both
-// counts instead of being counted as stable.
-func projectTrustDecay(in domain.TrustInput, now, horizon time.Time) (isTrusted, willDecay bool) {
-	if in.LatestEvidence.IsZero() && in.LastConfirmed.IsZero() {
-		return false, false
+// trustReference is the instant a belief's freshness is measured from: its
+// latest dated evidence or its last confirmation, whichever is later (ADR 0026).
+func trustReference(in domain.TrustInput) time.Time {
+	if in.LastConfirmed.After(in.LatestEvidence) {
+		return in.LastConfirmed
 	}
-	if trust.At(in, now) < healthLowTrustFloor {
-		return false, false // already below the floor: low_trust owns it, there is no fall left
-	}
-	return true, trust.At(in, horizon) < healthLowTrustFloor
+	return in.LatestEvidence
 }
 
-// trustDecayVital reports the share of currently-trusted beliefs whose trust
-// falls through the low-trust floor within the horizon unless something
-// re-verifies them — the rate at which the brain is LOSING trust, as against
-// low_trust's count of what it has already lost.
-//
-// Framed as a crossing rate rather than as aggregate trust lost per unit time,
-// because the aggregate is perverse: exponential decay is steepest right after
-// evidence arrives, so a brain being actively fed would score WORST, and one
-// whose every belief had already bottomed out on the freshness floor would
-// score a clean zero. The crossing rate is monotone in the direction anyone
-// actually cares about and is directly actionable — it names beliefs that need
-// re-verifying this month.
-//
-// Unknown when no belief is currently above the floor: an empty brain, or one
-// whose beliefs have all already decayed. Neither has trust left to lose, and
-// reporting a green 0 for the second would be the exact failure #325 fixed.
-func trustDecayVital(trusted, decaying int) Vital {
-	if trusted == 0 {
-		return Vital{"trust_decay", 0, HealthUnknown,
-			"no belief is currently above the trust floor; there is no decay to measure"}
+// ageNeutralTrust is a belief's trust at its own reference instant: trust.At
+// with freshness 1, so only confidence, corroboration and credit remain. It is
+// what low_trust grades (ADR 0032). Trust that is low only because the belief
+// aged onto the freshness floor is staleness's to report, and counting it here
+// put every belief with confidence below 1.0 under the floor for good (#481).
+func ageNeutralTrust(in domain.TrustInput, now time.Time) float64 {
+	ref := trustReference(in)
+	if ref.IsZero() || ref.After(now) {
+		ref = now
 	}
-	rate := float64(decaying) / float64(trusted)
-	return Vital{"trust_decay", rate, gradeHigherWorse(rate, healthTrustDecayWarn, healthTrustDecayCrit),
-		fmt.Sprintf("%d/%d trusted beliefs decay below trust %.2f within %.0f days unless re-verified",
-			decaying, trusted, healthLowTrustFloor, healthTrustDecayHorizonDays)}
+	return trust.At(in, ref)
+}
+
+// floorAgeDays is how many days after its reference a belief's freshness
+// reaches trust.FreshnessFloor: τ·ln(1/floor), with τ its own time constant.
+func floorAgeDays(in domain.TrustInput) float64 {
+	tau := in.HalfLifeDays
+	if tau <= 0 {
+		tau = trust.FreshnessHalfLifeDays
+	}
+	return tau * math.Log(1/trust.FreshnessFloor)
+}
+
+// projectTrustDecay places a belief on its way to the freshness floor (ADR
+// 0032). approaching: it has dated evidence, is not low-trust on its merits,
+// and has not reached the floor yet. crossing: it reaches the floor within the
+// horizon. expected: the chance a belief of its time constant crosses within
+// the horizon when beliefs arrive at a steady rate (horizon / floor age,
+// capped at 1), so summing it gives the crossings a steady brain would show.
+//
+// A belief with no dated evidence and no confirmation cannot be projected: its
+// freshness is undefined rather than perfect, so it is excluded.
+func projectTrustDecay(in domain.TrustInput, now time.Time) (approaching, crossing bool, expected float64) {
+	ref := trustReference(in)
+	if ref.IsZero() || ageNeutralTrust(in, now) < healthLowTrustFloor {
+		return false, false, 0
+	}
+	age := math.Max(0, now.Sub(ref).Hours()/24)
+	floorAge := floorAgeDays(in)
+	if age >= floorAge {
+		return false, false, 0 // already on the floor: staleness owns it
+	}
+	return true, age+healthTrustDecayHorizonDays >= floorAge,
+		math.Min(1, healthTrustDecayHorizonDays/floorAge)
+}
+
+// trustDecayVital reports how many beliefs reach the freshness floor within
+// the horizon, as a ratio to how many a brain fed at a steady rate would show
+// (ADR 0032). It names the beliefs that need re-verifying this month, graded
+// against the normal flow rather than a fixed share: any brain of dated beliefs
+// has some reaching the floor every month, and that is not a symptom.
+//
+// Unknown when too few beliefs are on their way to the floor for the ratio to
+// mean anything: an empty brain, one whose beliefs have all already aged out
+// (staleness reports that), or a handful of beliefs whose expected crossings
+// round to nothing. Reporting a green 1.0 for those would be the failure #325
+// fixed.
+func trustDecayVital(approaching, crossing int, expected float64) Vital {
+	if approaching == 0 || expected < healthTrustDecayMinExpected {
+		return Vital{"trust_decay", 0, HealthUnknown, fmt.Sprintf(
+			"%d belief(s) on their way to the freshness floor, %.1f expected to reach it within %.0f days; too few to compare against the steady rate",
+			approaching, expected, healthTrustDecayHorizonDays)}
+	}
+	ratio := float64(crossing) / expected
+	return Vital{"trust_decay", ratio, gradeHigherWorse(ratio, healthTrustDecayWarn, healthTrustDecayCrit),
+		fmt.Sprintf("%d of %d beliefs reach the freshness floor within %.0f days unless re-verified; a steady flow would bring %.1f (%.2f×)",
+			crossing, approaching, healthTrustDecayHorizonDays, expected, ratio)}
 }
 
 func gradeWithSamples(samples int, value, warn, crit float64) HealthStatus {

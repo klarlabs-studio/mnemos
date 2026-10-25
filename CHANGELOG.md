@@ -8,6 +8,37 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.132.1] — 2026-10-24
+
+A security patch, and system errors that say what went wrong.
+
+### Security
+
+- **[GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809) fixed** by building
+  with Go 1.27.3 (#489). `crypto/x509` trusted intermediate certificates that
+  have since been compromised. That affects every TLS connection Mnemos makes
+  or accepts: `mnemos serve` and `mcp --http` with TLS, and outbound calls to
+  LLM, embedding and database endpoints. v0.132.0 and earlier were built with
+  an affected toolchain. Upgrade.
+
+### Fixed
+
+- **System errors name their cause without `--verbose`** (#440, #488). The
+  cause was printed only under `--verbose`, and nothing said so. Twice it was
+  the whole diagnosis: `error: backfill trust` hid `SQLITE_BUSY` from a
+  concurrent writer. Causes are now classified (`database is locked`,
+  `disk full`, `permission denied`, `timed out`, `network unreachable`) and
+  appended to the message, with one line of advice. Every error that withholds
+  a cause ends with `Re-run with --verbose for the full cause.` The raw cause
+  stays behind `--verbose`, since it can carry paths and driver internals.
+
+## [0.132.0] — 2026-10-19
+
+Brain health stops grading a steadily fed brain unhealthy for growing older.
+Low trust, staleness and trust decay each answer one question, and a belief's
+age is counted once, against its own half-life. gRPC writers can now set
+belief validity like REST ones.
+
 ### Added
 
 - **gRPC `AppendBeliefs` takes `valid_from`, `valid_to` and `half_life_days`**,
@@ -15,6 +46,24 @@ notable changes.
   same validation applies (`valid_to` before `valid_from`, or a negative, NaN
   or infinite half-life, is `InvalidArgument`), and `valid_to` goes through the
   governed validity write.
+
+### Changed
+
+- **Brain-health trust vitals separate age from untrust** (ADR 0032, #481). A
+  steadily fed brain of single-evidence beliefs read unhealthy by construction:
+  freshness bottoms out at 0.30, so every belief with confidence below 1.0 aged
+  into `low_trust` for good, and ~28% of trusted beliefs crossed that floor in
+  any month, past `trust_decay`'s fixed 0.20 critical line.
+  - `low_trust` grades age-neutral trust (as of the belief's evidence date):
+    low confidence or negative credit, never age alone.
+  - `staleness` measures from the belief's own evidence, confirmation or
+    verification against its own half-life, so a backfilled old record is not
+    fresh and a ten-year record is not stale at 90 days. Undated beliefs keep
+    the 90-day rule.
+  - `trust_decay` is now a ratio: beliefs reaching the freshness floor within
+    30 days over what a steady flow would bring. ~1.0 is normal; warn at 1.5,
+    critical at 3.0; unknown below one expected crossing. Its value is no
+    longer in [0, 1].
 
 ### Fixed
 

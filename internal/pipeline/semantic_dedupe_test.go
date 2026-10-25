@@ -121,7 +121,7 @@ func TestPlanSemanticDedupe_SkipsClaimsWithoutEmbedding(t *testing.T) {
 	}
 }
 
-func TestApplySemanticDedupe_ReassignsEvidenceAndDeletesDup(t *testing.T) {
+func TestApplySemanticDedupe_ReassignsEvidenceAndKeepsDupHistory(t *testing.T) {
 	db, conn := openDedupeDB(t)
 
 	ctx := context.Background()
@@ -165,7 +165,8 @@ func TestApplySemanticDedupe_ReassignsEvidenceAndDeletesDup(t *testing.T) {
 		t.Fatalf("merged = %d, want 1", merged)
 	}
 
-	// Winner now has both events; duplicate is gone.
+	// Winner now has both events; the duplicate is a redirect that keeps its
+	// history (#387).
 	var evCount int
 	if err := db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM claim_evidence WHERE claim_id = 'cl_winner'`,
@@ -175,14 +176,15 @@ func TestApplySemanticDedupe_ReassignsEvidenceAndDeletesDup(t *testing.T) {
 	if evCount != 2 {
 		t.Fatalf("expected winner to absorb both evidence rows, got %d", evCount)
 	}
-	var dupExists int
+	assertRedirect(t, conn, "cl_dup", "cl_winner")
+	var history int
 	if err := db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM claims WHERE id = 'cl_dup'`,
-	).Scan(&dupExists); err != nil {
-		t.Fatalf("check dup: %v", err)
+		`SELECT COUNT(*) FROM claim_status_history WHERE claim_id = 'cl_dup' AND reason LIKE 'semantic dedupe:%'`,
+	).Scan(&history); err != nil {
+		t.Fatalf("count history: %v", err)
 	}
-	if dupExists != 0 {
-		t.Fatalf("duplicate claim should be deleted")
+	if history != 1 {
+		t.Fatalf("the merge's status change was not recorded on the redirect (%d rows)", history)
 	}
 }
 

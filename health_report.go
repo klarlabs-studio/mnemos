@@ -8,7 +8,6 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
-	"go.klarlabs.de/mnemos/internal/trust"
 )
 
 // Health modes, reported in BrainHealth.Mode.
@@ -66,44 +65,59 @@ func (m *memory) BrainHealthFull(ctx context.Context) (BrainHealth, error) {
 // sampled path tallies a sample. Both feed the same report builder, so the
 // two can only differ in what they counted, never in how it is graded.
 type beliefTally struct {
-	valid, lowTrust, stale, trusted, decaying int
+	valid, lowTrust, stale, approaching, crossing int
+	expected                                      float64
 }
 
-// assess adds one currently-valid belief to the tally. in/hasInputs are its
-// canonical trust inputs (ADR 0026); without them the stored score stands in.
-func (t *beliefTally) assess(c domain.Claim, in domain.TrustInput, hasInputs bool, now, decayHorizon time.Time) {
-	t.valid++
-	// Canonical trust now, not the stored cache: the cache was computed at
-	// trust_computed_at and freshness has decayed since.
-	trustNow := c.TrustScore
-	if hasInputs {
-		trustNow = trust.At(in, now)
-	}
-	if trustNow < healthLowTrustFloor {
-		t.lowTrust++
+// isStale reports whether a belief has aged onto the freshness floor without
+// being re-verified (ADR 0032): measured from its own reference (latest
+// evidence, confirmation or verification) against its own time constant, so a
+// ten-year record is not stale at 90 days and a backfilled old record is not
+// fresh because it was written today. A belief with no dated evidence falls
+// back to the fixed horizon from when it was written or verified.
+func isStale(c domain.Claim, in domain.TrustInput, hasInputs bool, now time.Time) bool {
+	if hasInputs && !trustReference(in).IsZero() {
+		ref := trustReference(in)
+		if c.LastVerified.After(ref) {
+			ref = c.LastVerified
+		}
+		return now.Sub(ref).Hours()/24 >= floorAgeDays(in)
 	}
 	ref := c.CreatedAt
 	if c.LastVerified.After(ref) {
 		ref = c.LastVerified
 	}
-	if now.Sub(ref).Hours()/24 > healthStalenessHorizonDays {
+	return now.Sub(ref).Hours()/24 > healthStalenessHorizonDays
+}
+
+// assess adds one currently-valid belief to the tally. in/hasInputs are its
+// canonical trust inputs (ADR 0026); without them the stored score stands in.
+func (t *beliefTally) assess(c domain.Claim, in domain.TrustInput, hasInputs bool, now time.Time) {
+	t.valid++
+	// Canonical age-neutral trust, not the stored cache (ADR 0032): the cache
+	// mixes in freshness as of trust_computed_at, and age belongs to staleness.
+	trustScore := c.TrustScore
+	if hasInputs {
+		trustScore = ageNeutralTrust(in, now)
+	}
+	if trustScore < healthLowTrustFloor {
+		t.lowTrust++
+	}
+	if isStale(c, in, hasInputs, now) {
 		t.stale++
 	}
 	if !hasInputs {
 		return
 	}
-	// trust_decay reads the SAME beliefs forward: how many of those trusted
-	// today stop being trusted within the horizon if nobody re-verifies them.
-	if tr, d := projectTrustDecay(in, now, decayHorizon); tr {
-		t.trusted++
-		if d {
-			t.decaying++
+	// trust_decay reads the SAME beliefs forward: how many reach the freshness
+	// floor within the horizon, against how many a steady flow would bring.
+	if approaching, crossing, expected := projectTrustDecay(in, now); approaching {
+		t.approaching++
+		t.expected += expected
+		if crossing {
+			t.crossing++
 		}
 	}
-}
-
-func decayHorizonFrom(now time.Time) time.Time {
-	return now.Add(time.Duration(healthTrustDecayHorizonDays * 24 * float64(time.Hour)))
 }
 
 // exactBrainHealth computes every vital over every belief.
@@ -136,7 +150,6 @@ func (m *memory) exactBrainHealth(ctx context.Context) (BrainHealth, error) {
 	claimIDs := make(map[string]struct{}, len(claims))
 	var tally beliefTally
 	orphans := 0
-	decayHorizon := decayHorizonFrom(now)
 	for _, c := range claims {
 		claimIDs[c.ID] = struct{}{} // every claim, so dangling-edge detection sees them all
 		// Forgotten (valid time closed) and deprecated beliefs are not
@@ -146,7 +159,7 @@ func (m *memory) exactBrainHealth(ctx context.Context) (BrainHealth, error) {
 			continue
 		}
 		in, hasInputs := trustInputs[c.ID]
-		tally.assess(c, in, hasInputs, now, decayHorizon)
+		tally.assess(c, in, hasInputs, now)
 		if evidenceCount[c.ID] == 0 {
 			orphans++ // a claim requires evidence — an orphan is a data-integrity smell
 		}
@@ -193,10 +206,9 @@ func (m *memory) sampledBrainHealth(ctx context.Context, s ports.HealthSampler, 
 		trustInputs = ins
 	}
 	var tally beliefTally
-	decayHorizon := decayHorizonFrom(now)
 	for _, c := range sample {
 		in, hasInputs := trustInputs[c.ID]
-		tally.assess(c, in, hasInputs, now, decayHorizon)
+		tally.assess(c, in, hasInputs, now)
 	}
 	orphans, err := s.CountLiveOrphans(ctx)
 	if err != nil {
@@ -272,10 +284,12 @@ func (m *memory) healthReport(ctx context.Context, h *healthCorpus, now time.Tim
 			"low_trust": {SampleSize: t.valid, Population: population, Margin95: margin95(t.lowTrust, t.valid, population)},
 			"staleness": {SampleSize: t.valid, Population: population, Margin95: margin95(t.stale, t.valid, population)},
 		}
-		if t.trusted > 0 {
-			// trust_decay is a rate among the trusted part of the sample.
-			estimates["trust_decay"] = VitalEstimate{SampleSize: t.trusted, Population: population,
-				Margin95: margin95(t.decaying, t.trusted, max(population*t.trusted/max(t.valid, 1), t.trusted))}
+		if t.approaching > 0 && t.expected > 0 {
+			// trust_decay is crossings/expected over the approaching part of the
+			// sample: the crossing share's margin, scaled by the same divisor.
+			share := margin95(t.crossing, t.approaching, max(population*t.approaching/max(t.valid, 1), t.approaching))
+			estimates["trust_decay"] = VitalEstimate{SampleSize: t.approaching, Population: population,
+				Margin95: share * float64(t.approaching) / t.expected}
 		}
 	}
 
@@ -289,8 +303,8 @@ func (m *memory) healthReport(ctx context.Context, h *healthCorpus, now time.Tim
 		{"low_trust", lowTrustRate, gradeWithSamples(t.valid, lowTrustRate, healthLowTrustWarn, healthLowTrustCrit),
 			fmt.Sprintf("%s valid beliefs below trust %.2f", countPhrase(t.lowTrust), healthLowTrustFloor)},
 		{"staleness", stalenessRate, gradeWithSamples(t.valid, stalenessRate, healthStalenessWarn, healthStalenessCrit),
-			fmt.Sprintf("%s valid beliefs unverified in %.0f days", countPhrase(t.stale), healthStalenessHorizonDays)},
-		trustDecayVital(t.trusted, t.decaying),
+			fmt.Sprintf("%s valid beliefs aged onto the freshness floor unverified (undated: unverified in %.0f days)", countPhrase(t.stale), healthStalenessHorizonDays)},
+		trustDecayVital(t.approaching, t.crossing, t.expected),
 		m.skillCoverageVital(ctx),
 	}
 

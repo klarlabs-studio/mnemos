@@ -8,42 +8,61 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
-// low_trust judges canonical trust NOW, not the stored cache: a cache computed
-// weeks ago for a volatile belief still says "trusted", while trust.At on the
-// same inputs today is below the floor. low_trust and trust_decay now read the
-// same function, so the belief is counted where it belongs instead of by
-// neither.
-func TestBrainHealth_LowTrustReadsCanonicalTrustNow(t *testing.T) {
+// low_trust judges canonical trust, not the stored cache: a cache can say
+// "trusted" for a belief whose confidence is low on its merits. It grades
+// AGE-NEUTRAL trust (ADR 0032), so that is the only thing that can put a
+// belief under the floor here.
+func TestBrainHealth_LowTrustReadsCanonicalTrustNotTheCache(t *testing.T) {
 	m := calibMem(t)
-	ctx := context.Background()
 	now := time.Now().UTC()
-	old := now.Add(-60 * 24 * time.Hour)
+	seedEvidencedClaim(t, m, "weak", now, domain.Claim{Confidence: 0.2, TrustScore: 0.9}) // stale-high cache
+
+	lt := vitalByName(mustHealth(t, m), "low_trust")
+	if lt.Value != 1 {
+		t.Errorf("low_trust = %+v; a confidence-0.2 belief is untrusted whatever its cache says", lt)
+	}
+}
+
+// #481: with the freshness floor at 0.30, a confidence-0.9 belief bottoms out at
+// trust 0.27 and used to count as low-trust forever once it was ~99 days old.
+// That is age, which staleness reports; on its merits the belief is trusted.
+func TestBrainHealth_AgeAloneIsNotLowTrust(t *testing.T) {
+	m := calibMem(t)
+	old := time.Now().UTC().Add(-400 * 24 * time.Hour)
+	seedEvidencedClaim(t, m, "aged", old, domain.Claim{Confidence: 0.9})
+
+	h := mustHealth(t, m)
+	if lt := vitalByName(h, "low_trust"); lt.Value != 0 {
+		t.Errorf("an aged confidence-0.9 belief is stale, not untrusted: low_trust = %+v", lt)
+	}
+	if st := vitalByName(h, "staleness"); st.Value != 1 {
+		t.Errorf("staleness must report the aged belief: %+v", st)
+	}
+}
+
+func seedEvidencedClaim(t *testing.T, m *memory, id string, at time.Time, c domain.Claim) {
+	t.Helper()
+	ctx := context.Background()
 	if err := m.conn.Events.Append(ctx, domain.Event{
-		ID: "ev", Content: "deploy pipeline uses runner v2", SchemaVersion: "v1", SourceInputID: "s",
-		Timestamp: old, IngestedAt: old, CreatedBy: "alice",
+		ID: "ev-" + id, Content: "observed " + id, SchemaVersion: "v1", SourceInputID: "s",
+		Timestamp: at, IngestedAt: at, CreatedBy: "alice",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// A stale-high cache: the memory backend keeps a caller-supplied score.
-	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{{
-		ID: "vol", Text: "Deploy pipeline uses runner v2", Type: domain.ClaimTypeFact,
-		Confidence: 0.9, TrustScore: 0.9, Status: domain.ClaimStatusActive, CreatedAt: old, ValidFrom: old,
-	}}); err != nil {
+	c.ID, c.Text, c.Type, c.Status, c.CreatedAt, c.ValidFrom = id, "Observed "+id, domain.ClaimTypeFact, domain.ClaimStatusActive, at, at
+	if err := m.conn.Claims.Upsert(ctx, []domain.Claim{c}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{{ClaimID: "vol", EventID: "ev"}}); err != nil {
+	if err := m.conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{{ClaimID: id, EventID: "ev-" + id}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.conn.Claims.MarkVerified(ctx, "vol", old, 14); err != nil { // 14-day time constant
-		t.Fatal(err)
-	}
+}
 
-	h, err := m.BrainHealth(ctx)
+func mustHealth(t *testing.T, m *memory) BrainHealth {
+	t.Helper()
+	h, err := m.BrainHealth(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	lt := vitalByName(h, "low_trust")
-	if lt.Value != 1 {
-		t.Errorf("low_trust = %+v; the volatile belief is below the floor now (canonical trust) and must count, whatever its stale cache says", lt)
-	}
+	return h
 }

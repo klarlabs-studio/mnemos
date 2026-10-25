@@ -106,3 +106,32 @@ func TestExpectations_SQLiteBackend(t *testing.T) {
 		t.Fatalf("sqlite round-trip: want one confirmed reconciliation; got %+v", recs)
 	}
 }
+
+// #395: with a zero tolerance, reconciliation and credit used to disagree on
+// the same observation. Reconciliation must report the domain's verdict and
+// surprise, and a miss of 0.5 on a prediction of 10 is a refutation with a
+// relative surprise of 0.05.
+func TestExpectations_ZeroToleranceVerdictIsTheDomainVerdict(t *testing.T) {
+	m := calibMem(t)
+	ctx := context.Background()
+	upsertTypedClaim(t, m, "cz", "the queue holds exactly ten jobs", domain.ClaimTypeHypothesis)
+	if err := m.Expect(ctx, "cz", 10, 0, time.Now().UTC().Add(time.Hour)); err != nil {
+		t.Fatalf("Expect: %v", err)
+	}
+	if err := m.RecordObservation(ctx, "cz", 10.5); err != nil {
+		t.Fatalf("RecordObservation: %v", err)
+	}
+	recs, err := m.ReconcileExpectations(ctx)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("ReconcileExpectations: %v (%d)", err, len(recs))
+	}
+	exp := domain.Expectation{Predicted: 10, Observed: 10.5, HasObservation: true}
+	wantConfirmed, _ := exp.Confirmed()
+	wantSurprise, _ := exp.Surprise()
+	if recs[0].Confirmed != wantConfirmed || recs[0].Confirmed {
+		t.Errorf("confirmed = %v, want the domain verdict %v (refuted)", recs[0].Confirmed, wantConfirmed)
+	}
+	if recs[0].Surprise != wantSurprise || wantSurprise != 0.05 {
+		t.Errorf("surprise = %v, want the domain surprise %v (0.05)", recs[0].Surprise, wantSurprise)
+	}
+}

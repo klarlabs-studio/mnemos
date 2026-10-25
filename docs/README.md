@@ -59,6 +59,8 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [ADR 0029: Derived state records what produced it](adr/0029-derived-state-records-its-producer.md)
 - [ADR 0030: Recall gathers candidates at the belief level; spreading activation is opt-in](adr/0030-recall-candidates-at-belief-level.md)
 - [ADR 0031: Recall can return each belief's source excerpt](adr/0031-recall-returns-source-excerpts.md)
+- [ADR 0032: Trust vitals separate age from untrust](adr/0032-vitals-separate-age-from-untrust.md)
+- [ADR 0033: Merged beliefs become redirects](adr/0033-merged-beliefs-become-redirects.md)
 
 ## Working notes
 

@@ -12,18 +12,28 @@ import (
 // ListLiveByTextKeys implements ports.ClaimRepository: the live claims (valid
 // time open, not deprecated) whose text_key is one of keys, oldest first.
 func (r ClaimRepository) ListLiveByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(ctx, keys, `valid_to IS NULL AND status <> 'deprecated'`)
+}
+
+// ListMergedByTextKeys implements ports.ClaimRepository: the merge redirects
+// whose text_key is one of keys, oldest first.
+func (r ClaimRepository) ListMergedByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(ctx, keys, `merged_into <> ''`)
+}
+
+func (r ClaimRepository) listByTextKeys(ctx context.Context, keys []string, predicate string) ([]domain.Claim, error) {
 	if len(keys) == 0 {
 		return []domain.Claim{}, nil
 	}
 	placeholders, args := inPlaceholders(keys)
-	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
+	//nolint:gosec // G202: placeholders are literal "?" tokens and predicate a constant, not user input
 	rows, err := r.db.QueryContext(ctx, `
 SELECT `+claimColumns("")+`
 FROM claims
-WHERE text_key IN (`+placeholders+`) AND valid_to IS NULL AND status <> 'deprecated'
+WHERE text_key IN (`+placeholders+`) AND `+predicate+`
 ORDER BY created_at, id`, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list live claims by text key: %w", err)
+		return nil, fmt.Errorf("list claims by text key: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	return collectClaimRows(rows)

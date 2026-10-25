@@ -1,6 +1,6 @@
 # ADR 0019: Brain health — vital signs, integrity checks, and health-over-time
 
-- **Status:** Accepted; implemented (v0.97.0).
+- **Status:** Accepted; implemented (v0.97.0). `low_trust`, `staleness` and `trust_decay` amended by ADR 0032.
 - **Date:** 2026-07-13
 - **Deciders:** Felix Geelhaar
 - **Scope:** Diagnostics / observability. Answers "is the brain *healthy* right now, and
