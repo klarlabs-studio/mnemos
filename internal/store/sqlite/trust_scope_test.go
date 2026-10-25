@@ -137,3 +137,59 @@ func TestRecomputeTrustForClaims_MatchesFullRecompute(t *testing.T) {
 		}
 	}
 }
+
+// The full recompute commits in batches so it never holds the write lock over
+// the whole corpus (#466). Every claim must still be rescored, across batches.
+func TestRecomputeTrust_CommitsInBatches(t *testing.T) {
+	ctx := context.Background()
+	repo := NewClaimRepository(openTestDB(t))
+	ids := []string{"a", "b", "c", "d", "e"}
+	for _, id := range ids {
+		seedClaim(t, ctx, repo, id)
+	}
+
+	prevBatch, prevPause := trustWriteBatch, trustBatchPause
+	trustWriteBatch, trustBatchPause = 2, 0
+	t.Cleanup(func() { trustWriteBatch, trustBatchPause = prevBatch, prevPause })
+
+	n, err := repo.RecomputeTrust(ctx, domain.TrustScoring{Score: func(domain.TrustInput) float64 { return 0.42 }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(ids) {
+		t.Fatalf("rescored %d claims, want %d", n, len(ids))
+	}
+	for _, id := range ids {
+		if got := trustOf(t, ctx, repo, id); got != 0.42 {
+			t.Fatalf("claim %s trust = %v, want 0.42", id, got)
+		}
+	}
+}
+
+// A pass cancelled part-way keeps the batches that already committed.
+func TestRecomputeTrust_CancelKeepsCommittedBatches(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repo := NewClaimRepository(openTestDB(t))
+	for _, id := range []string{"a", "b", "c", "d"} {
+		seedClaim(t, ctx, repo, id)
+	}
+
+	prevBatch, prevPause := trustWriteBatch, trustBatchPause
+	trustWriteBatch, trustBatchPause = 2, 0
+	t.Cleanup(func() { trustWriteBatch, trustBatchPause = prevBatch, prevPause })
+
+	calls := 0
+	n, err := repo.RecomputeTrust(ctx, domain.TrustScoring{Score: func(domain.TrustInput) float64 {
+		calls++
+		if calls == 3 { // inside the second batch
+			cancel()
+		}
+		return 0.42
+	}})
+	if err == nil {
+		t.Fatal("expected the cancelled context to stop the pass")
+	}
+	if n != 2 {
+		t.Fatalf("committed %d claims before stopping, want the first batch of 2", n)
+	}
+}
