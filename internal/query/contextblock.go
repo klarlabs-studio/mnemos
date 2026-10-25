@@ -66,11 +66,11 @@ func (e Engine) BuildContextBlock(ctx context.Context, opts ContextBlockOptions)
 	// The same population recall admits (recallPopulation: not deprecated,
 	// not session-local) and currently valid. Contested and resolved stay, so
 	// the agent still sees live disagreements and their outcome. A claim whose
-	// valid time has closed was forgotten or superseded: it is history, and the
+	// valid time has closed was superseded, and an archived one was forgotten: either is history, and the
 	// block lists it under "Active claims", so it does not belong here. Recall
 	// already drops it unless the caller asks for history.
 	now := time.Now().UTC()
-	active := keepClaims(recallPopulation(claims), func(c domain.Claim) bool { return c.IsValidAt(now) })
+	active := keepClaims(recallPopulation(claims), func(c domain.Claim) bool { return c.IsValidAt(now) && !c.IsArchived() })
 
 	// Honour the Query filter. This field was declared, documented ("empty
 	// Query falls back to all active claims for the run"), accepted by

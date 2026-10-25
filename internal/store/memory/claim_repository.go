@@ -769,6 +769,13 @@ func isLive(c domain.Claim) bool {
 	return c.ValidTo.IsZero() && c.Status != domain.ClaimStatusDeprecated
 }
 
+// isCurrentLive is the population brain health measures: held (isLive) and
+// not archived. The duplicate check keeps isLive, so a restatement can fold
+// onto an archived belief and bring it back (ADR 0034).
+func isCurrentLive(c domain.Claim) bool {
+	return isLive(c) && !c.IsArchived()
+}
+
 // CountLiveClaims implements ports.HealthSampler.
 func (r ClaimRepository) CountLiveClaims(ctx context.Context) (int, error) {
 	all, err := r.ListAll(ctx)
@@ -777,7 +784,7 @@ func (r ClaimRepository) CountLiveClaims(ctx context.Context) (int, error) {
 	}
 	n := 0
 	for _, c := range all {
-		if isLive(c) {
+		if isCurrentLive(c) {
 			n++
 		}
 	}
@@ -794,7 +801,7 @@ func (r ClaimRepository) CountLiveOrphans(ctx context.Context) (int, error) {
 	defer r.state.mu.RUnlock()
 	n := 0
 	for _, c := range all {
-		if isLive(c) && len(r.state.evidence[c.ID]) == 0 {
+		if isCurrentLive(c) && len(r.state.evidence[c.ID]) == 0 {
 			n++
 		}
 	}
@@ -826,7 +833,7 @@ func (r ClaimRepository) SampleLiveClaims(ctx context.Context, n int, seed uint6
 	byID := map[string]domain.Claim{}
 	var ids []string
 	for _, c := range all {
-		if isLive(c) {
+		if isCurrentLive(c) {
 			byID[c.ID] = c
 			ids = append(ids, c.ID)
 		}
@@ -861,7 +868,7 @@ func (r ClaimRepository) CountHypercorrections(_ context.Context, floor float64)
 			continue
 		}
 		a, b := sa.toDomain(), sb.toDomain()
-		if !isLive(a) || !isLive(b) ||
+		if !isCurrentLive(a) || !isCurrentLive(b) ||
 			a.Lifecycle == domain.ClaimLifecycleSuperseded || b.Lifecycle == domain.ClaimLifecycleSuperseded {
 			continue
 		}

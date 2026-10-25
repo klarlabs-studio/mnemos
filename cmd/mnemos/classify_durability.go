@@ -148,7 +148,7 @@ func classifyDurability(limit int, only []string, dryRun bool, f Flags) {
 // deprecated or valid-time closed is already excluded there, so classifying it
 // would spend the budget on text no reader will see.
 func recallable(c domain.Claim) bool {
-	return c.Status != domain.ClaimStatusDeprecated && c.ValidTo.IsZero()
+	return c.Status != domain.ClaimStatusDeprecated && c.IsCurrent()
 }
 
 func countUnclassifiedRecallable(claims []domain.Claim) int {

@@ -151,7 +151,7 @@ func gatherCuriositySignals(ctx context.Context, conn *store.Conn) ([]curiosity.
 	now := time.Now().UTC()
 	beliefs := make([]curiosity.Belief, 0, len(claims))
 	for _, c := range claims {
-		if !c.ValidTo.IsZero() {
+		if !c.IsCurrent() {
 			continue // only live knowledge
 		}
 		_, isUnresolved := unresolved[c.ID]

@@ -83,14 +83,14 @@ func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64
 
 	// Index the claims that may take part in a merge. Two kinds are left out:
 	// claims with no embedding cannot be compared, and RETIRED claims —
-	// deprecated, or with valid time closed (forgotten / superseded) — must not
+	// deprecated, superseded (valid time closed) or archived (forgotten) — must not
 	// be. Merging a retired claim into a live one repoints its evidence onto
 	// the live claim, so knowledge the brain deliberately retired would come
 	// back as fresh corroboration of whatever it happened to resemble.
 	pool := make([]indexedClaim, 0, len(allClaims))
 	skipped, retired := 0, 0
 	for _, c := range allClaims {
-		if c.Status == domain.ClaimStatusDeprecated || !c.ValidTo.IsZero() {
+		if c.Status == domain.ClaimStatusDeprecated || !c.IsCurrent() {
 			retired++
 			continue
 		}
