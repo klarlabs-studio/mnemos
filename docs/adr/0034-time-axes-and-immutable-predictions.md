@@ -1,6 +1,6 @@
 # ADR 0034: Three ways a belief retires, and predictions that cannot be edited
 
-- **Status:** Accepted; Rollout step 1 (archive axis) implemented, steps 2–3 pending.
+- **Status:** Accepted; Rollout steps 1 (archive axis) and 2 (validity history) implemented, step 3 pending.
 - **Date:** 2026-10-25
 - **Deciders:** Felix Geelhaar
 - **Amends:** `ConsolidateOptions.ForgetBelowTrust` / `ForgetRefuted` (`memory.go`),
@@ -92,11 +92,15 @@ in the same way `merged_into` redirects a restatement (ADR 0033).
 
 ### 2. Valid time is versioned
 
-`SetValidity` appends a row to a new `claim_validity_changes` table (`claim_id`,
-`old_valid_to`, `new_valid_to`, `changed_at`, `changed_by`, `reason`) in the same
-governed write that updates the claim. `claims.valid_to` stays as the current
-value for cheap filtering, and the table is the system-time history behind it.
-The same applies to `archived_at`, with `reason` naming the sweep.
+`SetValidity`, `Archive` and `Unarchive` append a row to a new
+`claim_validity_history` table (`claim_id`, `field` = `valid_to` or
+`archived_at`, `from_value`, `to_value`, `changed_at`, `changed_by`, `reason`)
+in the same transaction that updates the claim, and append nothing when the
+value does not change. `claims.valid_to` and `claims.archived_at` stay as the
+current values for cheap filtering, and the table is the system-time history
+behind them. The sweeps record the trust they archived at, or the refutation,
+as the reason. Hard deletes drop the history with the claim, and
+`mnemos audit who` lists a principal's validity changes.
 
 ### 3. Predictions are append-only
 
@@ -152,8 +156,8 @@ score omits.
    claims whose `valid_to` was set by a sweep cannot be identified from the row
    alone, so the migration leaves existing `valid_to` values as they are and the
    change applies from the next consolidation.
-2. **Validity history.** `claim_validity_changes`, written by `SetValidity` and
-   the archive setter.
+2. **Validity history.** `claim_validity_history`, written by `SetValidity`,
+   `Archive` and `Unarchive`.
 3. **Predictions.** The three tables, a one-time copy of `claim_expectations`
    (each row becomes a prediction, plus an observation if it had one, plus a
    verdict if resolved; `confidence_at` and `evidence_cutoff` are left empty
