@@ -89,8 +89,8 @@ func evidenceEventsFor(t *testing.T, conn *store.Conn, claimID string) []string 
 // at a claim the merge considered gone.
 //
 // The contract now: the winner ends up with the UNION of the evidence and every
-// reachable dependent, and no active un-evidenced claim survives — a loser whose
-// row cannot be removed is a deprecated tombstone that the caller is told about.
+// reachable dependent, and the loser survives only as a deprecated redirect to
+// the winner (#387) — never as an active, un-evidenced claim.
 func TestApplySemanticDedupe_StrandsNoOrphanedDependents(t *testing.T) {
 	ctx := context.Background()
 	_, conn := openDedupeDB(t)
@@ -102,31 +102,15 @@ func TestApplySemanticDedupe_StrandsNoOrphanedDependents(t *testing.T) {
 	merged, err := ApplySemanticDedupe(ctx, conn, SemanticDedupePlan{
 		Merges: []SemanticMerge{{WinnerID: "cl_win", DuplicateIDs: []string{"cl_lose"}}},
 	})
+	if err != nil {
+		t.Fatalf("ApplySemanticDedupe: %v", err)
+	}
 	if merged != 1 {
 		t.Errorf("merged = %d, want 1", merged)
 	}
 
-	// 1. No stranded ACTIVE claim. Either the row is gone, or it is a
-	//    deprecated tombstone the caller was told about.
-	survivors, lerr := conn.Claims.ListByIDs(ctx, []string{"cl_lose"})
-	if lerr != nil {
-		t.Fatalf("ListByIDs: %v", lerr)
-	}
-	if len(survivors) == 1 {
-		if survivors[0].Status == domain.ClaimStatusActive {
-			t.Fatalf("ORPHANED ACTIVE CLAIM SURVIVED the merge: %+v", survivors[0])
-		}
-		if survivors[0].Status != domain.ClaimStatusDeprecated {
-			t.Errorf("surviving loser status = %q, want deprecated", survivors[0].Status)
-		}
-		if err == nil {
-			t.Error("a merge that could not remove the losing row must surface it, not return nil")
-		} else if !contains(err.Error(), "cl_lose") {
-			t.Errorf("error should name the tombstoned claim, got: %v", err)
-		}
-	} else if err != nil {
-		t.Fatalf("merge removed the loser but still errored: %v", err)
-	}
+	// 1. The loser is a deprecated redirect to the winner, not an active claim.
+	assertRedirect(t, conn, "cl_lose", "cl_win")
 
 	// 2. The winner retains the UNION of evidence, not just its own.
 	events := evidenceEventsFor(t, conn, "cl_win")
@@ -172,11 +156,11 @@ func TestApplySemanticDedupe_StrandsNoOrphanedDependents(t *testing.T) {
 	}
 }
 
-// TestApplySemanticDedupe_RemovesLoserWhenBackendAllows covers the clean path:
-// on a backend with no residual dependent blocking the delete, the losing row is
-// actually gone, the winner holds the union of evidence, and no error is
-// returned.
-func TestApplySemanticDedupe_RemovesLoserWhenBackendAllows(t *testing.T) {
+// TestApplySemanticDedupe_KeepsLoserAsRedirect: a merge keeps the losing row,
+// deprecated and pointing at the winner, as Wikidata keeps a merged item as a
+// redirect (#387). Its id still resolves, and the winner holds the union of the
+// evidence.
+func TestApplySemanticDedupe_KeepsLoserAsRedirect(t *testing.T) {
 	ctx := context.Background()
 	conn, err := store.Open(ctx, "memory://")
 	if err != nil {
@@ -196,15 +180,29 @@ func TestApplySemanticDedupe_RemovesLoserWhenBackendAllows(t *testing.T) {
 	if merged != 1 {
 		t.Errorf("merged = %d, want 1", merged)
 	}
-	survivors, err := conn.Claims.ListByIDs(ctx, []string{"cl_lose"})
+	assertRedirect(t, conn, "cl_lose", "cl_win")
+	if events := evidenceEventsFor(t, conn, "cl_win"); !containsAll(events, "ev_cl_win", "ev_cl_lose") {
+		t.Errorf("winner evidence = %v, want the union", events)
+	}
+	if events := evidenceEventsFor(t, conn, "cl_lose"); len(events) != 0 {
+		t.Errorf("the redirect kept evidence %v; it must all have moved to the winner", events)
+	}
+}
+
+func assertRedirect(t *testing.T, conn *store.Conn, loserID, winnerID string) {
+	t.Helper()
+	got, err := conn.Claims.ListByIDs(context.Background(), []string{loserID})
 	if err != nil {
 		t.Fatalf("ListByIDs: %v", err)
 	}
-	if len(survivors) != 0 {
-		t.Errorf("loser survived a clean merge: %+v", survivors)
+	if len(got) != 1 {
+		t.Fatalf("merged claim %s was deleted; it must stay as a redirect", loserID)
 	}
-	if events := evidenceEventsFor(t, conn, "cl_win"); !containsAll(events, "ev_cl_win", "ev_cl_lose") {
-		t.Errorf("winner evidence = %v, want the union", events)
+	if got[0].Status != domain.ClaimStatusDeprecated {
+		t.Errorf("redirect %s status = %q, want deprecated", loserID, got[0].Status)
+	}
+	if got[0].MergedInto != winnerID {
+		t.Errorf("redirect %s merged_into = %q, want %q", loserID, got[0].MergedInto, winnerID)
 	}
 }
 
@@ -219,13 +217,4 @@ func containsAll(got []string, want ...string) bool {
 		}
 	}
 	return true
-}
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

@@ -12,16 +12,26 @@ import (
 // time open, not deprecated) whose text_key is one of keys, oldest first. Row
 // security scopes it to the connection's tenant like every other read.
 func (r ClaimRepository) ListLiveByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(ctx, keys, `valid_to IS NULL AND status <> 'deprecated'`)
+}
+
+// ListMergedByTextKeys implements ports.ClaimRepository: the merge redirects
+// whose text_key is one of keys, oldest first.
+func (r ClaimRepository) ListMergedByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(ctx, keys, `merged_into <> ''`)
+}
+
+func (r ClaimRepository) listByTextKeys(ctx context.Context, keys []string, predicate string) ([]domain.Claim, error) {
 	if len(keys) == 0 {
 		return []domain.Claim{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
 SELECT `+claimColumns("")+`
 FROM %s
-WHERE text_key = ANY($1) AND valid_to IS NULL AND status <> 'deprecated'
+WHERE text_key = ANY($1) AND `+predicate+`
 ORDER BY created_at, id`, qualify(r.ns, "claims")), pgArray(keys))
 	if err != nil {
-		return nil, fmt.Errorf("list live claims by text key: %w", err)
+		return nil, fmt.Errorf("list claims by text key: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	return collectClaimRows(rows)

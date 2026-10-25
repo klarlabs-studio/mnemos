@@ -269,3 +269,44 @@ func trustEvidenceCount(t *testing.T, conn *store.Conn, claimID string) int {
 	}
 	return in[claimID].EvidenceCount
 }
+
+// A belief merged away by semantic dedupe is a redirect (#387). Restating its
+// text must land on the claim that absorbed it, through any chain of merges,
+// and never on a target that is no longer live.
+func TestPersistArtifacts_RestatingAMergedBeliefLandsOnItsWinner(t *testing.T) {
+	for name, conn := range knownClaimStores(t) {
+		ctx := context.Background()
+		winner := knownClaim("cl-winner", "Deploys go out from the release branch")
+		middle := knownClaim("cl-middle", "We deploy from the release branch")
+		middle.Status, middle.MergedInto = domain.ClaimStatusDeprecated, winner.ID
+		first := knownClaim("cl-first", "Deployments ship from the release branch")
+		first.Status, first.MergedInto = domain.ClaimStatusDeprecated, middle.ID
+		orphan := knownClaim("cl-orphan", "The cache is flushed nightly")
+		orphan.Status, orphan.MergedInto = domain.ClaimStatusDeprecated, "cl-retired"
+		retired := knownClaim("cl-retired", "Caches flush every night")
+		retired.Status = domain.ClaimStatusDeprecated
+		persistOne(t, conn, captureEvent("ev-old", "session-1", "old"), winner, middle, first, orphan, retired)
+
+		persistOne(t, conn, captureEvent("ev-new", "session-2", "new"),
+			knownClaim("cl-restated", "deployments ship from the release branch."),
+			knownClaim("cl-relearned", "The cache is flushed nightly"))
+
+		got, err := conn.Claims.ListByIDs(ctx, []string{"cl-restated", "cl-relearned"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := map[string]bool{}
+		for _, c := range got {
+			ids[c.ID] = true
+		}
+		if ids["cl-restated"] {
+			t.Errorf("%s: a restated merged belief became a new claim instead of following the redirect", name)
+		}
+		if ev := evidenceEvents(t, conn, winner.ID); !containsAll(ev, "ev-old", "ev-new") {
+			t.Errorf("%s: winner evidence = %v, want the restatement's event through the merge chain", name, ev)
+		}
+		if !ids["cl-relearned"] {
+			t.Errorf("%s: a redirect to a retired claim absorbed the restatement; it must come back as a new claim", name)
+		}
+	}
+}

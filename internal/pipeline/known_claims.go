@@ -25,7 +25,10 @@ import (
 // normalised text (domain.ClaimTextKey), scope and audience, in the same
 // tenant — the connection is already tenant-scoped. A deprecated claim never
 // absorbs a restatement: the belief comes back as a new claim, as it would have
-// before.
+// before. The one exception is a merge redirect (#387): a claim semantic dedupe
+// folded into another hands its restatements to the live claim at the end of
+// its MergedInto chain, so new evidence reaches the belief instead of waiting
+// for the next consolidation to merge a fresh copy again.
 //
 // Folding must not turn repetition into corroboration (#443, #390). Trust
 // counts evidence links, so a claim gains at most ONE link per origin — the
@@ -110,7 +113,60 @@ func heldBeliefs(ctx context.Context, conn *store.Conn, claims []domain.Claim) (
 			held[identityOf(c)] = c.ID
 		}
 	}
+	if err := followMergeRedirects(ctx, conn, keys, held); err != nil {
+		return nil, err
+	}
 	return held, nil
+}
+
+// maxRedirectHops bounds how far a merge chain is followed. A chain grows by
+// one hop each time a winner is itself merged later, so real chains are short;
+// the bound only stops a corrupt cycle.
+const maxRedirectHops = 8
+
+// followMergeRedirects adds, for each identity no live claim holds, the live
+// claim its merge redirect resolves to. A redirect whose chain ends at a claim
+// that is no longer live resolves to nothing, and the belief comes back as a
+// new claim.
+func followMergeRedirects(ctx context.Context, conn *store.Conn, keys []string, held map[beliefIdentity]string) error {
+	redirects, err := conn.Claims.ListMergedByTextKeys(ctx, keys)
+	if err != nil {
+		return fmt.Errorf("look up merge redirects: %w", err)
+	}
+	for _, r := range redirects { // oldest first, like the live lookup
+		if _, ok := held[identityOf(r)]; ok {
+			continue
+		}
+		target, err := resolveRedirect(ctx, conn, r)
+		if err != nil {
+			return err
+		}
+		if target != "" {
+			held[identityOf(r)] = target
+		}
+	}
+	return nil
+}
+
+// resolveRedirect follows r's MergedInto chain to a live claim, or returns ""
+// when the chain ends at a claim that is gone or no longer live.
+func resolveRedirect(ctx context.Context, conn *store.Conn, r domain.Claim) (string, error) {
+	next := r.MergedInto
+	for hop := 0; hop < maxRedirectHops && next != ""; hop++ {
+		found, err := conn.Claims.ListByIDs(ctx, []string{next})
+		if err != nil {
+			return "", fmt.Errorf("resolve merge redirect %s: %w", r.ID, err)
+		}
+		if len(found) != 1 {
+			return "", nil
+		}
+		c := found[0]
+		if c.Status != domain.ClaimStatusDeprecated && c.ValidTo.IsZero() {
+			return c.ID, nil
+		}
+		next = c.MergedInto
+	}
+	return "", nil
 }
 
 // foldOntoHeld drops each claim whose belief is already held — by a stored

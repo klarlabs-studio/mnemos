@@ -126,6 +126,9 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS visibility            text          
 -- upsert; rows that predate it are keyed by backfillClaimTextKeys on open.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS text_key              text             NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_claims_text_key ON claims(text_key);
+-- merged_into (#387, ADR 0033): the claim that absorbed this one in a
+-- semantic-dedupe merge; the row stays as a deprecated redirect.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS merged_into           text             NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_claims_scope_service ON claims(scope_service);
 CREATE INDEX IF NOT EXISTS idx_claims_lifecycle ON claims(lifecycle);
 -- ListByTestRequirementRef filters `type = 'test_result' AND
