@@ -71,6 +71,7 @@ type Claim struct {
 	SubjectClass         string         `json:"subject_class"`
 	Durability           string         `json:"durability"`
 	TextKey              string         `json:"text_key"`
+	MergedInto           string         `json:"merged_into"`
 }
 
 type ClaimEntity struct {

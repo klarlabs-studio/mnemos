@@ -54,10 +54,10 @@ func claimUpsertSQL(ns string) string {
 INSERT INTO %s (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, half_life_days, lifecycle, subject_class, durability, confidence_components,
                 test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
                 scope_service, scope_env, scope_team,
-                source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, visibility, half_life_classifier, text_key)
+                source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, visibility, half_life_classifier, text_key, merged_into)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
         $21, $22, $23,
-        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
 ON CONFLICT (id) DO UPDATE SET
   text = EXCLUDED.text,
   type = EXCLUDED.type,
@@ -68,6 +68,9 @@ ON CONFLICT (id) DO UPDATE SET
   -- Preserved on empty for the same reason: a writer carrying no classifier
   -- verdict must not erase one, or coverage would decay under write traffic.
   half_life_classifier = CASE WHEN EXCLUDED.half_life_classifier <> '' THEN EXCLUDED.half_life_classifier ELSE claims.half_life_classifier END,
+  -- A merge redirect survives a write that carries none: re-extraction rebuilds
+  -- a claim from its text and never sets merged_into (#387).
+  merged_into = CASE WHEN EXCLUDED.merged_into <> '' THEN EXCLUDED.merged_into ELSE claims.merged_into END,
   lifecycle = EXCLUDED.lifecycle,
   subject_class = EXCLUDED.subject_class,
   durability = EXCLUDED.durability,
@@ -164,6 +167,7 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 			string(claim.Visibility),
 			claim.HalfLifeClassifier,
 			domain.ClaimTextKey(claim.Text),
+			claim.MergedInto,
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
 		}
@@ -815,6 +819,7 @@ var claimColumnNames = []string{
 	"scope_service", "scope_env", "scope_team",
 	"source_document", "source_type", "source_authority", "liveness",
 	"last_executed", "citation_count", "provenance_rationale", "visibility",
+	"merged_into",
 }
 
 // claimColumns renders the shared projection, optionally table-qualified
@@ -887,6 +892,7 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 		&scopeService, &scopeEnv, &scopeTeam,
 		&sourceDocument, &sourceType, &c.SourceAuthority, &liveness,
 		&lastExecuted, &c.CitationCount, &provenanceRationale, &visibility,
+		&c.MergedInto,
 	); err != nil {
 		return domain.Claim{}, fmt.Errorf("scan claim row: %w", err)
 	}
