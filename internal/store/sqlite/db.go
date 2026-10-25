@@ -142,7 +142,10 @@ CREATE TABLE IF NOT EXISTS claims (
 	durability TEXT NOT NULL DEFAULT '',
 	-- text_key: domain.ClaimTextKey(text), looked up by the write path's
 	-- duplicate check. Backfilled on open for rows written before it existed.
-	text_key TEXT NOT NULL DEFAULT ''
+	text_key TEXT NOT NULL DEFAULT '',
+	-- merged_into (#387, ADR 0033): the claim that absorbed this one in a
+	-- semantic-dedupe merge; the row stays as a deprecated redirect.
+	merged_into TEXT NOT NULL DEFAULT ''
 );
 -- idx_claims_trust_score and idx_claims_valid_to are created by
 -- migrate() after the v1→v2 / v2→v3 ALTER TABLEs add the columns on
@@ -663,7 +666,10 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // identity the write path looks up so a repeated belief links new evidence to
 // the claim that already holds it instead of adding a row. Existing rows are
 // keyed by backfillClaimTextKeys, which runs on every open, not behind the gate.
-const currentSchemaVersion = 29
+// v30 (#387, ADR 0033) adds claims.merged_into: a semantic-dedupe merge keeps
+// the losing claim as a deprecated redirect to the winner instead of deleting
+// it. Existing rows default to '' (not merged).
+const currentSchemaVersion = 30
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -774,6 +780,7 @@ var expectedColumns = []addMissingColumn{
 	// same trap durability documents above: CREATE TABLE IF NOT EXISTS does not
 	// add columns to a table that already exists.
 	{"claims", "half_life_classifier", "TEXT NOT NULL DEFAULT ''"},
+	{"claims", "merged_into", "TEXT NOT NULL DEFAULT ''"},
 	// v26 - explicit confirmation time (ADR 0026), read by canonical trust.
 	{"claims", "last_confirmed", "TEXT NOT NULL DEFAULT ''"},
 	// v27 - trust cache provenance (ADR 0026 §5).

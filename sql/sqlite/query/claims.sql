@@ -15,8 +15,8 @@
 -- not confident about), so a plain excluded.half_life_days would reset a
 -- human override set through MarkVerified the next time the same claim
 -- came back through ingest. Same COALESCE semantics as MarkClaimVerified.
-INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, text_key)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   text = excluded.text,
   type = excluded.type,
@@ -30,6 +30,9 @@ ON CONFLICT(id) DO UPDATE SET
   -- a writer that carries no classifier verdict must not erase one, or the
   -- coverage number would decay under ordinary write traffic (ADR 0025).
   half_life_classifier = CASE WHEN excluded.half_life_classifier <> '' THEN excluded.half_life_classifier ELSE claims.half_life_classifier END,
+  -- A merge redirect survives a write that carries none: re-extraction rebuilds
+  -- a claim from its text and never sets merged_into (#387).
+  merged_into = CASE WHEN excluded.merged_into <> '' THEN excluded.merged_into ELSE claims.merged_into END,
   -- Scope, provenance and visibility are PRESERVED when the incoming value is
   -- zero, generalising the half_life_days rule above (#334, #345, #346).
   --
@@ -108,7 +111,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score, 
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle, subject_class, durability, text_key
+       visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into
 FROM claims
 ORDER BY created_at ASC;
 
@@ -124,7 +127,7 @@ SELECT id, text, type, confidence, status, created_at, created_by, trust_score, 
        last_executed, citation_count, provenance_rationale,
        test_id, test_requirement_ref, test_author,
        test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
-       visibility, confidence_components, lifecycle, subject_class, durability, text_key
+       visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into
 FROM claims
 WHERE type = 'test_result'
   AND test_requirement_ref = ?

@@ -68,6 +68,12 @@ type ClaimRepository interface {
 	// did not ask at all. No keys returns no claims.
 	ListLiveByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error)
 
+	// ListMergedByTextKeys returns the merge redirects — claims with a
+	// non-empty MergedInto — whose domain.ClaimTextKey is one of keys, in the
+	// same order. The write path follows them so a restatement of a merged
+	// belief lands on the claim that absorbed it (#387). No keys returns none.
+	ListMergedByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error)
+
 	// ListByTestRequirementRef returns every test_result claim sharing the
 	// given TestRequirementRef, ordered by TestLastRunAt DESC then
 	// CreatedAt DESC. Drives `mnemos trust --test=<ref>` and the

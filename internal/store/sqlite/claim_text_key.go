@@ -14,9 +14,19 @@ import (
 // text_key is one of keys, oldest first. The predicate is liveClaimSQL, the
 // same definition of "live" brain health counts.
 func (r ClaimRepository) ListLiveByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(ctx, keys, liveClaimSQL)
+}
+
+// ListMergedByTextKeys implements ports.ClaimRepository: the merge redirects
+// whose text_key is one of keys, oldest first.
+func (r ClaimRepository) ListMergedByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(ctx, keys, `merged_into <> ''`)
+}
+
+func (r ClaimRepository) listByTextKeys(ctx context.Context, keys []string, predicate string) ([]domain.Claim, error) {
 	out := []domain.Claim{}
 	err := inChunks(keys, func(chunk []string) error {
-		part, err := r.listLiveByTextKeysChunk(ctx, chunk)
+		part, err := r.listByTextKeysChunk(ctx, chunk, predicate)
 		out = append(out, part...)
 		return err
 	})
@@ -27,16 +37,16 @@ func (r ClaimRepository) ListLiveByTextKeys(ctx context.Context, keys []string) 
 	return out, nil
 }
 
-func (r ClaimRepository) listLiveByTextKeysChunk(ctx context.Context, keys []string) ([]domain.Claim, error) {
+func (r ClaimRepository) listByTextKeysChunk(ctx context.Context, keys []string, predicate string) ([]domain.Claim, error) {
 	args := make([]any, len(keys))
 	for i, k := range keys {
 		args[i] = k
 	}
 	query := `SELECT ` + scanClaimColumns + ` FROM claims WHERE text_key IN (` +
-		strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",") + `) AND ` + liveClaimSQL
+		strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",") + `) AND ` + predicate
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list live claims by text key: %w", err)
+		return nil, fmt.Errorf("list claims by text key: %w", err)
 	}
 	defer closeRows(rows)
 
@@ -49,7 +59,7 @@ func (r ClaimRepository) listLiveByTextKeysChunk(ctx context.Context, keys []str
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate live claims by text key: %w", err)
+		return nil, fmt.Errorf("iterate claims by text key: %w", err)
 	}
 	return out, nil
 }

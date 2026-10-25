@@ -149,6 +149,9 @@ CREATE INDEX idx_claims_test_requirement_ref ON claims (test_requirement_ref, ty
 -- upsert; rows that predate it are keyed by backfillClaimTextKeys on open.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS text_key             CHAR(32)      NOT NULL DEFAULT '';
 CREATE INDEX idx_claims_text_key ON claims (text_key);
+-- merged_into (#387, ADR 0033): the claim that absorbed this one in a
+-- semantic-dedupe merge; the row stays as a deprecated redirect.
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS merged_into          VARCHAR(190)  NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS entities (
   id              VARCHAR(190) NOT NULL,
