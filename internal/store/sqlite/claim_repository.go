@@ -555,10 +555,41 @@ func (r ClaimRepository) ListTrustInputs(ctx context.Context, claimIDs []string)
 	return out, nil
 }
 
+// trustWriteBatch is how many trust updates one transaction commits.
+//
+// The full recompute used to write the whole corpus in one transaction, holding
+// the write lock for all of it (#466). Each row's update is independent, so a
+// pass that stops part-way leaves every committed row correctly rescored and a
+// re-run finishes the rest.
+var trustWriteBatch = 5000
+
+// trustBatchPause separates batches so other writers get the lock. A writer
+// waiting on SQLITE_BUSY retries on its busy handler's schedule, which backs off
+// to 100 ms; batches committed back to back leave gaps too short for it to land
+// in, so to everyone else the pass still looks like one long lock.
+var trustBatchPause = 100 * time.Millisecond
+
 func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, scoring domain.TrustScoring) (int, error) {
+	written := 0
+	for start := 0; start < len(rows); start += trustWriteBatch {
+		if start > 0 {
+			if err := pause(ctx, trustBatchPause); err != nil {
+				return written, err
+			}
+		}
+		batch := rows[start:min(start+trustWriteBatch, len(rows))]
+		if err := r.writeTrustBatch(ctx, batch, scoring); err != nil {
+			return written, err
+		}
+		written += len(batch)
+	}
+	return written, nil
+}
+
+func (r ClaimRepository) writeTrustBatch(ctx context.Context, rows []trustRow, scoring domain.TrustScoring) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin tx: %w", err)
+		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	qtx := r.q.WithTx(tx)
@@ -570,13 +601,29 @@ func (r ClaimRepository) applyTrustRows(ctx context.Context, rows []trustRow, sc
 			TrustModelVersion: scoring.ModelVersion,
 			ID:                row.claimID,
 		}); err != nil {
-			return 0, fmt.Errorf("update trust for %s: %w", row.claimID, err)
+			return fmt.Errorf("update trust for %s: %w", row.claimID, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit trust update: %w", err)
+		return fmt.Errorf("commit trust update: %w", err)
 	}
-	return len(rows), nil
+	return nil
+}
+
+// pause waits d, or returns the context's error if it ends first. A zero d
+// still reports a context that has already ended.
+func pause(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 // ApplyBeliefCredit implements [ports.BeliefCreditWriter]: it writes the
