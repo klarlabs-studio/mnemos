@@ -204,13 +204,19 @@ type cluster struct {
 }
 
 // clusterActions groups actions that share the same operational
-// surface (subject + kind). The subject becomes the lesson's
-// Scope.Service and the kind labels both Lesson.Kind and Lesson.Trigger.
+// surface: subject, environment, team and kind. The subject becomes the
+// lesson's Scope.Service, the env and team metadata
+// (domain.ActionMetadataEnv / ActionMetadataTeam) its Scope.Env and
+// Scope.Team, and the kind labels both Lesson.Kind and Lesson.Trigger.
+// Clustering on subject alone merged staging and prod into one lesson,
+// against the domain.Context contract.
 // Actions without any matching outcome are skipped — they cannot
 // teach us anything about what happened next.
 func clusterActions(actions []domain.Action, outcomesByAction map[string][]domain.Outcome) []cluster {
 	type key struct {
 		Service string
+		Env     string
+		Team    string
 		Kind    string
 	}
 	buckets := map[key]*cluster{}
@@ -219,11 +225,12 @@ func clusterActions(actions []domain.Action, outcomesByAction map[string][]domai
 		if !ok || len(os) == 0 {
 			continue
 		}
-		k := key{Service: a.Subject, Kind: string(a.Kind)}
+		env, team := a.Metadata[domain.ActionMetadataEnv], a.Metadata[domain.ActionMetadataTeam]
+		k := key{Service: a.Subject, Env: env, Team: team, Kind: string(a.Kind)}
 		c, exists := buckets[k]
 		if !exists {
 			c = &cluster{
-				Scope:   domain.LessonScope{Service: a.Subject},
+				Scope:   domain.LessonScope{Service: a.Subject, Env: env, Team: team},
 				Trigger: triggerLabel(string(a.Kind), a.Subject),
 				Kind:    string(a.Kind),
 			}
@@ -272,7 +279,9 @@ func scoreCluster(c cluster, halfLifeDays float64, now time.Time) (float64, bool
 	}
 	flatOutcomes := flattenOutcomes(c)
 	dominantResult, dominantCount := dominantResult(flatOutcomes)
-	if dominantResult == "" {
+	// Outcomes nobody could read teach nothing: a cluster that is mostly
+	// unknown is not evidence that the action succeeds.
+	if dominantResult == "" || dominantResult == domain.OutcomeResultUnknown {
 		return 0, false
 	}
 	consistency := float64(dominantCount) / float64(len(flatOutcomes))
@@ -338,6 +347,14 @@ func flattenOutcomes(c cluster) []domain.Outcome {
 	return out
 }
 
+// resultPrecedence breaks ties in dominantResult, which used to follow Go's
+// random map order. Failure wins a tie so a contested cluster never reads as
+// a success.
+var resultPrecedence = []domain.OutcomeResult{
+	domain.OutcomeResultFailure, domain.OutcomeResultPartial,
+	domain.OutcomeResultSuccess, domain.OutcomeResultUnknown,
+}
+
 func dominantResult(os []domain.Outcome) (domain.OutcomeResult, int) {
 	counts := map[domain.OutcomeResult]int{}
 	for _, o := range os {
@@ -345,8 +362,8 @@ func dominantResult(os []domain.Outcome) (domain.OutcomeResult, int) {
 	}
 	var best domain.OutcomeResult
 	bestN := 0
-	for r, n := range counts {
-		if n > bestN {
+	for _, r := range resultPrecedence {
+		if n := counts[r]; n > bestN {
 			best = r
 			bestN = n
 		}
