@@ -27,6 +27,15 @@ const (
 	ActionKindCustom    ActionKind = "custom"
 )
 
+// ActionMetadataEnv and ActionMetadataTeam are the Action.Metadata keys that
+// name the environment and team an action ran in. Synthesis clusters actions
+// within (subject, env, team), so a lesson learned in staging never covers
+// prod. Actions without them cluster as before, with an empty env or team.
+const (
+	ActionMetadataEnv  = "env"
+	ActionMetadataTeam = "team"
+)
+
 // Action is a recorded operational change. Actions are paired with
 // Outcomes (one Action → 0..N Outcomes) so the synthesis layer can
 // cluster action→outcome chains into Lessons and Playbooks.
