@@ -13,7 +13,7 @@ import (
 // Structural-retrieval constants govern [Memory.AnalogousClaims].
 const (
 	// StructuralHops is the radius of the typed subgraph fingerprinted around a
-	// claim — its local "causal skeleton".
+	// claim — its local relational skeleton.
 	StructuralHops = 2
 
 	// StructuralIterations is the number of Weisfeiler-Lehman label-propagation
@@ -47,7 +47,7 @@ const (
 
 // Analogy is a claim whose surrounding typed subgraph is structurally similar to
 // the query subgraph — the anchor of a past situation with the same relational
-// shape (causal skeleton), even when the claims themselves differ.
+// shape (relational skeleton), even when the claims themselves differ.
 type Analogy struct {
 	ClaimID    string
 	Text       string

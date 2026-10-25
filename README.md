@@ -527,7 +527,7 @@ internal/
   ingest/            # Multi-format input ingestion
   parser/            # Input-to-event normalization
   extract/           # Claim extraction with evidence mapping
-  relate/            # Relationship + causal edge detection (supports, contradicts, causes, validates, ...)
+  relate/            # Relationship detection (supports, contradicts, cites, test conflicts)
   query/             # Query assembly and ranking (BM25 + cosine hybrid)
   embedding/         # Vector embedding client abstraction
   llm/               # LLM client abstraction (multi-provider)
@@ -801,7 +801,7 @@ Phase 1: Developer Primitive — Available now.
 
 Mnemos has shipped a self-learning loop on top of the evidence layer:
 
-- **Causal edges** — `causes`, `caused_by`, `action_of`, `outcome_of`, `validates`, `refutes`, `derived_from` extend the relationship graph beyond logical agreement. `relate.DetectCausal` infers these from event-time + shared-entity signals; the optional `relate.DetectCausalLLM` augments borderline pairs via LLM disambiguation.
+- **Causal and outcome edges** — `causes`, `caused_by`, `action_of`, `outcome_of`, `validates`, `refutes`, `derived_from` extend the relationship graph beyond logical agreement. Causal evidence comes from **recorded interventions**: an action linked to the outcome it produced (`action_of` / `outcome_of`), and a decision's outcome validating or refuting the beliefs it rested on. Mnemos does not infer `causes` from text. The `relate.DetectCausal` heuristic and `relate.DetectCausalLLM` exist but are not wired: measured on a real brain they labelled co-occurrence as cause in nearly every pair.
 - **Action + Outcome recording** — `mnemos action record` / `mnemos outcome record` capture operational changes and their observed metrics. The Prometheus pull adapter (`internal/adapters/outcomes/prometheus.go`) scrapes metrics and produces Outcomes automatically.
 - **Lessons synthesis** — `mnemos synthesize` clusters action→outcome chains into validated Lessons (confidence = corroboration × consistency × recency).
 - **Playbooks** — `mnemos playbook synthesize` derives steps-only operational intelligence from Lesson clusters. Consumers run them through whatever execution layer they own (an agent runtime, an in-process executor, a programmatic system).
@@ -810,7 +810,7 @@ Mnemos has shipped a self-learning loop on top of the evidence layer:
 - **Multi-tenant scope** — `Scope{Service, Env, Team}` on Claims, Lessons, Decisions, Playbooks; `mnemos query --service X --env prod` filters the answer.
 - **Human-editable layer** — `mnemos export` + `mnemos import` round-trip Lessons/Playbooks to Git-friendly YAML+markdown; `mnemos history` lists snapshots from system-versioned `*_versions` tables.
 
-Marketing claim: *"evidence-based memory that learns from actions over time, with provable causality, scoped multi-tenancy, and a human-editable corrections loop."*
+Marketing claim: *"evidence-based memory that learns from recorded actions and their outcomes, with scoped multi-tenancy and a human-editable corrections loop."*
 
 ### Cognitive layer (v0.35–v0.60)
 
