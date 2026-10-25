@@ -147,7 +147,7 @@ func syncRepoDocs(ctx context.Context, repoRoot, fileName, brainDSN string) (pat
 	updated := upsertManagedBlock(existing, block)
 	if updated == existing {
 		// Already current: baseline the hash to what's on disk (== block).
-		writeStoredDocHash(repoRoot, fileName, blockHash(block))
+		writeDocBaseline(repoRoot, fileName, block)
 		return path, false, nil
 	}
 	if werr := os.WriteFile(path, []byte(updated), 0o644); werr != nil { //nolint:gosec // agent-facing doc, world-readable by design
@@ -156,7 +156,7 @@ func syncRepoDocs(ctx context.Context, repoRoot, fileName, brainDSN string) (pat
 	// Baseline the stored hash AFTER the write succeeds, so the brief-time
 	// sync-back can tell a later human edit apart from mnemos's own output —
 	// and never treats a failed write as a phantom edit.
-	writeStoredDocHash(repoRoot, fileName, blockHash(block))
+	writeDocBaseline(repoRoot, fileName, block)
 	// Keep the derived index + hash sidecars out of git so only the doc is
 	// committed. Best-effort.
 	ensureRepoGitignore(repoRoot)
@@ -173,6 +173,7 @@ func ensureRepoGitignore(repoRoot string) {
 		".mnemos/mnemos.db-shm",
 		".mnemos/mnemos.db-wal",
 		".mnemos/.*.sha",
+		".mnemos/.*.block",
 	}
 	path := filepath.Join(repoRoot, ".gitignore")
 	existing := ""
@@ -270,7 +271,7 @@ func handleRebuild(args []string, f Flags) {
 	})
 	// Baseline the sync-back hash to the committed block so the next brief
 	// doesn't treat it as a fresh human edit and re-ingest.
-	writeStoredDocHash(repoRoot, fileName, blockHash(inner))
+	writeDocBaseline(repoRoot, fileName, inner)
 	ensureRepoGitignore(repoRoot)
 
 	lines := strings.Count(strings.TrimSpace(text), "\n") + 1
@@ -315,6 +316,49 @@ func writeStoredDocHash(repoRoot, fileName, hash string) {
 	_ = os.WriteFile(docHashPath(repoRoot, fileName), []byte(hash+"\n"), 0o644) //nolint:gosec // local state
 }
 
+// docBaselinePath is the sidecar holding the block itself, beside its hash, so
+// sync-back can tell the lines mnemos wrote from the lines a human added (#391).
+func docBaselinePath(repoRoot, fileName string) string {
+	return filepath.Join(repoRoot, ".mnemos", "."+fileName+".block")
+}
+
+// writeDocBaseline records inner as the block sync-back compares against: its
+// hash (has anything changed?) and its text (what changed?).
+func writeDocBaseline(repoRoot, fileName, inner string) {
+	inner = strings.TrimSpace(inner)
+	writeStoredDocHash(repoRoot, fileName, blockHash(inner))
+	_ = os.WriteFile(docBaselinePath(repoRoot, fileName), []byte(inner+"\n"), 0o644) //nolint:gosec // local state
+}
+
+func readDocBaselineBlock(repoRoot, fileName string) string {
+	data, err := os.ReadFile(docBaselinePath(repoRoot, fileName)) //nolint:gosec // repo-local state file
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// addedBullets returns the bullet lines of current that baseline does not
+// contain, one per line, compared after the same cleanup blockBulletsText
+// applies and domain.NormalizeClaimText. A re-annotated or re-cased projected
+// line is not an addition.
+func addedBullets(current, baseline string) string {
+	known := map[string]struct{}{}
+	for _, ln := range strings.Split(blockBulletsText(baseline), "\n") {
+		known[domain.NormalizeClaimText(ln)] = struct{}{}
+	}
+	var added []string
+	for _, ln := range strings.Split(blockBulletsText(current), "\n") {
+		if ln == "" {
+			continue
+		}
+		if _, ok := known[domain.NormalizeClaimText(ln)]; !ok {
+			added = append(added, ln)
+		}
+	}
+	return strings.Join(added, "\n")
+}
+
 // blockBulletsText pulls the bullet lines out of the managed block and strips
 // mnemos's own annotations (trust scores, contested flag), yielding clean text
 // to re-ingest. Section headers and boilerplate are skipped, so only the actual
@@ -355,24 +399,28 @@ func syncBackFromDocs(ctx context.Context, repoRoot, fileName, brainDSN string, 
 	}
 	cur := blockHash(inner)
 	stored := readStoredDocHash(repoRoot, fileName)
-	if stored == "" {
-		// No baseline yet (e.g. a fresh clone): adopt current without ingesting,
-		// so mnemos's own generated content isn't mistaken for a human edit.
-		writeStoredDocHash(repoRoot, fileName, cur)
+	baseline := readDocBaselineBlock(repoRoot, fileName)
+	if stored == "" || baseline == "" {
+		// No baseline yet (a fresh clone, or state from a binary that kept
+		// only the hash): adopt current without ingesting, so mnemos's own
+		// generated content isn't mistaken for a human edit.
+		writeDocBaseline(repoRoot, fileName, inner)
 		return
 	}
 	if cur == stored {
 		return // unchanged since mnemos last wrote it
 	}
 
-	text := blockBulletsText(inner)
+	// Only what the human added. The block is a projection of the brain's own
+	// beliefs; re-ingesting the projected lines gave each of them a new,
+	// "independent" evidence origin on every edit — the brain corroborating
+	// itself (#391).
+	text := addedBullets(inner, baseline)
 	if strings.TrimSpace(text) == "" {
-		writeStoredDocHash(repoRoot, fileName, cur)
+		writeDocBaseline(repoRoot, fileName, inner)
 		return
 	}
 	ingest := func() {
-		// Dedup in the pipeline collapses lines already known, so only the
-		// human's additions become new claims.
 		_, _ = mcpRunProcessText(ctx, "human-edit:"+fileName, mcpProcessTextInput{
 			Text:          text,
 			UseLLM:        useLLM,
@@ -390,7 +438,7 @@ func syncBackFromDocs(ctx context.Context, repoRoot, fileName, brainDSN string, 
 	// would wipe the human's note. The block is rewritten only by an explicit
 	// `mnemos sync-docs` (which absorbs edits first). Re-baselining prevents
 	// re-ingesting the same edit next time.
-	writeStoredDocHash(repoRoot, fileName, cur)
+	writeDocBaseline(repoRoot, fileName, inner)
 }
 
 // repoTenantKey returns a stable identity for the repo containing dir: the git
