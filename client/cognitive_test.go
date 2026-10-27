@@ -42,6 +42,14 @@ func cognitiveStub(t *testing.T) *client.Client {
 			_ = json.NewEncoder(w).Encode(map[string]any{"recombinations": []client.Recombination{
 				{ClaimA: "a", ClaimB: "b", Similarity: 0.6},
 			}})
+		case r.URL.Path == "/v1/brain/health":
+			mode := "sampled"
+			if r.URL.Query().Get("full") == "true" {
+				mode = "exact"
+			}
+			_ = json.NewEncoder(w).Encode(client.BrainHealth{Status: "healthy", Mode: mode,
+				Vitals:      []client.Vital{{Name: "calibration", Value: 0.07, Status: "healthy"}},
+				Pathologies: []client.Pathology{{Kind: "orphan_claims", Status: "healthy"}}})
 		case strings.HasSuffix(r.URL.Path, "/analogous"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"analogous": []client.Analogy{
 				{ClaimID: "cl2", Text: "similar", Similarity: 0.7},
@@ -99,5 +107,21 @@ func TestCognitive_AnalogousClaims(t *testing.T) {
 	an, err := cognitiveStub(t).AnalogousClaims(context.Background(), "cl1", 5)
 	if err != nil || len(an) != 1 || an[0].ClaimID != "cl2" {
 		t.Fatalf("AnalogousClaims: %v %+v", err, an)
+	}
+}
+
+func TestCognitive_BrainHealth(t *testing.T) {
+	c := cognitiveStub(t)
+	for _, tc := range []struct {
+		full     bool
+		wantMode string
+	}{{false, "sampled"}, {true, "exact"}} {
+		h, err := c.BrainHealth(context.Background(), tc.full)
+		if err != nil {
+			t.Fatalf("BrainHealth(full=%v): %v", tc.full, err)
+		}
+		if h.Status != "healthy" || h.Mode != tc.wantMode || len(h.Vitals) != 1 || len(h.Pathologies) != 1 {
+			t.Errorf("BrainHealth(full=%v) = %+v", tc.full, h)
+		}
 	}
 }

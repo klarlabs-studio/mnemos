@@ -57,6 +57,7 @@ var mcpToolScopes = map[string]string{
 	"predictive_error":    "",
 	"hypercorrections":    "",
 	"recombinations":      "",
+	"brain_health":        "",
 	"analogous_beliefs":   "",
 	"get_belief":          "",
 	"classify":            "",

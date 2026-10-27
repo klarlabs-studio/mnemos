@@ -29,6 +29,8 @@ func TestServe_CognitiveEndpointsDelegate(t *testing.T) {
 		"/v1/calibration",
 		"/v1/hypercorrections",
 		"/v1/recombinations",
+		"/v1/brain/health",
+		"/v1/brain/health?full=true",
 	} {
 		resp, err := http.Get(srv.URL + path)
 		if err != nil {

@@ -83,6 +83,20 @@ func (c *Client) Recombinations(ctx context.Context, limit int) ([]Recombination
 	return out.Recombinations, nil
 }
 
+// BrainHealth reads the brain-health report. full forces the exact scan over
+// every belief; otherwise large brains are sampled. GET /v1/brain/health.
+func (c *Client) BrainHealth(ctx context.Context, full bool) (BrainHealth, error) {
+	q := url.Values{}
+	if full {
+		q.Set("full", "true")
+	}
+	var out BrainHealth
+	if err := c.do(ctx, http.MethodGet, withQuery("/v1/brain/health", q), nil, &out); err != nil {
+		return BrainHealth{}, err
+	}
+	return out, nil
+}
+
 // AnalogousClaims returns the claims most structurally analogous to a given one.
 // GET /v1/claims/{id}/analogous.
 func (c *Client) AnalogousClaims(ctx context.Context, claimID string, limit int) ([]Analogy, error) {

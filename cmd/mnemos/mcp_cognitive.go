@@ -258,6 +258,17 @@ func mcpRecombinations(ctx context.Context, mem mnemos.Memory, in mcpRecombinati
 	return out, nil
 }
 
+type mcpBrainHealthInput struct {
+	Full bool `json:"full,omitempty" jsonschema:"description=Scan every belief exactly instead of sampling large brains"`
+}
+
+func mcpBrainHealth(ctx context.Context, mem mnemos.Memory, in mcpBrainHealthInput) (mnemos.BrainHealth, error) {
+	if in.Full {
+		return mem.BrainHealthFull(ctx)
+	}
+	return mem.BrainHealth(ctx)
+}
+
 type mcpAnalogousInput struct {
 	ClaimID string `json:"belief_id" jsonschema:"required,description=The claim to find analogues for"`
 	Limit   int    `json:"limit,omitempty" jsonschema:"description=Max analogues (default 10)"`

@@ -377,8 +377,8 @@ var Registry = []Capability{
 		ID: "brain.health", Effect: Read,
 		Summary: "Brain health: vitals, integrity checks and one verdict (ADR 0019)",
 		On: map[Transport]Binding{
-			Go: Has("BrainHealth", "BrainHealthFull", "SnapshotHealth"), REST: Gap("only Prometheus gauges at /internal/metrics; no health report route"), GRPC: Gap("no brain-health RPC"),
-			MCP: Gap("no brain-health tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no brain-health read"),
+			Go: Has("BrainHealth", "BrainHealthFull", "SnapshotHealth"), REST: Has("GET /v1/brain/health"), GRPC: Gap("no brain-health RPC"),
+			MCP: Has("brain_health"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BrainHealth"),
 		},
 	},
 	{
