@@ -8,6 +8,13 @@ notable changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Consolidate no longer runs the quadratic near-duplicate scan without a bound
+  (#387, #466). `ConsolidateOptions.DedupeScanBudget` caps it (default 5 minutes,
+  negative for unlimited); a scan that runs out keeps the duplicates it found and
+  reports `DedupeTruncated` instead of discarding them. See ADR 0035.
+
 ## [0.132.1] — 2026-10-24
 
 A security patch, and system errors that say what went wrong.

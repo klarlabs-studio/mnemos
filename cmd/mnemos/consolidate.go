@@ -60,6 +60,7 @@ func handleConsolidate(args []string, f Flags) {
 		"claims_scanned":        res.ClaimsScanned,
 		"duplicate_groups":      res.DuplicateGroups,
 		"merged":                res.Merged,
+		"dedupe_truncated":      res.DedupeTruncated,
 		"trust_refreshed":       res.TrustRefreshed,
 		"forgotten":             res.Forgotten,
 		"refuted":               res.Refuted,

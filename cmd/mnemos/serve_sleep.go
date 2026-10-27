@@ -210,6 +210,7 @@ func consolidateTargets(ctx context.Context, targets []sleepTarget, logger *bolt
 			Str("tenant", target.Tenant).
 			Int("claims_scanned", res.ClaimsScanned).
 			Int("merged", res.Merged).
+			Bool("dedupe_truncated", res.DedupeTruncated).
 			Int("trust_refreshed", res.TrustRefreshed).
 			Int("lessons_synthesized", res.LessonsSynthesized).
 			Float64("seconds", time.Since(start).Seconds()).
