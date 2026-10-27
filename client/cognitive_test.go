@@ -50,6 +50,12 @@ func cognitiveStub(t *testing.T) *client.Client {
 			_ = json.NewEncoder(w).Encode(client.BrainHealth{Status: "healthy", Mode: mode,
 				Vitals:      []client.Vital{{Name: "calibration", Value: 0.07, Status: "healthy"}},
 				Pathologies: []client.Pathology{{Kind: "orphan_claims", Status: "healthy"}}})
+		case r.URL.Path == "/v1/beliefs/cl1/history":
+			_ = json.NewEncoder(w).Encode(map[string]any{"claim_id": "cl1", "versions": []client.BeliefVersion{
+				{ClaimID: "cl1", Version: 2, Text: "new"}, {ClaimID: "cl1", Version: 1, Text: "old"},
+			}})
+		case r.URL.Path == "/v1/beliefs/cl1/provenance":
+			_, _ = w.Write([]byte(`{"claim_id":"cl1","trust_score":0.8}`))
 		case strings.HasSuffix(r.URL.Path, "/analogous"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"analogous": []client.Analogy{
 				{ClaimID: "cl2", Text: "similar", Similarity: 0.7},
@@ -123,5 +129,28 @@ func TestCognitive_BrainHealth(t *testing.T) {
 		if h.Status != "healthy" || h.Mode != tc.wantMode || len(h.Vitals) != 1 || len(h.Pathologies) != 1 {
 			t.Errorf("BrainHealth(full=%v) = %+v", tc.full, h)
 		}
+	}
+}
+
+func TestCognitive_BeliefHistory(t *testing.T) {
+	vs, err := cognitiveStub(t).BeliefHistory(context.Background(), "cl1")
+	if err != nil {
+		t.Fatalf("BeliefHistory: %v", err)
+	}
+	if len(vs) != 2 || vs[0].Version != 2 || vs[1].Text != "old" {
+		t.Errorf("BeliefHistory = %+v", vs)
+	}
+}
+
+func TestCognitive_BeliefProvenance(t *testing.T) {
+	raw, err := cognitiveStub(t).BeliefProvenance(context.Background(), "cl1")
+	if err != nil {
+		t.Fatalf("BeliefProvenance: %v", err)
+	}
+	var got struct {
+		ClaimID string `json:"claim_id"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil || got.ClaimID != "cl1" {
+		t.Errorf("BeliefProvenance = %s (%v)", raw, err)
 	}
 }

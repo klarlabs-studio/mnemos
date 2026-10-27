@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -93,6 +94,29 @@ func (c *Client) BrainHealth(ctx context.Context, full bool) (BrainHealth, error
 	var out BrainHealth
 	if err := c.do(ctx, http.MethodGet, withQuery("/v1/brain/health", q), nil, &out); err != nil {
 		return BrainHealth{}, err
+	}
+	return out, nil
+}
+
+// BeliefHistory returns a belief's version chain, newest first.
+// GET /v1/beliefs/{id}/history.
+func (c *Client) BeliefHistory(ctx context.Context, claimID string) ([]BeliefVersion, error) {
+	var out struct {
+		Versions []BeliefVersion `json:"versions"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/v1/beliefs/"+url.PathEscape(claimID)+"/history", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Versions, nil
+}
+
+// BeliefProvenance explains where a belief came from and why it is trusted.
+// The report is returned as the server's raw JSON so the SDK does not pin the
+// provenance schema. GET /v1/beliefs/{id}/provenance.
+func (c *Client) BeliefProvenance(ctx context.Context, claimID string) (json.RawMessage, error) {
+	var out json.RawMessage
+	if err := c.do(ctx, http.MethodGet, "/v1/beliefs/"+url.PathEscape(claimID)+"/provenance", nil, &out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

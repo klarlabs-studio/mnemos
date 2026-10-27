@@ -151,7 +151,7 @@ var Registry = []Capability{
 		Summary: "Explain where a belief came from",
 		On: map[Transport]Binding{
 			Go: Gap("no provenance read on Memory"), REST: Has("GET /v1/beliefs/{id}/provenance"), GRPC: Gap("no provenance RPC"),
-			MCP: Gap("no provenance tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no provenance read"),
+			MCP: Gap("no provenance tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefProvenance"),
 		},
 	},
 	{
@@ -159,7 +159,7 @@ var Registry = []Capability{
 		Summary: "A belief's version chain and status history",
 		On: map[Transport]Binding{
 			Go: Gap("no history read on Memory"), REST: Has("GET /v1/beliefs/{id}/history"), GRPC: Gap("no history RPC"),
-			MCP: Gap("no history tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no history read"),
+			MCP: Gap("no history tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefHistory"),
 		},
 	},
 	{

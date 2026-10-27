@@ -13,6 +13,7 @@ notable changes.
 - Brain health is now readable beyond the embedded API (#408): `GET /v1/brain/health`
   (`?full=true` for the exact scan), the `brain_health` MCP tool, and
   `client.BrainHealth`. Read-only. Closes three acknowledged capability gaps (85 → 82).
+- `client.BeliefHistory` and `client.BeliefProvenance` mirror the existing REST routes (#408; 82 → 80).
 
 ## [0.132.1] — 2026-10-24
 

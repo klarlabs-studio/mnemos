@@ -305,6 +305,17 @@ type VitalEstimate struct {
 	Margin95   float64 `json:"margin_95"`
 }
 
+// BeliefVersion is one row of a belief's version chain.
+type BeliefVersion struct {
+	ClaimID    string  `json:"claim_id"`
+	Version    int     `json:"version"`
+	Text       string  `json:"text"`
+	Confidence float64 `json:"confidence"`
+	Status     string  `json:"status"`
+	WrittenAt  string  `json:"written_at"`
+	WrittenBy  string  `json:"written_by"`
+}
+
 // Analogy is a claim structurally similar to a query claim (Weisfeiler-Lehman
 // similarity over the evidence subgraph).
 type Analogy struct {

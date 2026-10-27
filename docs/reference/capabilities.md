@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-75 capabilities, 82 acknowledged gaps.
+75 capabilities, 80 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -34,8 +34,8 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`belief.lifecycle`](#belieflifecycle) | write | ✓ | ✓ | ✓ | GAP | — | — | ✓ |
 | [`belief.govern`](#beliefgovern) | write | GAP | GAP | GAP | ✓ | — | — | GAP |
 | [`belief.purge`](#beliefpurge) | write | — | ✓ | — | — | — | — | GAP |
-| [`belief.provenance`](#beliefprovenance) | read | GAP | ✓ | GAP | GAP | — | — | GAP |
-| [`belief.history`](#beliefhistory) | read | GAP | ✓ | GAP | GAP | — | — | GAP |
+| [`belief.provenance`](#beliefprovenance) | read | GAP | ✓ | GAP | GAP | — | — | ✓ |
+| [`belief.history`](#beliefhistory) | read | GAP | ✓ | GAP | GAP | — | — | ✓ |
 | [`belief.export_markdown`](#beliefexport_markdown) | read | — | ✓ | — | — | — | — | GAP |
 | [`belief.feedback`](#belieffeedback) | write | GAP | ✓ | GAP | ✓ | — | — | GAP |
 | [`belief.classify`](#beliefclassify) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -325,7 +325,7 @@ Explain where a belief came from (read).
 | mcp | **GAP** — no provenance tool |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no provenance read |
+| client | `BeliefProvenance` |
 
 ### belief.history
 
@@ -339,7 +339,7 @@ A belief's version chain and status history (read).
 | mcp | **GAP** — no history tool |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no history read |
+| client | `BeliefHistory` |
 
 ### belief.export_markdown
 
