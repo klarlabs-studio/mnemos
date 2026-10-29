@@ -222,6 +222,30 @@ func makeRecombinationsHandler(mem mnemos.Memory) http.HandlerFunc {
 	}
 }
 
+// --- brain health ------------------------------------------------------------
+
+// makeBrainHealthHandler serves the unified brain-health report (ADR 0019).
+// ?full=true forces the exact scan; the default samples above the size where an
+// exact scan stops being cheap. Strictly read-only.
+func makeBrainHealthHandler(mem mnemos.Memory) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		mem := scopedMem(r.Context(), mem)
+		if !requireGET(w, r) || memUnavailable(w, mem) {
+			return
+		}
+		health := mem.BrainHealth
+		if r.URL.Query().Get("full") == "true" {
+			health = mem.BrainHealthFull
+		}
+		rep, err := health(r.Context())
+		if err != nil {
+			writeInternalError(w, "brain health", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, rep)
+	}
+}
+
 // --- analogous (claim subresource) -------------------------------------------
 
 type analogyDTO struct {

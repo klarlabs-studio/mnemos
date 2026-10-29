@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-75 capabilities, 85 acknowledged gaps.
+75 capabilities, 80 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -34,8 +34,8 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`belief.lifecycle`](#belieflifecycle) | write | ✓ | ✓ | ✓ | GAP | — | — | ✓ |
 | [`belief.govern`](#beliefgovern) | write | GAP | GAP | GAP | ✓ | — | — | GAP |
 | [`belief.purge`](#beliefpurge) | write | — | ✓ | — | — | — | — | GAP |
-| [`belief.provenance`](#beliefprovenance) | read | GAP | ✓ | GAP | GAP | — | — | GAP |
-| [`belief.history`](#beliefhistory) | read | GAP | ✓ | GAP | GAP | — | — | GAP |
+| [`belief.provenance`](#beliefprovenance) | read | GAP | ✓ | GAP | GAP | — | — | ✓ |
+| [`belief.history`](#beliefhistory) | read | GAP | ✓ | GAP | GAP | — | — | ✓ |
 | [`belief.export_markdown`](#beliefexport_markdown) | read | — | ✓ | — | — | — | — | GAP |
 | [`belief.feedback`](#belieffeedback) | write | GAP | ✓ | GAP | ✓ | — | — | GAP |
 | [`belief.classify`](#beliefclassify) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -61,7 +61,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`brain.hypercorrections`](#brainhypercorrections) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.recombinations`](#brainrecombinations) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.predictive_error`](#brainpredictive_error) | read | ✓ | GAP | GAP | ✓ | — | — | GAP |
-| [`brain.health`](#brainhealth) | read | ✓ | GAP | GAP | GAP | — | — | GAP |
+| [`brain.health`](#brainhealth) | read | ✓ | ✓ | GAP | ✓ | — | — | ✓ |
 | [`brain.metrics`](#brainmetrics) | read | GAP | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.consolidate`](#brainconsolidate) | write | ✓ | — | — | — | — | — | — |
 | [`expectation.set`](#expectationset) | write | ✓ | ✓ | GAP | ✓ | — | — | ✓ |
@@ -325,7 +325,7 @@ Explain where a belief came from (read).
 | mcp | **GAP** — no provenance tool |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no provenance read |
+| client | `BeliefProvenance` |
 
 ### belief.history
 
@@ -339,7 +339,7 @@ A belief's version chain and status history (read).
 | mcp | **GAP** — no history tool |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no history read |
+| client | `BeliefHistory` |
 
 ### belief.export_markdown
 
@@ -706,12 +706,12 @@ Brain health: vitals, integrity checks and one verdict (ADR 0019) (read).
 | Transport | Binding |
 |---|---|
 | go | `BrainHealth`, `BrainHealthFull`, `SnapshotHealth` |
-| rest | **GAP** — only Prometheus gauges at /internal/metrics; no health report route |
+| rest | `GET /v1/brain/health` |
 | grpc | **GAP** — no brain-health RPC |
-| mcp | **GAP** — no brain-health tool |
+| mcp | `brain_health` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no brain-health read |
+| client | `BrainHealth` |
 
 ### brain.metrics
 

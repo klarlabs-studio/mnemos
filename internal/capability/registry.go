@@ -151,7 +151,7 @@ var Registry = []Capability{
 		Summary: "Explain where a belief came from",
 		On: map[Transport]Binding{
 			Go: Gap("no provenance read on Memory"), REST: Has("GET /v1/beliefs/{id}/provenance"), GRPC: Gap("no provenance RPC"),
-			MCP: Gap("no provenance tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no provenance read"),
+			MCP: Gap("no provenance tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefProvenance"),
 		},
 	},
 	{
@@ -159,7 +159,7 @@ var Registry = []Capability{
 		Summary: "A belief's version chain and status history",
 		On: map[Transport]Binding{
 			Go: Gap("no history read on Memory"), REST: Has("GET /v1/beliefs/{id}/history"), GRPC: Gap("no history RPC"),
-			MCP: Gap("no history tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no history read"),
+			MCP: Gap("no history tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefHistory"),
 		},
 	},
 	{
@@ -377,8 +377,8 @@ var Registry = []Capability{
 		ID: "brain.health", Effect: Read,
 		Summary: "Brain health: vitals, integrity checks and one verdict (ADR 0019)",
 		On: map[Transport]Binding{
-			Go: Has("BrainHealth", "BrainHealthFull", "SnapshotHealth"), REST: Gap("only Prometheus gauges at /internal/metrics; no health report route"), GRPC: Gap("no brain-health RPC"),
-			MCP: Gap("no brain-health tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no brain-health read"),
+			Go: Has("BrainHealth", "BrainHealthFull", "SnapshotHealth"), REST: Has("GET /v1/brain/health"), GRPC: Gap("no brain-health RPC"),
+			MCP: Has("brain_health"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BrainHealth"),
 		},
 	},
 	{

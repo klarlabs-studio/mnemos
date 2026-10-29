@@ -838,6 +838,17 @@ func handleMCP(args []string) {
 			return mcpRecombinations(ctx, mem, input)
 		})
 
+	srv.Tool("brain_health").
+		Description("Report brain health: cognitive vitals, structural-integrity checks and one verdict. Read-only.").
+		OutputSchema(mnemos.BrainHealth{}).
+		Handler(func(ctx context.Context, input mcpBrainHealthInput) (mnemos.BrainHealth, error) {
+			mem, err := getMem(ctx)
+			if err != nil {
+				return mnemos.BrainHealth{}, err
+			}
+			return mcpBrainHealth(ctx, mem, input)
+		})
+
 	srv.Tool("analogous_beliefs").
 		Description("Return the claims most structurally analogous to a given one.").
 		OutputSchema(mcpAnalogousOutput{}).

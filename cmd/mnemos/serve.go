@@ -504,6 +504,7 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux.HandleFunc("/v1/calibration", makeCalibrationHandler(mem))
 	mux.HandleFunc("/v1/hypercorrections", makeHypercorrectionsHandler(mem))
 	mux.HandleFunc("/v1/recombinations", makeRecombinationsHandler(mem))
+	mux.HandleFunc("/v1/brain/health", makeBrainHealthHandler(mem))
 	// Claim CRUD parity (v0.67): novelty classification + decision browse surface.
 	mux.HandleFunc("/v1/classify", makeClassifyHandler(mem))
 	mux.HandleFunc("/v1/decisions", makeDecisionsHandler(mem))

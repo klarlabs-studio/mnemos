@@ -270,6 +270,52 @@ type Recombination struct {
 	Similarity float64 `json:"similarity"`
 }
 
+// BrainHealth is the unified brain-health report: one verdict rolling up the
+// cognitive vitals and structural-integrity checks. Mode is "exact" or
+// "sampled"; Estimates is set only for sampled vitals.
+type BrainHealth struct {
+	Status      string                   `json:"status"`
+	Vitals      []Vital                  `json:"vitals"`
+	Pathologies []Pathology              `json:"pathologies"`
+	Mode        string                   `json:"mode"`
+	Estimates   map[string]VitalEstimate `json:"estimates,omitempty"`
+	At          time.Time                `json:"at"`
+}
+
+// Vital is one brain-health vital sign with its own verdict.
+type Vital struct {
+	Name   string  `json:"name"`
+	Value  float64 `json:"value"`
+	Status string  `json:"status"`
+	Detail string  `json:"detail"`
+}
+
+// Pathology is a structural-integrity finding; Count 0 means the check passed.
+type Pathology struct {
+	Kind   string `json:"kind"`
+	Count  int    `json:"count"`
+	Status string `json:"status"`
+	Detail string `json:"detail"`
+}
+
+// VitalEstimate describes how a sampled vital was estimated.
+type VitalEstimate struct {
+	SampleSize int     `json:"sample_size"`
+	Population int     `json:"population"`
+	Margin95   float64 `json:"margin_95"`
+}
+
+// BeliefVersion is one row of a belief's version chain.
+type BeliefVersion struct {
+	ClaimID    string  `json:"claim_id"`
+	Version    int     `json:"version"`
+	Text       string  `json:"text"`
+	Confidence float64 `json:"confidence"`
+	Status     string  `json:"status"`
+	WrittenAt  string  `json:"written_at"`
+	WrittenBy  string  `json:"written_by"`
+}
+
 // Analogy is a claim structurally similar to a query claim (Weisfeiler-Lehman
 // similarity over the evidence subgraph).
 type Analogy struct {
