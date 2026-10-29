@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/relate"
@@ -32,6 +33,12 @@ type SemanticDedupePlan struct {
 	// deprecated or their valid time is closed. Retired knowledge is never a
 	// merge candidate.
 	SkippedRetired int
+	// Truncated is true when the scan's time budget ran out before every
+	// comparison was made (PlanSemanticDedupeBudget). The plan is still safe to
+	// apply — it holds only merges the scan saw — but duplicates it did not reach
+	// are left for a later run. RowsScanned of RowsTotal says how far it got.
+	Truncated              bool
+	RowsScanned, RowsTotal int
 }
 
 // SemanticMerge describes one absorption: a winner claim id that
@@ -58,6 +65,15 @@ type SemanticMerge struct {
 // hundreds of thousands of claims this should move to a vector
 // index (sqlite-vss with cgo, or a separate process).
 func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64) (SemanticDedupePlan, error) {
+	return PlanSemanticDedupeBudget(ctx, conn, threshold, 0)
+}
+
+// PlanSemanticDedupeBudget is PlanSemanticDedupe with a wall-clock budget for the
+// similarity scan, which is quadratic in the number of claims. When budget is
+// positive and runs out, the plan holds the merges found so far and is marked
+// Truncated; budget <= 0 scans everything. The scan is the only unbounded part
+// of a consolidate pass, so this is what keeps a large brain's pass finite.
+func PlanSemanticDedupeBudget(ctx context.Context, conn *store.Conn, threshold float64, budget time.Duration) (SemanticDedupePlan, error) {
 	if threshold <= 0 || threshold > 1 {
 		return SemanticDedupePlan{}, fmt.Errorf("threshold must be in (0, 1]; got %v", threshold)
 	}
@@ -105,7 +121,7 @@ func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64
 		return SemanticDedupePlan{}, err
 	}
 
-	candidates, err := candidatePairs(ctx, pool, threshold)
+	candidates, stats, err := candidatePairsBudget(ctx, pool, threshold, budget)
 	if err != nil {
 		return SemanticDedupePlan{}, err
 	}
@@ -208,6 +224,9 @@ func PlanSemanticDedupe(ctx context.Context, conn *store.Conn, threshold float64
 		ClaimsScanned:      len(pool),
 		SkippedNoEmbedding: skipped,
 		SkippedRetired:     retired,
+		Truncated:          stats.Truncated,
+		RowsScanned:        stats.RowsScanned,
+		RowsTotal:          stats.RowsTotal,
 	}, nil
 }
 

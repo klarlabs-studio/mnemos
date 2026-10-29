@@ -690,6 +690,14 @@ type ConsolidateOptions struct {
 	// so nothing is lost. In (0, 1]; a sensible default (~0.92) is used when <= 0.
 	DedupeThreshold float64
 
+	// DedupeScanBudget bounds the wall-clock time of the near-duplicate scan,
+	// which compares claims pairwise and so grows with the square of the brain.
+	// When it runs out, the pass merges the duplicates found so far and reports
+	// [ConsolidateResult.DedupeTruncated]; later passes cover the rest as the
+	// merges shrink the pool. 0 uses a default (5 minutes); a negative value
+	// scans everything however long that takes.
+	DedupeScanBudget time.Duration
+
 	// ForgetBelowTrust actively forgets claims whose recomputed trust score is
 	// strictly below this floor — the brain's offline pruning: a memory that has
 	// decayed (low confidence × corroboration × freshness) and is no longer
@@ -840,6 +848,10 @@ type ConsolidateResult struct {
 	ClaimsScanned int
 	// DuplicateGroups is the number of near-duplicate groups found.
 	DuplicateGroups int
+	// DedupeTruncated is true when the dedupe scan hit its time budget
+	// ([ConsolidateOptions.DedupeScanBudget]) before comparing every claim, so
+	// some duplicates may remain for a later pass.
+	DedupeTruncated bool
 	// Merged is the number of duplicate claims collapsed into their canonical
 	// (the gist) — 0 on a dry run.
 	Merged int

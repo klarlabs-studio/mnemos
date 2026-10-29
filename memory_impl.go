@@ -1021,17 +1021,36 @@ func (m *memory) log() *bolt.Logger {
 	return discardLogger
 }
 
+// defaultDedupeScanBudget caps the near-duplicate scan of a consolidate pass when
+// the caller sets none. The scan is quadratic: on a 66k-claim brain an unbounded
+// one ran for over an hour and merged nothing.
+const defaultDedupeScanBudget = 5 * time.Minute
+
+// dedupeScanBudget resolves ConsolidateOptions.DedupeScanBudget to the budget the
+// planner takes: 0 means unlimited there, so a negative option maps to 0 and an
+// unset one to the default.
+func dedupeScanBudget(opts ConsolidateOptions) time.Duration {
+	switch {
+	case opts.DedupeScanBudget < 0:
+		return 0
+	case opts.DedupeScanBudget == 0:
+		return defaultDedupeScanBudget
+	default:
+		return opts.DedupeScanBudget
+	}
+}
+
 // Consolidate implements [Memory.Consolidate] — the maintenance "sleep" pass.
 func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (ConsolidateResult, error) {
 	threshold := opts.DedupeThreshold
 	if threshold <= 0 {
 		threshold = 0.92
 	}
-	plan, err := pipeline.PlanSemanticDedupe(ctx, m.conn, threshold)
+	plan, err := pipeline.PlanSemanticDedupeBudget(ctx, m.conn, threshold, dedupeScanBudget(opts))
 	if err != nil {
 		return ConsolidateResult{}, fmt.Errorf("mnemos: consolidate: plan dedupe: %w", err)
 	}
-	res := ConsolidateResult{ClaimsScanned: plan.ClaimsScanned, DuplicateGroups: len(plan.Merges)}
+	res := ConsolidateResult{ClaimsScanned: plan.ClaimsScanned, DuplicateGroups: len(plan.Merges), DedupeTruncated: plan.Truncated}
 	if opts.DryRun {
 		// Preview only — report what dedupe WOULD collapse; no mutation, and
 		// forgetting (which acts on freshly-recomputed trust) is not simulated.
@@ -1234,6 +1253,7 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 	m.log().Ctx(ctx).Info().
 		Int("scanned", res.ClaimsScanned).
 		Int("merged", res.Merged).
+		Bool("dedupe_truncated", res.DedupeTruncated).
 		Int("credited", res.Credited).
 		Int("forgotten", res.Forgotten).
 		Int("refuted", res.Refuted).

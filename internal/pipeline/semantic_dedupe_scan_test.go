@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"testing"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
@@ -109,5 +110,67 @@ func BenchmarkCandidatePairs(b *testing.B) {
 		if _, err := candidatePairs(context.Background(), pool, 0.92); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// A scan that runs out of budget keeps what it found. Every pair it returns is
+// a real candidate, and it says it stopped early, so the caller can merge the
+// duplicates it did find instead of losing an hour of comparisons.
+func TestCandidatePairsBudget_ReturnsPartialResultWhenTimeRunsOut(t *testing.T) {
+	const threshold = 0.95
+	pool := scanPool(3000, 64, 5)
+
+	full, err := candidatePairs(context.Background(), pool, threshold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[[2]int]float32{}
+	for _, p := range full {
+		want[[2]int{p.i, p.j}] = p.sim
+	}
+
+	got, stats, err := candidatePairsBudget(context.Background(), pool, threshold, time.Nanosecond)
+	if err != nil {
+		t.Fatalf("an exhausted budget is not an error: %v", err)
+	}
+	if !stats.Truncated || stats.RowsScanned >= stats.RowsTotal {
+		t.Fatalf("scan should report it stopped early: %+v", stats)
+	}
+	for _, p := range got {
+		if _, ok := want[[2]int{p.i, p.j}]; !ok {
+			t.Fatalf("partial scan returned (%d,%d), which a full scan does not", p.i, p.j)
+		}
+	}
+	if len(got) >= len(full) {
+		t.Fatalf("partial scan found %d pairs, the full scan %d", len(got), len(full))
+	}
+}
+
+func TestCandidatePairsBudget_ZeroMeansUnlimited(t *testing.T) {
+	pool := scanPool(600, 64, 7)
+
+	want, err := candidatePairs(context.Background(), pool, 0.95)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, stats, err := candidatePairsBudget(context.Background(), pool, 0.95, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Truncated || stats.RowsScanned != stats.RowsTotal {
+		t.Fatalf("an unlimited scan covers every row: %+v", stats)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("unlimited scan found %d pairs, candidatePairs %d", len(got), len(want))
+	}
+}
+
+// Cancellation is still an error: the caller asked to stop, which is not the
+// same as the scan choosing to stop.
+func TestCandidatePairsBudget_CancellationStillFails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := candidatePairsBudget(ctx, scanPool(400, 16, 3), 0.9, time.Minute); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }
