@@ -229,3 +229,69 @@ func TestApplySemanticDedupe_DropsSelfLoopRelationships(t *testing.T) {
 		t.Fatalf("self-loop should have been dropped, got %d", n)
 	}
 }
+
+// seedParaphrasePair inserts two near-duplicate claims (cl_b wins on trust).
+func seedParaphrasePair(t *testing.T, db *sql.DB) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	embRepo := sqlite.NewEmbeddingRepository(db)
+	for i, c := range []struct {
+		id    string
+		trust float64
+		vec   []float32
+	}{
+		{"cl_a", 0.4, []float32{1, 0.01, 0}},
+		{"cl_b", 0.7, []float32{1, 0.02, 0}},
+	} {
+		if _, err := db.Exec(
+			`INSERT INTO claims (id, text, type, confidence, status, created_at, trust_score)
+			 VALUES (?, ?, 'fact', 0.8, 'active', ?, ?)`,
+			c.id, "Felix needs coffee for the flea market", now, c.trust,
+		); err != nil {
+			t.Fatalf("insert claim %d: %v", i, err)
+		}
+		if err := embRepo.Upsert(context.Background(), c.id, "claim", c.vec, "test", ""); err != nil {
+			t.Fatalf("embed %s: %v", c.id, err)
+		}
+	}
+}
+
+// A plan built under an exhausted budget is a valid, smaller plan: it says it
+// is partial and merges nothing it did not see. The same data under a generous
+// budget finds the merge.
+func TestPlanSemanticDedupeBudget_ReportsPartialScan(t *testing.T) {
+	db, conn := openDedupeDB(t)
+	seedParaphrasePair(t, db)
+
+	short, err := PlanSemanticDedupeBudget(context.Background(), conn, 0.95, time.Nanosecond)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if !short.Truncated || short.RowsScanned >= short.RowsTotal {
+		t.Fatalf("exhausted budget should mark the plan partial: %+v", short)
+	}
+	if len(short.Merges) != 0 {
+		t.Fatalf("a scan that compared nothing cannot propose merges: %+v", short.Merges)
+	}
+
+	full, err := PlanSemanticDedupeBudget(context.Background(), conn, 0.95, time.Minute)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if full.Truncated || len(full.Merges) != 1 {
+		t.Fatalf("a generous budget should find the pair: %+v", full)
+	}
+}
+
+func TestPlanSemanticDedupe_IsNotTruncated(t *testing.T) {
+	db, conn := openDedupeDB(t)
+	seedParaphrasePair(t, db)
+
+	plan, err := PlanSemanticDedupe(context.Background(), conn, 0.95)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if plan.Truncated || plan.RowsScanned != plan.RowsTotal {
+		t.Fatalf("the unbudgeted plan covers everything: %+v", plan)
+	}
+}

@@ -4,10 +4,12 @@ import (
 	"cmp"
 	"context"
 	"math"
+	"math/rand/v2"
 	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // candidatePairs returns every pair of pool indexes (i < j) whose cosine
@@ -28,6 +30,29 @@ import (
 //
 // ctx is checked before every row, so a deadline stops the scan.
 func candidatePairs(ctx context.Context, pool []indexedClaim, threshold float64) ([]simPair, error) {
+	pairs, _, err := candidatePairsBudget(ctx, pool, threshold, 0)
+	return pairs, err
+}
+
+// scanStats says how much of the pool a budgeted scan covered.
+type scanStats struct {
+	// RowsScanned and RowsTotal count the scan's work items, one per claim that
+	// still has later partition members to be compared with.
+	RowsScanned, RowsTotal int
+	// Truncated is true when the budget ran out before every row was scanned.
+	Truncated bool
+}
+
+// candidatePairsBudget is candidatePairs with a wall-clock budget. When budget
+// is positive and runs out, the scan stops, keeps the pairs it found and
+// reports Truncated; budget <= 0 scans everything. A truncated result is safe
+// to cluster: the clustering only joins claims it saw as pairs, so a pair the
+// scan never reached keeps two claims apart. It can merge less, never more.
+//
+// Rows are scanned in a shuffled order when a budget applies, so repeated
+// truncated runs cover different claims rather than the same long early rows
+// every time. A cancelled ctx is still an error.
+func candidatePairsBudget(ctx context.Context, pool []indexedClaim, threshold float64, budget time.Duration) ([]simPair, scanStats, error) {
 	units := make([][]float32, len(pool))
 	partitions := map[scanKey][]int{}
 	for i, c := range pool {
@@ -54,6 +79,12 @@ func candidatePairs(ctx context.Context, pool []indexedClaim, threshold float64)
 		}
 	}
 
+	var deadline time.Time
+	if budget > 0 {
+		deadline = time.Now().Add(budget)
+		rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
+	}
+
 	t := float32(threshold)
 	var (
 		next    atomic.Int64
@@ -61,6 +92,7 @@ func candidatePairs(ctx context.Context, pool []indexedClaim, threshold float64)
 		out     []simPair
 		scanErr error
 		wg      sync.WaitGroup
+		scanned atomic.Int64
 	)
 	for range max(runtime.GOMAXPROCS(0)/2, 1) {
 		wg.Go(func() {
@@ -76,6 +108,9 @@ func candidatePairs(ctx context.Context, pool []indexedClaim, threshold float64)
 					mu.Unlock()
 					break
 				}
+				if !deadline.IsZero() && time.Now().After(deadline) {
+					break
+				}
 				r := rows[n]
 				i := r.members[r.at]
 				for _, j := range r.members[r.at+1:] {
@@ -83,6 +118,7 @@ func candidatePairs(ctx context.Context, pool []indexedClaim, threshold float64)
 						found = append(found, simPair{i: i, j: j, sim: sim})
 					}
 				}
+				scanned.Add(1)
 			}
 			mu.Lock()
 			out = append(out, found...)
@@ -91,12 +127,14 @@ func candidatePairs(ctx context.Context, pool []indexedClaim, threshold float64)
 	}
 	wg.Wait()
 	if scanErr != nil {
-		return nil, scanErr
+		return nil, scanStats{}, scanErr
 	}
+	stats := scanStats{RowsScanned: int(scanned.Load()), RowsTotal: len(rows)}
+	stats.Truncated = stats.RowsScanned < stats.RowsTotal
 	slices.SortFunc(out, func(a, b simPair) int {
 		return cmp.Or(cmp.Compare(b.sim, a.sim), cmp.Compare(a.i, b.i), cmp.Compare(a.j, b.j))
 	})
-	return out, nil
+	return out, stats, nil
 }
 
 // scanKey groups the claims mayMerge allows to merge with each other.
