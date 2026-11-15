@@ -4,6 +4,9 @@ scan:
     # that match the SEC-680 "Prometheus API key" regex; these ARE the
     # finding fingerprints, not actual secrets.
     - ".nox/baseline.json"
+    # Waiver file: the reason prose quotes the settings it waives, which
+    # re-triggers those rules on the explanation itself.
+    - ".nox/waivers.yaml"
     # go.sum: module digests look like API keys to entropy-based detectors.
     - "go.sum"
     - "**/go.sum"

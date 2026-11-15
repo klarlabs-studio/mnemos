@@ -21,7 +21,9 @@ version: "3.9"
 
 services:
   chronos:
-    image: ${CHRONOS_IMAGE:-ghcr.io/felixgeelhaar/chronos:latest}
+    image: ${CHRONOS_IMAGE:-ghcr.io/felixgeelhaar/chronos@sha256:cced8457afa7abd6346945fc293ed8bfc54dd445304fabeeaeb161b6aa2fbad7}
+    mem_limit: 512m
+    cpus: 1.0
     container_name: chronos-integration
     ports:
       - "7778:7778"
@@ -40,7 +42,9 @@ services:
     # from the runner host instead.
 
   mnemos:
-    image: ${MNEMOS_IMAGE:-ghcr.io/klarlabs-studio/mnemos:latest}
+    image: ${MNEMOS_IMAGE:-ghcr.io/klarlabs-studio/mnemos:0.132.1}
+    mem_limit: 512m
+    cpus: 1.0
     container_name: mnemos-integration
     ports:
       - "7777:7777"
