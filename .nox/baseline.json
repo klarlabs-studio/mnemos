@@ -658,15 +658,6 @@
       "reason": "token-mint is a one-shot job that writes the playground token and exits; a container health check has no meaning for a process that is not long-running."
     },
     {
-      "fingerprint": "41131eda8752e6de09401f8c4866ec55ec1e19705e88f31926584175a8567eb1",
-      "rule_id": "VULN-001",
-      "file_path": "Dockerfile",
-      "severity": "medium",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "ALPINE-CVE-2026-4738 (zlib 1.3.2-r1) is in the digest-pinned alpine:3.21 base; Alpine ships the fix (1.4-r0) as a package update only, so the Dockerfile runs apk upgrade zlib at build time. The scanner reads the base image, not the built layer. The mnemos binary is static Go and does not link zlib."
-    },
-    {
       "fingerprint": "d8fc513d11c9738bdaa3d265aa31c3d5ef9e372f49c0b7e191daa12700621c0a",
       "rule_id": "DATA-001",
       "file_path": "cmd/mnemos/web/landing.js",
@@ -674,6 +665,36 @@
       "created_at": "2026-11-15T00:00:00Z",
       "owner": "@felixgeelhaar",
       "reason": "The project's published contact address in the landing page's waitlist mailto link (same address already waived for landing.html); not personal data held about anyone. Raised by nox 1.34.0 only."
+    },
+    {
+      "fingerprint": "214dd2f507109d807044cf1a64b7449f473211edec704364fa497165c77949bf",
+      "rule_id": "CONT-001",
+      "file_path": "Dockerfile",
+      "severity": "medium",
+      "created_at": "2026-07-25T19:24:07.826791Z"
+    },
+    {
+      "fingerprint": "9e1a7b19358d6a56aa6236ff55d452ba346c1d824bb455e71a333e1d1c96a2d1",
+      "rule_id": "IAC-121",
+      "file_path": "Dockerfile",
+      "severity": "medium",
+      "created_at": "2026-07-25T19:24:07.826791Z"
+    },
+    {
+      "fingerprint": "e00c51bfc3329de81afc0694bac32126ad6633509c1a86c193d918c2bb3c0131",
+      "rule_id": "IAC-123",
+      "file_path": "Dockerfile",
+      "severity": "low",
+      "created_at": "2026-07-25T19:24:07.826791Z"
+    },
+    {
+      "fingerprint": "031786253a325cd72823360506f19798dc2fe9e1bd1122e602724de47785591b",
+      "rule_id": "CONT-001",
+      "file_path": "Dockerfile",
+      "severity": "medium",
+      "created_at": "2026-11-15T00:00:00Z",
+      "owner": "@felixgeelhaar",
+      "reason": "Base image alpine:3.21 is pinned by tag, not digest. Accepted, see container-hardening in .nox/waivers.yaml: the shared CI image smoke job cannot build this Dockerfile (it needs GoReleaser's per-platform context), so touching the file turns that check red; tracked in an issue. Nox 1.63+ fingerprint of the entry already baselined for 1.34."
     }
   ]
 }
