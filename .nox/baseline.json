@@ -9,27 +9,6 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
-      "fingerprint": "214dd2f507109d807044cf1a64b7449f473211edec704364fa497165c77949bf",
-      "rule_id": "CONT-001",
-      "file_path": "Dockerfile",
-      "severity": "medium",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "9e1a7b19358d6a56aa6236ff55d452ba346c1d824bb455e71a333e1d1c96a2d1",
-      "rule_id": "IAC-121",
-      "file_path": "Dockerfile",
-      "severity": "medium",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "e00c51bfc3329de81afc0694bac32126ad6633509c1a86c193d918c2bb3c0131",
-      "rule_id": "IAC-123",
-      "file_path": "Dockerfile",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
       "fingerprint": "4fd64c61428129c9b590f1fc650db67aadfdc5b80a6dcfc20226c977d7a5c204",
       "rule_id": "IAC-124",
       "file_path": "Dockerfile",
@@ -333,20 +312,6 @@
     {
       "fingerprint": "626a7458a3ffa9cef95a9ea6bdaa8d7fd0f07dbe80220b3fa03c99a397fbe4cf",
       "rule_id": "IAC-153",
-      "file_path": "docs-site/.github/workflows/docs.yml",
-      "severity": "medium",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "5f11f2b1487bb0491b4517eac46554adfafd418385a5ab5c1f01d2a34fb97937",
-      "rule_id": "IAC-308",
-      "file_path": "docs-site/.github/workflows/docs.yml",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "f77601ed7c0992945e42f455f083f2f0eb4b08205b57ae8a6d945a47d562a5a2",
-      "rule_id": "IAC-314",
       "file_path": "docs-site/.github/workflows/docs.yml",
       "severity": "medium",
       "created_at": "2026-07-25T19:24:07.826791Z"
@@ -661,20 +626,6 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
-      "fingerprint": "7ef485203e7eafd08549ac444947726610bc794b080468e20f7ecbab803ba2ca",
-      "rule_id": "IAC-231",
-      "file_path": "test/integration/docker-compose.yml",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "8c7ffe65f7ed47a6b08376867043f8433d315337207fa3d237fbaa0fc4b34d54",
-      "rule_id": "IAC-231",
-      "file_path": "test/integration/docker-compose.yml",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
       "fingerprint": "d534c8778098554a8388a143201569d97a44de864286c28d7e72370ed3b83198",
       "rule_id": "SEC-081",
       "file_path": "test/integration/docker-compose.yml",
@@ -687,51 +638,6 @@
       "file_path": "test/integration/docker-compose.yml",
       "severity": "high",
       "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "f8fce8f0147c60853e962b8e3a3e2ca8404724e07d85f49dd5df46f7366d549b",
-      "rule_id": "SEC-073",
-      "file_path": "cmd/mnemos/dsn_test.go",
-      "severity": "critical",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test fixture DSN with placeholder credentials used to exercise DSN parsing and redaction; not a credential to any real system. Same class as the fixture DSNs waived in .nox/waivers.yaml."
-    },
-    {
-      "fingerprint": "e0643fb007c60058b2211bf4896268836e68578b6287809995aaad7881c13cfc",
-      "rule_id": "SEC-073",
-      "file_path": "internal/config/merge_test.go",
-      "severity": "critical",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test fixture DSN with placeholder credentials (u:p) used to exercise config merging; not a credential to any real system."
-    },
-    {
-      "fingerprint": "35d61552869ce2c2a1862c7f79f5feddfba19805308964cfc5f1efcbe4db0010",
-      "rule_id": "SEC-073",
-      "file_path": "internal/store/postgres/postgres_test.go",
-      "severity": "critical",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test fixture DSN with placeholder credentials (user:pw) used to exercise DSN parsing; not a credential to any real system."
-    },
-    {
-      "fingerprint": "7005f84dff936af8279d93eaa98eadd9ee808d1edf56e59a9a4bf849047990cb",
-      "rule_id": "AI-050",
-      "file_path": "internal/workflow/runner_test.go",
-      "severity": "low",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test sets MaxRetries = 0 on purpose to assert a failing workflow step fails exactly once; production runners keep their retry policy. One entry per occurrence (identical fingerprints)."
-    },
-    {
-      "fingerprint": "7005f84dff936af8279d93eaa98eadd9ee808d1edf56e59a9a4bf849047990cb",
-      "rule_id": "AI-050",
-      "file_path": "internal/workflow/runner_test.go",
-      "severity": "low",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test sets MaxRetries = 0 on purpose to assert a failing workflow step fails exactly once; production runners keep their retry policy. One entry per occurrence (identical fingerprints)."
     },
     {
       "fingerprint": "7005f84dff936af8279d93eaa98eadd9ee808d1edf56e59a9a4bf849047990cb",

@@ -260,7 +260,7 @@ func TestMCPRepoBrainDSN_EmptyInMultiTenantMode(t *testing.T) {
 // concatenation rather than a rendering call, so that walk never inspects it.
 // Hence this behavioural test, which cares only about what comes out.
 func TestProbeProjectRootRedactsDSNPassword(t *testing.T) {
-	t.Setenv("MNEMOS_DB_URL", "postgres://mnemos:hunter2@db.internal:5432/mnemos")
+	t.Setenv("MNEMOS_DB_URL", "postgres://mnemos:hunter2@db.internal:5432/mnemos") // nox:ignore SEC-073 -- test fixture DSN with a placeholder password, not a real credential
 
 	got := probeProjectRoot().Detail
 	if strings.Contains(got, "hunter2") {

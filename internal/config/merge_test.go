@@ -28,7 +28,7 @@ func TestSetValuesCreatesFile(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	env := cfg.EnvOverrides()
-	if env["MNEMOS_DB_URL"] != "postgres://u:p@h/db" {
+	if env["MNEMOS_DB_URL"] != "postgres://u:p@h/db" { // nox:ignore SEC-073 -- test fixture DSN with placeholder credentials
 		t.Errorf("db.url roundtrip = %q", env["MNEMOS_DB_URL"])
 	}
 	if env["MNEMOS_LLM_PROVIDER"] != "ollama" {
