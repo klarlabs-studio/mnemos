@@ -7,6 +7,7 @@
 # Run:
 #   export OPENAI_API_KEY=sk-...        # required by mem0/zep/letta defaults
 #   export MNEMOS_JWT_SECRET=$(openssl rand -hex 32)
+#   export BENCH_POSTGRES_PASSWORD=$(openssl rand -hex 16)
 #   docker compose -f benchmarks/docker-compose.yml up -d
 #   python -m benchmarks.run --provider all --suite all
 #   docker compose -f benchmarks/docker-compose.yml down -v
@@ -18,9 +19,11 @@ services:
   # --- Mnemos ---------------------------------------------------------
   mnemos-postgres:
     image: postgres:16-alpine
+    mem_limit: 1g
+    cpus: 1.0
     environment:
       POSTGRES_USER: mnemos
-      POSTGRES_PASSWORD: mnemos
+      POSTGRES_PASSWORD: ${BENCH_POSTGRES_PASSWORD:?set BENCH_POSTGRES_PASSWORD}
       POSTGRES_DB: mnemos
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mnemos"]
@@ -30,8 +33,10 @@ services:
 
   mnemos:
     image: ghcr.io/klarlabs-studio/mnemos:${MNEMOS_TAG:-0.13.0}
+    mem_limit: 1g
+    cpus: 1.0
     environment:
-      MNEMOS_DB_URL: "postgres://mnemos:mnemos@mnemos-postgres:5432/mnemos?sslmode=disable"
+      MNEMOS_DB_URL: "postgres://mnemos:${BENCH_POSTGRES_PASSWORD:?set BENCH_POSTGRES_PASSWORD}@mnemos-postgres:5432/mnemos?sslmode=disable"
       MNEMOS_SERVE_PORT: "7777"
       MNEMOS_JWT_SECRET: ${MNEMOS_JWT_SECRET:?set MNEMOS_JWT_SECRET}
       # LLM-driven claim extraction lifts contradiction-detection on
