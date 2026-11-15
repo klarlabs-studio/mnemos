@@ -1,5 +1,7 @@
 # Mnemos
 
+[![nox security grade](.github/nox-badge.svg)](https://github.com/klarlabs-studio/mnemos/security)
+
 **A brain for your AI agents — open-source, local-first, evidence-backed memory.**
 
 AI agents forget everything the moment a session ends. Mnemos gives them a memory that lasts: it stores facts as small, checkable **claims** with evidence back to the source, **surfaces contradictions** instead of silently overwriting, and **consolidates and forgets** on its own. A brain, not a log — a single Go binary, your data in your own storage, no vendor cloud, no per-call billing.
