@@ -9,11 +9,13 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
-      "fingerprint": "e00c51bfc3329de81afc0694bac32126ad6633509c1a86c193d918c2bb3c0131",
-      "rule_id": "IAC-123",
+      "fingerprint": "41131eda8752e6de09401f8c4866ec55ec1e19705e88f31926584175a8567eb1",
+      "rule_id": "VULN-001",
       "file_path": "Dockerfile",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
+      "severity": "medium",
+      "created_at": "2026-11-15T00:00:00Z",
+      "owner": "@felixgeelhaar",
+      "reason": "ALPINE-CVE-2026-4738 (zlib 1.3.2-r1) is in the digest-pinned alpine:3.21 base; Alpine ships the fix (1.4-r0) as a package update only, so the Dockerfile runs apk upgrade zlib at build time. The scanner reads the base image, not the built layer. The mnemos binary is static Go and does not link zlib."
     },
     {
       "fingerprint": "109162fa5cddcf174a6a55c1beeda52e73b33b5c524dcb0bc48dd32dc989e347",
@@ -160,7 +162,9 @@
       "rule_id": "SEC-073",
       "file_path": "cmd/mnemos/dsn_test.go",
       "severity": "critical",
-      "created_at": "2026-07-25T19:24:07.826791Z"
+      "created_at": "2026-11-15T00:00:00Z",
+      "owner": "@felixgeelhaar",
+      "reason": "Test fixture DSN with placeholder credentials used to exercise DSN parsing and redaction; not a credential to any real system. Same class as the fixture DSNs waived in .nox/waivers.yaml."
     },
     {
       "fingerprint": "4c754d71c96fd27e0203587a45b62c26fa8c67113c3be0dea93c1b483964ec9b",
@@ -282,6 +286,15 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
+      "fingerprint": "d8fc513d11c9738bdaa3d265aa31c3d5ef9e372f49c0b7e191daa12700621c0a",
+      "rule_id": "DATA-001",
+      "file_path": "cmd/mnemos/web/landing.js",
+      "severity": "low",
+      "created_at": "2026-11-15T00:00:00Z",
+      "owner": "@felixgeelhaar",
+      "reason": "The project's published contact address in the landing page's waitlist mailto link (same address already waived for landing.html); not personal data held about anyone. Raised by nox 1.34.0 only."
+    },
+    {
       "fingerprint": "40f394f1bb8b793ed03331da0ef9e6d2ab2969594fb20d0040f043126e0418f2",
       "rule_id": "IAC-238",
       "file_path": "data/eval/boundaries.yaml",
@@ -310,22 +323,17 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
+      "fingerprint": "542595d16fc5ed547c4e9746e8cec53adeab18f3810d74a863ab4743d1024678",
+      "rule_id": "IAC-182",
+      "file_path": "deploy/playground/docker-compose.yml",
+      "severity": "low",
+      "created_at": "2026-11-15T00:00:00Z",
+      "owner": "@felixgeelhaar",
+      "reason": "token-mint is a one-shot job that writes the playground token and exits; a container health check has no meaning for a process that is not long-running."
+    },
+    {
       "fingerprint": "626a7458a3ffa9cef95a9ea6bdaa8d7fd0f07dbe80220b3fa03c99a397fbe4cf",
       "rule_id": "IAC-153",
-      "file_path": "docs-site/.github/workflows/docs.yml",
-      "severity": "medium",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "5f11f2b1487bb0491b4517eac46554adfafd418385a5ab5c1f01d2a34fb97937",
-      "rule_id": "IAC-308",
-      "file_path": "docs-site/.github/workflows/docs.yml",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "f77601ed7c0992945e42f455f083f2f0eb4b08205b57ae8a6d945a47d562a5a2",
-      "rule_id": "IAC-314",
       "file_path": "docs-site/.github/workflows/docs.yml",
       "severity": "medium",
       "created_at": "2026-07-25T19:24:07.826791Z"
@@ -405,7 +413,9 @@
       "rule_id": "SEC-073",
       "file_path": "internal/config/merge_test.go",
       "severity": "critical",
-      "created_at": "2026-07-25T19:24:07.826791Z"
+      "created_at": "2026-11-15T00:00:00Z",
+      "owner": "@felixgeelhaar",
+      "reason": "Test fixture DSN with placeholder credentials (u:p) used to exercise config merging; not a credential to any real system."
     },
     {
       "fingerprint": "f6e5856e7552aa79977eb9f52c8c4c88387ce9fbbe12a20a17a9ced43c45e46a",
@@ -476,7 +486,9 @@
       "rule_id": "SEC-073",
       "file_path": "internal/store/postgres/postgres_test.go",
       "severity": "critical",
-      "created_at": "2026-07-25T19:24:07.826791Z"
+      "created_at": "2026-11-15T00:00:00Z",
+      "owner": "@felixgeelhaar",
+      "reason": "Test fixture DSN with placeholder credentials (user:pw) used to exercise DSN parsing; not a credential to any real system."
     },
     {
       "fingerprint": "388ca6a7104d5124733be1efa82356503418397b61d6580f59b4e3bde0db2286",
@@ -584,6 +596,15 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
+      "fingerprint": "7005f84dff936af8279d93eaa98eadd9ee808d1edf56e59a9a4bf849047990cb",
+      "rule_id": "AI-050",
+      "file_path": "internal/workflow/runner_test.go",
+      "severity": "low",
+      "created_at": "2026-11-15T00:00:00Z",
+      "owner": "@felixgeelhaar",
+      "reason": "Test sets MaxRetries = 0 on purpose to assert a failing workflow step fails exactly once; production runners keep their retry policy. One entry per occurrence (identical fingerprints)."
+    },
+    {
       "fingerprint": "a258f9cd4b7d64f29832bbd9fd1f24dd879a73d0874f43695cd5f2b6d7a18240",
       "rule_id": "AI-050",
       "file_path": "internal/workflow/runner_test.go",
@@ -640,20 +661,6 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
-      "fingerprint": "7ef485203e7eafd08549ac444947726610bc794b080468e20f7ecbab803ba2ca",
-      "rule_id": "IAC-231",
-      "file_path": "test/integration/docker-compose.yml",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "8c7ffe65f7ed47a6b08376867043f8433d315337207fa3d237fbaa0fc4b34d54",
-      "rule_id": "IAC-231",
-      "file_path": "test/integration/docker-compose.yml",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
       "fingerprint": "d534c8778098554a8388a143201569d97a44de864286c28d7e72370ed3b83198",
       "rule_id": "SEC-081",
       "file_path": "test/integration/docker-compose.yml",
@@ -666,87 +673,6 @@
       "file_path": "test/integration/docker-compose.yml",
       "severity": "high",
       "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "f8fce8f0147c60853e962b8e3a3e2ca8404724e07d85f49dd5df46f7366d549b",
-      "rule_id": "SEC-073",
-      "file_path": "cmd/mnemos/dsn_test.go",
-      "severity": "critical",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test fixture DSN with placeholder credentials used to exercise DSN parsing and redaction; not a credential to any real system. Same class as the fixture DSNs waived in .nox/waivers.yaml."
-    },
-    {
-      "fingerprint": "e0643fb007c60058b2211bf4896268836e68578b6287809995aaad7881c13cfc",
-      "rule_id": "SEC-073",
-      "file_path": "internal/config/merge_test.go",
-      "severity": "critical",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test fixture DSN with placeholder credentials (u:p) used to exercise config merging; not a credential to any real system."
-    },
-    {
-      "fingerprint": "35d61552869ce2c2a1862c7f79f5feddfba19805308964cfc5f1efcbe4db0010",
-      "rule_id": "SEC-073",
-      "file_path": "internal/store/postgres/postgres_test.go",
-      "severity": "critical",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test fixture DSN with placeholder credentials (user:pw) used to exercise DSN parsing; not a credential to any real system."
-    },
-    {
-      "fingerprint": "7005f84dff936af8279d93eaa98eadd9ee808d1edf56e59a9a4bf849047990cb",
-      "rule_id": "AI-050",
-      "file_path": "internal/workflow/runner_test.go",
-      "severity": "low",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test sets MaxRetries = 0 on purpose to assert a failing workflow step fails exactly once; production runners keep their retry policy. One entry per occurrence (identical fingerprints)."
-    },
-    {
-      "fingerprint": "7005f84dff936af8279d93eaa98eadd9ee808d1edf56e59a9a4bf849047990cb",
-      "rule_id": "AI-050",
-      "file_path": "internal/workflow/runner_test.go",
-      "severity": "low",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test sets MaxRetries = 0 on purpose to assert a failing workflow step fails exactly once; production runners keep their retry policy. One entry per occurrence (identical fingerprints)."
-    },
-    {
-      "fingerprint": "7005f84dff936af8279d93eaa98eadd9ee808d1edf56e59a9a4bf849047990cb",
-      "rule_id": "AI-050",
-      "file_path": "internal/workflow/runner_test.go",
-      "severity": "low",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "Test sets MaxRetries = 0 on purpose to assert a failing workflow step fails exactly once; production runners keep their retry policy. One entry per occurrence (identical fingerprints)."
-    },
-    {
-      "fingerprint": "542595d16fc5ed547c4e9746e8cec53adeab18f3810d74a863ab4743d1024678",
-      "rule_id": "IAC-182",
-      "file_path": "deploy/playground/docker-compose.yml",
-      "severity": "low",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "token-mint is a one-shot job that writes the playground token and exits; a container health check has no meaning for a process that is not long-running."
-    },
-    {
-      "fingerprint": "41131eda8752e6de09401f8c4866ec55ec1e19705e88f31926584175a8567eb1",
-      "rule_id": "VULN-001",
-      "file_path": "Dockerfile",
-      "severity": "medium",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "ALPINE-CVE-2026-4738 (zlib 1.3.2-r1) is in the digest-pinned alpine:3.21 base; Alpine ships the fix (1.4-r0) as a package update only, so the Dockerfile runs apk upgrade zlib at build time. The scanner reads the base image, not the built layer. The mnemos binary is static Go and does not link zlib."
-    },
-    {
-      "fingerprint": "d8fc513d11c9738bdaa3d265aa31c3d5ef9e372f49c0b7e191daa12700621c0a",
-      "rule_id": "DATA-001",
-      "file_path": "cmd/mnemos/web/landing.js",
-      "severity": "low",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "The project's published contact address in the landing page's waitlist mailto link (same address already waived for landing.html); not personal data held about anyone. Raised by nox 1.34.0 only."
     }
   ]
 }

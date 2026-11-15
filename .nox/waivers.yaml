@@ -119,6 +119,7 @@ waivers:
       - internal/store/sqlite/user_repository_test.go
       - docs/index.html
       - cmd/mnemos/web/landing.html
+      - cmd/mnemos/web/landing.js
     owner: "@felixgeelhaar"
     expires: 2027-04-06
     reason: >-
@@ -147,26 +148,49 @@ waivers:
       Deliberate. The binary is copied root-owned and the image runs as the
       non-root user "mnemos", so the runtime user cannot replace it.
 
+  - id: base-image-zlib
+    rules: [VULN-001]
+    paths: [Dockerfile]
+    owner: "@felixgeelhaar"
+    expires: 2027-02-15
+    reason: >-
+      ALPINE-CVE-2026-4738 (zlib 1.3.2-r1) sits in the digest-pinned
+      alpine:3.21 base, and Alpine ships the fix (1.4-r0) as a package update
+      only. The Dockerfile runs apk upgrade for zlib at build time, but the
+      scanner reads the base image rather than the built layer. The mnemos
+      binary is static Go and does not link zlib. Re-pin the base once an
+      Alpine release carries 1.4-r0.
+
+  - id: one-shot-token-mint
+    rules: [IAC-182]
+    paths: [deploy/playground/docker-compose.yml]
+    owner: "@felixgeelhaar"
+    expires: 2027-05-15
+    reason: >-
+      token-mint is a one-shot job that writes the playground token to a
+      shared volume and exits, so a container health check has no meaning for
+      a process that is not long-running. The long-running services in the
+      same file declare one.
+
   - id: docs-site-workflow
-    rules: [IAC-153, IAC-308, IAC-314]
+    rules: [IAC-153]
     paths: [docs-site/.github/workflows/docs.yml]
     owner: "@felixgeelhaar"
     expires: 2027-01-06
     reason: >-
-      Accepted gap in the docs site's own Pages workflow: contents:write,
-      manual dispatch and an unattested artifact upload. It publishes static
-      documentation only, with no secrets beyond its token. Narrow the
-      permission before this expires.
+      Accepted gap in the docs site's own Pages workflow: an unattested
+      artifact upload. The permission is now contents:read and manual dispatch
+      is gone. It publishes static documentation only, with no secrets beyond
+      its token. Add attestation when the deploy step is wired up.
 
   - id: compose-latest-tags
     rules: [IAC-231]
     paths:
       - benchmarks/docker-compose.yml
-      - test/integration/docker-compose.yml
     owner: "@felixgeelhaar"
     expires: 2027-01-06
     reason: >-
-      Accepted gap. Benchmark competitors and the integration stack use
-      :latest images. Both are local, disposable stacks, so a moved tag
-      changes a measurement, not a deployment, but pin them before this
-      expires so benchmark runs are reproducible.
+      Accepted gap. Benchmark competitors use :latest images. The stack is
+      local and disposable, so a moved tag changes a measurement, not a
+      deployment, but pin them before this expires so benchmark runs are
+      reproducible. The integration stack is already pinned.
