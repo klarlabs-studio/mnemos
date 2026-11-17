@@ -31,7 +31,7 @@ type recallParams struct {
 	Question       string
 	RunID          string
 	AsOf           time.Time // valid time
-	RecordedAsOf   time.Time // transaction time (ADR 0035)
+	RecordedAsOf   time.Time // transaction time (ADR 0036)
 	Hops           int
 	HopKinds       []domain.RelationshipType
 	MinTrust       float64
