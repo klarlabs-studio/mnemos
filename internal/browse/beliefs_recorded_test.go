@@ -17,7 +17,7 @@ import (
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
-// ADR 0035 step 2: the belief browse answers a recorded-as-of read with the
+// ADR 0036 step 2: the belief browse answers a recorded-as-of read with the
 // same rewind as recall. Before it, GET /v1/beliefs?recorded_as_of= filtered
 // today's claims on created_at only: a belief retracted after T read as
 // deprecated, and one merged after T read as a redirect, so the browse and

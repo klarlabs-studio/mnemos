@@ -1,12 +1,14 @@
 # ADR 0036: A recorded-as-of read reconstructs what the brain believed
 
-- **Status:** Accepted; step 1 implemented.
+- **Status:** Accepted; steps 1 and 2 implemented.
 - **Date:** 2026-11-17
 - **Deciders:** Felix Geelhaar
 - **Builds on:** ADR 0034 (time axes; `claim_validity_history`)
 - **Amends:** `query.AnswerOptions.RecordedAsOf`, `mnemos.Query.RecordedAsOf`,
   `query --recorded-at`, `/v1/search?recorded_as_of=`, gRPC `RecordedAsOf`;
-  adds `recordedAsOf` to the `recall_at_time` MCP tool
+  adds `recordedAsOf` to the `recall_at_time` MCP tool. Step 2 amends
+  `GET /v1/beliefs?recorded_as_of=`, gRPC `ListBeliefs.recorded_as_of` and
+  `ports.ClaimRepository` (`ListMergedInto`)
 
 ## Context
 
@@ -47,8 +49,8 @@ the brain first recorded the belief.
 ### 1. A recorded-as-of read sees the store as it was at T
 
 When `RecordedAsOf` is set, the engine answers from a view of its repositories
-bounded at T (`internal/query/recorded.go`), applied once per call in every
-exported entry point:
+bounded at T (`internal/recorded`, wired in `internal/query/recorded.go`),
+applied once per call in every exported entry point:
 
 | Read | Rule at T |
 |---|---|
@@ -57,11 +59,12 @@ exported entry point:
 | claim status | the `to_status` of the last transition at or before T; if every transition is after T, the `from_status` of the first; no history, the stored value |
 | `valid_to`, `archived_at` | the same rule over `claim_validity_history` |
 | status history (narratives) | transitions after T are dropped |
-| relationships | only edges with `created_at ≤ T` exist (contradictions, hops, priming) |
+| `merged_into` | cleared when the merge transition (`domain.MergeRedirectReason`) is after T |
+| relationships | only edges with `created_at ≤ T` exist (contradictions, hops, priming); endpoints a later merge moved are moved back (§5) |
 
 Admission then runs unchanged on the rewound claims, so the deprecated, validity
 and archive filters ask their questions of the state the brain held at T.
-The rewind rule is a pure function (`rewindClaim`), tested in isolation.
+The rewind rule is a pure function (`recorded.Rewind`), tested in isolation.
 
 `AsOf` (valid time) keeps its meaning and composes: `RecordedAsOf=Tue, AsOf=Mon`
 is "what did we believe on Tuesday about Monday".
@@ -79,27 +82,107 @@ returns the same answer.
   T needs the evidence count as of T (`claim_evidence` has no timestamp) and the
   credit as of T (not versioned). `MinTrust` and agent-mode contradiction
   resolution therefore use current trust on a recorded-as-of read. Step 3.
-- **Merges.** Semantic dedupe repoints a loser's evidence and edges onto the
-  winner and keeps the loser as a deprecated redirect (ADR 0033). The status of
-  the loser rewinds correctly, but its evidence links now point at the winner,
-  so a read before the merge can reach the winner (and drop it when it was
-  recorded after T) instead of the loser. Repointed edges keep their original
-  `created_at`. Step 2.
+- **Merges.** Reconstructed from the redirect, with the approximations stated
+  in §5. Step 2.
 - **Text and confidence.** The pipeline never rewrites a stored claim's text;
   confidence changes are versioned only on SQLite and memory (`claim_versions`).
   Not rewound.
 - **History older than its table.** Validity changes made before ADR 0034 step 2
   have no history row; the stored value is used.
-- **Browse.** `GET /v1/beliefs?recorded_as_of=` (`page.ClaimFilter`) still
-  filters on `created_at` only. It should use the same rewind. Step 2.
+- **Browse.** Uses the same views (§6). Step 2.
 
 ### 4. Cost
 
 Two history reads per candidate claim, on the recorded-as-of path only. The
 candidate set is bounded (top events, the widened claim candidates, hop
 expansion), so this is tens to a few hundred indexed lookups. Every backend
-already has `ListStatusHistoryByClaimID` and `ListValidityHistory`, so no port
-changes. A batch method is warranted only if a measurement says so.
+already has `ListStatusHistoryByClaimID` and `ListValidityHistory`. A batch
+method is warranted only if a measurement says so. The browse lists the whole
+store, so it reads histories in bulk instead (`ListAllStatusHistory`,
+`ListValidityHistory("")`): three reads per page request, not two per claim.
+The merge walk (§5) adds one indexed `ListMergedInto` per redirect level, which
+on a store with no merges is a single lookup that finds nothing.
+
+### 5. Merges are walked backwards from the redirect (step 2)
+
+Semantic dedupe (ADR 0033) folds a loser into a winner in place:
+`RepointEvidence` moves the loser's evidence links onto the winner,
+`RepointEndpoint` moves its edges (same id, same `created_at`), and the loser
+stays as a deprecated redirect with `merged_into` set and a status transition
+whose reason is `domain.MergeRedirectReason`. A read at T before the merge
+reaches the winner through the moved evidence; a winner recorded after T is
+dropped, and the loser the brain held at T is unreachable.
+
+Two designs were considered:
+
+- **Record repoint history.** Version every moved evidence link and edge (a
+  new history table on four backends, with RLS registration, migrations and
+  cascade handling) so the view can put each one back exactly. Precise, but a
+  large schema change, and it reconstructs nothing for merges that happened
+  before it shipped. Edges a merge *deleted* (a loser–winner self-loop, a
+  duplicate of an edge the winner already had) would also need their full row
+  recorded.
+- **Walk the redirect backwards (chosen).** Everything needed is already
+  stored: `merged_into` says who absorbed whom, and the redirect's status
+  transition dates the merge. One read port method is added,
+  `ClaimRepository.ListMergedInto(targetIDs)` (claims whose `merged_into` is in
+  the set; indexed `idx_claims_merged_into` on every backend; memory scans). It
+  works for every merge ever recorded, adds no write-path cost and no table.
+
+The rules, in `internal/recorded`:
+
+- **Claims reached through events.** `ListByEventIDs` returns, besides the
+  claims holding the events' evidence now, every claim merged into them
+  (transitively) that was still held separately at T: recorded by T, merge
+  transition after T. A claim already a redirect at T is not added; its
+  evidence was on its target then too.
+- **A rewound claim** has its `merged_into` cleared when the merge is after T,
+  and its status rewinds from the same history, so the loser reads as the
+  active belief it was.
+- **Evidence.** A claim merged after T is attributed the evidence of the claim
+  at the end of its redirect chain, and links to events ingested after T are
+  dropped.
+- **Edges.** An endpoint recorded *after* the edge was created cannot be the
+  edge's original endpoint, so the edge arrived by a merge. The view moves it to
+  the oldest claim merged into that endpoint that existed when the edge was
+  created, followed forward through any merge that had already happened by T.
+
+Stated approximations, all confined to claims a merge judged near-duplicates
+(cosine above threshold, same type, scope and polarity, no recorded
+contradiction):
+
+- Evidence links were moved, not versioned, so a claim held separately at T is
+  reached through all of its absorber's evidence, not only its own, and is
+  attributed all of it.
+- An edge whose current endpoint already existed when the edge was created
+  stays on that endpoint: it may have been the loser's, and nothing recorded
+  says so. Both claims are in a read at T that reaches either, so the edge still
+  surfaces, attached to the wrong one of two near-duplicates. When several
+  losers could have held a moved edge, the oldest is chosen.
+- Edges a merge deleted are not reconstructed.
+- A redirect with no merge transition in its history (none is known to exist)
+  keeps its stored pointer, like any field without history.
+
+### 6. Every surface reads the past through the same views (step 2)
+
+`internal/recorded` holds the rewind (`Rewind`) and the bounded views
+(`Events`, `Claims`, `Relationships`). It imports only `domain` and `ports`, so
+every caller can use it without a cycle, and none re-implements it:
+
+- recall: `query.Engine.recordedAt` swaps its repositories for the views;
+- the belief browse: `browse.Recorded(conn, t)` returns the event and claim
+  views, `browse.BeliefsInGo` lists, filters and run-scopes through them, and
+  `browse.Beliefs` always pages a recorded-as-of browse in Go (the SQLite pager
+  already refused time bounds; the Postgres pager now refuses
+  `recorded_as_of`, since SQL over current rows cannot rewind);
+- `GET /v1/beliefs` reads the page *and* its evidence through
+  `browse.Recorded`;
+- gRPC `ListBeliefs` reads beliefs, run scope and evidence through
+  `browse.Recorded` and filters with `page.ClaimFilter.Matches`, the same
+  filter as REST.
+
+A recorded-as-of browse of status `active` therefore lists exactly the beliefs
+a recorded-as-of recall can admit, on every backend.
 
 ## Consequences
 
@@ -114,12 +197,20 @@ changes. A batch method is warranted only if a measurement says so.
   Tuesday read returns the Tuesday diagnosis, not Thursday's, and does not show
   Thursday's contradiction, the retracted, archived and superseded beliefs
   read as they were on Tuesday, and repeating the read changes nothing.
+- Step 2 acceptance tests: a merge after T keeps the belief and its
+  contradiction as held at T (`TestRecordedAsOf_MergeAfterTKeepsTheBeliefHeldAtT`,
+  SQLite, through the real `pipeline.ApplySemanticDedupe`); the browse rewinds
+  status and merges on memory and SQLite
+  (`TestBeliefs_RecordedAsOfRewindsStatusAndMerges`), over REST
+  (`TestServe_ListBeliefsRecordedAsOfRewinds`) and gRPC
+  (`TestListBeliefs_RecordedAsOfRewindsStatusAndMerges`); `ListMergedInto` is
+  pinned on every backend (`TestClaims_ListMergedIntoOnEveryBackend`).
 
 ## Rollout
 
 1. Reconstruction of events, claims, status, validity, archive, edges and
    narratives; no write-backs on time-travel reads. **Implemented.**
 2. Merge-aware rewind (follow `merged_into` redirects backward when a winner was
-   recorded after T); browse uses the same rewind.
+   recorded after T); browse uses the same rewind. **Implemented** (§5, §6).
 3. Trust at T: timestamp evidence links and version credit, then compute
    `trust.At` over the inputs as of T.

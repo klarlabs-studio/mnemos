@@ -64,7 +64,7 @@ func TestClaims_MergedIntoRoundTripsOnEveryBackend(t *testing.T) {
 	}
 }
 
-// A recorded-as-of read walks merges backwards (ADR 0035 step 2): from the claim
+// A recorded-as-of read walks merges backwards (ADR 0036 step 2): from the claim
 // that holds a merged belief's evidence now to the redirects that point at it.
 // Every backend must return exactly the direct redirects of the ids asked for,
 // oldest first, and nothing for a live claim or an unknown id.

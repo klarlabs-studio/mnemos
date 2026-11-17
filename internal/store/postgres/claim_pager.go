@@ -17,7 +17,7 @@ import (
 //
 // recorded_as_of is refused: it reads the store as it was at that instant,
 // rewinding status, valid time, the archive axis and merges from their history
-// (ADR 0035, internal/recorded), which SQL over the current rows cannot do.
+// (ADR 0036, internal/recorded), which SQL over the current rows cannot do.
 // The browse pages it in Go through the same views recall uses.
 func (r ClaimRepository) PageClaims(ctx context.Context, f page.ClaimFilter, after *page.Key, limit int) (ports.ClaimPage, error) {
 	if !f.RecordedAsOf.IsZero() {

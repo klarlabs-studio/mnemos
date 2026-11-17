@@ -78,7 +78,7 @@ type ClaimRepository interface {
 	// targetIDs — claims whose MergedInto is in targetIDs — oldest first. A
 	// recorded-as-of read walks it backwards from the claim that holds a
 	// merged belief's evidence now to the claims the brain held separately
-	// before the merge (ADR 0035 step 2). Chains are followed by the caller,
+	// before the merge (ADR 0036 step 2). Chains are followed by the caller,
 	// one level per call. No ids returns none.
 	ListMergedInto(ctx context.Context, targetIDs []string) ([]domain.Claim, error)
 

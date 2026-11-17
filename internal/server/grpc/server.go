@@ -708,7 +708,7 @@ func (s *Server) ListBeliefs(ctx context.Context, req *mnemosv1.ListBeliefsReque
 		filter.RecordedAsOf = req.RecordedAsOf.AsTime()
 	}
 	// A recorded-as-of read sees the store as it was at that instant, through
-	// the same views as recall and the REST browse (ADR 0035): status, valid
+	// the same views as recall and the REST browse (ADR 0036): status, valid
 	// time, the archive axis and merges are rewound from their history, and
 	// episodes ingested later do not exist.
 	eventsAt, claimsAt := browse.Recorded(s.connFor(ctx), filter.RecordedAsOf)

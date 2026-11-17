@@ -119,7 +119,7 @@ func BeliefsInGo(ctx context.Context, conn *store.Conn, f page.ClaimFilter, afte
 }
 
 // Recorded returns conn's event and claim repositories as recorded at t
-// (ADR 0035), or unchanged when t is zero. Every browse surface reads a
+// (ADR 0036), or unchanged when t is zero. Every browse surface reads a
 // recorded-as-of request through it, so they rewind exactly as recall does.
 func Recorded(conn *store.Conn, t time.Time) (ports.EventRepository, ports.ClaimRepository) {
 	if t.IsZero() {

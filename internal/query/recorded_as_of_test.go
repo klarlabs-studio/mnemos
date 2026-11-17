@@ -212,7 +212,7 @@ func tick() time.Time {
 	return at
 }
 
-// ADR 0035 step 2: a merge after T must not hide what the brain held at T.
+// ADR 0036 step 2: a merge after T must not hide what the brain held at T.
 //
 // On Tuesday the brain holds the disk diagnosis and a belief contradicting it.
 // On Thursday a restatement is recorded and semantic dedupe folds the Tuesday

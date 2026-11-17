@@ -15,7 +15,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
-// ADR 0035 step 2: GET /v1/beliefs?recorded_as_of= returns the beliefs the
+// ADR 0036 step 2: GET /v1/beliefs?recorded_as_of= returns the beliefs the
 // brain held at T as it held them, with the evidence they stood on then: the
 // same rewind recall applies. Before it the browse filtered today's rows on
 // created_at, so a belief retracted after T came back deprecated and a belief

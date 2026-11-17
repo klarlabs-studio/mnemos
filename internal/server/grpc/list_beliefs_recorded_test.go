@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// ADR 0035 step 2: gRPC ListBeliefs with recorded_as_of reads the store as it
+// ADR 0036 step 2: gRPC ListBeliefs with recorded_as_of reads the store as it
 // was at T through the same views as recall and the REST browse. Before it,
 // it filtered today's rows on created_at: a belief retracted after T came back
 // deprecated, a belief merged after T came back as a redirect, and a run

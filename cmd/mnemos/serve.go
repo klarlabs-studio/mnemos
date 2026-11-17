@@ -1144,7 +1144,7 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 	}
 
 	// The evidence each belief stood on, read through the same recorded-as-of
-	// view as the page (ADR 0035): a belief merged after T keeps the evidence
+	// view as the page (ADR 0036): a belief merged after T keeps the evidence
 	// the merge moved onto the claim that absorbed it.
 	_, claimsAt := browse.Recorded(conn, recordedAsOf)
 	links, evErr := claimsAt.ListEvidenceByClaimIDs(ctx, ids)

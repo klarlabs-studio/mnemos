@@ -1,5 +1,5 @@
 // Package recorded reconstructs the store as it was recorded at an instant T
-// (ADR 0035): what the brain believed then, not which of today's beliefs
+// (ADR 0036): what the brain believed then, not which of today's beliefs
 // existed then.
 //
 // Filtering today's claims by created_at does not deliver that: status, valid

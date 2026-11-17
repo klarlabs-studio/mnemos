@@ -47,7 +47,7 @@ func (r Events) ListByRunID(ctx context.Context, runID string) ([]domain.Event, 
 // Claims returns claims rewound to At. Only reads are bounded; the time-travel
 // paths never write through it.
 //
-// Merges (ADR 0035 step 2). Semantic dedupe repoints a loser's evidence onto
+// Merges (ADR 0036 step 2). Semantic dedupe repoints a loser's evidence onto
 // the winner and keeps the loser as a redirect. The view walks that backwards:
 //
 //   - ListByEventIDs reaches the claim that holds the evidence now and adds
