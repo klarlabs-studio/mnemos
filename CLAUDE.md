@@ -101,6 +101,7 @@ this file, which made them invisible to anyone navigating by it:
 | `internal/govwrite/` | The governed daemon-write surface — every durable write goes through it |
 | `internal/auth/` | Identity primitives: JWT issuance and verification |
 | `internal/runscope/` | Run-scoped token boundary (F.4.b) |
+| `internal/recorded/` | Recorded-as-of views (ADR 0036): rewinds claims, evidence, edges and merges to an instant; the one implementation recall, browse and gRPC share |
 
 ### Entrypoints
 
