@@ -1,4 +1,4 @@
-# ADR 0035: A recorded-as-of read reconstructs what the brain believed
+# ADR 0036: A recorded-as-of read reconstructs what the brain believed
 
 - **Status:** Accepted; step 1 implemented.
 - **Date:** 2026-11-17
