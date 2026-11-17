@@ -8,10 +8,6 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos"
-	"go.klarlabs.de/mnemos/internal/domain"
-	"go.klarlabs.de/mnemos/internal/embedding"
-	"go.klarlabs.de/mnemos/internal/llm"
-	"go.klarlabs.de/mnemos/internal/query"
 )
 
 // mcpRememberEventInput is the MCP-side input shape for the
@@ -58,11 +54,11 @@ type mcpTimelineQueryOutput struct {
 // retrieval set.
 type mcpRecallAtTimeInput struct {
 	Question string `json:"question" jsonschema:"required,description=Natural language question"`
-	AsOf     string `json:"asOf" jsonschema:"required,description=RFC3339 instant; claims valid at this time are returned"`
+	AsOf     string `json:"asOf" jsonschema:"required,description=YYYY-MM-DD or RFC3339 instant; claims valid at this time are returned"`
 	// RecordedAsOf is the transaction-time axis (ADR 0035): the answer the
 	// brain would have given at that instant, with each belief's status,
 	// validity and contradictions as they were recorded then.
-	RecordedAsOf string `json:"recordedAsOf,omitempty" jsonschema:"description=Optional RFC3339 instant; answer as the brain believed it then (status, validity and contradictions as recorded at that time). Pair with asOf: what did we believe at recordedAsOf about asOf"`
+	RecordedAsOf string `json:"recordedAsOf,omitempty" jsonschema:"description=Optional YYYY-MM-DD or RFC3339 instant; answer as the brain believed it then (status, validity and contradictions as recorded at that time). Pair with asOf: what did we believe at recordedAsOf about asOf"`
 	RunID        string `json:"runId,omitempty" jsonschema:"description=Optional run ID to scope the query"`
 	Hops         int    `json:"hops,omitempty" jsonschema:"description=BFS hop expansion depth through supports/contradicts edges (0-5)"`
 }
@@ -161,75 +157,20 @@ func mcpRunTimelineQuery(ctx context.Context, input mcpTimelineQueryInput) (mcpT
 	return mcpTimelineQueryOutput{Events: out}, nil
 }
 
-// mcpRunRecallAtTime answers a query against the state of the
-// knowledge base at a historical instant (claims whose ValidFrom <=
-// AsOf and ValidTo > AsOf are considered). With RecordedAsOf it answers as
-// the brain believed at that instant (ADR 0035).
-func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (mcpQueryOutput, error) {
-	q := strings.TrimSpace(input.Question)
-	if q == "" {
-		return mcpQueryOutput{}, errors.New("question is required")
+// mcpRunRecallAtTime is query_knowledge with a required valid time. It used to
+// be a second implementation with its own engine wiring, parser and hop rule,
+// and it searched only the global brain where query_knowledge federates the
+// repo brain too. It is now an adapter: the same handler, the same brains, the
+// same answer for the same question.
+func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (recallOutput, error) {
+	if strings.TrimSpace(input.AsOf) == "" {
+		return recallOutput{}, userInputError(errors.New("asOf is required"))
 	}
-	if err := enforceRunScope(ctx, input.RunID); err != nil {
-		return mcpQueryOutput{}, err
-	}
-	asOf, err := time.Parse(time.RFC3339, strings.TrimSpace(input.AsOf))
-	if err != nil {
-		return mcpQueryOutput{}, userInputError(fmt.Errorf("invalid asOf timestamp: %w", err))
-	}
-	var recordedAsOf time.Time
-	if raw := strings.TrimSpace(input.RecordedAsOf); raw != "" {
-		recordedAsOf, err = time.Parse(time.RFC3339, raw)
-		if err != nil {
-			return mcpQueryOutput{}, userInputError(fmt.Errorf("invalid recordedAsOf timestamp: %w", err))
-		}
-		recordedAsOf = recordedAsOf.UTC()
-	}
-
-	conn, err := openConn(ctx)
-	if err != nil {
-		return mcpQueryOutput{}, err
-	}
-	defer closeConn(conn)
-
-	// Same full wiring as query_knowledge — a time-scoped recall is still a recall.
-	engine := newQueryEngine(conn)
-	if embCfg, embErr := embedding.ConfigFromEnv(); embErr == nil {
-		if embClient, ecErr := embedding.NewClient(embCfg); ecErr == nil {
-			engine = engine.WithEmbeddings(conn.Embeddings, embClient)
-		}
-	}
-	if llmCfg, llmErr := llm.ConfigFromEnv(); llmErr == nil {
-		if llmClient, lcErr := llm.NewClient(llmCfg); lcErr == nil {
-			engine = engine.WithLLM(llmClient)
-		}
-	}
-
-	hops := max(input.Hops, 0)
-	hops = min(hops, 5)
-	opts := query.AnswerOptions{
-		Hops:         hops,
-		AsOf:         asOf.UTC(),
-		RecordedAsOf: recordedAsOf,
-		Consumer:     domain.ConsumerAgent,
-	}.WithCognitiveDefaults()
-
-	var answer domain.Answer
-	if runID := strings.TrimSpace(input.RunID); runID != "" {
-		answer, err = engine.AnswerForRunWithOptions(ctx, q, runID, opts)
-	} else {
-		answer, err = engine.AnswerWithOptions(ctx, q, opts)
-	}
-	if err != nil {
-		return mcpQueryOutput{}, err
-	}
-
-	return mcpQueryOutput{
-		Answer:           answer.AnswerText,
-		Claims:           answer.Claims,
-		Contradictions:   answer.Contradictions,
-		Timeline:         answer.TimelineEventIDs,
-		ClaimProvenance:  answer.ClaimProvenance,
-		ClaimHopDistance: answer.ClaimHopDistance,
-	}, nil
+	return mcpRunQueryScoped(ctx, mcpQueryInput{
+		Question:     input.Question,
+		RunID:        input.RunID,
+		Hops:         input.Hops,
+		AsOf:         input.AsOf,
+		RecordedAsOf: input.RecordedAsOf,
+	})
 }

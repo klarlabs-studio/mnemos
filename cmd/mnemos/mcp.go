@@ -63,20 +63,13 @@ type mcpQueryInput struct {
 	RunID    string `json:"runId,omitempty" jsonschema:"description=Optional run ID to scope the query"`
 	Hops     int    `json:"hops,omitempty" jsonschema:"description=BFS hop expansion depth through supports/contradicts edges (0-5, default 0)"`
 	Scope    string `json:"context,omitempty" jsonschema:"description=Which brain(s) to search: 'both' (default; global + this repo's brain if one exists), 'global', or 'repo'. Repo claims win on conflict and are tagged claim_provenance=repo."`
-}
-
-type mcpQueryOutput struct {
-	Answer         string                `json:"answer"`
-	Claims         []domain.Claim        `json:"beliefs"`
-	Contradictions []domain.Relationship `json:"dissonances"`
-	Timeline       []string              `json:"timeline"`
-	// ClaimProvenance maps claim ID to "local" or a registry URL so the
-	// agent can show which claims came from a federated registry.
-	ClaimProvenance map[string]string `json:"belief_provenance,omitempty"`
-	// ClaimHopDistance maps claim ID to the BFS hop count from the
-	// directly-retrieved set (0 = direct, N>0 = expanded via N hops of
-	// supports/contradicts). Empty when hops=0.
-	ClaimHopDistance map[string]int `json:"belief_hop_distance,omitempty"`
+	// The filters below mirror the CLI's `query` flags one for one; both
+	// surfaces feed the same recallParams (recall.go).
+	AsOf           string  `json:"asOf,omitempty" jsonschema:"description=Optional valid time (YYYY-MM-DD or RFC3339): only beliefs true in the world at that instant"`
+	RecordedAsOf   string  `json:"recordedAsOf,omitempty" jsonschema:"description=Optional transaction time (YYYY-MM-DD or RFC3339): answer as the brain believed it then, with status, validity and contradictions as recorded at that time"`
+	MinTrust       float64 `json:"minTrust,omitempty" jsonschema:"description=Drop beliefs whose trust score is below this floor (0-1)"`
+	IncludeHistory bool    `json:"includeHistory,omitempty" jsonschema:"description=Also return superseded and archived beliefs"`
+	Visibility     string  `json:"visibility,omitempty" jsonschema:"description=personal, team (default) or org"`
 }
 
 type mcpProcessTextInput struct {
@@ -460,10 +453,10 @@ func handleMCP(args []string) {
 
 	srv.Tool("query_knowledge").
 		Description("Query the Mnemos knowledge base and return evidence-backed results.").
-		OutputSchema(mcpQueryOutput{}).
-		Handler(func(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
+		OutputSchema(recallOutput{}).
+		Handler(func(ctx context.Context, input mcpQueryInput) (recallOutput, error) {
 			if kernel != nil {
-				return dispatchAxiTool[mcpQueryOutput](ctx, kernel, nil, "query_knowledge", input)
+				return dispatchAxiTool[recallOutput](ctx, kernel, nil, "query_knowledge", input)
 			}
 			return mcpRunQueryScoped(ctx, input)
 		})
@@ -763,10 +756,10 @@ func handleMCP(args []string) {
 
 	srv.Tool("recall_at_time").
 		Description("Answer a question against the state of the knowledge base at a historical instant: asOf is valid time (what was true then); the optional recordedAsOf is what the brain believed then, with status, validity and contradictions as recorded at that time.").
-		OutputSchema(mcpQueryOutput{}).
-		Handler(func(ctx context.Context, input mcpRecallAtTimeInput) (mcpQueryOutput, error) {
+		OutputSchema(recallOutput{}).
+		Handler(func(ctx context.Context, input mcpRecallAtTimeInput) (recallOutput, error) {
 			if kernel != nil {
-				return dispatchAxiTool[mcpQueryOutput](ctx, kernel, nil, "recall_at_time", input)
+				return dispatchAxiTool[recallOutput](ctx, kernel, nil, "recall_at_time", input)
 			}
 			return mcpRunRecallAtTime(ctx, input)
 		})
@@ -1228,7 +1221,7 @@ func mcpRepoBrainDSN() string {
 // repo's brain per input.Scope (default "both"). Each side runs against an
 // explicit per-request DSN (context override) — never mutating MNEMOS_DB_URL —
 // so it is safe under the concurrent MCP transport.
-func mcpRunQueryScoped(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
+func mcpRunQueryScoped(ctx context.Context, input mcpQueryInput) (recallOutput, error) {
 	scope := strings.ToLower(strings.TrimSpace(input.Scope))
 	repoDSN := mcpRepoBrainDSN()
 
@@ -1245,7 +1238,7 @@ func mcpRunQueryScoped(ctx context.Context, input mcpQueryInput) (mcpQueryOutput
 	globalOut, gerr := mcpRunQuery(ctx, input)
 	switch {
 	case rerr != nil && gerr != nil:
-		return mcpQueryOutput{}, gerr
+		return recallOutput{}, gerr
 	case rerr != nil:
 		return globalOut, nil
 	case gerr != nil:
@@ -1265,9 +1258,9 @@ func mcpRunQueryScoped(ctx context.Context, input mcpQueryInput) (mcpQueryOutput
 //   - surface-dissonance: repo leads (as tenant-wins), but same-topic,
 //     opposing-polarity conflicts between the tiers surface as synthetic
 //     `contradicts` relationships on Contradictions so neither silently wins.
-func mergeScopedQuery(repo, global mcpQueryOutput, policy query.PrecedencePolicy) mcpQueryOutput {
+func mergeScopedQuery(repo, global recallOutput, policy query.PrecedencePolicy) recallOutput {
 	globalLeads := policy == query.PrecedenceGlobalWins
-	out := mcpQueryOutput{ClaimProvenance: map[string]string{}}
+	out := recallOutput{ClaimProvenance: map[string]string{}}
 	seen := map[string]bool{}
 	add := func(claims []domain.Claim, tier string) {
 		for _, c := range claims {
@@ -1305,14 +1298,16 @@ func mergeScopedQuery(repo, global mcpQueryOutput, policy query.PrecedencePolicy
 		}
 	}
 
-	leadAnswer, leadClaims, followAnswer := repo.Answer, repo.Claims, global.Answer
+	lead, follow := repo, global
 	if globalLeads {
-		leadAnswer, leadClaims, followAnswer = global.Answer, global.Claims, repo.Answer
+		lead, follow = global, repo
 	}
-	if len(leadClaims) > 0 && strings.TrimSpace(leadAnswer) != "" {
-		out.Answer = leadAnswer
+	// The answer and its confidence travel together: the confidence describes
+	// the tier whose answer is shown.
+	if len(lead.Claims) > 0 && strings.TrimSpace(lead.Answer) != "" {
+		out.Answer, out.Confidence = lead.Answer, lead.Confidence
 	} else {
-		out.Answer = followAnswer
+		out.Answer, out.Confidence = follow.Answer, follow.Confidence
 	}
 
 	if policy == query.PrecedenceSurfaceDissonance {
@@ -1341,58 +1336,54 @@ func scopedDissonance(repo, global []domain.Claim) []domain.Relationship {
 	return rels
 }
 
-func mcpRunQuery(ctx context.Context, input mcpQueryInput) (mcpQueryOutput, error) {
+func mcpRunQuery(ctx context.Context, input mcpQueryInput) (recallOutput, error) {
 	// Enforce the token's run allowlist: deny a disallowed run, and deny an
 	// unscoped query from a run-restricted token (which would span every run).
 	if err := enforceRunScope(ctx, input.RunID); err != nil {
-		return mcpQueryOutput{}, err
+		return recallOutput{}, err
+	}
+	params, err := input.recallParams()
+	if err != nil {
+		return recallOutput{}, userInputError(err)
 	}
 	conn, err := openConn(ctx)
 	if err != nil {
-		return mcpQueryOutput{}, err
+		return recallOutput{}, err
 	}
 	defer closeConn(conn)
 
-	// Shared builder: embeddings AND the full-text leg AND decisions. The
-	// hand-rolled chain here wired embeddings and the LLM but never
-	// WithTextSearch, so MCP recall lost the sparse (BM25/FTS) leg that nails
-	// exact tokens — SHAs, service names, error codes — which dense retrieval
-	// blurs. Capability detection lives in one place now.
-	engine := newQueryEngine(conn)
-
-	hops := input.Hops
-	if hops < 0 {
-		hops = 0
-	}
-	if hops > 5 {
-		hops = 5
-	}
-	// Cognitive retrieval is ON here, not just in the CLI. Before this, MCP
-	// built AnswerOptions without the five behaviours, so every recall through
-	// Claude Code got none of them and no env var could change it.
-	// Consumer=agent, because the caller IS one. This gates more than it looks:
-	// verdicts are only produced for an agent consumer, and inhibition
-	// (ADR 0016) returns early without verdicts — so leaving it unset made
-	// Inhibit a no-op here no matter what the env said.
-	opts := query.AnswerOptions{Hops: hops, Consumer: domain.ConsumerAgent}.WithCognitiveDefaults()
-
-	var answer domain.Answer
-	if strings.TrimSpace(input.RunID) != "" {
-		answer, err = engine.AnswerForRunWithOptions(ctx, strings.TrimSpace(input.Question), strings.TrimSpace(input.RunID), opts)
-	} else {
-		answer, err = engine.AnswerWithOptions(ctx, strings.TrimSpace(input.Question), opts)
+	answer, err := recallWith(ctx, newQueryEngine(conn), params)
+	if isInvalidRecall(err) {
+		return recallOutput{}, userInputError(err)
 	}
 	if err != nil {
-		return mcpQueryOutput{}, err
+		return recallOutput{}, err
 	}
+	return newRecallOutput(answer), nil
+}
 
-	return mcpQueryOutput{
-		Answer:           answer.AnswerText,
-		Claims:           answer.Claims,
-		Contradictions:   answer.Contradictions,
-		Timeline:         answer.TimelineEventIDs,
-		ClaimProvenance:  answer.ClaimProvenance,
-		ClaimHopDistance: answer.ClaimHopDistance,
+// recallParams maps the MCP input onto the shared recall input. Consumer is
+// agent, because the caller IS one: verdicts, and so inhibition (ADR 0016),
+// are only produced for an agent consumer.
+func (in mcpQueryInput) recallParams() (recallParams, error) {
+	asOf, err := parseInstant(in.AsOf)
+	if err != nil {
+		return recallParams{}, fmt.Errorf("asOf: %w", err)
+	}
+	recordedAsOf, err := parseInstant(in.RecordedAsOf)
+	if err != nil {
+		return recallParams{}, fmt.Errorf("recordedAsOf: %w", err)
+	}
+	return recallParams{
+		Question:       in.Question,
+		RunID:          in.RunID,
+		Hops:           in.Hops,
+		AsOf:           asOf,
+		RecordedAsOf:   recordedAsOf,
+		MinTrust:       in.MinTrust,
+		IncludeHistory: in.IncludeHistory,
+		Visibility:     in.Visibility,
+		Consumer:       domain.ConsumerAgent,
 	}, nil
 }
 

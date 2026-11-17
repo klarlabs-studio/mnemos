@@ -240,7 +240,8 @@ type Query struct {
 
 	// Hops controls graph expansion. 0 (the default) returns directly
 	// retrieved claims. 1 follows one supports/contradicts edge and
-	// brings the connected claims in. Higher values expand further.
+	// brings the connected claims in. Higher values expand further, up to
+	// 5; a larger value is rejected, as it is on the CLI, MCP and REST.
 	Hops int
 
 	// Limit caps the number of [Result]s returned. 0 means "use the
