@@ -68,7 +68,7 @@ func (r JournalRepository) ListBySubject(_ context.Context, subjectID string, li
 // recentMatching walks the append-ordered log newest-first, returning up to limit
 // entries that match. Caller holds the lock.
 func (r JournalRepository) recentMatching(limit int, match func(domain.JournalEntry) bool) []domain.JournalEntry {
-	out := make([]domain.JournalEntry, 0, limit)
+	out := make([]domain.JournalEntry, 0, min(limit, len(r.state.journalEntries)))
 	for i := len(r.state.journalEntries) - 1; i >= 0 && len(out) < limit; i-- {
 		e := r.state.journalEntries[i]
 		if match(e) {
