@@ -262,7 +262,7 @@ type Query struct {
 	// with AsOf (valid time of the facts). Zero value disables the filter
 	// (the common case — "use the latest knowledge").
 	//
-	// The answer is reconstructed, not filtered (ADR 0035): events ingested
+	// The answer is reconstructed, not filtered (ADR 0036): events ingested
 	// and relationships created after RecordedAsOf are invisible, and each
 	// belief's status, valid time and archive state are rewound to their
 	// recorded values at that instant. Trust is the current value. A

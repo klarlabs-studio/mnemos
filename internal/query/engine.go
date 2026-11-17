@@ -141,7 +141,7 @@ type AnswerOptions struct {
 	AsOf     time.Time
 	// RecordedAsOf is the ingestion-time axis. When non-zero, the
 	// engine answers from repositories bounded at that instant
-	// (recordedAt, ADR 0035): later events, claims and edges are
+	// (recordedAt, ADR 0036): later events, claims and edges are
 	// invisible and each claim's status, valid_to and archived_at are
 	// rewound from their history. Zero value disables it (the common case).
 	RecordedAsOf   time.Time
@@ -270,7 +270,7 @@ func (e Engine) AnswerWithOptions(ctx context.Context, question string, opts Ans
 	// round-trip to the embedding provider.
 	ctx = withQueryVectorMemo(ctx)
 	if !opts.RecordedAsOf.IsZero() {
-		e = e.recordedAt(opts.RecordedAsOf) // ADR 0035
+		e = e.recordedAt(opts.RecordedAsOf) // ADR 0036
 	}
 	ans, err := e.resolveAnswer(ctx, question, opts)
 	if err != nil {
@@ -310,7 +310,7 @@ func (e Engine) applyRetrievalWriteBacks(ctx context.Context, opts AnswerOptions
 		return
 	}
 	// A read of the past is an audit, not a use of the memory now: it must be
-	// repeatable and leave the brain as it found it (ADR 0035 §2).
+	// repeatable and leave the brain as it found it (ADR 0036 §2).
 	if isTimeTravel(opts) {
 		return
 	}
@@ -726,7 +726,7 @@ func (e Engine) AnswerForRunWithOptions(ctx context.Context, question, runID str
 	// One question embedding for the whole recall — see AnswerWithOptions.
 	ctx = withQueryVectorMemo(ctx)
 	if !opts.RecordedAsOf.IsZero() {
-		e = e.recordedAt(opts.RecordedAsOf) // ADR 0035
+		e = e.recordedAt(opts.RecordedAsOf) // ADR 0036
 	}
 	events, err := e.events.ListByRunID(ctx, runID)
 	if err != nil {
