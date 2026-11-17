@@ -223,11 +223,12 @@ logged and retried on the file's next change; the new version is already stored.
 
 ## Not done in step 1
 
-- **Recall still ranks a retracted event.** A retracted event's beliefs are
-  either deprecated (filtered) or unlinked from it, so no live belief is reached
-  through it, but the event itself can still rank among the answer's top events
-  and timeline. Excluding retracted events belongs in the recall entry points
-  and `internal/query`, which have their own owners.
+- ~~**Recall still ranks a retracted event.**~~ Done in step 1b: the query
+  engine reads the retraction journal once per recall (`WithRetractions`,
+  `internal/query/retracted.go`) and hides every episode retracted at or before
+  the read's instant (now, or the recorded-as-of instant, so a read of the past
+  still sees it). Every surface gets it through `newQueryEngine` /
+  `query.NewEngineWith`, the library included (`TestRecall_SkipsRetractedEpisodes`).
 - **A persistent refresh flag** on lessons, playbooks and decisions that the
   synthesiser and `decision show` read. Today the flag lives only in the
   retraction record.

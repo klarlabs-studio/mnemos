@@ -46,6 +46,8 @@ type Engine struct {
 	// re-ranker asks the store to score ONLY the admitted candidates instead of
 	// pulling the entire claim-embedding table into Go. See cosineClaimScores.
 	claimVectorSearch ports.ClaimSimilaritySearcher
+	// journal records event retractions (ADR 0037); see WithRetractions.
+	journal ports.JournalRepository
 }
 
 // eventVectorTopK is how many candidate events the native vector path pulls
@@ -271,6 +273,10 @@ func (e Engine) AnswerWithOptions(ctx context.Context, question string, opts Ans
 	ctx = withQueryVectorMemo(ctx)
 	if !opts.RecordedAsOf.IsZero() {
 		e = e.recordedAt(opts.RecordedAsOf) // ADR 0036
+	}
+	e, err := e.withoutRetracted(ctx, liveAt(opts)) // ADR 0037
+	if err != nil {
+		return domain.Answer{}, err
 	}
 	ans, err := e.resolveAnswer(ctx, question, opts)
 	if err != nil {
@@ -727,6 +733,10 @@ func (e Engine) AnswerForRunWithOptions(ctx context.Context, question, runID str
 	ctx = withQueryVectorMemo(ctx)
 	if !opts.RecordedAsOf.IsZero() {
 		e = e.recordedAt(opts.RecordedAsOf) // ADR 0036
+	}
+	e, err := e.withoutRetracted(ctx, liveAt(opts)) // ADR 0037
+	if err != nil {
+		return domain.Answer{}, err
 	}
 	events, err := e.events.ListByRunID(ctx, runID)
 	if err != nil {

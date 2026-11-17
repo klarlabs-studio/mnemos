@@ -13,7 +13,6 @@ import (
 	"go.klarlabs.de/mnemos/internal/kernel"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/pipeline"
-	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/relate"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -90,33 +89,19 @@ func newFromCfg(cfg config) (Memory, error) {
 		return nil, fmt.Errorf("mnemos: build extractor: %w", err)
 	}
 
-	// Query engine wires the repository ports + optional clients.
-	q := query.NewEngine(conn.Events, conn.Claims, conn.Relationships)
-	if embClient != nil && conn.Embeddings != nil {
-		q = q.WithEmbeddings(conn.Embeddings, embClient)
-	}
-	// Hybrid retrieval (R1): adopt the full-text (sparse) recall leg whenever the
-	// store's repositories provide one. The dense embedding leg blurs exact tokens
-	// (SHAs, service names, error codes) that lexical search nails; the query
-	// engine fuses the two by RRF. Auto-wired by capability, like the vector path
-	// in WithEmbeddings — Postgres (tsvector) and SQLite (FTS5) implement it; other
-	// backends simply don't, and recall stays dense/legacy for them.
-	if es, ok := conn.Events.(ports.TextSearcher); ok {
-		var cs ports.TextSearcher
-		if c, ok := conn.Claims.(ports.TextSearcher); ok {
-			cs = c
-		}
-		q = q.WithTextSearch(es, cs)
-	}
-	if llmClient != nil {
-		q = q.WithLLM(llmClient)
-	}
-	if conn.Decisions != nil {
-		q = q.WithDecisions(conn.Decisions)
-	}
-	if conn.Incidents != nil {
-		q = q.WithIncidents(conn.Incidents)
-	}
+	// The same constructor every cmd surface uses (newQueryEngine), so the
+	// embedded store gets exactly the capabilities they get: the full-text leg,
+	// decisions, incidents and the retraction journal (ADR 0037). It used to
+	// chain them by hand here, which is how a capability added to the shared
+	// constructor would have silently skipped the library.
+	q := query.NewEngineWith(conn.Events, conn.Claims, conn.Relationships, query.EngineDeps{
+		Embeddings:  conn.Embeddings,
+		EmbedClient: embClient,
+		LLM:         llmClient,
+		Decisions:   conn.Decisions,
+		Incidents:   conn.Incidents,
+		Journal:     conn.Journal,
+	})
 
 	// Chronos: use the supplied engine or boot a default in-memory one.
 	// The default engine lets RememberEvent / Timeline work out of the

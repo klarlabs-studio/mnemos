@@ -14,6 +14,9 @@ type EngineDeps struct {
 	LLM         llm.Client
 	Decisions   ports.DecisionRepository
 	Incidents   ports.IncidentRepository
+	// Journal records event retractions (ADR 0037); recall skips retracted
+	// episodes when it is set.
+	Journal ports.JournalRepository
 }
 
 // NewEngineWith builds an Engine with every capability the caller can supply,
@@ -69,6 +72,10 @@ func NewEngineWith(events eventLister, claims ports.ClaimRepository, relationshi
 
 	if d.Incidents != nil {
 		e = e.WithIncidents(d.Incidents)
+	}
+
+	if d.Journal != nil {
+		e = e.WithRetractions(d.Journal)
 	}
 
 	return e

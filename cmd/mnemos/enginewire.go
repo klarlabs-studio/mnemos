@@ -25,6 +25,7 @@ func engineDepsFor(conn *store.Conn) query.EngineDeps {
 		Embeddings: conn.Embeddings,
 		Decisions:  conn.Decisions,
 		Incidents:  conn.Incidents,
+		Journal:    conn.Journal,
 	}
 
 	if cfg, err := embedding.ConfigFromEnv(); err == nil {
