@@ -92,7 +92,7 @@ type battery struct {
 
 // runBattery puts every question to r and scores the answers.
 //
-// As-of questions go first. They are side-effect free on Mnemos (ADR 0035 §2),
+// As-of questions go first. They are side-effect free on Mnemos (ADR 0036 §2),
 // while ordinary recall writes back; asking them first keeps the probes'
 // write-backs out of the reconstruction being scored.
 func runBattery(ctx context.Context, r retriever, qs questionSet) (battery, error) {

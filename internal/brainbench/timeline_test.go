@@ -110,7 +110,7 @@ func TestRun_TimelinePhasesAreOrderedOnTheWriteClock(t *testing.T) {
 // deprecated. At the time of writing that breaks "what is known now about
 // Tuesday" while the recorded-as-of read survives, because the loser's status
 // change is rewound. The
-// test does not pin which axis breaks — ADR 0035 step 2 may change it — only
+// test does not pin which axis breaks — ADR 0036 step 2 may change it — only
 // that a broken reconstruction is reported as a regression, not as a neutral
 // or improved run.
 func TestRun_ReportsRegressionWhenAsOfAnswersBreak(t *testing.T) {

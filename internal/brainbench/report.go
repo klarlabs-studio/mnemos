@@ -111,7 +111,7 @@ func Limitations() []string {
 		"Timeline phases are milliseconds apart on the wall clock, not days. Valid-time freshness and " +
 			"decay see no age difference between phases, and a wall-clock step backwards during a run " +
 			"would misorder them (TestRun_TimelinePhasesAreOrderedOnTheWriteClock guards the order). " +
-			"Trust is current on a recorded-as-of read (ADR 0035 §3) and merges are not rewound.",
+			"Trust is current on a recorded-as-of read (ADR 0036 §3) and merges are not rewound.",
 	}
 }
 

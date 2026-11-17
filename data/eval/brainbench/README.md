@@ -78,7 +78,7 @@ the `unknown` rules and the verdict are untouched.
 An incident review asks two different things about Tuesday:
 
 - **What did the brain believe on Tuesday?** Transaction time,
-  `mnemos.Query.RecordedAsOf` (ADR 0035 reconstructs status, validity, archive
+  `mnemos.Query.RecordedAsOf` (ADR 0036 reconstructs status, validity, archive
   state, edges and events as they were recorded).
 - **What is known now about Tuesday?** Valid time, `mnemos.Query.AsOf`, read
   with today's knowledge.
