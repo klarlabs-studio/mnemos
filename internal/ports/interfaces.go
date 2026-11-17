@@ -48,7 +48,7 @@ type EventRepository interface {
 // ingested from one file, matched on the `input_source_path` metadata key that
 // file ingestion stamps (internal/ingest, parser.Normalizer). watch_file uses it
 // to find the events of a file's previous version when the file changes or
-// disappears (ADR 0036). Every shipped backend implements it.
+// disappears (ADR 0037). Every shipped backend implements it.
 type EventSourceLister interface {
 	ListBySourcePath(ctx context.Context, path string) ([]domain.Event, error)
 }

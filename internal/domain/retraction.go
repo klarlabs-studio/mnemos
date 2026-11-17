@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-// JournalKindEventRetraction is one row per retracted event (ADR 0036): who
+// JournalKindEventRetraction is one row per retracted event (ADR 0037): who
 // retracted it, when, why, and the impact the retraction had. The subject is the
 // event id and the row id is RetractionJournalID(eventID), so a retraction is
 // recorded at most once.
@@ -19,7 +19,7 @@ func RetractionJournalID(eventID string) string { return "retraction_" + eventID
 const RetractionReasonPrefix = "retracted: "
 
 // EventRetraction records that an event (an episode) was withdrawn as evidence
-// (ADR 0036). The event row itself is immutable and stays; this record is the
+// (ADR 0037). The event row itself is immutable and stays; this record is the
 // append-only fact that it no longer counts, plus what that changed.
 type EventRetraction struct {
 	EventID     string    `json:"episode_id"`

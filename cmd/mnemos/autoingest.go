@@ -257,7 +257,7 @@ func existingSourcePathsFromConn(ctx context.Context, conn *store.Conn) (map[str
 
 // ingestSingleDoc ingests one file through the full pipeline and returns the
 // events it persisted, so watch_file can tell which earlier events of the file
-// describe text that is gone (ADR 0036).
+// describe text that is gone (ADR 0037).
 func ingestSingleDoc(
 	ctx context.Context,
 	w *govwrite.Writer,

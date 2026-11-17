@@ -1,9 +1,9 @@
-# ADR 0036: Evidence retraction and dependency propagation
+# ADR 0037: Evidence retraction and dependency propagation
 
 - **Status:** Accepted; step 1 implemented.
 - **Date:** 2026-11-17
 - **Deciders:** Felix Geelhaar
-- **Builds on:** ADR 0034 (three ways a belief retires), ADR 0035 (recorded-as-of
+- **Builds on:** ADR 0034 (three ways a belief retires), ADR 0036 (recorded-as-of
   reads), ADR 0033 (merged beliefs become redirects), ADR 0018 (cognitive journal)
 - **Adds:** `govwrite.Writer.RetractEvent`, `mnemos retract-event`, the
   `retract_episode` MCP tool, `ports.EventSourceLister`; amends `watch_file`
@@ -33,12 +33,12 @@ Mnemos has no notion of a source being withdrawn. Before this ADR the word
   without evidence, with its version chain and status history. That answers
   "remove this data", not "this source was wrong": afterwards nobody can see
   what the brain believed, why, or that the belief was withdrawn, and a
-  recorded-as-of read (ADR 0035) cannot reconstruct it.
+  recorded-as-of read (ADR 0036) cannot reconstruct it.
 
 ADR 0034 already names the retirement this needs: **retracted** means "it was
 never true; we asserted it in error", recorded as `status = deprecated` with a
 reason, distinct from **ended** (`valid_to`) and **archived** (`archived_at`).
-ADR 0035 rewinds status from `claim_status_history`, so a retraction recorded as
+ADR 0036 rewinds status from `claim_status_history`, so a retraction recorded as
 a status transition is invisible to a read of the time before it, which is the
 behaviour an audit needs.
 
@@ -142,7 +142,7 @@ refuses an episode outside a run-scoped token's allowlist, reporting it as not
 found. The capability is `episode.retract` in `internal/capability`; REST, gRPC,
 the Go library and the Go client are acknowledged gaps.
 
-### 5. Interaction with ADR 0035 (recorded-as-of reads)
+### 5. Interaction with ADR 0036 (recorded-as-of reads)
 
 A recorded-as-of read at T reaches beliefs through events ingested at or before
 T (`recordedEvents`, `recordedClaims.ListByEventIDs` in
@@ -158,12 +158,12 @@ T (`recordedEvents`, `recordedClaims.ListByEventIDs` in
 - A **rescored** belief loses its link to the retracted event. A read before
   the retraction then reaches it only through its other evidence. When that
   other evidence was ingested after T, the read misses a belief the brain held
-  at T. `claim_evidence` has no timestamps (ADR 0035 §3), so this is the same
-  limitation ADR 0035 already lists for trust; the retraction record keeps the
+  at T. `claim_evidence` has no timestamps (ADR 0036 §3), so this is the same
+  limitation ADR 0036 already lists for trust; the retraction record keeps the
   event id, which is enough to restore the link when evidence becomes
-  versioned (ADR 0035 step 3).
+  versioned (ADR 0036 step 3).
 
-Trust is not rewound (ADR 0035 §3): a read before the retraction shows a
+Trust is not rewound (ADR 0036 §3): a read before the retraction shows a
 rescored belief's current, lower trust.
 
 ### 6. Interaction with merges (ADR 0033)
@@ -236,7 +236,7 @@ logged and retried on the file's next change; the new version is already stored.
 - **REST, gRPC, Go library and client bindings** (gaps in the capability
   registry).
 - **Evidence-link timestamps**, which would let a recorded-as-of read restore a
-  rescored belief's link to the retracted event (ADR 0035 step 3).
+  rescored belief's link to the retracted event (ADR 0036 step 3).
 - **Watch-file path aliasing.** Matching is on the resolved absolute path the
   watcher stores. A file first ingested under a different spelling of its path
   (a symlink, a relative path resolved elsewhere) is not found.

@@ -14,7 +14,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/workflow"
 )
 
-// Event retraction on the CLI and over MCP (ADR 0036).
+// Event retraction on the CLI and over MCP (ADR 0037).
 //
 // Both surfaces call runRetraction, which calls govwrite.Writer.RetractEvent —
 // the single implementation — and render its report through retractionView, so

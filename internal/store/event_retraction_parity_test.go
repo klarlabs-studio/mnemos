@@ -13,8 +13,8 @@ import (
 	"go.klarlabs.de/mnemos/internal/trust"
 )
 
-// ADR 0036: retracting an event behaves the same on every backend, and a
-// recorded-as-of read from before the retraction (ADR 0035) still returns the
+// ADR 0037: retracting an event behaves the same on every backend, and a
+// recorded-as-of read from before the retraction (ADR 0036) still returns the
 // belief the retraction withdrew. Asserted on what each store returns.
 func TestRetractEvent_AgreesAcrossBackends(t *testing.T) {
 	ctx := context.Background()
@@ -92,7 +92,7 @@ func TestRetractEvent_AgreesAcrossBackends(t *testing.T) {
 			t.Errorf("%s: retraction not recorded: ok=%v err=%v", b.name, ok, err)
 		}
 
-		// ADR 0035: as the brain knew it before the retraction, the belief was held.
+		// ADR 0036: as the brain knew it before the retraction, the belief was held.
 		engine := query.NewEngine(b.conn.Events, b.conn.Claims, b.conn.Relationships)
 		const question = "billing ledger nightly"
 		past, err := engine.AnswerWithOptions(ctx, question, query.AnswerOptions{RecordedAsOf: beforeRetraction})

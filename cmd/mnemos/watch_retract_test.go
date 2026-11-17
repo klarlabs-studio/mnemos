@@ -51,7 +51,7 @@ const (
 	removedParagraph = "The billing service retries failed charges five times."
 )
 
-// ADR 0036: when a watched file changes, the evidence of text that is no longer
+// ADR 0037: when a watched file changes, the evidence of text that is no longer
 // in it is retracted; the evidence of text still present is not.
 func TestWatcher_RevisionRetractsRemovedText(t *testing.T) {
 	dir := t.TempDir()

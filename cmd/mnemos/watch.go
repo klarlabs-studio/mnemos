@@ -222,7 +222,7 @@ func (w *Watcher) loop(ctx context.Context) {
 
 // tick re-hashes every watched file and re-ingests any whose content has
 // changed since the last observation, retracting the evidence of text the new
-// version no longer contains (ADR 0036). Disappearing files are dropped from
+// version no longer contains (ADR 0037). Disappearing files are dropped from
 // the set with a stderr note and every event they contributed is retracted.
 // Returns counts for tests.
 func (w *Watcher) tick(ctx context.Context) (changed, removed int) {
@@ -299,7 +299,7 @@ func (w *Watcher) tick(ctx context.Context) (changed, removed int) {
 }
 
 // retractStale retracts the stored events of path whose text is not in the
-// current version (ADR 0036). current holds the events the latest ingest of
+// current version (ADR 0037). current holds the events the latest ingest of
 // path persisted; nil means the file is gone, which retracts every event of it.
 //
 // Matching is on chunk text: an earlier event whose content equals a chunk of

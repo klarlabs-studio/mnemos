@@ -160,7 +160,7 @@ Append an episode (an immutable timestamped event) (write).
 
 ### episode.retract
 
-Withdraw an episode as evidence: retract beliefs it alone supported, rescore the rest, report the impact (ADR 0036) (write).
+Withdraw an episode as evidence: retract beliefs it alone supported, rescore the rest, report the impact (ADR 0037) (write).
 
 | Transport | Binding |
 |---|---|

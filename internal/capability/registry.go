@@ -56,7 +56,7 @@ var Registry = []Capability{
 	},
 	{
 		ID: "episode.retract", Effect: Write,
-		Summary: "Withdraw an episode as evidence: retract beliefs it alone supported, rescore the rest, report the impact (ADR 0036)",
+		Summary: "Withdraw an episode as evidence: retract beliefs it alone supported, rescore the rest, report the impact (ADR 0037)",
 		On: map[Transport]Binding{
 			Go: Gap("no retraction on Memory"), REST: Gap("no retraction route"), GRPC: Gap("no retraction RPC"),
 			MCP: Has("retract_episode"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no retraction call"),

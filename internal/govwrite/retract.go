@@ -15,7 +15,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
-// Event retraction (ADR 0036).
+// Event retraction (ADR 0037).
 //
 // Retracting an event withdraws it as evidence without touching the event row,
 // which is immutable. The retraction is recorded once, append-only, in the
@@ -26,7 +26,7 @@ import (
 //     itself retracted) is retracted: a status transition to deprecated whose
 //     reason starts with domain.RetractionReasonPrefix (ADR 0034's "retracted",
 //     never true). Its evidence link is kept, so a recorded-as-of read before the
-//     retraction (ADR 0035) still reaches the belief through the event and
+//     retraction (ADR 0036) still reaches the belief through the event and
 //     rewinds it to its earlier status;
 //   - a belief with other live evidence loses the link to the event and is
 //     rescored on what remains (RecomputeTrustForClaims);
@@ -73,7 +73,7 @@ func (e retractEventExecutor) Execute(ctx context.Context, input any, _ axidomai
 }
 
 // RetractEvent withdraws eventID as evidence and reports what that changed
-// (ADR 0036). It is the one implementation of retraction: the CLI, the MCP
+// (ADR 0037). It is the one implementation of retraction: the CLI, the MCP
 // tool and watch_file all call it. Retracting an already retracted event
 // writes nothing and returns the stored record with AlreadyRetracted set.
 func (w *Writer) RetractEvent(ctx context.Context, eventID string, note domain.ChangeNote) (domain.EventRetraction, error) {
