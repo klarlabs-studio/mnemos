@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-75 capabilities, 80 acknowledged gaps.
+76 capabilities, 84 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -23,6 +23,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`ingest.git`](#ingestgit) | write | — | — | — | ✓ | — | — | — |
 | [`ingest.watch`](#ingestwatch) | write | — | — | — | ✓ | — | — | — |
 | [`episode.append`](#episodeappend) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| [`episode.retract`](#episoderetract) | write | GAP | GAP | GAP | ✓ | — | — | GAP |
 | [`episode.list`](#episodelist) | read | GAP | ✓ | ✓ | GAP | — | — | ✓ |
 | [`timeline.query`](#timelinequery) | read | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | [`timeline.signals`](#timelinesignals) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -156,6 +157,22 @@ Append an episode (an immutable timestamped event) (write).
 | client | `Events` |
 
 > Go and the lite adapters write to the bundled Chronos timeline; REST, gRPC and MCP append to the episode store.
+
+### episode.retract
+
+Withdraw an episode as evidence: retract beliefs it alone supported, rescore the rest, report the impact (ADR 0036) (write).
+
+| Transport | Binding |
+|---|---|
+| go | **GAP** — no retraction on Memory |
+| rest | **GAP** — no retraction route |
+| grpc | **GAP** — no retraction RPC |
+| mcp | `retract_episode` |
+| mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| client | **GAP** — no retraction call |
+
+> The MCP tool and `mnemos retract-event` both call govwrite.Writer.RetractEvent; watch_file calls it for text a revised or deleted file no longer contains.
 
 ### episode.list
 

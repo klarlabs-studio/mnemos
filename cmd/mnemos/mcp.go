@@ -717,6 +717,13 @@ func handleMCP(args []string) {
 			return mcpRunForget(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
+	srv.Tool("retract_episode").
+		Description("Withdraw an episode as evidence when its source was wrong or has been revised. The episode is kept and the retraction is recorded (who, when, why). Beliefs left with no other live evidence are retracted (deprecated, with the reason in their history); beliefs with other evidence are rescored. Returns an impact report: what changed, and what may be affected (associations, decisions that cited a retracted belief), without judging those wrong. Repeating it changes nothing.").
+		OutputSchema(mcpRetractEpisodeOutput{}).
+		Handler(func(ctx context.Context, input mcpRetractEpisodeInput) (mcpRetractEpisodeOutput, error) {
+			return mcpRunRetractEpisode(ctx, mcpActorFor(ctx, mcpActor), input)
+		})
+
 	srv.Tool("update").
 		Description("Rewrite a claim's text (and optionally its confidence) when the agent's understanding refines. The reason is recorded in the status history.").
 		OutputSchema(mcpUpdateOutput{}).
