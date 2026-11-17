@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/page"
 	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/recorded"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -20,8 +22,13 @@ import (
 // SQL, reading only the page. Otherwise, and always for the legacy offset
 // form, it pages in Go over the full list. Both orders are newest first with
 // id breaking ties, and both honour the cursor.
+//
+// A recorded-as-of browse always pages in Go: it reads the store as it was at
+// that instant through the same views recall uses (internal/recorded), which
+// rewind status, valid time, the archive axis and merges from their history.
+// SQL over the current rows cannot.
 func Beliefs(ctx context.Context, conn *store.Conn, f page.ClaimFilter, after *page.Key, limit, offset int) (ports.ClaimPage, error) {
-	if offset == 0 {
+	if offset == 0 && f.RecordedAsOf.IsZero() {
 		if p, ok := conn.Claims.(ports.ClaimPager); ok {
 			pg, err := p.PageClaims(ctx, f, after, limit)
 			if !errors.Is(err, ports.ErrPageUnsupported) {
@@ -36,12 +43,13 @@ func Beliefs(ctx context.Context, conn *store.Conn, f page.ClaimFilter, after *p
 // fallback for stores without a pager and for filters a store cannot evaluate
 // exactly, and the definition the store pagers are tested against.
 func BeliefsInGo(ctx context.Context, conn *store.Conn, f page.ClaimFilter, after *page.Key, limit, offset int) (ports.ClaimPage, error) {
+	eventRepo, claimRepo := Recorded(conn, f.RecordedAsOf)
 	// run_id scoping: the beliefs with evidence from an event of that run. An
 	// empty set means the run has no beliefs; return nothing rather than fall
 	// through to an unfiltered list.
 	var allowedEventIDs map[string]struct{}
 	if f.RunID != "" {
-		events, err := conn.Events.ListByRunID(ctx, f.RunID)
+		events, err := eventRepo.ListByRunID(ctx, f.RunID)
 		if err != nil {
 			return ports.ClaimPage{}, fmt.Errorf("list events by run id: %w", err)
 		}
@@ -53,7 +61,7 @@ func BeliefsInGo(ctx context.Context, conn *store.Conn, f page.ClaimFilter, afte
 			allowedEventIDs[e.ID] = struct{}{}
 		}
 	}
-	all, err := conn.Claims.ListAll(ctx)
+	all, err := claimRepo.ListAll(ctx)
 	if err != nil {
 		return ports.ClaimPage{}, err
 	}
@@ -70,7 +78,7 @@ func BeliefsInGo(ctx context.Context, conn *store.Conn, f page.ClaimFilter, afte
 		for _, c := range filtered {
 			ids = append(ids, c.ID)
 		}
-		links, err := conn.Claims.ListEvidenceByClaimIDs(ctx, ids)
+		links, err := claimRepo.ListEvidenceByClaimIDs(ctx, ids)
 		if err != nil {
 			return ports.ClaimPage{}, fmt.Errorf("list evidence for run_id filter: %w", err)
 		}
@@ -108,4 +116,16 @@ func BeliefsInGo(ctx context.Context, conn *store.Conn, f page.ClaimFilter, afte
 	}
 	out.Claims = rest
 	return out, nil
+}
+
+// Recorded returns conn's event and claim repositories as recorded at t
+// (ADR 0035), or unchanged when t is zero. Every browse surface reads a
+// recorded-as-of request through it, so they rewind exactly as recall does.
+func Recorded(conn *store.Conn, t time.Time) (ports.EventRepository, ports.ClaimRepository) {
+	if t.IsZero() {
+		return conn.Events, conn.Claims
+	}
+	t = t.UTC()
+	return recorded.Events{EventRepository: conn.Events, At: t},
+		recorded.Claims{ClaimRepository: conn.Claims, Events: conn.Events, At: t}
 }

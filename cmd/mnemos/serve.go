@@ -1143,7 +1143,11 @@ func listClaimsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request)
 		ids = append(ids, c.ID)
 	}
 
-	links, evErr := conn.Claims.ListEvidenceByClaimIDs(ctx, ids)
+	// The evidence each belief stood on, read through the same recorded-as-of
+	// view as the page (ADR 0035): a belief merged after T keeps the evidence
+	// the merge moved onto the claim that absorbed it.
+	_, claimsAt := browse.Recorded(conn, recordedAsOf)
+	links, evErr := claimsAt.ListEvidenceByClaimIDs(ctx, ids)
 	if evErr != nil {
 		writeInternalError(w, "load evidence", evErr)
 		return

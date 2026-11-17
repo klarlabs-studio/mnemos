@@ -66,7 +66,10 @@ type ClaimFilter struct {
 	Type, Status string
 	// AsOf keeps beliefs in force at that instant (domain.Belief.IsValidAt).
 	AsOf time.Time
-	// RecordedAsOf drops beliefs recorded after that instant.
+	// RecordedAsOf reads the store as it was at that instant (ADR 0035).
+	// Matches only drops beliefs recorded after it; the rest of the rewind
+	// (status, valid time, archive, merges) happens in the claims the filter
+	// is applied to, which browse reads through internal/recorded.
 	RecordedAsOf time.Time
 	// RunID keeps beliefs with evidence from an event of that run.
 	RunID string
