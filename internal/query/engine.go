@@ -140,9 +140,10 @@ type AnswerOptions struct {
 	MinTrust float64
 	AsOf     time.Time
 	// RecordedAsOf is the ingestion-time axis. When non-zero, the
-	// engine drops claims with CreatedAt > RecordedAsOf so the
-	// response reproduces what the store knew as of that timestamp.
-	// Zero value disables the filter (the common case).
+	// engine answers from repositories bounded at that instant
+	// (recordedAt, ADR 0035): later events, claims and edges are
+	// invisible and each claim's status, valid_to and archived_at are
+	// rewound from their history. Zero value disables it (the common case).
 	RecordedAsOf   time.Time
 	IncludeHistory bool
 	// AllowedClaimIDs, when non-nil, restricts the answer set to
@@ -268,6 +269,9 @@ func (e Engine) AnswerWithOptions(ctx context.Context, question string, opts Ans
 	// corrective pass all share one vector instead of each buying their own
 	// round-trip to the embedding provider.
 	ctx = withQueryVectorMemo(ctx)
+	if !opts.RecordedAsOf.IsZero() {
+		e = e.recordedAt(opts.RecordedAsOf) // ADR 0035
+	}
 	ans, err := e.resolveAnswer(ctx, question, opts)
 	if err != nil {
 		return domain.Answer{}, err
@@ -303,6 +307,11 @@ func (e Engine) AnswerWithOptions(ctx context.Context, question string, opts Ans
 // effect is visible to the next recall exactly as before.
 func (e Engine) applyRetrievalWriteBacks(ctx context.Context, opts AnswerOptions, ans domain.Answer) {
 	if !opts.Hebbian && !opts.Reconsolidate && !opts.Inhibit {
+		return
+	}
+	// A read of the past is an audit, not a use of the memory now: it must be
+	// repeatable and leave the brain as it found it (ADR 0035 §2).
+	if isTimeTravel(opts) {
 		return
 	}
 	// The caller owns ans once it is returned; the write-backs read only claim
@@ -716,6 +725,9 @@ func (e Engine) AnswerForRunWithOptions(ctx context.Context, question, runID str
 	}
 	// One question embedding for the whole recall — see AnswerWithOptions.
 	ctx = withQueryVectorMemo(ctx)
+	if !opts.RecordedAsOf.IsZero() {
+		e = e.recordedAt(opts.RecordedAsOf) // ADR 0035
+	}
 	events, err := e.events.ListByRunID(ctx, runID)
 	if err != nil {
 		return domain.Answer{}, fmt.Errorf("load events for run: %w", err)

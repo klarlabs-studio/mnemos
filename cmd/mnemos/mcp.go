@@ -762,7 +762,7 @@ func handleMCP(args []string) {
 		})
 
 	srv.Tool("recall_at_time").
-		Description("Answer a question against the state of the knowledge base at a historical instant.").
+		Description("Answer a question against the state of the knowledge base at a historical instant: asOf is valid time (what was true then); the optional recordedAsOf is what the brain believed then, with status, validity and contradictions as recorded at that time.").
 		OutputSchema(mcpQueryOutput{}).
 		Handler(func(ctx context.Context, input mcpRecallAtTimeInput) (mcpQueryOutput, error) {
 			if kernel != nil {
