@@ -86,6 +86,7 @@ type Validity struct {
 	// identically-untreated arms — the run's actual noise floor.
 	NondeterministicMetrics []string `json:"nondeterministic_metrics,omitempty"`
 	ProbeCount              int      `json:"probe_count"`
+	AsOfProbeCount          int      `json:"as_of_probe_count,omitempty"`
 	// MinResolvableRateDelta is 1/probe_count: the smallest change any
 	// probe-based rate can express. A delta at this value is one probe
 	// flipping.
@@ -127,7 +128,14 @@ type ScenarioResult struct {
 	Comparisons []Comparison `json:"comparisons"`
 	Summary     Summary      `json:"summary"`
 	Verdict     RunVerdict   `json:"verdict"`
-	DurationMS  int64        `json:"duration_ms"`
+
+	// Questions lists the probe ids every answerer was asked, in order.
+	Questions []string `json:"questions"`
+	// Baselines compares the untreated Mnemos arm with raw retrieval over the
+	// same documents. Separate from Summary and Verdict by design.
+	Baselines []BaselineResult `json:"baselines"`
+
+	DurationMS int64 `json:"duration_ms"`
 }
 
 // Run executes one scenario's paired experiment under workDir.
@@ -156,6 +164,14 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 	}
 	res.Seed = seedStats
 
+	// The baseline's corpus is the seed's raw events, read before anything
+	// else touches the seed. Events are immutable, so this is the exact text
+	// every arm was built from.
+	events, err := readEvents(ctx, "sqlite://"+seedPath)
+	if err != nil {
+		return res, err
+	}
+
 	// Warm up BEFORE the copies are taken, so every arm inherits identical
 	// Hebbian strengths and inhibition weights. Warming each arm separately
 	// would introduce a second uncontrolled difference between them and quietly
@@ -174,7 +190,7 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 	}
 
 	// CONTROL: untreated, measured once.
-	control, err := Measure(ctx, "sqlite://"+controlPath, controlPath, sc)
+	control, err := Measure(ctx, "sqlite://"+controlPath, controlPath, sc, seedStats.Phases)
 	if err != nil {
 		return res, fmt.Errorf("brainbench: measure control: %w", err)
 	}
@@ -182,7 +198,7 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 	// NOISE: a second untreated arm. Its only job is to establish whether two
 	// identical inputs produce identical measurements. Without it, every delta
 	// below the (unknown) noise floor would be reported as an effect.
-	noise, err := Measure(ctx, "sqlite://"+noisePath, noisePath, sc)
+	noise, err := Measure(ctx, "sqlite://"+noisePath, noisePath, sc, seedStats.Phases)
 	if err != nil {
 		return res, fmt.Errorf("brainbench: measure noise arm: %w", err)
 	}
@@ -193,7 +209,7 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 		return res, err
 	}
 	res.Activity = activity
-	treatment, err := Measure(ctx, "sqlite://"+treatmentPath, treatmentPath, sc)
+	treatment, err := Measure(ctx, "sqlite://"+treatmentPath, treatmentPath, sc, seedStats.Phases)
 	if err != nil {
 		return res, fmt.Errorf("brainbench: measure treatment: %w", err)
 	}
@@ -201,6 +217,7 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 	res.Validity = Validity{
 		Deterministic:           true,
 		ProbeCount:              len(sc.Probes),
+		AsOfProbeCount:          len(sc.AsOfProbes),
 		MinResolvableRateDelta:  1 / float64(max(len(sc.Probes), 1)),
 		NondeterministicMetrics: driftingMetrics(control, noise),
 	}
@@ -209,6 +226,22 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 	res.Comparisons = CompareSets(control, treatment)
 	res.Summary = Summarize(res.Comparisons)
 	res.Verdict = verdictFor(res)
+
+	// BASELINES: raw retrieval over the same documents, asked the same
+	// questions, compared with the untreated arm — the brain as ingested, with
+	// no process applied, because the baseline has none either. Kept out of
+	// Summary and Verdict: those answer "did the process help?", and a
+	// baseline win is a different finding that must not be read as a process
+	// regression (or hidden inside one).
+	qs, err := buildQuestions(sc, seedStats.Phases)
+	if err != nil {
+		return res, err
+	}
+	res.Questions = control.Questions
+	res.Baselines, err = runBaselines(ctx, events, qs, control)
+	if err != nil {
+		return res, err
+	}
 	res.DurationMS = time.Since(started).Milliseconds()
 	return res, nil
 }

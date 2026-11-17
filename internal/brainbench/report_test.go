@@ -111,3 +111,39 @@ func TestReport_VerdictTally(t *testing.T) {
 		t.Fatalf("aggregate better = %d, want 3", r.Summary.Better)
 	}
 }
+
+// TestReport_BaselineWinIsShownAndNotAProcessRegression pins how a baseline
+// win is reported: visibly, in the scenario table and the totals, and outside
+// the process A/B summary. Folding it into Summary.Worse would make
+// -fail-on-regression blame consolidation for a property of retrieval.
+func TestReport_BaselineWinIsShownAndNotAProcessRegression(t *testing.T) {
+	mn := MetricSet{Metrics: []Metric{KnownMetric(MetricAnswerMRR, HigherBetter, 0.5, 4, "ratio")}}
+	base := MetricSet{Metrics: []Metric{KnownMetric(MetricAnswerMRR, HigherBetter, 1, 4, "ratio")}}
+	cs, sum := compareWithBaseline(mn, base)
+	r := BuildReport([]ScenarioResult{{
+		ID:        "s",
+		Validity:  Validity{Deterministic: true, ProbeCount: 4},
+		Verdict:   VerdictNoEffect,
+		Questions: []string{"a", "b", "c", "d"},
+		Baselines: []BaselineResult{{Name: BaselineBM25, Metrics: base, Comparisons: cs, Summary: sum}},
+	}})
+	if r.HasRegression() {
+		t.Fatal("a baseline win was counted as a process regression")
+	}
+	if got := r.BaselineSummary[BaselineBM25].BaselineBetter; got != 1 {
+		t.Fatalf("baseline_summary baseline_better = %d, want 1", got)
+	}
+	var buf bytes.Buffer
+	if err := r.WriteHuman(&buf); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{"BASELINE", "baseline-better", "MNEMOS vs raw_bm25: 0 mnemos-better, 1 baseline-better"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("human report missing %q", want)
+		}
+	}
+	if !strings.Contains(strings.ToLower(strings.Join(r.Limitations, " ")), "baselines see the documents only") {
+		t.Error("limitations do not state what the baselines cannot see")
+	}
+}

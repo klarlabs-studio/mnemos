@@ -67,6 +67,9 @@ func UnknownMetric(name string, dir Direction, reason string) Metric {
 // MetricSet is one arm's full measurement, ordered for stable reporting.
 type MetricSet struct {
 	Metrics []Metric `json:"metrics"`
+	// Questions lists the probe ids put to the answerer, in order. Every
+	// answerer in a scenario must have been asked the identical list.
+	Questions []string `json:"questions,omitempty"`
 }
 
 // Get returns the named metric.

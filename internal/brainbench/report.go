@@ -12,7 +12,10 @@ import (
 // ReportVersion is the schema version of the machine-readable output. Bump it
 // on any breaking change so a consumer diffing two reports can tell whether the
 // numbers or the format moved.
-const ReportVersion = 1
+//
+// 2: timeline scenarios (seed.phases, as_of_* metrics), raw-retrieval baselines
+// (scenarios[].baselines, baseline_summary) and per-scenario question lists.
+const ReportVersion = 2
 
 // Report is the harness's complete machine-readable output.
 type Report struct {
@@ -25,6 +28,11 @@ type Report struct {
 	Summary     Summary          `json:"summary"`
 	// Verdicts counts scenario verdicts by kind.
 	Verdicts map[RunVerdict]int `json:"verdicts"`
+	// BaselineSummary totals, per baseline, how the untreated Mnemos arm
+	// compared with it across scenarios. It never feeds Summary or
+	// HasRegression: a baseline win is a finding about Mnemos's semantics,
+	// not a regression caused by a process.
+	BaselineSummary map[string]BaselineSummary `json:"baseline_summary"`
 }
 
 // Config records the conditions the numbers were produced under. It travels
@@ -37,6 +45,7 @@ type Config struct {
 	LLM        string `json:"llm"`
 	Backend    string `json:"backend"`
 	Design     string `json:"design"`
+	Clock      string `json:"clock"`
 }
 
 // DefaultConfig describes the conditions Run operates under.
@@ -47,7 +56,11 @@ func DefaultConfig() Config {
 		LLM:        "none",
 		Backend:    "sqlite",
 		Design: "paired A/B on byte-identical file copies of one seed; " +
-			"control untreated, treatment consolidated, third untreated arm measures the noise floor",
+			"control untreated, treatment consolidated, third untreated arm measures the noise floor; " +
+			"raw-retrieval baselines over the seed's event texts are scored on the same questions " +
+			"and compared with the control arm, outside the A/B verdict",
+		Clock: "corpus scenarios: one wall-clock anchor, back-dated by age_days; " +
+			"timeline scenarios: phases written on the real store clock, milliseconds apart",
 	}
 }
 
@@ -85,6 +98,20 @@ func Limitations() []string {
 		"Calibration, credit and salience stages need decisions, expectations and outcomes to act on. " +
 			"A scenario whose corpus contains none leaves those stages inert, and the report will " +
 			"show that as zero activity rather than as a neutral result.",
+		"The raw-retrieval baselines see the documents only. Curation a timeline applies as " +
+			"structured operations (retract, archive, supersede, contradict) has no textual trace in " +
+			"their corpus; a real log would carry a retraction note they could retrieve. Mnemos's " +
+			"advantage on forbidden-hit and valid-as-of questions is therefore partly an advantage of " +
+			"having that curation at all, not only of using it well.",
+		"The baselines are lexical (BM25, sentence chunks, no stemming or stop words) and Mnemos " +
+			"recall here runs on the lexical stub embedder, so 'Mnemos vs raw retrieval' compares " +
+			"two lexical retrievers plus Mnemos's structure. It says nothing about dense-retrieval RAG.",
+		"Baselines are compared with the untreated arm only. They are not consolidated, so comparing " +
+			"them with the treatment arm would mix the process effect into the baseline effect.",
+		"Timeline phases are milliseconds apart on the wall clock, not days. Valid-time freshness and " +
+			"decay see no age difference between phases, and a wall-clock step backwards during a run " +
+			"would misorder them (TestRun_TimelinePhasesAreOrderedOnTheWriteClock guards the order). " +
+			"Trust is current on a recorded-as-of read (ADR 0035 §3) and merges are not rewound.",
 	}
 }
 
@@ -98,8 +125,15 @@ func BuildReport(results []ScenarioResult) Report {
 		Limitations: Limitations(),
 		Scenarios:   results,
 		Verdicts:    map[RunVerdict]int{},
+
+		BaselineSummary: map[string]BaselineSummary{},
 	}
 	for _, s := range results {
+		for _, b := range s.Baselines {
+			sum := r.BaselineSummary[b.Name]
+			sum.add(b.Summary)
+			r.BaselineSummary[b.Name] = sum
+		}
 		r.Summary.Better += s.Summary.Better
 		r.Summary.Worse += s.Summary.Worse
 		r.Summary.Unchanged += s.Summary.Unchanged
@@ -154,6 +188,10 @@ func (r Report) WriteHuman(w io.Writer) error {
 		p("  stages under test: %s\n", strings.Join(s.Stages, ", "))
 		p("  seed: %d events, %d claims (%d collapsed by ingest dedupe), %d edges, %d vectors\n",
 			s.Seed.Events, s.Seed.Claims, s.Seed.DedupedAtIngest, s.Seed.Relationships, s.Seed.Embeddings)
+		if len(s.Seed.Phases) > 0 {
+			p("  timeline: %d phases on the real write clock, %d curation changes, %d as-of probes\n",
+				len(s.Seed.Phases), s.Seed.Changes, s.Validity.AsOfProbeCount)
+		}
 
 		p("\n  ACTIVITY (what the process reported doing — NOT evidence of benefit)\n")
 		p("    scanned %d | duplicate groups %d | merged %d | forgotten %d | refuted %d\n",
@@ -195,6 +233,7 @@ func (r Report) WriteHuman(w io.Writer) error {
 		p("\n  SUMMARY: %d better, %d worse, %d unchanged, %d changed-but-unscored, %d unknown\n",
 			s.Summary.Better, s.Summary.Worse, s.Summary.Unchanged, s.Summary.Changed, s.Summary.Unknown)
 		p("  VERDICT: %s — %s\n\n", s.Verdict, verdictExplanation(s.Verdict))
+		writeBaselines(p, s)
 	}
 
 	p("──────────────────────────────────────────────────────────────────────\n")
@@ -205,13 +244,65 @@ func (r Report) WriteHuman(w io.Writer) error {
 		verdicts = append(verdicts, fmt.Sprintf("%s=%d", v, n))
 	}
 	sort.Strings(verdicts)
-	p("VERDICTS: %s\n\n", strings.Join(verdicts, " "))
+	p("VERDICTS: %s\n", strings.Join(verdicts, " "))
+	names := make([]string, 0, len(r.BaselineSummary))
+	for n := range r.BaselineSummary {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		b := r.BaselineSummary[n]
+		p("MNEMOS vs %s: %d mnemos-better, %d baseline-better, %d tie, %d unknown\n",
+			n, b.MnemosBetter, b.BaselineBetter, b.Tie, b.Unknown)
+	}
+	p("\n")
 
 	p("WHAT THIS HARNESS DOES NOT MEASURE\n")
 	for _, l := range r.Limitations {
 		p("  - %s\n", wrapIndent(l, 76, "    "))
 	}
 	return werr
+}
+
+// writeBaselines renders the Mnemos-vs-raw-retrieval table for one scenario:
+// one row per metric, one column per answerer, so a baseline win is as visible
+// as a Mnemos win.
+func writeBaselines(p func(string, ...any), s ScenarioResult) {
+	if len(s.Baselines) == 0 {
+		return
+	}
+	p("  BASELINE (untreated Mnemos arm vs raw retrieval over the same documents, same %d questions)\n",
+		len(s.Questions))
+	for _, b := range s.Baselines {
+		p("    %s: %s\n", b.Name, b.Description)
+	}
+	p("    %-26s %10s", "metric", "mnemos")
+	for _, b := range s.Baselines {
+		p(" %17s", b.Name)
+	}
+	p("  verdicts\n")
+	for i, c := range s.Baselines[0].Comparisons {
+		p("    %-26s %10s", c.Name, fmtMetric(c.Mnemos))
+		verdicts := make([]string, 0, len(s.Baselines))
+		for _, b := range s.Baselines {
+			// Every baseline is scored by the same battery, so rows align;
+			// a misaligned row is printed as unknown rather than guessed.
+			if i >= len(b.Comparisons) || b.Comparisons[i].Name != c.Name {
+				p(" %17s", "unknown")
+				verdicts = append(verdicts, string(BaselineUnknown))
+				continue
+			}
+			bc := b.Comparisons[i]
+			p(" %17s", fmtMetric(bc.Baseline))
+			verdicts = append(verdicts, string(bc.Verdict))
+		}
+		p("  %s\n", strings.Join(verdicts, " / "))
+	}
+	for _, b := range s.Baselines {
+		p("    vs %s: %d mnemos-better, %d baseline-better, %d tie, %d unknown\n",
+			b.Name, b.Summary.MnemosBetter, b.Summary.BaselineBetter, b.Summary.Tie, b.Summary.Unknown)
+	}
+	p("\n")
 }
 
 func fmtMetric(m Metric) string {
