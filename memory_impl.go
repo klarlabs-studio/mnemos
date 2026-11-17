@@ -547,30 +547,28 @@ func (m *memory) recall(ctx context.Context, q Query) ([]Result, domain.Answer, 
 		return nil, domain.Answer{}, errors.New("mnemos: Recall: Text is required")
 	}
 
-	// The embedded store is the path every consuming product uses (senat-os,
-	// pet-medical). It built AnswerOptions without the cognitive behaviours, so
-	// those brains never primed, never strengthened, never reconsolidated.
-	opts := query.AnswerOptions{
-		Hops:           q.Hops,
-		AsOf:           q.AsOf,
-		RecordedAsOf:   q.RecordedAsOf,
-		IncludeHistory: q.IncludeHistory,
-		Lifecycle:      domain.ClaimLifecycle(q.Lifecycle),
-		Consumer:       consumerMode(q.AgentConsumer),
-		// Recall returns ranked beliefs only; it never reads AnswerText, so it
-		// must not pay for one (#472). Without this, a memory with a language
-		// model made one grounded-answer completion per recall — prompted with
-		// every claim, before Query.Limit trimmed them — and discarded it.
-		SkipAnswerText: true,
-	}.WithCognitiveDefaults()
-
-	var ans domain.Answer
-	var err error
-	if q.RunID != "" {
-		ans, err = m.query.AnswerForRunWithOptions(ctx, q.Text, q.RunID, opts)
-	} else {
-		ans, err = m.query.AnswerWithOptions(ctx, q.Text, opts)
-	}
+	// The same entry point as the CLI, MCP and REST (query.Engine.Recall), so
+	// the embedded store validates, bounds hops and applies the cognitive
+	// defaults exactly as they do. It used to build AnswerOptions without the
+	// cognitive behaviours, so embedded brains never primed, strengthened or
+	// reconsolidated.
+	ans, err := m.query.Recall(ctx, query.RecallRequest{
+		Question: q.Text,
+		RunID:    q.RunID,
+		Options: query.AnswerOptions{
+			Hops:           q.Hops,
+			AsOf:           q.AsOf,
+			RecordedAsOf:   q.RecordedAsOf,
+			IncludeHistory: q.IncludeHistory,
+			Lifecycle:      domain.ClaimLifecycle(q.Lifecycle),
+			Consumer:       consumerMode(q.AgentConsumer),
+			// Recall returns ranked beliefs only; it never reads AnswerText, so it
+			// must not pay for one (#472). Without this, a memory with a language
+			// model made one grounded-answer completion per recall — prompted with
+			// every claim, before Query.Limit trimmed them — and discarded it.
+			SkipAnswerText: true,
+		},
+	})
 	if err != nil {
 		return nil, domain.Answer{}, fmt.Errorf("mnemos: answer: %w", err)
 	}

@@ -1450,15 +1450,8 @@ func decodeJSON(r *http.Request, dst any) error {
 }
 
 func parseTimeFlexible(s string) (time.Time, error) {
-	if s == "" {
-		return time.Time{}, nil
-	}
-	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("unrecognized time format %q (want RFC3339)", s)
+	// One timestamp grammar across the API, the CLI and MCP (recall.go).
+	return parseInstant(s)
 }
 
 func appendEventsHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
@@ -2407,52 +2400,45 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 		// SkipAnswerText: the response carries claims, never an answer text, so
 		// the engine must not pay for one — a configured LLM was called once per
 		// search and its answer discarded (#472).
-		opts := query.AnswerOptions{MinTrust: req.MinTrust, SkipAnswerText: true}.WithCognitiveDefaults()
-		if req.AsOf != "" {
-			t, err := parseTimeFlexible(req.AsOf)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("as_of: %v", err))
-				return
-			}
-			opts.AsOf = t
+		// The same recall as the CLI and MCP (recall.go): one parser, one
+		// validator, one engine entry point.
+		//
+		// SkipAnswerText: the response carries claims, never an answer text, so
+		// the engine must not pay for one — a configured LLM was called once per
+		// search and its answer discarded (#472).
+		asOf, err := parseInstant(req.AsOf)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("as_of: %v", err))
+			return
 		}
-		if req.RecordedAsOf != "" {
-			t, err := parseTimeFlexible(req.RecordedAsOf)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("recorded_as_of: %v", err))
-				return
-			}
-			opts.RecordedAsOf = t
+		recordedAsOf, err := parseInstant(req.RecordedAsOf)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("recorded_as_of: %v", err))
+			return
+		}
+		params := recallParams{
+			Question:       req.Query,
+			RunID:          req.RunID,
+			AsOf:           asOf,
+			RecordedAsOf:   recordedAsOf,
+			MinTrust:       req.MinTrust,
+			Visibility:     req.Visibility,
+			Consumer:       domain.ConsumerUser,
+			SkipAnswerText: true,
 		}
 		if req.Scope != nil {
-			opts.Scope = domain.Scope{
-				Service: req.Scope.Service,
-				Env:     req.Scope.Env,
-				Team:    req.Scope.Team,
-			}
+			params.Scope = domain.Scope{Service: req.Scope.Service, Env: req.Scope.Env, Team: req.Scope.Team}
 		}
 		if req.Consumer == "agent" {
-			opts.Consumer = domain.ConsumerAgent
-		} else {
-			opts.Consumer = domain.ConsumerUser
-		}
-		switch domain.Visibility(req.Visibility) {
-		case domain.VisibilityPersonal, domain.VisibilityTeam, domain.VisibilityOrg:
-			opts.Visibility = domain.Visibility(req.Visibility)
-		default:
-			// zero / unknown → engine default (team)
+			params.Consumer = domain.ConsumerAgent
 		}
 
-		// Fully wired: embeddings, full-text, LLM, decisions. This built a bare
-		// engine and ranked by token overlap — on the path the hosted recall hook
-		// uses for every prompt.
-		engine := newQueryEngine(conn)
-		var answer domain.Answer
-		var err error
-		if req.RunID != "" {
-			answer, err = engine.AnswerForRunWithOptions(r.Context(), req.Query, req.RunID, opts)
-		} else {
-			answer, err = engine.AnswerWithOptions(r.Context(), req.Query, opts)
+		// Fully wired: embeddings, full-text, decisions — newQueryEngine, the
+		// constructor every recall surface shares.
+		answer, err := recallWith(r.Context(), newQueryEngine(conn), params)
+		if isInvalidRecall(err) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
 		}
 		if err != nil {
 			writeInternalError(w, "search", err)
@@ -2516,11 +2502,11 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 		if req.MinTrust > 0 {
 			applied["min_trust"] = req.MinTrust
 		}
-		if !opts.AsOf.IsZero() {
-			applied["as_of"] = opts.AsOf.UTC().Format(time.RFC3339)
+		if !asOf.IsZero() {
+			applied["as_of"] = asOf.UTC().Format(time.RFC3339)
 		}
-		if !opts.RecordedAsOf.IsZero() {
-			applied["recorded_as_of"] = opts.RecordedAsOf.UTC().Format(time.RFC3339)
+		if !recordedAsOf.IsZero() {
+			applied["recorded_as_of"] = recordedAsOf.UTC().Format(time.RFC3339)
 		}
 		if req.Filters != nil {
 			if req.Filters.ClaimType != "" {

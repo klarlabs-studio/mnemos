@@ -181,6 +181,31 @@ Deliberate omissions go in the per-backend allowlists **with a reason** — an e
 
 **The conflict rule is a separate decision from the projection, and a blind one erases curation.** `half_life_days` (#334) reset a `MarkVerified` override on every re-ingest because re-extraction supplies a zero and the rule was `= excluded.x`. The scope, provenance and visibility columns Postgres and MySQL gained in #338/#339 use `CASE WHEN <incoming is non-zero> THEN <incoming> ELSE <stored> END` for the same reason: no ingest path produces any of them, and the API writers that *can* hit an existing claim id (`POST /v1/beliefs`, gRPC `WriteBeliefs`) build a claim from a request that has no scope / `citation_count` / `last_executed` / `provenance_rationale` field at all. An explicit value still wins, so nothing becomes uncorrectable; clearing a value back to empty needs a statement that owns the column, as `MarkVerified` owns `verify_count`. **SQLite still assigns these blindly** and carries the same latent erase hazard — deliberate divergence, following #340's precedent of not copying Postgres's `lifecycle` rule to MySQL. Pin the semantics with a two-write test (`claim_conflict_integration_test.go` in each backend), not a single write.
 
+### Recall has one path on every surface
+
+**The CLI, MCP (`query_knowledge`, `recall_at_time`), REST `/v1/search`, gRPC and the Go library all recall through `query.Engine.Recall`.** That entry point checks the request (`ErrInvalidRecall`), enforces `query.MaxHops`, applies `WithCognitiveDefaults` and handles run scope.
+
+In `cmd/mnemos`, each surface translates its own input into `recallParams` (`recall.go`) and calls `recallWith`. Every surface:
+- parses timestamps with `parseInstant` (YYYY-MM-DD or RFC3339, returned as UTC; REST's `parseTimeFlexible` delegates to it);
+- builds the engine with `newQueryEngine`;
+- serialises CLI JSON and MCP output as `recallOutput`.
+
+Consumer mode is the only per-surface default: agent on MCP, user on the CLI and REST.
+
+Before this, each surface built `AnswerOptions` by hand, and the same question got different answers:
+- the CLI accepted dates where MCP demanded RFC3339;
+- the CLI rejected `--hops 6` where MCP silently clamped it;
+- `query_knowledge` took no time bounds at all;
+- the CLI ranked by keywords unless `--embed` was passed;
+- `recall_at_time` skipped the repo-brain federation that `query_knowledge` does.
+
+Three tests enforce this:
+- `TestRecallSurfacesGoThroughEngineRecall` fails if production code outside `internal/query` calls `AnswerWithOptions`/`AnswerForRunWithOptions` directly.
+- `TestEngineRecallAppliesCognitiveDefaults` keeps the defaults inside `Recall`.
+- `TestRecallParity_EverySurfaceAgrees` asks the same questions on all five surfaces and requires identical beliefs in the same order.
+
+When you add a recall surface or a recall filter, add it to `recallParams`, not to one surface.
+
 ### Hand-maintained lists — the source-drift guards (`internal/sourceguard`)
 
 **A list a human must remember to update, next to code that never reads it, is drift waiting to happen — and it never fails a test, because nothing depends on the list being right.** Same defect class as the projection drift above, one layer up. Two had already drifted when the guards were written:

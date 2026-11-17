@@ -35,6 +35,10 @@ var searchedDirs = []string{"../..", "../../cmd/mnemos"}
 // so the guard is here instead: build AnswerOptions on a read path and you must
 // say what happens to the cognitive fields.
 //
+// A literal handed to query.Engine.Recall as RecallRequest.Options is covered:
+// Recall applies the defaults itself, and TestEngineRecallAppliesCognitiveDefaults
+// keeps it that way.
+//
 // If this fires, append .WithCognitiveDefaults() to the literal. If the site is
 // genuinely not a retrieval path (a test fixture, a projection), move it out of
 // the scanned packages or mark the line `cognitive-defaults-ok: <reason>`.
@@ -79,7 +83,7 @@ func TestAnswerOptionsApplyCognitiveDefaults(t *testing.T) {
 				}
 				found++
 				pos := fset.Position(lit.Pos())
-				if exempt[pos.Line] || litHasCognitiveCall(file, lit) {
+				if exempt[pos.Line] || litHasCognitiveCall(file, lit) || litIsRecallRequestOptions(file, lit) {
 					return true
 				}
 				t.Errorf("%s: query.AnswerOptions built without .WithCognitiveDefaults() — this read path "+
@@ -131,4 +135,125 @@ func litHasCognitiveCall(file *ast.File, lit *ast.CompositeLit) bool {
 	})
 
 	return hit
+}
+
+// litIsRecallRequestOptions reports whether lit is the Options field of a
+// query.RecallRequest literal, i.e. it reaches the engine through Recall.
+func litIsRecallRequestOptions(file *ast.File, lit *ast.CompositeLit) bool {
+	hit := false
+	ast.Inspect(file, func(n ast.Node) bool {
+		outer, ok := n.(*ast.CompositeLit)
+		if !ok || !isQuerySelector(outer.Type, "RecallRequest") {
+			return true
+		}
+		for _, elt := range outer.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "Options" && kv.Value == lit {
+				hit = true
+			}
+		}
+		return true
+	})
+	return hit
+}
+
+func isQuerySelector(e ast.Expr, name string) bool {
+	sel, ok := e.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "query" && sel.Sel.Name == name
+}
+
+// TestEngineRecallAppliesCognitiveDefaults is what makes the RecallRequest
+// exemption above sound: the one recall entry point applies the defaults.
+func TestEngineRecallAppliesCognitiveDefaults(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "recall.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse recall.go: %v", err)
+	}
+	for _, d := range file.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "Recall" || fn.Recv == nil {
+			continue
+		}
+		applies := false
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == "WithCognitiveDefaults" {
+				applies = true
+			}
+			return true
+		})
+		if !applies {
+			t.Fatal("Engine.Recall no longer calls WithCognitiveDefaults: every surface would recall without the cognitive behaviours")
+		}
+		return
+	}
+	t.Fatal("Engine.Recall not found in recall.go")
+}
+
+// TestRecallSurfacesGoThroughEngineRecall fails if production code outside
+// internal/query calls the engine's answer methods directly.
+//
+// Every recall surface — the CLI, MCP, REST, gRPC and the library — goes
+// through query.Engine.Recall, so validation, the hop bound, the cognitive
+// defaults and run scoping are decided once. A surface that calls
+// AnswerWithOptions directly has its own copy of those decisions, which is how
+// the CLI and MCP came to disagree (YYYY-MM-DD vs RFC3339, reject vs clamp
+// hops, time bounds on one surface only). The fix for a hit is to call Recall.
+func TestRecallSurfacesGoThroughEngineRecall(t *testing.T) {
+	bypass := map[string]bool{"AnswerWithOptions": true, "AnswerForRunWithOptions": true, "Answer": true, "AnswerForRun": true}
+	root := "../.."
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if path != root && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir // .git, .claude worktrees, other checkouts
+			}
+			switch d.Name() {
+			case "node_modules", "vendor", "testdata":
+				return filepath.SkipDir
+			}
+			if filepath.Clean(path) == filepath.Clean(filepath.Join(root, "internal", "query")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || !bypass[sel.Sel.Name] {
+				return true
+			}
+			// Only the engine's methods: they take (ctx, question, ...).
+			if len(call.Args) < 2 {
+				return true
+			}
+			t.Errorf("%s: %s bypasses query.Engine.Recall; recall surfaces must share one entry point",
+				fset.Position(call.Pos()), sel.Sel.Name)
+			return true
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
 }

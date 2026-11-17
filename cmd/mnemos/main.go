@@ -13,7 +13,6 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/config"
 	"go.klarlabs.de/mnemos/internal/domain"
-	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ingest"
@@ -471,45 +470,21 @@ func runQuery(args []string, f Flags) error {
 		if err := job.SetStatus("loading", ""); err != nil {
 			return err
 		}
-		eventRepo := conn.Events
-		claimRepo := conn.Claims
-		engine := query.NewEngine(eventRepo, claimRepo, conn.Relationships).
-			WithDecisions(conn.Decisions)
-		// WithTextSearch is an optional capability (FTS5 etc); engage
-		// it only when both repos satisfy the TextSearcher port.
-		if eventSearcher, ok := eventRepo.(ports.TextSearcher); ok {
-			if claimSearcher, ok := claimRepo.(ports.TextSearcher); ok {
-				engine = engine.WithTextSearch(eventSearcher, claimSearcher)
-			}
-		}
-
-		if f.Embed {
-			printProgress("semantic search: preparing query embeddings")
-			embCfg, err := embedding.ConfigFromEnv()
-			if err != nil {
-				printProgress("warning: --embed requested but embedding config failed: %v (falling back to keyword matching)", err)
-			} else {
-				embClient, err := embedding.NewClient(embCfg)
-				if err != nil {
-					printProgress("warning: --embed requested but embedding client failed: %v (falling back to keyword matching)", err)
-				} else {
-					engine = engine.WithEmbeddings(
-						conn.Embeddings,
-						embClient,
-					)
-				}
-			}
-		}
-
+		// The same retrieval engine as MCP and REST (newQueryEngine): embeddings
+		// and full-text are used whenever they are configured, so the CLI and the
+		// agent rank identically. --embed used to gate the embeddings, which made
+		// `mnemos query` a keyword search while query_knowledge was hybrid.
+		//
+		// The LLM only writes the answer text; it never changes which beliefs
+		// come back. It stays opt-in here (--llm) because a person at a terminal
+		// pays per call and the template answer is usually enough.
+		engine := newQueryEngine(conn)
 		if f.LLM {
-			llmCfg, err := llm.ConfigFromEnv()
-			if err == nil {
-				llmClient, err := llm.NewClient(llmCfg)
-				if err == nil {
-					engine = engine.WithLLM(llmClient)
-					printProgress("grounded generation: using %s for answer synthesis", llmCfg.Provider)
-				}
+			if llmCfg, err := llm.ConfigFromEnv(); err == nil {
+				printProgress("grounded generation: using %s for answer synthesis", llmCfg.Provider)
 			}
+		} else {
+			engine = engine.WithLLM(nil)
 		}
 
 		// --why-wrong: audit-trail mode — list decisions refuted by failed outcomes.
@@ -560,9 +535,9 @@ func runQuery(args []string, f Flags) error {
 		if statusErr := job.SetStatus("querying", ""); statusErr != nil {
 			return statusErr
 		}
-		var answer domain.Answer
-		var queryErr error
-		opts := query.AnswerOptions{
+		params := recallParams{
+			Question:       question,
+			RunID:          runID,
 			Hops:           hops,
 			HopKinds:       qa.hopKinds,
 			Scope:          qa.scope,
@@ -570,10 +545,9 @@ func runQuery(args []string, f Flags) error {
 			AsOf:           asOf,
 			RecordedAsOf:   qa.recordedAsOf,
 			IncludeHistory: includeHistory,
-			Visibility:     qa.visibility,
+			Visibility:     string(qa.visibility),
 			// Per-query flags force a behaviour ON; the shared defaults supply
-			// the rest. Five near-identical env helpers used to live here and
-			// nowhere else, which is exactly why no other surface had them.
+			// the rest inside query.Engine.Recall.
 			Prime:         qa.prime,
 			Salient:       qa.salient,
 			Hebbian:       qa.hebbian,
@@ -587,7 +561,7 @@ func runQuery(args []string, f Flags) error {
 			// A person reading output otherwise wants the contradiction
 			// explained rather than silently resolved: that is ConsumerUser.
 			Consumer: consumerFor(qa.inhibit),
-		}.WithCognitiveDefaults()
+		}
 		if entity != "" {
 			entRepo := conn.Entities
 			ent, ok, rErr := resolveEntity(ctx, entRepo, entity)
@@ -597,19 +571,18 @@ func runQuery(args []string, f Flags) error {
 			if !ok {
 				return NewUserError("no entity matching %q (try `mnemos entities list`)", entity)
 			}
-			opts.AllowedClaimIDs = make(map[string]struct{})
+			params.AllowedClaimIDs = make(map[string]struct{})
 			ents, eErr := entRepo.ListClaimsForEntity(ctx, ent.ID)
 			if eErr != nil {
 				return NewSystemError(eErr, "load claims for entity")
 			}
 			for _, c := range ents {
-				opts.AllowedClaimIDs[c.ID] = struct{}{}
+				params.AllowedClaimIDs[c.ID] = struct{}{}
 			}
 		}
-		if runID != "" {
-			answer, queryErr = engine.AnswerForRunWithOptions(ctx, question, runID, opts)
-		} else {
-			answer, queryErr = engine.AnswerWithOptions(ctx, question, opts)
+		answer, queryErr := recallWith(ctx, engine, params)
+		if isInvalidRecall(queryErr) {
+			return NewUserError("%v", queryErr)
 		}
 		if queryErr != nil {
 			return NewSystemError(queryErr, "query engine failed")
@@ -621,13 +594,8 @@ func runQuery(args []string, f Flags) error {
 			resolveContradictionClaimText(ctx, conn.Claims, &answer)
 			printHumanReadableAnswer(question, answer)
 		} else {
-			response := map[string]any{
-				"answer":      answer.AnswerText,
-				"beliefs":     answer.Claims,
-				"dissonances": answer.Contradictions,
-				"timeline":    answer.TimelineEventIDs,
-				"confidence":  answer.Confidence,
-			}
+			// The same serialised shape as query_knowledge.
+			response := newRecallOutput(answer)
 			encoded, err := json.MarshalIndent(response, "", "  ")
 			if err != nil {
 				return NewSystemError(err, "failed to encode response")
@@ -1692,8 +1660,8 @@ func parseQueryArgs(args []string) (queryArgs, error) {
 				return queryArgs{}, NewUserError("--hops flag requires a value")
 			}
 			n, err := strconv.Atoi(questionArgs[1])
-			if err != nil || n < 0 || n > 5 {
-				return queryArgs{}, NewUserError("--hops must be an integer in [0, 5]")
+			if err != nil || n < 0 || n > query.MaxHops {
+				return queryArgs{}, NewUserError("--hops must be an integer in [0, %d]", query.MaxHops)
 			}
 			out.hops = n
 			questionArgs = questionArgs[2:]
@@ -1875,17 +1843,7 @@ func parseHopKinds(spec string) ([]domain.RelationshipType, error) {
 // `--at 2026-04-01` returns claims that were valid at the start of
 // April 1st (the most intuitive reading for "as of that day").
 func parseAsOf(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if t, err := time.Parse("2006-01-02", s); err == nil {
-		return t.UTC(), nil
-	}
-	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-		return t.UTC(), nil
-	}
-	if t, err := time.Parse(time.RFC3339, s); err == nil {
-		return t.UTC(), nil
-	}
-	return time.Time{}, fmt.Errorf("unrecognized timestamp %q (want YYYY-MM-DD or RFC3339)", s)
+	return parseInstant(s)
 }
 
 // warnRelateSkipped surfaces an incremental-relate failure as a warning
@@ -1981,7 +1939,7 @@ func runJobWithin(timeout time.Duration, kind string, scope map[string]string, v
 	dbPath := resolveDBPath()
 	if isFirstRun(dbPath) && kind != "ingest" && kind != "process" {
 		printWelcome()
-		fmt.Println("  First run detected. Use 'process' or 'ingest' to add knowledge.")
+		fmt.Fprintln(os.Stderr, "  First run detected. Use 'process' or 'ingest' to add knowledge.")
 		printFirstRunHints()
 	}
 

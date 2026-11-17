@@ -112,7 +112,7 @@ func toInputMap(in any) (map[string]any, error) {
 // a *sql.DB here.
 func mcpExecutorMap(actor string, getWatcher func() (*Watcher, error)) map[string]domain.ActionExecutor {
 	return map[string]domain.ActionExecutor{
-		"exec.query_knowledge": toolExecutor[mcpQueryInput, mcpQueryOutput]{run: func(ctx context.Context, in mcpQueryInput) (mcpQueryOutput, error) { return mcpRunQueryScoped(ctx, in) }, summary: querySummary},
+		"exec.query_knowledge": toolExecutor[mcpQueryInput, recallOutput]{run: func(ctx context.Context, in mcpQueryInput) (recallOutput, error) { return mcpRunQueryScoped(ctx, in) }, summary: querySummary},
 		"exec.process_text": toolExecutor[mcpProcessTextInput, mcpProcessTextOutput]{run: func(ctx context.Context, in mcpProcessTextInput) (mcpProcessTextOutput, error) {
 			return mcpRunProcessText(ctx, mcpActorFor(ctx, actor), in)
 		}, summary: processTextSummary, evidence: processTextEvidence},
@@ -151,7 +151,7 @@ func mcpExecutorMap(actor string, getWatcher func() (*Watcher, error)) map[strin
 		"exec.search_passages": toolExecutor[mcpSearchPassagesInput, mcpSearchPassagesOutput]{run: func(ctx context.Context, in mcpSearchPassagesInput) (mcpSearchPassagesOutput, error) {
 			return mcpRunSearchPassages(ctx, in)
 		}, summary: searchPassagesSummary},
-		"exec.recall_at_time": toolExecutor[mcpRecallAtTimeInput, mcpQueryOutput]{run: func(ctx context.Context, in mcpRecallAtTimeInput) (mcpQueryOutput, error) {
+		"exec.recall_at_time": toolExecutor[mcpRecallAtTimeInput, recallOutput]{run: func(ctx context.Context, in mcpRecallAtTimeInput) (recallOutput, error) {
 			return mcpRunRecallAtTime(ctx, in)
 		}, summary: querySummary},
 	}
@@ -211,7 +211,7 @@ func runWatchFileTool(in mcpWatchFileInput, getWatcher func() (*Watcher, error))
 // tamper-evident chain: counts, IDs, anything an auditor would want
 // to verify after the fact.
 
-func querySummary(out mcpQueryOutput) string {
+func querySummary(out recallOutput) string {
 	return fmt.Sprintf("answered with %d claim(s), %d contradiction(s)", len(out.Claims), len(out.Contradictions))
 }
 
