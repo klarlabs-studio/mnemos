@@ -12,10 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ingest"
 	"go.klarlabs.de/mnemos/internal/parser"
 	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/relate"
 	"go.klarlabs.de/mnemos/internal/store"
 )
@@ -219,8 +221,10 @@ func (w *Watcher) loop(ctx context.Context) {
 }
 
 // tick re-hashes every watched file and re-ingests any whose content has
-// changed since the last observation. Disappearing files are dropped from
-// the set with a stderr note. Returns counts for tests.
+// changed since the last observation, retracting the evidence of text the new
+// version no longer contains (ADR 0036). Disappearing files are dropped from
+// the set with a stderr note and every event they contributed is retracted.
+// Returns counts for tests.
 func (w *Watcher) tick(ctx context.Context) (changed, removed int) {
 	w.mu.Lock()
 	snapshot := make(map[string]string, len(w.hashes))
@@ -263,6 +267,8 @@ func (w *Watcher) tick(ctx context.Context) (changed, removed int) {
 				w.mu.Unlock()
 				removed++
 				fmt.Fprintf(os.Stderr, "watch: dropped missing file %s\n", path)
+				// The source is gone, so nothing it said is evidence any more.
+				w.retractStale(ctx, path, nil, "source deleted: "+path)
 				continue
 			}
 			fmt.Fprintf(os.Stderr, "watch: hash %s: %v\n", path, err)
@@ -273,10 +279,14 @@ func (w *Watcher) tick(ctx context.Context) (changed, removed int) {
 		}
 
 		runID := fmt.Sprintf("watch-%s", time.Now().UTC().Format("20060102T150405"))
-		if err := ingestSingleDoc(ctx, w.writer, service, normalizer, extractor, relEngine, runID, path, w.actor); err != nil {
+		current, err := ingestSingleDoc(ctx, w.writer, service, normalizer, extractor, relEngine, runID, path, w.actor)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "watch: re-ingest %s: %v\n", path, err)
 			continue
 		}
+		// The revision is stored; now withdraw what the previous versions said
+		// that this one no longer does.
+		w.retractStale(ctx, path, current, "source revised: text no longer in "+path)
 
 		w.mu.Lock()
 		w.hashes[path] = newHash
@@ -286,6 +296,56 @@ func (w *Watcher) tick(ctx context.Context) (changed, removed int) {
 	}
 
 	return changed, removed
+}
+
+// retractStale retracts the stored events of path whose text is not in the
+// current version (ADR 0036). current holds the events the latest ingest of
+// path persisted; nil means the file is gone, which retracts every event of it.
+//
+// Matching is on chunk text: an earlier event whose content equals a chunk of
+// the current version still says something the file says, so it stays. Events
+// already retracted are skipped before dispatch, so a quiet file costs a
+// journal read per old event rather than a governed write. Failures are logged,
+// not fatal: the revision itself is already stored, and the next change to the
+// file retries the retraction.
+func (w *Watcher) retractStale(ctx context.Context, path string, current []domain.Event, reason string) {
+	conn := w.writer.Conn()
+	lister, ok := conn.Events.(ports.EventSourceLister)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "watch: %s: this backend cannot list a file's events; nothing retracted\n", path)
+		return
+	}
+	stored, err := lister.ListBySourcePath(ctx, path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "watch: list events of %s: %v\n", path, err)
+		return
+	}
+	currentIDs := make(map[string]bool, len(current))
+	present := make(map[string]bool, len(current))
+	for _, e := range current {
+		currentIDs[e.ID] = true
+		present[e.Content] = true
+	}
+	retracted := 0
+	for _, e := range stored {
+		if currentIDs[e.ID] || present[e.Content] {
+			continue
+		}
+		if _, done, err := govwrite.LookupRetraction(ctx, conn, e.ID); err != nil {
+			fmt.Fprintf(os.Stderr, "watch: read retraction of %s: %v\n", e.ID, err)
+			continue
+		} else if done {
+			continue
+		}
+		if _, err := w.writer.RetractEvent(ctx, e.ID, domain.ChangeNote{Reason: reason, ChangedBy: w.actor}); err != nil {
+			fmt.Fprintf(os.Stderr, "watch: retract %s: %v\n", e.ID, err)
+			continue
+		}
+		retracted++
+	}
+	if retracted > 0 {
+		fmt.Fprintf(os.Stderr, "watch: retracted %d event(s) of %s\n", retracted, path)
+	}
 }
 
 // errWatcherShutDown is returned by lazyWatcher.get once the server has begun

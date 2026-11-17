@@ -231,7 +231,7 @@ func autoIngestProjectDocs(ctx context.Context, w *govwrite.Writer, root, actor 
 			report.Skipped++
 			continue
 		}
-		if err := ingestSingleDoc(ctx, w, service, normalizer, extractor, relEngine, runID, path, actor); err != nil {
+		if _, err := ingestSingleDoc(ctx, w, service, normalizer, extractor, relEngine, runID, path, actor); err != nil {
 			fmt.Fprintf(os.Stderr, "auto-ingest: %s: %v\n", path, err)
 			report.PerFileErrors[path] = err
 			continue
@@ -255,6 +255,9 @@ func existingSourcePathsFromConn(ctx context.Context, conn *store.Conn) (map[str
 	return existingSourcePaths(ctx, db)
 }
 
+// ingestSingleDoc ingests one file through the full pipeline and returns the
+// events it persisted, so watch_file can tell which earlier events of the file
+// describe text that is gone (ADR 0036).
 func ingestSingleDoc(
 	ctx context.Context,
 	w *govwrite.Writer,
@@ -265,44 +268,44 @@ func ingestSingleDoc(
 	runID string,
 	path string,
 	actor string,
-) error {
+) ([]domain.Event, error) {
 	conn := w.Conn()
 	input, content, err := service.IngestFile(path)
 	if err != nil {
-		return fmt.Errorf("ingest: %w", err)
+		return nil, fmt.Errorf("ingest: %w", err)
 	}
 	events, err := normalizer.Normalize(input, content)
 	if err != nil {
-		return fmt.Errorf("normalize: %w", err)
+		return nil, fmt.Errorf("normalize: %w", err)
 	}
 	for i := range events {
 		events[i].RunID = runID
 	}
 	claims, links, autoEntities, err := extractor.ExtractFn(ctx, events)
 	if err != nil {
-		return fmt.Errorf("extract: %w", err)
+		return nil, fmt.Errorf("extract: %w", err)
 	}
 	// A re-ingested file restates what the brain already holds; fold it
 	// before relating and embedding so that work lands on the stored claims.
 	known, err := pipeline.CollapseKnownClaims(ctx, conn, events, claims, links)
 	if err != nil {
-		return fmt.Errorf("collapse known claims: %w", err)
+		return nil, fmt.Errorf("collapse known claims: %w", err)
 	}
 	claims, links = known.Claims, known.Links
 	autoEntities = pipeline.RemapEntities(autoEntities, known.Remap)
 	rels, err := relEngine.Detect(claims)
 	if err != nil {
-		return fmt.Errorf("relate: %w", err)
+		return nil, fmt.Errorf("relate: %w", err)
 	}
 
 	existingClaims, err := pipeline.ExistingForRelate(ctx, conn, claims)
 	if err != nil {
-		return fmt.Errorf("list existing claims: %w", err)
+		return nil, fmt.Errorf("list existing claims: %w", err)
 	}
 	if len(existingClaims) > 0 {
 		incremental, err := relEngine.DetectIncremental(claims, existingClaims)
 		if err != nil {
-			return fmt.Errorf("incremental relate: %w", err)
+			return nil, fmt.Errorf("incremental relate: %w", err)
 		}
 		rels = append(rels, incremental...)
 	}
@@ -311,7 +314,7 @@ func ingestSingleDoc(
 	stampClaimActor(claims, actor)
 	stampRelationshipActor(rels, actor)
 	if _, err := w.Artifacts(ctx, events, claims, links, rels); err != nil {
-		return fmt.Errorf("persist: %w", err)
+		return nil, fmt.Errorf("persist: %w", err)
 	}
 	// Best-effort entity materialisation. Auto-ingest runs in a
 	// watcher loop; a transient failure here shouldn't pause file
@@ -321,5 +324,5 @@ func ingestSingleDoc(
 		fmt.Fprintf(os.Stderr, "auto-ingest: entity materialisation failed: %v\n", entErr)
 	}
 	generateEmbeddingsBestEffort(ctx, conn, events, claims)
-	return nil
+	return events, nil
 }
