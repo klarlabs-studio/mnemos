@@ -12,7 +12,7 @@ import (
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
 
-// ADR 0035: a recorded-as-of read answers "what did the brain believe at T",
+// ADR 0036: a recorded-as-of read answers "what did the brain believe at T",
 // not "which of today's beliefs existed at T".
 //
 // The scenario is the incident timeline from the competitive strategy: a deploy
@@ -20,7 +20,7 @@ import (
 // On Thursday the Tuesday diagnosis is retracted, a contradiction is recorded,
 // a runbook belief is archived by a sweep and a configuration fact is
 // superseded. A Tuesday read must return the Tuesday state of every one of
-// them; before ADR 0035 it returned Thursday's.
+// them; before ADR 0036 it returned Thursday's.
 func TestRecordedAsOf_IncidentTimelineReconstructsTuesdayBelief(t *testing.T) {
 	ctx := context.Background()
 	conn, err := store.Open(ctx, "sqlite://"+filepath.Join(t.TempDir(), "timeline.db"))
@@ -144,7 +144,7 @@ func TestRecordedAsOf_IncidentTimelineReconstructsTuesdayBelief(t *testing.T) {
 		t.Errorf("Tuesday's answer shows %d contradiction(s) recorded on Thursday", len(then.Contradictions))
 	}
 
-	// A read of the past does not write the present (ADR 0035 §2).
+	// A read of the past does not write the present (ADR 0036 §2).
 	after, err := conn.Claims.ListByIDs(ctx, []string{"cl-disk", "cl-deploy"})
 	if err != nil {
 		t.Fatalf("reload: %v", err)

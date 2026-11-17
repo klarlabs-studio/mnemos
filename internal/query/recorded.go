@@ -6,7 +6,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/recorded"
 )
 
-// Recorded-as-of reads (ADR 0035).
+// Recorded-as-of reads (ADR 0036).
 //
 // RecordedAsOf promises the answer the brain would have given at T. recordedAt
 // swaps the engine's repositories for the views in internal/recorded, bounded
@@ -26,7 +26,7 @@ func (e Engine) recordedAt(t time.Time) Engine {
 }
 
 // isTimeTravel reports whether opts read the past on either time axis. Such a
-// read must not apply retrieval write-backs (ADR 0035 §2).
+// read must not apply retrieval write-backs (ADR 0036 §2).
 func isTimeTravel(opts AnswerOptions) bool {
 	return !opts.AsOf.IsZero() || !opts.RecordedAsOf.IsZero()
 }

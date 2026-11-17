@@ -59,7 +59,7 @@ type mcpTimelineQueryOutput struct {
 type mcpRecallAtTimeInput struct {
 	Question string `json:"question" jsonschema:"required,description=Natural language question"`
 	AsOf     string `json:"asOf" jsonschema:"required,description=RFC3339 instant; claims valid at this time are returned"`
-	// RecordedAsOf is the transaction-time axis (ADR 0035): the answer the
+	// RecordedAsOf is the transaction-time axis (ADR 0036): the answer the
 	// brain would have given at that instant, with each belief's status,
 	// validity and contradictions as they were recorded then.
 	RecordedAsOf string `json:"recordedAsOf,omitempty" jsonschema:"description=Optional RFC3339 instant; answer as the brain believed it then (status, validity and contradictions as recorded at that time). Pair with asOf: what did we believe at recordedAsOf about asOf"`
@@ -164,7 +164,7 @@ func mcpRunTimelineQuery(ctx context.Context, input mcpTimelineQueryInput) (mcpT
 // mcpRunRecallAtTime answers a query against the state of the
 // knowledge base at a historical instant (claims whose ValidFrom <=
 // AsOf and ValidTo > AsOf are considered). With RecordedAsOf it answers as
-// the brain believed at that instant (ADR 0035).
+// the brain believed at that instant (ADR 0036).
 func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (mcpQueryOutput, error) {
 	q := strings.TrimSpace(input.Question)
 	if q == "" {
