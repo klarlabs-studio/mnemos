@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// recall_at_time's recordedAsOf (ADR 0035) is optional and validated: a
+// recall_at_time's recordedAsOf (ADR 0036) is optional and validated: a
 // malformed value is the caller's error, and a well-formed one answers.
 func TestMCPRecallAtTime_RecordedAsOf(t *testing.T) {
 	t.Setenv("MNEMOS_DB_URL", "sqlite://"+filepath.Join(t.TempDir(), "rat.db"))
