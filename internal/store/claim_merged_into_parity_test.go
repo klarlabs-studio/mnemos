@@ -63,3 +63,54 @@ func TestClaims_MergedIntoRoundTripsOnEveryBackend(t *testing.T) {
 		}
 	}
 }
+
+// A recorded-as-of read walks merges backwards (ADR 0035 step 2): from the claim
+// that holds a merged belief's evidence now to the redirects that point at it.
+// Every backend must return exactly the direct redirects of the ids asked for,
+// oldest first, and nothing for a live claim or an unknown id.
+func TestClaims_ListMergedIntoOnEveryBackend(t *testing.T) {
+	ctx := context.Background()
+	at := time.Date(2026, 10, 25, 9, 0, 0, 0, time.UTC)
+
+	for _, b := range openBackends(t) {
+		claims := []domain.Claim{
+			{ID: "c-into-winner", Text: "deploys go out on tuesdays", Type: domain.ClaimTypeFact,
+				Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: at.Add(2 * time.Hour)},
+			{ID: "c-into-b", Text: "deploys happen every tuesday", Type: domain.ClaimTypeFact,
+				Confidence: 0.8, Status: domain.ClaimStatusDeprecated, CreatedAt: at.Add(time.Hour), MergedInto: "c-into-winner"},
+			{ID: "c-into-a", Text: "we deploy on tuesdays", Type: domain.ClaimTypeFact,
+				Confidence: 0.8, Status: domain.ClaimStatusDeprecated, CreatedAt: at, MergedInto: "c-into-winner"},
+			{ID: "c-into-chain", Text: "tuesday is deploy day", Type: domain.ClaimTypeFact,
+				Confidence: 0.8, Status: domain.ClaimStatusDeprecated, CreatedAt: at, MergedInto: "c-into-a"},
+			{ID: "c-into-other", Text: "an unrelated live belief", Type: domain.ClaimTypeFact,
+				Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: at},
+		}
+		if err := b.conn.Claims.Upsert(ctx, claims); err != nil {
+			t.Fatalf("%s: upsert: %v", b.name, err)
+		}
+
+		got, err := b.conn.Claims.ListMergedInto(ctx, []string{"c-into-winner"})
+		if err != nil {
+			t.Fatalf("%s: ListMergedInto: %v", b.name, err)
+		}
+		if len(got) != 2 || got[0].ID != "c-into-a" || got[1].ID != "c-into-b" {
+			t.Fatalf("%s: ListMergedInto(winner) = %v, want [c-into-a c-into-b] oldest first", b.name, claimIDs(got))
+		}
+		if got[0].MergedInto != "c-into-winner" || !got[0].CreatedAt.Equal(at) {
+			t.Fatalf("%s: redirect read back as merged_into=%q created_at=%v", b.name, got[0].MergedInto, got[0].CreatedAt)
+		}
+
+		chain, err := b.conn.Claims.ListMergedInto(ctx, []string{"c-into-a", "c-into-other", "no-such-claim"})
+		if err != nil {
+			t.Fatalf("%s: ListMergedInto chain: %v", b.name, err)
+		}
+		if len(chain) != 1 || chain[0].ID != "c-into-chain" {
+			t.Fatalf("%s: ListMergedInto(c-into-a, live, unknown) = %v, want only the direct redirect c-into-chain", b.name, claimIDs(chain))
+		}
+
+		none, err := b.conn.Claims.ListMergedInto(ctx, nil)
+		if err != nil || len(none) != 0 {
+			t.Fatalf("%s: no ids returned %v (%v)", b.name, claimIDs(none), err)
+		}
+	}
+}

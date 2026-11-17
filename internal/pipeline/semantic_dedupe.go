@@ -331,8 +331,9 @@ func pickWinner(pool []indexedClaim, members []int) int {
 }
 
 // DedupeTombstoneReason is the audit reason on the status_history row written
-// when a losing claim is retired by a merge.
-const DedupeTombstoneReason = "semantic dedupe: merged into the canonical claim"
+// when a losing claim is retired by a merge. Recorded-as-of reads key on it to
+// date the merge, so it is defined once in domain.
+const DedupeTombstoneReason = domain.MergeRedirectReason
 
 // claimEntityUnlinker is the optional capability a backend may expose to drop a
 // claim's rows in the claim↔entity link table. The winner inherits the loser's

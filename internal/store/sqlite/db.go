@@ -983,6 +983,9 @@ CREATE INDEX IF NOT EXISTS idx_claims_test_requirement_ref
 -- by normalised text on every capture. Unindexed it would scan the brain once
 -- per write — the cost it exists to avoid.
 CREATE INDEX IF NOT EXISTS idx_claims_text_key ON claims(text_key);
+-- ADR 0035 step 2: a recorded-as-of read walks merge redirects backwards
+-- (ListMergedInto); unindexed every walk would scan the brain.
+CREATE INDEX IF NOT EXISTS idx_claims_merged_into ON claims(merged_into);
 `
 
 // ensurePostMigrateIndexes creates any missing post-migrate index. migrate

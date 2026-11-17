@@ -100,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_claims_test_requirement_ref
 -- The write path's duplicate check (ListLiveByTextKeys) filters on text_key.
 -- Must match postMigrateIndexes in internal/store/sqlite/db.go.
 CREATE INDEX IF NOT EXISTS idx_claims_text_key ON claims(text_key);
+CREATE INDEX IF NOT EXISTS idx_claims_merged_into ON claims(merged_into);
 
 CREATE TABLE IF NOT EXISTS entities (
   id TEXT PRIMARY KEY,
