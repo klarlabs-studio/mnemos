@@ -22,10 +22,10 @@ var Registry = []Capability{
 		ID: "ingest.text", Effect: Write,
 		Summary: "Extract beliefs from free text (ingest → extract → relate → persist)",
 		On: map[Transport]Binding{
-			Go: Has("Remember"), REST: Has("POST /v1/process"), GRPC: Gap("no ingest RPC; gRPC clients append pre-extracted beliefs"),
+			Go: Has("Remember"), REST: Has("POST /v1/process"), GRPC: Has("ProcessText"),
 			MCP: Has("process_text"), MCPLite: Has("remember"), HTTPLite: Has("POST /v1/remember"), Client: Has("Process"),
 		},
-		Notes: "REST and MCP run the pipeline directly; Go and the lite adapters go through Memory.Remember.",
+		Notes: "REST, gRPC and MCP run the same pipeline (REST and gRPC through runProcessRequest, which calls process_text's mcpRunProcessText); Go and the lite adapters go through Memory.Remember.",
 	},
 	{
 		ID: "ingest.git", Effect: Write,
@@ -302,10 +302,10 @@ var Registry = []Capability{
 		ID: "recall.search", Effect: Read,
 		Summary: "Hybrid search over beliefs (query engine ranking, filters)",
 		On: map[Transport]Binding{
-			Go: No("the library's search is Recall"), REST: Has("GET /v1/search", "POST /v1/search"), GRPC: Gap("no search RPC"),
+			Go: No("the library's search is Recall"), REST: Has("GET /v1/search", "POST /v1/search"), GRPC: Has("Search"),
 			MCP: Has("query_knowledge", "search_memory"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Search"),
 		},
-		Notes: "query_knowledge and /v1/search build their query engines separately; ranking parity is guarded in internal/query, not here.",
+		Notes: "REST /v1/search and gRPC Search share runSearch; every binding recalls through query.Engine.Recall, pinned by TestRecallParity_EverySurfaceAgrees.",
 	},
 	{
 		ID: "recall.at_time", Effect: Read,
@@ -328,7 +328,7 @@ var Registry = []Capability{
 		ID: "recall.passages", Effect: Read,
 		Summary: "Return the stored episode passages that best match a query (BM25)",
 		On: map[Transport]Binding{
-			Go: Has("Passages"), REST: Has("GET /v1/passages"), GRPC: Gap("no passages RPC"),
+			Go: Has("Passages"), REST: Has("GET /v1/passages"), GRPC: Has("Passages"),
 			MCP: Has("search_passages"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Passages"),
 		},
 		Notes: "Measured on the answer-quality evaluation (#441, deviation 6) before it was exposed remotely. A run-scoped token must name one of its runs.",
@@ -337,7 +337,7 @@ var Registry = []Capability{
 		ID: "recall.context_block", Effect: Read,
 		Summary: "Render the context block for a run",
 		On: map[Transport]Binding{
-			Go: Gap("no context-block render on Memory"), REST: Has("GET /v1/context", "POST /v1/context"), GRPC: Gap("no context-block RPC"),
+			Go: Has("ContextBlock"), REST: Has("GET /v1/context", "POST /v1/context"), GRPC: Has("ContextBlock"),
 			MCP: Has("memory_context"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Context"),
 		},
 	},
@@ -387,15 +387,15 @@ var Registry = []Capability{
 		ID: "brain.predictive_error", Effect: Read,
 		Summary: "Hierarchical prediction error (outcome, schema, dissonance, calibration)",
 		On: map[Transport]Binding{
-			Go: Has("PredictiveError"), REST: Gap("no predictive-error route"), GRPC: Gap("no predictive-error RPC"),
-			MCP: Has("predictive_error"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no predictive-error read"),
+			Go: Has("PredictiveError"), REST: Has("GET /v1/predictive-error"), GRPC: Has("PredictiveError"),
+			MCP: Has("predictive_error"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("PredictiveError"),
 		},
 	},
 	{
 		ID: "brain.health", Effect: Read,
 		Summary: "Brain health: vitals, integrity checks and one verdict (ADR 0019)",
 		On: map[Transport]Binding{
-			Go: Has("BrainHealth", "BrainHealthFull", "SnapshotHealth"), REST: Has("GET /v1/brain/health"), GRPC: Gap("no brain-health RPC"),
+			Go: Has("BrainHealth", "BrainHealthFull", "SnapshotHealth"), REST: Has("GET /v1/brain/health"), GRPC: Has("BrainHealth"),
 			MCP: Has("brain_health"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BrainHealth"),
 		},
 	},
@@ -403,9 +403,10 @@ var Registry = []Capability{
 		ID: "brain.metrics", Effect: Read,
 		Summary: "Knowledge-base counts and averages",
 		On: map[Transport]Binding{
-			Go: Gap("no metrics read on Memory"), REST: Has("GET /v1/metrics"), GRPC: Has("Metrics"),
+			Go: Has("Metrics"), REST: Has("GET /v1/metrics"), GRPC: Has("Metrics"),
 			MCP: Has("knowledge_metrics"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Metrics"),
 		},
+		Notes: "Every binding counts through internal/kbmetrics.Compute; a run-scoped token sees counts over its runs only.",
 	},
 	{
 		ID: "brain.consolidate", Effect: Write,
@@ -421,25 +422,28 @@ var Registry = []Capability{
 		ID: "expectation.set", Effect: Write,
 		Summary: "Attach a forward prediction to a belief (and read it back)",
 		On: map[Transport]Binding{
-			Go: Has("Expect"), REST: Has("POST /v1/beliefs/{id}/expectation", "GET /v1/beliefs/{id}/expectation"), GRPC: Gap("no expectation RPC"),
+			Go: Has("Expect"), REST: Has("POST /v1/beliefs/{id}/expectation", "GET /v1/beliefs/{id}/expectation"), GRPC: Has("SetExpectation", "GetExpectation"),
 			MCP: Has("record_expectation"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("SetExpectation", "Expectation"),
 		},
+		Notes: "Every binding sets through govwrite (CheckExpectation, then the set_expectation governed write; the library runs ApplySetExpectation in its own kernel) and returns the row as stored. The belief must exist; a run-scoped token may touch only beliefs whose evidence lies in its runs (runscope.ClaimAllowed), others read as not found.",
 	},
 	{
 		ID: "expectation.observe", Effect: Write,
 		Summary: "Record the observed value for a belief's prediction",
 		On: map[Transport]Binding{
-			Go: Has("RecordObservation"), REST: Has("POST /v1/beliefs/{id}/observation"), GRPC: Gap("no observation RPC"),
+			Go: Has("RecordObservation"), REST: Has("POST /v1/beliefs/{id}/observation"), GRPC: Has("RecordObservation"),
 			MCP: Has("record_observation"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("RecordObservation"),
 		},
+		Notes: "Every binding observes through govwrite (CheckObservation, then the observe_expectation governed write); no expectation is REST 404 / gRPC NotFound / mnemos.ErrExpectationNotFound. Run-scoped tokens are confined as for expectation.set.",
 	},
 	{
 		ID: "expectation.reconcile", Effect: Write,
 		Summary: "Close observed predictions into validates/refutes verdicts",
 		On: map[Transport]Binding{
-			Go: Has("ReconcileExpectations"), REST: Gap("no reconcile route"), GRPC: Gap("no reconcile RPC"),
-			MCP: Gap("no reconcile tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no reconcile call"),
+			Go: Has("ReconcileExpectations"), REST: Has("POST /v1/expectations/reconcile"), GRPC: Has("ReconcileExpectations"),
+			MCP: Has("reconcile_expectations"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ReconcileExpectations"),
 		},
+		Notes: "Every binding reconciles through govwrite (the reconcile_expectations governed write; the library runs ApplyReconcileExpectations in its own kernel). It spans every run, so a run-scoped token is refused.",
 	},
 
 	// --- Skill loop --------------------------------------------------------
@@ -537,9 +541,10 @@ var Registry = []Capability{
 		ID: "decision.record", Effect: Write,
 		Summary: "Record an agent decision with its beliefs and alternatives",
 		On: map[Transport]Binding{
-			Go: Has("RecordDecision"), REST: Gap("no decision write route"), GRPC: Has("AppendDecisions"),
-			MCP: Has("record_decision"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no decision write"),
+			Go: Has("RecordDecision"), REST: Has("POST /v1/decisions"), GRPC: Has("AppendDecisions"),
+			MCP: Has("record_decision"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("RecordDecision"),
 		},
+		Notes: "REST POST /v1/decisions and MCP record_decision share mcpRunRecordDecision (server-assigned id, validation, govwrite); gRPC AppendDecisions writes caller-supplied ids through govwrite; Go records through the library's governed kernel.",
 	},
 	{
 		ID: "decision.get", Effect: Read,

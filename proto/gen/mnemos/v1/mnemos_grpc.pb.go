@@ -65,6 +65,16 @@ const (
 	MnemosService_Synthesize_FullMethodName               = "/mnemos.v1.MnemosService/Synthesize"
 	MnemosService_Timeline_FullMethodName                 = "/mnemos.v1.MnemosService/Timeline"
 	MnemosService_Signals_FullMethodName                  = "/mnemos.v1.MnemosService/Signals"
+	MnemosService_ProcessText_FullMethodName              = "/mnemos.v1.MnemosService/ProcessText"
+	MnemosService_Search_FullMethodName                   = "/mnemos.v1.MnemosService/Search"
+	MnemosService_Passages_FullMethodName                 = "/mnemos.v1.MnemosService/Passages"
+	MnemosService_ContextBlock_FullMethodName             = "/mnemos.v1.MnemosService/ContextBlock"
+	MnemosService_PredictiveError_FullMethodName          = "/mnemos.v1.MnemosService/PredictiveError"
+	MnemosService_BrainHealth_FullMethodName              = "/mnemos.v1.MnemosService/BrainHealth"
+	MnemosService_SetExpectation_FullMethodName           = "/mnemos.v1.MnemosService/SetExpectation"
+	MnemosService_GetExpectation_FullMethodName           = "/mnemos.v1.MnemosService/GetExpectation"
+	MnemosService_RecordObservation_FullMethodName        = "/mnemos.v1.MnemosService/RecordObservation"
+	MnemosService_ReconcileExpectations_FullMethodName    = "/mnemos.v1.MnemosService/ReconcileExpectations"
 )
 
 // MnemosServiceClient is the client API for MnemosService service.
@@ -202,6 +212,31 @@ type MnemosServiceClient interface {
 	Timeline(ctx context.Context, in *TimelineRequest, opts ...grpc.CallOption) (*TimelineResponse, error)
 	// Signals returns detected temporal patterns.
 	Signals(ctx context.Context, in *SignalsRequest, opts ...grpc.CallOption) (*SignalsResponse, error)
+	// --- Ingest, search, passages, context, prediction and brain reads
+	// (capability-registry parity with REST / MCP / the Go library) ---
+	// ProcessText runs raw text through ingest -> extract -> relate -> persist,
+	// the same pipeline as REST POST /v1/process and the process_text MCP tool.
+	ProcessText(ctx context.Context, in *ProcessTextRequest, opts ...grpc.CallOption) (*ProcessTextResponse, error)
+	// Search is hybrid belief search with filters (REST /v1/search, MCP
+	// query_knowledge): the same recall path through query.Engine.Recall.
+	Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error)
+	// Passages returns the stored episode passages that best match a query (BM25).
+	Passages(ctx context.Context, in *PassagesRequest, opts ...grpc.CallOption) (*PassagesResponse, error)
+	// ContextBlock renders a run's agent-ready context block (REST /v1/context).
+	ContextBlock(ctx context.Context, in *ContextBlockRequest, opts ...grpc.CallOption) (*ContextBlockResponse, error)
+	// PredictiveError reports hierarchical prediction error (ADR 0017).
+	PredictiveError(ctx context.Context, in *PredictiveErrorRequest, opts ...grpc.CallOption) (*PredictiveErrorResponse, error)
+	// BrainHealth reports the unified brain-health verdict (ADR 0019).
+	BrainHealth(ctx context.Context, in *BrainHealthRequest, opts ...grpc.CallOption) (*BrainHealthResponse, error)
+	// SetExpectation attaches (or replaces) a forward prediction on a belief.
+	SetExpectation(ctx context.Context, in *SetExpectationRequest, opts ...grpc.CallOption) (*Expectation, error)
+	// GetExpectation reads a belief's expectation; NotFound when it has none.
+	GetExpectation(ctx context.Context, in *GetExpectationRequest, opts ...grpc.CallOption) (*Expectation, error)
+	// RecordObservation records the observed value for a belief's expectation.
+	RecordObservation(ctx context.Context, in *RecordObservationRequest, opts ...grpc.CallOption) (*Expectation, error)
+	// ReconcileExpectations closes every observed prediction into a
+	// validates/refutes verdict.
+	ReconcileExpectations(ctx context.Context, in *ReconcileExpectationsRequest, opts ...grpc.CallOption) (*ReconcileExpectationsResponse, error)
 }
 
 type mnemosServiceClient struct {
@@ -672,6 +707,106 @@ func (c *mnemosServiceClient) Signals(ctx context.Context, in *SignalsRequest, o
 	return out, nil
 }
 
+func (c *mnemosServiceClient) ProcessText(ctx context.Context, in *ProcessTextRequest, opts ...grpc.CallOption) (*ProcessTextResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProcessTextResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ProcessText_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Search_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) Passages(ctx context.Context, in *PassagesRequest, opts ...grpc.CallOption) (*PassagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PassagesResponse)
+	err := c.cc.Invoke(ctx, MnemosService_Passages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) ContextBlock(ctx context.Context, in *ContextBlockRequest, opts ...grpc.CallOption) (*ContextBlockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ContextBlockResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ContextBlock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) PredictiveError(ctx context.Context, in *PredictiveErrorRequest, opts ...grpc.CallOption) (*PredictiveErrorResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PredictiveErrorResponse)
+	err := c.cc.Invoke(ctx, MnemosService_PredictiveError_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) BrainHealth(ctx context.Context, in *BrainHealthRequest, opts ...grpc.CallOption) (*BrainHealthResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BrainHealthResponse)
+	err := c.cc.Invoke(ctx, MnemosService_BrainHealth_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) SetExpectation(ctx context.Context, in *SetExpectationRequest, opts ...grpc.CallOption) (*Expectation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Expectation)
+	err := c.cc.Invoke(ctx, MnemosService_SetExpectation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) GetExpectation(ctx context.Context, in *GetExpectationRequest, opts ...grpc.CallOption) (*Expectation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Expectation)
+	err := c.cc.Invoke(ctx, MnemosService_GetExpectation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) RecordObservation(ctx context.Context, in *RecordObservationRequest, opts ...grpc.CallOption) (*Expectation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Expectation)
+	err := c.cc.Invoke(ctx, MnemosService_RecordObservation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) ReconcileExpectations(ctx context.Context, in *ReconcileExpectationsRequest, opts ...grpc.CallOption) (*ReconcileExpectationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReconcileExpectationsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ReconcileExpectations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MnemosServiceServer is the server API for MnemosService service.
 // All implementations must embed UnimplementedMnemosServiceServer
 // for forward compatibility.
@@ -807,6 +942,31 @@ type MnemosServiceServer interface {
 	Timeline(context.Context, *TimelineRequest) (*TimelineResponse, error)
 	// Signals returns detected temporal patterns.
 	Signals(context.Context, *SignalsRequest) (*SignalsResponse, error)
+	// --- Ingest, search, passages, context, prediction and brain reads
+	// (capability-registry parity with REST / MCP / the Go library) ---
+	// ProcessText runs raw text through ingest -> extract -> relate -> persist,
+	// the same pipeline as REST POST /v1/process and the process_text MCP tool.
+	ProcessText(context.Context, *ProcessTextRequest) (*ProcessTextResponse, error)
+	// Search is hybrid belief search with filters (REST /v1/search, MCP
+	// query_knowledge): the same recall path through query.Engine.Recall.
+	Search(context.Context, *SearchRequest) (*SearchResponse, error)
+	// Passages returns the stored episode passages that best match a query (BM25).
+	Passages(context.Context, *PassagesRequest) (*PassagesResponse, error)
+	// ContextBlock renders a run's agent-ready context block (REST /v1/context).
+	ContextBlock(context.Context, *ContextBlockRequest) (*ContextBlockResponse, error)
+	// PredictiveError reports hierarchical prediction error (ADR 0017).
+	PredictiveError(context.Context, *PredictiveErrorRequest) (*PredictiveErrorResponse, error)
+	// BrainHealth reports the unified brain-health verdict (ADR 0019).
+	BrainHealth(context.Context, *BrainHealthRequest) (*BrainHealthResponse, error)
+	// SetExpectation attaches (or replaces) a forward prediction on a belief.
+	SetExpectation(context.Context, *SetExpectationRequest) (*Expectation, error)
+	// GetExpectation reads a belief's expectation; NotFound when it has none.
+	GetExpectation(context.Context, *GetExpectationRequest) (*Expectation, error)
+	// RecordObservation records the observed value for a belief's expectation.
+	RecordObservation(context.Context, *RecordObservationRequest) (*Expectation, error)
+	// ReconcileExpectations closes every observed prediction into a
+	// validates/refutes verdict.
+	ReconcileExpectations(context.Context, *ReconcileExpectationsRequest) (*ReconcileExpectationsResponse, error)
 	mustEmbedUnimplementedMnemosServiceServer()
 }
 
@@ -954,6 +1114,36 @@ func (UnimplementedMnemosServiceServer) Timeline(context.Context, *TimelineReque
 }
 func (UnimplementedMnemosServiceServer) Signals(context.Context, *SignalsRequest) (*SignalsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Signals not implemented")
+}
+func (UnimplementedMnemosServiceServer) ProcessText(context.Context, *ProcessTextRequest) (*ProcessTextResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProcessText not implemented")
+}
+func (UnimplementedMnemosServiceServer) Search(context.Context, *SearchRequest) (*SearchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Search not implemented")
+}
+func (UnimplementedMnemosServiceServer) Passages(context.Context, *PassagesRequest) (*PassagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Passages not implemented")
+}
+func (UnimplementedMnemosServiceServer) ContextBlock(context.Context, *ContextBlockRequest) (*ContextBlockResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ContextBlock not implemented")
+}
+func (UnimplementedMnemosServiceServer) PredictiveError(context.Context, *PredictiveErrorRequest) (*PredictiveErrorResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PredictiveError not implemented")
+}
+func (UnimplementedMnemosServiceServer) BrainHealth(context.Context, *BrainHealthRequest) (*BrainHealthResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BrainHealth not implemented")
+}
+func (UnimplementedMnemosServiceServer) SetExpectation(context.Context, *SetExpectationRequest) (*Expectation, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetExpectation not implemented")
+}
+func (UnimplementedMnemosServiceServer) GetExpectation(context.Context, *GetExpectationRequest) (*Expectation, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetExpectation not implemented")
+}
+func (UnimplementedMnemosServiceServer) RecordObservation(context.Context, *RecordObservationRequest) (*Expectation, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordObservation not implemented")
+}
+func (UnimplementedMnemosServiceServer) ReconcileExpectations(context.Context, *ReconcileExpectationsRequest) (*ReconcileExpectationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReconcileExpectations not implemented")
 }
 func (UnimplementedMnemosServiceServer) mustEmbedUnimplementedMnemosServiceServer() {}
 func (UnimplementedMnemosServiceServer) testEmbeddedByValue()                       {}
@@ -1804,6 +1994,186 @@ func _MnemosService_Signals_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_ProcessText_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProcessTextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ProcessText(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ProcessText_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ProcessText(ctx, req.(*ProcessTextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Search_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Search(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Search_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Search(ctx, req.(*SearchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_Passages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PassagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).Passages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_Passages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).Passages(ctx, req.(*PassagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_ContextBlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ContextBlockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ContextBlock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ContextBlock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ContextBlock(ctx, req.(*ContextBlockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_PredictiveError_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PredictiveErrorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).PredictiveError(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_PredictiveError_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).PredictiveError(ctx, req.(*PredictiveErrorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_BrainHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BrainHealthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).BrainHealth(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_BrainHealth_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).BrainHealth(ctx, req.(*BrainHealthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_SetExpectation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetExpectationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).SetExpectation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_SetExpectation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).SetExpectation(ctx, req.(*SetExpectationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_GetExpectation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetExpectationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).GetExpectation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_GetExpectation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).GetExpectation(ctx, req.(*GetExpectationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_RecordObservation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordObservationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).RecordObservation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_RecordObservation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).RecordObservation(ctx, req.(*RecordObservationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_ReconcileExpectations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconcileExpectationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ReconcileExpectations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ReconcileExpectations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ReconcileExpectations(ctx, req.(*ReconcileExpectationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MnemosService_ServiceDesc is the grpc.ServiceDesc for MnemosService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1994,6 +2364,46 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Signals",
 			Handler:    _MnemosService_Signals_Handler,
+		},
+		{
+			MethodName: "ProcessText",
+			Handler:    _MnemosService_ProcessText_Handler,
+		},
+		{
+			MethodName: "Search",
+			Handler:    _MnemosService_Search_Handler,
+		},
+		{
+			MethodName: "Passages",
+			Handler:    _MnemosService_Passages_Handler,
+		},
+		{
+			MethodName: "ContextBlock",
+			Handler:    _MnemosService_ContextBlock_Handler,
+		},
+		{
+			MethodName: "PredictiveError",
+			Handler:    _MnemosService_PredictiveError_Handler,
+		},
+		{
+			MethodName: "BrainHealth",
+			Handler:    _MnemosService_BrainHealth_Handler,
+		},
+		{
+			MethodName: "SetExpectation",
+			Handler:    _MnemosService_SetExpectation_Handler,
+		},
+		{
+			MethodName: "GetExpectation",
+			Handler:    _MnemosService_GetExpectation_Handler,
+		},
+		{
+			MethodName: "RecordObservation",
+			Handler:    _MnemosService_RecordObservation_Handler,
+		},
+		{
+			MethodName: "ReconcileExpectations",
+			Handler:    _MnemosService_ReconcileExpectations_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

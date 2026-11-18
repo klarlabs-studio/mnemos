@@ -22,6 +22,7 @@ import (
 //	actionUnretractEvent    -> mnemos-unretract-event      (write-local, idempotent; see unretract.go)
 //	actionOpenIncident      -> mnemos-open-incident        (write-local, idempotent on incident id; see incidents.go)
 //	actionResolveIncident   -> mnemos-resolve-incident     (write-local, idempotent; see incidents.go)
+//	set_expectation, observe_expectation, reconcile_expectations (write-local, idempotent; see expectations.go)
 const (
 	actionRemember          = "remember"
 	actionRememberClaim     = "remember_claim"
@@ -59,6 +60,12 @@ func writeActions() []kernel.Action {
 			Description: "Open (upsert) an incident record; see incidents.go."},
 		{Name: actionResolveIncident, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Mark an incident resolved; see incidents.go."},
+		{Name: actionSetExpectation, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Attach or replace a forward prediction on a claim."},
+		{Name: actionObserveExpectation, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Record the observed value for a claim's prediction."},
+		{Name: actionReconcileExpectations, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Close observed predictions into validates/refutes verdicts."},
 	}
 }
 
@@ -67,15 +74,18 @@ func writeActions() []kernel.Action {
 // write path can bypass the evidence chain + budget.
 func buildWriteKernel(m *memory, budget axi.Budget, evidenceLogPath string) (*kernel.Governed, error) {
 	executors := map[string]axidomain.ActionExecutor{
-		kernel.ExecutorRef(actionRemember):          rememberExecutor{m: m},
-		kernel.ExecutorRef(actionRememberClaim):     rememberClaimExecutor{m: m},
-		kernel.ExecutorRef(actionRememberEvent):     rememberEventExecutor{m: m},
-		kernel.ExecutorRef(actionRecordDecision):    recordDecisionExecutor{m: m},
-		kernel.ExecutorRef(actionSetClaimLifecycle): setClaimLifecycleExecutor{m: m},
-		kernel.ExecutorRef(actionRetractEvent):      retractEventExecutor{m: m},
-		kernel.ExecutorRef(actionUnretractEvent):    unretractEventExecutor{m: m},
-		kernel.ExecutorRef(actionOpenIncident):      openIncidentExecutor{m: m},
-		kernel.ExecutorRef(actionResolveIncident):   resolveIncidentExecutor{m: m},
+		kernel.ExecutorRef(actionRemember):              rememberExecutor{m: m},
+		kernel.ExecutorRef(actionRememberClaim):         rememberClaimExecutor{m: m},
+		kernel.ExecutorRef(actionRememberEvent):         rememberEventExecutor{m: m},
+		kernel.ExecutorRef(actionRecordDecision):        recordDecisionExecutor{m: m},
+		kernel.ExecutorRef(actionSetClaimLifecycle):     setClaimLifecycleExecutor{m: m},
+		kernel.ExecutorRef(actionRetractEvent):          retractEventExecutor{m: m},
+		kernel.ExecutorRef(actionUnretractEvent):        unretractEventExecutor{m: m},
+		kernel.ExecutorRef(actionOpenIncident):          openIncidentExecutor{m: m},
+		kernel.ExecutorRef(actionResolveIncident):       resolveIncidentExecutor{m: m},
+		kernel.ExecutorRef(actionSetExpectation):        setExpectationExecutor{m: m},
+		kernel.ExecutorRef(actionObserveExpectation):    observeExpectationExecutor{m: m},
+		kernel.ExecutorRef(actionReconcileExpectations): reconcileExpectationsExecutor{m: m},
 	}
 	return kernel.Build(m.logger, writeActions(), executors, budget, evidenceLogPath)
 }

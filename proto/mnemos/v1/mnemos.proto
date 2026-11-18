@@ -160,6 +160,32 @@ service MnemosService {
   rpc Timeline(TimelineRequest) returns (TimelineResponse);
   // Signals returns detected temporal patterns.
   rpc Signals(SignalsRequest) returns (SignalsResponse);
+
+  // --- Ingest, search, passages, context, prediction and brain reads
+  // (capability-registry parity with REST / MCP / the Go library) ---
+  // ProcessText runs raw text through ingest -> extract -> relate -> persist,
+  // the same pipeline as REST POST /v1/process and the process_text MCP tool.
+  rpc ProcessText(ProcessTextRequest) returns (ProcessTextResponse);
+  // Search is hybrid belief search with filters (REST /v1/search, MCP
+  // query_knowledge): the same recall path through query.Engine.Recall.
+  rpc Search(SearchRequest) returns (SearchResponse);
+  // Passages returns the stored episode passages that best match a query (BM25).
+  rpc Passages(PassagesRequest) returns (PassagesResponse);
+  // ContextBlock renders a run's agent-ready context block (REST /v1/context).
+  rpc ContextBlock(ContextBlockRequest) returns (ContextBlockResponse);
+  // PredictiveError reports hierarchical prediction error (ADR 0017).
+  rpc PredictiveError(PredictiveErrorRequest) returns (PredictiveErrorResponse);
+  // BrainHealth reports the unified brain-health verdict (ADR 0019).
+  rpc BrainHealth(BrainHealthRequest) returns (BrainHealthResponse);
+  // SetExpectation attaches (or replaces) a forward prediction on a belief.
+  rpc SetExpectation(SetExpectationRequest) returns (Expectation);
+  // GetExpectation reads a belief's expectation; NotFound when it has none.
+  rpc GetExpectation(GetExpectationRequest) returns (Expectation);
+  // RecordObservation records the observed value for a belief's expectation.
+  rpc RecordObservation(RecordObservationRequest) returns (Expectation);
+  // ReconcileExpectations closes every observed prediction into a
+  // validates/refutes verdict.
+  rpc ReconcileExpectations(ReconcileExpectationsRequest) returns (ReconcileExpectationsResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -984,3 +1010,163 @@ message SignalsRequest {
   int32  limit          = 3;
 }
 message SignalsResponse { repeated MemorySignal signals = 1; }
+
+// ---------------------------------------------------------------------------
+// Ingest, search, passages, context, prediction and brain reads
+// ---------------------------------------------------------------------------
+
+message ProcessTextRequest {
+  string text = 1;
+  // use_llm / use_embeddings are tri-state: unset lets the server decide
+  // (LLM extraction iff it has a provider configured), as on REST.
+  optional bool use_llm        = 2;
+  optional bool use_embeddings = 3;
+}
+message ProcessTextResponse {
+  string run_id          = 1;
+  int32  episodes        = 2;
+  int32  beliefs         = 3;
+  int32  associations    = 4;
+  int32  embeddings      = 5;
+  bool   used_llm        = 6;
+  bool   used_embeddings = 7;
+}
+
+message SearchRequest {
+  string                    query          = 1;
+  string                    run_id         = 2;
+  int32                     top_k          = 3;
+  double                    min_trust      = 4;
+  google.protobuf.Timestamp as_of          = 5; // validity time
+  google.protobuf.Timestamp recorded_as_of = 6; // ingestion time (ADR 0036)
+  Context                   scope          = 7;
+  string                    type_filter    = 8;
+  string                    status_filter  = 9;
+  string                    consumer       = 10; // user (default) | agent
+  string                    visibility     = 11; // personal | team | org
+}
+message SearchBelief {
+  string id          = 1;
+  string text        = 2;
+  string type        = 3;
+  string status      = 4;
+  double confidence  = 5;
+  double trust_score = 6;
+}
+message SearchVerdict {
+  string winner_belief_id  = 1;
+  string loser_belief_id   = 2;
+  double confidence        = 3;
+  string rationale         = 4;
+  string action            = 5;
+  string escalation_reason = 6;
+}
+message SearchResponse {
+  string                 query                     = 1;
+  repeated SearchBelief  beliefs                   = 2;
+  repeated Association   dissonances               = 3;
+  int32                  total                     = 4;
+  int32                  top_k                     = 5;
+  bool                   auto_resolved             = 6;
+  string                 dissonance_explanation    = 7;
+  repeated SearchVerdict verdicts                  = 8;
+}
+
+message PassagesRequest {
+  string query  = 1;
+  int32  limit  = 2;
+  string run_id = 3;
+}
+message Passage {
+  string                    episode_id = 1;
+  string                    text       = 2;
+  google.protobuf.Timestamp at         = 3;
+  map<string, string>       metadata   = 4;
+  double                    score      = 5;
+}
+message PassagesResponse { repeated Passage passages = 1; }
+
+message ContextBlockRequest {
+  string run_id     = 1;
+  string query      = 2;
+  int32  max_tokens = 3;
+}
+message ContextBlockResponse {
+  string run_id  = 1;
+  string context = 2;
+}
+
+message PredictiveErrorRequest {}
+message PredictiveErrorLevel {
+  string level   = 1;
+  double error   = 2;
+  int32  samples = 3;
+  string basis   = 4;
+}
+message PredictiveErrorResponse {
+  repeated PredictiveErrorLevel levels          = 1;
+  double                        total           = 2;
+  string                        hotspot         = 3;
+  int32                         levels_measured = 4;
+}
+
+message BrainHealthRequest {
+  // full forces the exact scan; the default samples large brains.
+  bool full = 1;
+}
+message Vital {
+  string name   = 1;
+  double value  = 2;
+  string status = 3;
+  string detail = 4;
+}
+message Pathology {
+  string kind   = 1;
+  int32  count  = 2;
+  string status = 3;
+  string detail = 4;
+}
+message VitalEstimate {
+  int32  sample_size = 1;
+  int32  population  = 2;
+  double margin_95   = 3;
+}
+message BrainHealthResponse {
+  string                     status      = 1;
+  repeated Vital             vitals      = 2;
+  repeated Pathology         pathologies = 3;
+  string                     mode        = 4;
+  map<string, VitalEstimate> estimates   = 5;
+  google.protobuf.Timestamp  at          = 6;
+}
+
+message Expectation {
+  string                    belief_id       = 1;
+  double                    predicted       = 2;
+  double                    tolerance       = 3;
+  google.protobuf.Timestamp horizon         = 4;
+  double                    observed        = 5;
+  bool                      has_observation = 6;
+  bool                      resolved        = 7;
+  google.protobuf.Timestamp created_at      = 8;
+}
+message SetExpectationRequest {
+  string                    belief_id = 1;
+  double                    predicted = 2;
+  double                    tolerance = 3;
+  google.protobuf.Timestamp horizon   = 4;
+}
+message GetExpectationRequest { string belief_id = 1; }
+message RecordObservationRequest {
+  string belief_id = 1;
+  double observed  = 2;
+}
+message ReconcileExpectationsRequest {}
+message Reconciliation {
+  string belief_id = 1;
+  double predicted = 2;
+  double observed  = 3;
+  double surprise  = 4;
+  bool   confirmed = 5;
+}
+message ReconcileExpectationsResponse { repeated Reconciliation reconciliations = 1; }

@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/runscope"
 )
 
 // MCP counterparts for three REST endpoints that had none.
@@ -48,11 +50,10 @@ type mcpRecordExpectationOutput struct {
 	Horizon   string  `json:"horizon,omitempty"`
 }
 
-// mcpRunRecordExpectation attaches a forward prediction to a belief.
-//
-// Mirrors POST /v1/beliefs/<id>/expectation. Tolerance is normalised to its
-// absolute value exactly as memory.Expect does, so a caller passing -5 gets the
-// same band as one passing 5 rather than an unsatisfiable one.
+// mcpRunRecordExpectation attaches a forward prediction to a belief through
+// the governed writer (govwrite.Writer.SetExpectation), the one implementation
+// REST, gRPC and the Go library share: the belief must exist, the tolerance is
+// normalised to its magnitude, and the write is audited.
 func mcpRunRecordExpectation(ctx context.Context, input mcpRecordExpectationInput) (mcpRecordExpectationOutput, error) {
 	claimID := strings.TrimSpace(input.ClaimID)
 	// Attach the expectation in the brain that HOLDS the belief (#341): a
@@ -62,49 +63,31 @@ func mcpRunRecordExpectation(ctx context.Context, input mcpRecordExpectationInpu
 	if err != nil {
 		return mcpRecordExpectationOutput{}, err
 	}
+	var horizon time.Time
+	if s := strings.TrimSpace(input.Horizon); s != "" {
+		t, terr := parseTimeArg(s)
+		if terr != nil {
+			return mcpRecordExpectationOutput{}, userInputError(fmt.Errorf("horizon: %w", terr))
+		}
+		horizon = t
+	}
 	w, err := openWriter(ctx)
 	if err != nil {
 		return mcpRecordExpectationOutput{}, err
 	}
 	defer closeWriter(w)
-	conn := w.Conn()
-	if conn.Expectations == nil {
-		return mcpRecordExpectationOutput{}, fmt.Errorf("expectations are not supported by this store")
+	if err := mcpRequireBeliefInRuns(ctx, w, claimID); err != nil {
+		return mcpRecordExpectationOutput{}, err
 	}
-	found, err := conn.Claims.ListByIDs(ctx, []string{claimID})
+	exp, err := w.SetExpectation(ctx, govwrite.ExpectationRequest{
+		ClaimID: claimID, Predicted: input.Predicted, Tolerance: input.Tolerance, Horizon: horizon,
+	})
 	if err != nil {
-		return mcpRecordExpectationOutput{}, fmt.Errorf("look up claim: %w", err)
+		return mcpRecordExpectationOutput{}, mcpExpectationError(err)
 	}
-	if len(found) == 0 {
-		return mcpRecordExpectationOutput{}, fmt.Errorf("no such belief %s", claimID)
-	}
-
-	tolerance := input.Tolerance
-	if tolerance < 0 {
-		tolerance = -tolerance
-	}
-	var horizon time.Time
-	if s := strings.TrimSpace(input.Horizon); s != "" {
-		t, terr := parseTimeArg(s)
-		if terr != nil {
-			return mcpRecordExpectationOutput{}, fmt.Errorf("horizon: %w", terr)
-		}
-		horizon = t
-	}
-
-	exp := domain.Expectation{
-		ClaimID:   claimID,
-		Predicted: input.Predicted,
-		Tolerance: tolerance,
-		Horizon:   horizon,
-		CreatedAt: time.Now().UTC(),
-	}
-	if err := conn.Expectations.Upsert(ctx, exp); err != nil {
-		return mcpRecordExpectationOutput{}, fmt.Errorf("upsert expectation: %w", err)
-	}
-	out := mcpRecordExpectationOutput{ClaimID: claimID, Predicted: exp.Predicted, Tolerance: exp.Tolerance}
-	if !horizon.IsZero() {
-		out.Horizon = horizon.UTC().Format(time.RFC3339)
+	out := mcpRecordExpectationOutput{ClaimID: exp.ClaimID, Predicted: exp.Predicted, Tolerance: exp.Tolerance}
+	if !exp.Horizon.IsZero() {
+		out.Horizon = exp.Horizon.UTC().Format(time.RFC3339)
 	}
 	return out, nil
 }
@@ -121,16 +104,15 @@ type mcpRecordObservationOutput struct {
 	Validates bool    `json:"validates"`
 }
 
-// mcpRunRecordObservation records what actually happened, resolving a belief's
-// expectation into the signed prediction error credit assignment consumes.
+// mcpRunRecordObservation records what actually happened through the governed
+// writer (govwrite.Writer.ObserveExpectation), resolving a belief's expectation
+// into the signed prediction error credit assignment consumes.
 //
-// Mirrors POST /v1/beliefs/<id>/observation, including its 404 for a claim with
-// no expectation: an observation with nothing to resolve is a caller error, not
-// an empty success, and silently accepting it would lose the datum.
+// A belief with no expectation is a caller error, not an empty success —
+// silently accepting it would lose the datum (REST answers 404).
 //
 // `validates` is reported back because the whole point of an observation is the
-// verdict, and making the caller re-derive it from predicted/observed/tolerance
-// invites two implementations of one rule.
+// verdict; it is domain.Expectation.Confirmed, the rule every consumer reads.
 func mcpRunRecordObservation(ctx context.Context, input mcpRecordObservationInput) (mcpRecordObservationOutput, error) {
 	claimID := strings.TrimSpace(input.ClaimID)
 	// Resolve the belief's own brain (#341) — the expectation this observation
@@ -145,40 +127,49 @@ func mcpRunRecordObservation(ctx context.Context, input mcpRecordObservationInpu
 		return mcpRecordObservationOutput{}, err
 	}
 	defer closeWriter(w)
-	conn := w.Conn()
-	if conn.Expectations == nil {
-		return mcpRecordObservationOutput{}, fmt.Errorf("expectations are not supported by this store")
+	if err := mcpRequireBeliefInRuns(ctx, w, claimID); err != nil {
+		return mcpRecordObservationOutput{}, err
 	}
-
-	exp, ok, err := conn.Expectations.Get(ctx, claimID)
+	exp, err := w.ObserveExpectation(ctx, claimID, input.Observed)
 	if err != nil {
-		return mcpRecordObservationOutput{}, fmt.Errorf("get expectation: %w", err)
+		return mcpRecordObservationOutput{}, mcpExpectationError(err)
 	}
-	if !ok {
-		return mcpRecordObservationOutput{}, fmt.Errorf("no expectation for claim %s; record one first", claimID)
-	}
-	exp.Observed = input.Observed
-	exp.HasObservation = true
-	if err := conn.Expectations.Upsert(ctx, exp); err != nil {
-		return mcpRecordObservationOutput{}, fmt.Errorf("upsert observation: %w", err)
-	}
+	validates, _ := exp.Confirmed()
 	return mcpRecordObservationOutput{
-		ClaimID:   claimID,
+		ClaimID:   exp.ClaimID,
 		Predicted: exp.Predicted,
 		Observed:  exp.Observed,
-		Validates: expectationValidates(exp),
+		Validates: validates,
 	}, nil
 }
 
-// expectationValidates reports whether an observation fell inside the predicted
-// band. A zero tolerance demands an exact match, which is the honest reading of
-// "predicted X with no stated slack".
-func expectationValidates(e domain.Expectation) bool {
-	d := e.Observed - e.Predicted
-	if d < 0 {
-		d = -d
+// mcpRequireBeliefInRuns refuses a belief outside a run-scoped token's runs
+// (runscope.ClaimAllowed) as "no such belief", so the answer never confirms
+// another run's belief exists. Stdio carries no token and is unrestricted.
+func mcpRequireBeliefInRuns(ctx context.Context, w *govwrite.Writer, claimID string) error {
+	var allowed []string
+	if c, ok := claimsFromContext(ctx); ok {
+		allowed = c.Runs
 	}
-	return d <= e.Tolerance
+	ok, err := runscope.ClaimAllowed(ctx, w.Conn(), claimID, allowed)
+	if err != nil {
+		return fmt.Errorf("check run scope: %w", err)
+	}
+	if !ok {
+		return userInputError(fmt.Errorf("no such belief %s", claimID))
+	}
+	return nil
+}
+
+// mcpExpectationError marks govwrite's caller-mistake sentinels as user input
+// errors (-32602) and passes everything else through as internal.
+func mcpExpectationError(err error) error {
+	switch {
+	case errors.Is(err, govwrite.ErrBeliefNotFound), errors.Is(err, govwrite.ErrExpectationNotFound),
+		errors.Is(err, govwrite.ErrBeliefIDRequired), errors.Is(err, govwrite.ErrExpectationsUnsupported):
+		return userInputError(err)
+	}
+	return err
 }
 
 type mcpRecordFeedbackInput struct {
@@ -253,4 +244,28 @@ func mcpRunRecordFeedback(ctx context.Context, input mcpRecordFeedbackInput) (mc
 		HelpfulCount:           state.HelpfulCount,
 		NegativeFeedbackStreak: state.NegativeFeedbackStreak,
 	}, nil
+}
+
+type mcpReconcileExpectationsOutput struct {
+	Reconciliations []reconciliationDTO `json:"reconciliations"`
+}
+
+// mcpReconcileExpectations closes observed predictions through the governed
+// writer (govwrite.Writer.ReconcileExpectations), the implementation the Go
+// library, REST and gRPC share, and reports each verdict in the REST wire form.
+// Reconciliation spans every run, so a run-scoped token is refused.
+func mcpReconcileExpectations(ctx context.Context) (mcpReconcileExpectationsOutput, error) {
+	if mcpRunRestricted(ctx) {
+		return mcpReconcileExpectationsOutput{}, errors.New("token is run-scoped: reconciliation spans every run")
+	}
+	w, err := openWriter(ctx)
+	if err != nil {
+		return mcpReconcileExpectationsOutput{}, err
+	}
+	defer closeWriter(w)
+	recs, err := w.ReconcileExpectations(ctx)
+	if err != nil {
+		return mcpReconcileExpectationsOutput{}, err
+	}
+	return mcpReconcileExpectationsOutput{Reconciliations: reconciliationsToDTO(recs)}, nil
 }

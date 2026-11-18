@@ -84,3 +84,55 @@ func TestCheckEventRunsAllowed(t *testing.T) {
 		}
 	})
 }
+
+// A run-restricted bearer may touch a claim only when all of its evidence lies
+// in its runs; a claim with no evidence, or with any foreign evidence, is not
+// its to touch.
+func TestClaimAllowed(t *testing.T) {
+	ctx := context.Background()
+	conn, err := store.Open(ctx, "memory://claim-allowed-test")
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	now := time.Now().UTC()
+	for _, ev := range []domain.Event{
+		{ID: "ev-a", Content: "a", SourceInputID: "s", RunID: "run-a", Timestamp: now, IngestedAt: now},
+		{ID: "ev-b", Content: "b", SourceInputID: "s", RunID: "run-b", Timestamp: now, IngestedAt: now},
+	} {
+		if err := conn.Events.Append(ctx, ev); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+	}
+	var claims []domain.Claim
+	for _, id := range []string{"cl-a", "cl-b", "cl-both", "cl-none"} {
+		claims = append(claims, domain.Claim{ID: id, Text: id, Type: domain.ClaimTypeFact, Status: domain.ClaimStatusActive, Confidence: 0.5, CreatedAt: now})
+	}
+	if err := conn.Claims.Upsert(ctx, claims); err != nil {
+		t.Fatalf("claims: %v", err)
+	}
+	if err := conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{
+		{ClaimID: "cl-a", EventID: "ev-a"}, {ClaimID: "cl-b", EventID: "ev-b"},
+		{ClaimID: "cl-both", EventID: "ev-a"}, {ClaimID: "cl-both", EventID: "ev-b"},
+	}); err != nil {
+		t.Fatalf("evidence: %v", err)
+	}
+	for _, tc := range []struct {
+		claim   string
+		allowed []string
+		want    bool
+	}{
+		{"cl-b", nil, true},
+		{"cl-a", []string{"run-a"}, true},
+		{"cl-b", []string{"run-a"}, false},
+		{"cl-both", []string{"run-a"}, false},
+		{"cl-both", []string{"run-a", "run-b"}, true},
+		{"cl-none", []string{"run-a"}, false},
+		{"cl-missing", []string{"run-a"}, false},
+	} {
+		got, err := runscope.ClaimAllowed(ctx, conn, tc.claim, tc.allowed)
+		if err != nil || got != tc.want {
+			t.Errorf("ClaimAllowed(%s, %v) = %v, %v; want %v", tc.claim, tc.allowed, got, err, tc.want)
+		}
+	}
+}

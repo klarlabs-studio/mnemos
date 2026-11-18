@@ -90,6 +90,7 @@ var mcpToolScopes = map[string]string{
 	"record_outcome":            domain.ScopeClaimsWrite,
 	"record_expectation":        domain.ScopeClaimsWrite,
 	"record_observation":        domain.ScopeClaimsWrite,
+	"reconcile_expectations":    domain.ScopeClaimsWrite,
 	"record_feedback":           domain.ScopeClaimsWrite,
 	"record_decision":           domain.ScopeClaimsWrite,
 	"synthesize_schemas":        domain.ScopeClaimsWrite,
