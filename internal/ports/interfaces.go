@@ -152,12 +152,28 @@ type ClaimRepository interface {
 	// still has other evidence — the claim keeps standing on what is left.
 	UnlinkEvidence(ctx context.Context, claimID, eventID string) error
 
+	// CloseEvidence ends the (claimID, eventID) link at closedAt instead of
+	// deleting it (ADR 0036 §8): the row leaves claim_evidence, so no live
+	// read sees it, and is kept with its created_at, closedAt and note in
+	// closed_claim_evidence, which only recorded-as-of reads consult.
+	// Idempotent: closing a link that is not live records nothing. Used by
+	// retraction (ADR 0037); UnlinkEvidence stays for destruction
+	// (delete-event), which keeps no history by design.
+	CloseEvidence(ctx context.Context, claimID, eventID string, closedAt time.Time, note domain.ChangeNote) error
+
+	// ListClosedEvidenceByClaimIDs returns the closed links of claimIDs, and
+	// ListClosedEvidenceByEventIDs those naming eventIDs, oldest closure
+	// first. Read only by internal/recorded.
+	ListClosedEvidenceByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.ClosedEvidence, error)
+	ListClosedEvidenceByEventIDs(ctx context.Context, eventIDs []string) ([]domain.ClosedEvidence, error)
+
 	// DeleteCascade removes a claim and every row keyed on claim_id
 	// that the claim alone owns. The canonical cascade set, which
 	// every backend must clear in full for the tables it actually
 	// has, is:
 	//
 	//	claim_evidence
+	//	closed_claim_evidence (every backend)
 	//	claim_status_history
 	//	claim_validity_history (every backend)
 	//	claim_versions
@@ -290,11 +306,21 @@ type RelationshipRepository interface {
 	// and unique-edge conflicts collapse silently — Mnemos doesn't
 	// distinguish duplicate edges. Used by ApplySemanticDedupe to
 	// fold a duplicate claim's edges onto its winner.
+	//
+	// An edge the rewrite drops is closed, not deleted (ADR 0036 §8): it is
+	// kept, with the endpoints it had, in closed_relationships with reason
+	// domain.MergeClosedReason, so a recorded-as-of read before the merge
+	// still sees it.
 	RepointEndpoint(ctx context.Context, oldID, newID string) error
+
+	// ListClosedByClaimIDs returns the closed edges touching claimIDs, and
+	// ListAllClosed every closed edge. Read only by internal/recorded.
+	ListClosedByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.ClosedRelationship, error)
+	ListAllClosed(ctx context.Context) ([]domain.ClosedRelationship, error)
 
 	// DeleteByClaim removes every relationship that touches the
 	// given claim (as source OR target). Used to clean up a claim's
-	// edges before the claim itself is deleted.
+	// edges before the claim itself is deleted, closed edges included.
 	DeleteByClaim(ctx context.Context, claimID string) error
 
 	// CountAll returns the total number of relationships stored.

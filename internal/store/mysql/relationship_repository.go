@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -73,6 +74,11 @@ func (r RelationshipRepository) RepointEndpoint(ctx context.Context, oldID, newI
 		return fmt.Errorf("begin repoint endpoint tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Edges the rewrite drops are closed, not deleted (ADR 0036 §8).
+	closedAt := time.Now().UTC().Truncate(time.Microsecond)
+	if err := stageClosedEdges(ctx, tx, oldID, newID, closedAt); err != nil {
+		return err
+	}
 	conflictFrom := `
 DELETE a FROM relationships a
 JOIN relationships b
@@ -111,6 +117,9 @@ WHERE a.to_claim_id = ?`
 	); err != nil {
 		return fmt.Errorf("drop self-loops on %s: %w", newID, err)
 	}
+	if err := keepClosedEdges(ctx, tx, closedAt); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit repoint endpoint tx: %w", err)
 	}
@@ -124,6 +133,12 @@ func (r RelationshipRepository) DeleteByClaim(ctx context.Context, claimID strin
 		claimID, claimID,
 	); err != nil {
 		return fmt.Errorf("delete relationships for %s: %w", claimID, err)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM closed_relationships WHERE from_claim_id = ? OR to_claim_id = ?`,
+		claimID, claimID,
+	); err != nil {
+		return fmt.Errorf("delete closed relationships for %s: %w", claimID, err)
 	}
 	return nil
 }
@@ -152,6 +167,9 @@ func (r RelationshipRepository) CountByType(ctx context.Context, relType string)
 func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM relationships`); err != nil {
 		return fmt.Errorf("delete all relationships: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM closed_relationships`); err != nil {
+		return fmt.Errorf("delete all closed relationships: %w", err)
 	}
 	return nil
 }

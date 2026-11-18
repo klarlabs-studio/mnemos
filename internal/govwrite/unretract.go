@@ -268,7 +268,9 @@ func liveEvidenceRestored(ctx context.Context, conn *store.Conn, claims []domain
 
 // relinkRescored gives every belief active rescored back its evidence link to
 // eventID and returns them as they were before relinking (trust included).
-// Beliefs that no longer exist are dropped.
+// Beliefs that no longer exist are dropped. The restored link is a new one,
+// recorded now: the link the retraction closed keeps its closed interval in
+// closed_claim_evidence, so history stays append-only (ADR 0036 §8).
 func relinkRescored(ctx context.Context, conn *store.Conn, eventID string, active domain.EventRetraction) ([]domain.Claim, error) {
 	if len(active.Impact.Rescored) == 0 {
 		return nil, nil

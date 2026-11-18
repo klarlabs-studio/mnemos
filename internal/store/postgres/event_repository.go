@@ -121,6 +121,12 @@ func (r EventRepository) CountAll(ctx context.Context) (int64, error) {
 
 // DeleteByID removes the event with the given id. Idempotent.
 func (r EventRepository) DeleteByID(ctx context.Context, id string) error {
+	// Deleting an event destroys it: its closed evidence links go with it.
+	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
+		`DELETE FROM %s WHERE event_id = $1`, qualify(r.ns, "closed_claim_evidence"),
+	), id); err != nil {
+		return fmt.Errorf("delete closed evidence of event %s: %w", id, err)
+	}
 	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
 		`DELETE FROM %s WHERE id = $1`, qualify(r.ns, "events"),
 	), id); err != nil {
@@ -131,6 +137,11 @@ func (r EventRepository) DeleteByID(ctx context.Context, id string) error {
 
 // DeleteAll wipes the events table.
 func (r EventRepository) DeleteAll(ctx context.Context) error {
+	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
+		`DELETE FROM %s`, qualify(r.ns, "closed_claim_evidence"),
+	)); err != nil {
+		return fmt.Errorf("delete closed evidence: %w", err)
+	}
 	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
 		`DELETE FROM %s`, qualify(r.ns, "events"),
 	)); err != nil {

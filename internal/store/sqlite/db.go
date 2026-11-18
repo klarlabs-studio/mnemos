@@ -254,6 +254,41 @@ CREATE TABLE IF NOT EXISTS claim_credit_history (
 );
 CREATE INDEX IF NOT EXISTS idx_claim_credit_history_claim_id ON claim_credit_history(claim_id);
 
+-- closed_claim_evidence and closed_relationships (ADR 0036 §8): evidence links
+-- and associations that were ended instead of deleted, by retraction (ADR 0037)
+-- and by semantic-dedupe merges. The row leaves the live table, so no live read
+-- sees it, and is kept here with when, by whom and why it was closed. Only
+-- recorded-as-of reads consult them: a row was in force over
+-- [created_at, closed_at). No foreign keys: the deletes that destroy a claim or
+-- an event clear these explicitly.
+CREATE TABLE IF NOT EXISTS closed_claim_evidence (
+	claim_id TEXT NOT NULL,
+	event_id TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT '',
+	closed_at TEXT NOT NULL,
+	closed_by TEXT NOT NULL DEFAULT '<system>',
+	reason TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (claim_id, event_id, closed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_closed_claim_evidence_event_id ON closed_claim_evidence(event_id);
+
+CREATE TABLE IF NOT EXISTS closed_relationships (
+	id TEXT NOT NULL,
+	type TEXT NOT NULL,
+	from_claim_id TEXT NOT NULL,
+	to_claim_id TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	created_by TEXT NOT NULL DEFAULT '<system>',
+	strength REAL NOT NULL DEFAULT 1,
+	derived_by TEXT NOT NULL DEFAULT '',
+	closed_at TEXT NOT NULL,
+	closed_by TEXT NOT NULL DEFAULT '<system>',
+	reason TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (id, closed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_closed_relationships_from ON closed_relationships(from_claim_id);
+CREATE INDEX IF NOT EXISTS idx_closed_relationships_to ON closed_relationships(to_claim_id);
+
 -- claim_versions (Refs #38) — append-only audit trail of every text /
 -- confidence / status snapshot a claim has held. Side table so the
 -- claim row itself stays slim; consumers asking for the timeline JOIN
@@ -705,7 +740,10 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // NOT EXISTS that runs on every open.
 // v33 (ADR 0036 step 3) adds claim_evidence.created_at (no backfill; see
 // expectedColumns) and claim_credit_history (CREATE TABLE IF NOT EXISTS).
-const currentSchemaVersion = 33
+// v34 (ADR 0036 §8) adds closed_claim_evidence and closed_relationships
+// (CREATE TABLE IF NOT EXISTS): retraction and merges close links and edges
+// instead of deleting them.
+const currentSchemaVersion = 34
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,

@@ -325,7 +325,7 @@ func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID st
 // one tx.
 //
 // The set is the canonical one from [ports.ClaimRepository], narrowed to
-// the tables this backend declares: claim_evidence,
+// the tables this backend declares: claim_evidence, closed_claim_evidence,
 // claim_status_history, claim_validity_history, claim_credit_history, then the
 // claim row. MySQL has no
 // claim_versions, claim_feedback or claim_expectations table, so there
@@ -340,6 +340,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	defer func() { _ = tx.Rollback() }()
 	for _, q := range []string{
 		`DELETE FROM claim_evidence WHERE claim_id = ?`,
+		`DELETE FROM closed_claim_evidence WHERE claim_id = ?`,
 		`DELETE FROM claim_status_history WHERE claim_id = ?`,
 		`DELETE FROM claim_validity_history WHERE claim_id = ?`,
 		`DELETE FROM claim_credit_history WHERE claim_id = ?`,
@@ -419,6 +420,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_evidence`); err != nil {
 		return fmt.Errorf("delete claim_evidence: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM closed_claim_evidence`); err != nil {
+		return fmt.Errorf("delete closed_claim_evidence: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history`); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)

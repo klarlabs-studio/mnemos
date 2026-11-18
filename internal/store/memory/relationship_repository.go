@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -59,10 +60,19 @@ func (r RelationshipRepository) ListByClaim(_ context.Context, claimID string) (
 
 // RepointEndpoint rewrites every relationship whose endpoints
 // equal oldID to point at newID. Self-loops and unique-edge
-// duplicates (same type + from + to) are dropped.
+// duplicates (same type + from + to) are closed (ADR 0036 §8): they
+// leave the live map and are kept, as they were, in closedRels.
 func (r RelationshipRepository) RepointEndpoint(_ context.Context, oldID, newID string) error {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
+	closedAt := time.Now().UTC()
+	closeEdge := func(id string, rel storedRelationship) {
+		delete(r.state.relationships, id)
+		r.state.closedRels = append(r.state.closedRels, domain.ClosedRelationship{
+			Association: rel.toDomain(), ClosedAt: closedAt,
+			ClosedBy: domain.SystemUser, Reason: domain.MergeClosedReason(oldID, newID),
+		})
+	}
 	type edgeKey struct{ Type, From, To string }
 	// Build the set of edges that already exist after rewrites,
 	// keyed on (type, from, to). When a rewrite would introduce a
@@ -77,12 +87,12 @@ func (r RelationshipRepository) RepointEndpoint(_ context.Context, oldID, newID 
 			to = newID
 		}
 		if from == to {
-			delete(r.state.relationships, id)
+			closeEdge(id, rel)
 			continue
 		}
 		key := edgeKey{Type: string(rel.Type), From: from, To: to}
 		if _, dup := existing[key]; dup {
-			delete(r.state.relationships, id)
+			closeEdge(id, rel)
 			continue
 		}
 		existing[key] = id
@@ -102,7 +112,38 @@ func (r RelationshipRepository) DeleteByClaim(_ context.Context, claimID string)
 			delete(r.state.relationships, id)
 		}
 	}
+	kept := r.state.closedRels[:0]
+	for _, rel := range r.state.closedRels {
+		if rel.FromClaimID != claimID && rel.ToClaimID != claimID {
+			kept = append(kept, rel)
+		}
+	}
+	r.state.closedRels = kept
 	return nil
+}
+
+// ListClosedByClaimIDs implements [ports.RelationshipRepository.ListClosedByClaimIDs].
+func (r RelationshipRepository) ListClosedByClaimIDs(_ context.Context, claimIDs []string) ([]domain.ClosedRelationship, error) {
+	wanted := make(map[string]bool, len(claimIDs))
+	for _, id := range claimIDs {
+		wanted[id] = true
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	var out []domain.ClosedRelationship
+	for _, rel := range r.state.closedRels {
+		if wanted[rel.FromClaimID] || wanted[rel.ToClaimID] {
+			out = append(out, rel)
+		}
+	}
+	return out, nil
+}
+
+// ListAllClosed implements [ports.RelationshipRepository.ListAllClosed].
+func (r RelationshipRepository) ListAllClosed(_ context.Context) ([]domain.ClosedRelationship, error) {
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	return append([]domain.ClosedRelationship(nil), r.state.closedRels...), nil
 }
 
 // ListByClaimIDs returns every relationship touching any of the given
@@ -153,6 +194,7 @@ func (r RelationshipRepository) DeleteAll(_ context.Context) error {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
 	r.state.relationships = map[string]storedRelationship{}
+	r.state.closedRels = nil
 	return nil
 }
 

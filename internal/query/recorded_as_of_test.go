@@ -10,6 +10,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/recorded"
 	"go.klarlabs.de/mnemos/internal/store"
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 	"go.klarlabs.de/mnemos/internal/trust"
@@ -287,6 +288,75 @@ func TestRecordedAsOf_MergeAfterTKeepsTheBeliefHeldAtT(t *testing.T) {
 	}
 }
 
+// ADR 0036 §8: a merge closes the edges it drops instead of deleting them.
+//
+// On Wednesday the brain holds the disk diagnosis, its restatement, a support
+// edge between the two, and a belief contradicting each. On Thursday the
+// diagnosis is merged into the restatement: the support edge would become a
+// self-loop and one contradiction a duplicate of the other, so the merge drops
+// both. A Wednesday read must still return both contradictions, each on the
+// belief it was recorded against.
+func TestRecordedAsOf_MergeKeepsTheEdgesItDropped(t *testing.T) {
+	s := openTimeline(t)
+	ctx := s.ctx
+
+	s.add("ev-disk", "cl-disk", "payments outage cause: database disk saturation")
+	s.add("ev-restated", "cl-restated", "payments outage cause: saturation of the database disk")
+	s.add("ev-iops", "cl-iops", "payments outage cause: database disk saturation is ruled out, iops were normal")
+	now := time.Now().UTC()
+	if err := s.conn.Relationships.Upsert(ctx, []domain.Relationship{
+		{ID: "rel-iops-disk", Type: domain.RelationshipTypeContradicts, FromClaimID: "cl-iops", ToClaimID: "cl-disk", CreatedAt: now},
+		{ID: "rel-iops-restated", Type: domain.RelationshipTypeContradicts, FromClaimID: "cl-iops", ToClaimID: "cl-restated", CreatedAt: now},
+		{ID: "rel-restated-disk", Type: domain.RelationshipTypeSupports, FromClaimID: "cl-restated", ToClaimID: "cl-disk", CreatedAt: now},
+	}); err != nil {
+		t.Fatalf("edges: %v", err)
+	}
+	wednesday := tick()
+	if _, err := pipeline.ApplySemanticDedupe(ctx, s.conn, pipeline.SemanticDedupePlan{
+		Merges: []pipeline.SemanticMerge{{WinnerID: "cl-restated", DuplicateIDs: []string{"cl-disk"}}},
+	}); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+
+	live, err := s.conn.Relationships.ListAll(ctx)
+	if err != nil {
+		t.Fatalf("live edges: %v", err)
+	}
+	if len(live) != 1 {
+		t.Fatalf("live edges after the merge = %+v, want the one surviving contradiction", live)
+	}
+
+	engine := NewEngine(s.conn.Events.(eventLister), s.conn.Claims, s.conn.Relationships)
+	then, err := engine.AnswerWithOptions(ctx, "payments outage cause database disk saturation", AnswerOptions{RecordedAsOf: wednesday})
+	if err != nil {
+		t.Fatalf("answer as of Wednesday: %v", err)
+	}
+	got := map[string]string{}
+	for _, rel := range then.Contradictions {
+		got[rel.ID] = rel.FromClaimID + "→" + rel.ToClaimID
+	}
+	want := map[string]string{"rel-iops-disk": "cl-iops→cl-disk", "rel-iops-restated": "cl-iops→cl-restated"}
+	for id, ends := range want {
+		if got[id] != ends {
+			t.Errorf("Wednesday contradiction %s = %q, want %q (all: %v)", id, got[id], ends, got)
+		}
+	}
+
+	edges, err := recordedRelationships(s.conn.Relationships, s.conn.Claims, wednesday).ListByClaimIDs(ctx, []string{"cl-disk"})
+	if err != nil {
+		t.Fatalf("recorded edges of cl-disk: %v", err)
+	}
+	support := false
+	for _, rel := range edges {
+		if rel.ID == "rel-restated-disk" && rel.FromClaimID == "cl-restated" && rel.ToClaimID == "cl-disk" {
+			support = true
+		}
+	}
+	if !support {
+		t.Errorf("Wednesday edges of cl-disk = %+v, missing the support edge the merge dropped as a self-loop", edges)
+	}
+}
+
 func answerIDs(ans domain.Answer) map[string]bool {
 	out := make(map[string]bool, len(ans.Claims))
 	for _, c := range ans.Claims {
@@ -380,4 +450,8 @@ func TestRecordedAsOf_TrustIsReconstructedAtT(t *testing.T) {
 	if math.Abs(got-today) < 1e-3 {
 		t.Errorf("trust at Tuesday equals today's %.4f: Thursday's evidence and credit leaked into the past", today)
 	}
+}
+
+func recordedRelationships(rels ports.RelationshipRepository, claims ports.ClaimRepository, at time.Time) recorded.Relationships {
+	return recorded.Relationships{RelationshipRepository: rels, Claims: claims, At: at}
 }

@@ -344,6 +344,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	defer func() { _ = tx.Rollback() }()
 	for _, q := range []string{
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_evidence")),
+		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "closed_claim_evidence")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_status_history")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_validity_history")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_credit_history")),
@@ -428,6 +429,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claim_evidence"))); err != nil {
 		return fmt.Errorf("delete claim_evidence: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "closed_claim_evidence"))); err != nil {
+		return fmt.Errorf("delete closed_claim_evidence: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claim_status_history"))); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -77,6 +78,12 @@ func (r RelationshipRepository) RepointEndpoint(ctx context.Context, oldID, newI
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Edges the rewrite drops are closed, not deleted (ADR 0036 §8).
+	closedAt := time.Now().UTC().Truncate(time.Microsecond)
+	if err := r.stageClosedEdges(ctx, tx, oldID, newID, closedAt); err != nil {
+		return err
+	}
+
 	// Postgres has no UPDATE OR IGNORE, so conflicting edges must be removed
 	// before the rewrite. This used to be two pre-deletes, one per endpoint,
 	// BOTH evaluated before EITHER update ran — and that is unsound: rewriting
@@ -136,6 +143,9 @@ DELETE FROM %s WHERE id IN (
 	// No separate self-loop sweep: the prune above already drops any row whose
 	// post-rewrite endpoints are equal (nf = nt), which covers both loops the
 	// rewrite would create and any that already existed on newID.
+	if err := r.keepClosedEdges(ctx, tx, closedAt); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit repoint endpoint tx: %w", err)
 	}
@@ -149,6 +159,12 @@ func (r RelationshipRepository) DeleteByClaim(ctx context.Context, claimID strin
 		claimID,
 	); err != nil {
 		return fmt.Errorf("delete relationships for %s: %w", claimID, err)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		fmt.Sprintf(`DELETE FROM %s WHERE from_claim_id = $1 OR to_claim_id = $1`, qualify(r.ns, "closed_relationships")),
+		claimID,
+	); err != nil {
+		return fmt.Errorf("delete closed relationships for %s: %w", claimID, err)
 	}
 	return nil
 }
@@ -181,6 +197,11 @@ func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 		`DELETE FROM %s`, qualify(r.ns, "relationships"),
 	)); err != nil {
 		return fmt.Errorf("delete all relationships: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
+		`DELETE FROM %s`, qualify(r.ns, "closed_relationships"),
+	)); err != nil {
+		return fmt.Errorf("delete all closed relationships: %w", err)
 	}
 	return nil
 }

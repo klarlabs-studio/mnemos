@@ -124,6 +124,8 @@ type state struct {
 	validityHistory  []domain.ValidityChange         // every claim's validity changes, in insertion order
 	evidence         map[string]map[string]time.Time // claim_id -> event_id -> when the link was recorded
 	creditHistory    []domain.CreditChange           // every claim's applied-credit changes, in insertion order
+	closedEvidence   []domain.ClosedEvidence         // evidence links closed instead of deleted (ADR 0036 §8), in closure order
+	closedRels       []domain.ClosedRelationship     // associations closed instead of deleted (ADR 0036 §8), in closure order
 	relationships    map[string]storedRelationship
 	embeddings       map[embeddingKey]storedEmbedding
 	users            map[string]storedUser
@@ -225,6 +227,8 @@ func (s *state) clear() {
 	s.validityHistory = nil
 	s.evidence = map[string]map[string]time.Time{}
 	s.creditHistory = nil
+	s.closedEvidence = nil
+	s.closedRels = nil
 	s.relationships = map[string]storedRelationship{}
 	s.embeddings = map[embeddingKey]storedEmbedding{}
 	s.users = map[string]storedUser{}

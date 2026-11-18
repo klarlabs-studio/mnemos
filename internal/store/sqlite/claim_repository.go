@@ -785,6 +785,9 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_evidence WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_evidence: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM closed_claim_evidence WHERE claim_id = ?`, claimID); err != nil {
+		return fmt.Errorf("delete closed_claim_evidence: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)
 	}
@@ -844,6 +847,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	defer rollbackTx(tx)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_evidence`); err != nil {
 		return fmt.Errorf("delete claim_evidence: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM closed_claim_evidence`); err != nil {
+		return fmt.Errorf("delete closed_claim_evidence: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history`); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)

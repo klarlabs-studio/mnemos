@@ -288,6 +288,41 @@ CREATE TABLE IF NOT EXISTS claim_credit_history (
   CONSTRAINT fk_claim_credit_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- closed_claim_evidence and closed_relationships (ADR 0036 §8): evidence links
+-- and associations ended instead of deleted, by retraction (ADR 0037) and by
+-- semantic-dedupe merges. The row leaves the live table, so no live read sees
+-- it, and is kept here with when, by whom and why it was closed; only
+-- recorded-as-of reads consult them. A row was in force over
+-- [created_at, closed_at). No foreign keys: the deletes that destroy a claim or
+-- an event clear these explicitly.
+CREATE TABLE IF NOT EXISTS closed_claim_evidence (
+  claim_id   VARCHAR(190) NOT NULL,
+  event_id   VARCHAR(190) NOT NULL,
+  created_at DATETIME(6)  NULL,
+  closed_at  DATETIME(6)  NOT NULL,
+  closed_by  VARCHAR(190) NOT NULL DEFAULT '<system>',
+  reason     TEXT         NOT NULL,
+  PRIMARY KEY (claim_id, event_id, closed_at),
+  KEY idx_closed_claim_evidence_event_id (event_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS closed_relationships (
+  id            VARCHAR(190) NOT NULL,
+  type          VARCHAR(32)  NOT NULL,
+  from_claim_id VARCHAR(190) NOT NULL,
+  to_claim_id   VARCHAR(190) NOT NULL,
+  created_at    DATETIME(6)  NOT NULL,
+  created_by    VARCHAR(190) NOT NULL DEFAULT '<system>',
+  strength      DOUBLE       NOT NULL DEFAULT 1,
+  derived_by    VARCHAR(64)  NOT NULL DEFAULT '',
+  closed_at     DATETIME(6)  NOT NULL,
+  closed_by     VARCHAR(190) NOT NULL DEFAULT '<system>',
+  reason        TEXT         NOT NULL,
+  PRIMARY KEY (id, closed_at),
+  KEY idx_closed_relationships_from (from_claim_id),
+  KEY idx_closed_relationships_to   (to_claim_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS embeddings (
   entity_id   VARCHAR(190) NOT NULL,
   entity_type VARCHAR(64)  NOT NULL,

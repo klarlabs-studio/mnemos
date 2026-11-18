@@ -2,6 +2,8 @@ package recorded
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
@@ -18,9 +20,12 @@ import (
 // merged into that endpoint which existed when the edge was created (the
 // oldest, when several did), as that claim stood at At. An edge whose
 // endpoint already existed when it was created stays where it is: it may have
-// been the endpoint's own or a loser's, and nothing recorded says which. Edges
-// a merge deleted (a self-loop between loser and winner, or a duplicate of an
-// edge the winner already had) are gone and are not reconstructed.
+// been the endpoint's own or a loser's, and nothing recorded says which.
+//
+// Edges a merge dropped (a self-loop between loser and winner, or a duplicate
+// of an edge the winner already had) are closed, not deleted (ADR 0036 §8): an
+// edge closed after At is in the view, with the endpoints it had when it was
+// closed, and goes through the same rewind.
 type Relationships struct {
 	ports.RelationshipRepository
 	// Claims is the unbounded claim repository the merge walk reads.
@@ -165,7 +170,11 @@ func (r Relationships) ListByClaimIDs(ctx context.Context, ids []string) ([]doma
 	if err != nil {
 		return nil, err
 	}
-	rels, err = r.rewind(ctx, rels)
+	closed, err := r.ListClosedByClaimIDs(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("closed edges: %w", err)
+	}
+	rels, err = r.rewind(ctx, r.withClosed(rels, closed))
 	if err != nil {
 		return nil, err
 	}
@@ -193,5 +202,46 @@ func (r Relationships) ListAll(ctx context.Context) ([]domain.Relationship, erro
 	if err != nil {
 		return nil, err
 	}
-	return r.rewind(ctx, rels)
+	closed, err := r.ListAllClosed(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("closed edges: %w", err)
+	}
+	return r.rewind(ctx, r.withClosed(rels, closed))
+}
+
+// withClosed adds to rels the closed edges that were in force at At. An edge
+// id names one row at a time, but a live edge can reuse the id of one closed
+// earlier (an edge re-detected after a merge dropped it); the closed one wins
+// at At when the live one was recorded after At. When closed edges are added,
+// the result is ordered by created_at, as ListAll is.
+func (r Relationships) withClosed(rels []domain.Relationship, closed []domain.ClosedRelationship) []domain.Relationship {
+	if len(closed) == 0 {
+		return rels
+	}
+	out := append([]domain.Relationship(nil), rels...)
+	changed := false
+	at := make(map[string]int, len(out))
+	for i, rel := range out {
+		at[rel.ID] = i
+	}
+	for _, c := range closed {
+		if !c.InForceAt(r.At) {
+			continue
+		}
+		i, ok := at[c.ID]
+		switch {
+		case !ok:
+			at[c.ID] = len(out)
+			out = append(out, c.Association)
+			changed = true
+		case out[i].CreatedAt.After(r.At):
+			out[i] = c.Association
+			changed = true
+		}
+	}
+	if !changed {
+		return rels
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out
 }

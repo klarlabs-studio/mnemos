@@ -364,6 +364,69 @@ func (r ClaimRepository) UnlinkEvidence(_ context.Context, claimID, eventID stri
 	return nil
 }
 
+// CloseEvidence implements [ports.ClaimRepository.CloseEvidence].
+func (r ClaimRepository) CloseEvidence(_ context.Context, claimID, eventID string, closedAt time.Time, note domain.ChangeNote) error {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	links, ok := r.state.evidence[claimID]
+	if !ok {
+		return nil
+	}
+	created, ok := links[eventID]
+	if !ok {
+		return nil
+	}
+	r.state.closedEvidence = append(r.state.closedEvidence, domain.ClosedEvidence{
+		BeliefEvidence: domain.ClaimEvidence{ClaimID: claimID, EventID: eventID, CreatedAt: created},
+		ClosedAt:       closedAt.UTC(),
+		ClosedBy:       actorOr(note.ChangedBy),
+		Reason:         note.Reason,
+	})
+	delete(links, eventID)
+	if len(links) == 0 {
+		delete(r.state.evidence, claimID)
+	}
+	return nil
+}
+
+// ListClosedEvidenceByClaimIDs implements [ports.ClaimRepository.ListClosedEvidenceByClaimIDs].
+func (r ClaimRepository) ListClosedEvidenceByClaimIDs(_ context.Context, claimIDs []string) ([]domain.ClosedEvidence, error) {
+	return r.closedEvidenceWhere(claimIDs, func(l domain.ClosedEvidence) string { return l.ClaimID }), nil
+}
+
+// ListClosedEvidenceByEventIDs implements [ports.ClaimRepository.ListClosedEvidenceByEventIDs].
+func (r ClaimRepository) ListClosedEvidenceByEventIDs(_ context.Context, eventIDs []string) ([]domain.ClosedEvidence, error) {
+	return r.closedEvidenceWhere(eventIDs, func(l domain.ClosedEvidence) string { return l.EventID }), nil
+}
+
+func (r ClaimRepository) closedEvidenceWhere(ids []string, key func(domain.ClosedEvidence) string) []domain.ClosedEvidence {
+	wanted := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		wanted[id] = true
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	var out []domain.ClosedEvidence
+	for _, l := range r.state.closedEvidence {
+		if wanted[key(l)] {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// dropClosedEvidenceLocked removes the closed links matching drop. Caller
+// holds the write lock.
+func (s *state) dropClosedEvidenceLocked(drop func(domain.ClosedEvidence) bool) {
+	kept := s.closedEvidence[:0]
+	for _, l := range s.closedEvidence {
+		if !drop(l) {
+			kept = append(kept, l)
+		}
+	}
+	s.closedEvidence = kept
+}
+
 // DeleteCascade removes a claim plus every claim-keyed collection it
 // owns: evidence, status history, the version chain, the feedback
 // counters and the forward expectation — the full canonical set from
@@ -382,6 +445,7 @@ func (r ClaimRepository) DeleteCascade(_ context.Context, claimID string) error 
 		r.state.claimOrder = removeStringFromSlice(r.state.claimOrder, claimID)
 	}
 	delete(r.state.evidence, claimID)
+	r.state.dropClosedEvidenceLocked(func(l domain.ClosedEvidence) bool { return l.ClaimID == claimID })
 	delete(r.state.statusHistory, claimID)
 	r.dropValidityHistoryLocked(claimID)
 	r.dropCreditHistoryLocked(claimID)
@@ -470,6 +534,7 @@ func (r ClaimRepository) DeleteAll(_ context.Context) error {
 	r.state.claims = map[string]storedClaim{}
 	r.state.claimOrder = nil
 	r.state.evidence = map[string]map[string]time.Time{}
+	r.state.closedEvidence = nil
 	r.state.creditHistory = nil
 	r.state.statusHistory = map[string][]storedTransition{}
 	r.state.validityHistory = nil
