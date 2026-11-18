@@ -35,8 +35,10 @@ host_port() {
   docker port "$1" "$2/tcp" | head -1 | sed 's/.*://'
 }
 
+# -v: `docker rm -f` overrides --rm and would leave each container's anonymous
+# data volume behind (~1.3 GB per run), which filled the disk.
 cleanup() {
-  docker rm -f "${PG_NAME}" "${MY_NAME}" >/dev/null 2>&1 || true
+  docker rm -f -v "${PG_NAME}" "${MY_NAME}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -49,7 +51,7 @@ reap_orphans() {
     owner="$(docker inspect -f "{{ index .Config.Labels \"${LABEL}\" }}" "${id}" 2>/dev/null || true)"
     if [[ -n "${owner}" ]] && ! kill -0 "${owner}" 2>/dev/null; then
       echo "removing orphaned integration container ${id} (owner ${owner} exited)"
-      docker rm -f "${id}" >/dev/null 2>&1 || true
+      docker rm -f -v "${id}" >/dev/null 2>&1 || true
     fi
   done
 }
