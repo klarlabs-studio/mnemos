@@ -1,0 +1,299 @@
+# Evolving engineering ownership: do structured claims beat raw chunks on a
+# changing world?
+#
+# Three services change owner, and checkout's on-call rotates, over six phases
+# (labelled jan..jun; each is "the end of that phase" on the real write clock,
+# see internal/brainbench/timeline.go). The world is messy in the ways an
+# ownership register is messy:
+#
+#   - ANNOUNCED AHEAD. In February the search handover to Platform is
+#     announced, effective March (valid time later than record time).
+#   - RECORDED LATE. Billing moved to Ledger in March; nobody wrote it down
+#     until May (valid time earlier than record time).
+#   - CORRECTED AFTER THE FACT. In May the February announcement is found to
+#     have named the wrong team: Relevance, not Platform, took search over in
+#     March. The Platform claim is retracted.
+#   - STALE RESTATEMENTS. A runbook copied in March restates the old search
+#     owner verbatim; a June escalation page restates the old checkout owner
+#     in new words. Nobody curates either, as nobody curates a stale wiki.
+#
+# Curation mirrors the shipped operations: `supersede_by` is `mnemos resolve
+# --supersedes` (the old claim's valid time ends where the successor's
+# begins), `retract` is a status transition. They are applied in the phase the
+# change was RECORDED, never the phase it took effect.
+#
+# Probe classes (accuracy_<class>):
+#   current         who owns / is on call for X now
+#   valid_history   who owned X at the end of phase D, with today's knowledge
+#   known_history   what the brain believed at the end of phase D about who
+#                   owned X then
+#   change_why      what changed and why
+#
+# A probe is correct only when the expected assertion is returned and no
+# forbidden assertion is (strict rule). Forbidden strings are full ownership
+# assertions, not team names, because the "why" sentences legitimately mention
+# both the old and new team.
+#
+# Gold was written from the timeline's semantics before any system was run
+# against it, and has not been edited to favour any system.
+id: ownership_timeline
+description: Services change owners and on-call several times, with announced, late-recorded, corrected and stale-restated changes; reconstruct ownership now, then, and as believed then.
+
+timeline:
+  - phase: jan
+    docs:
+      - id: register-checkout
+        source: service-register
+        text: |
+          The checkout service is owned by the Payments team.
+      - id: register-search
+        source: service-register
+        text: |
+          The search service is owned by the Discovery team.
+      - id: register-billing
+        source: service-register
+        text: |
+          The billing service is owned by the Revenue team.
+      - id: oncall-alice
+        source: pagerduty-export
+        text: |
+          The primary on-call for checkout is Alice Moreno.
+
+  - phase: feb
+    docs:
+      - id: announce-search
+        source: eng-announcements
+        valid_from: mar
+        text: |
+          The search service is owned by the Platform team.
+      - id: announce-search-why
+        source: eng-announcements
+        valid_from: mar
+        text: |
+          Search moves from the Discovery team to the Platform team in March to consolidate infrastructure ownership.
+      - id: oncall-bob
+        source: pagerduty-export
+        text: |
+          The primary on-call for checkout is Bob Okafor.
+      - id: oncall-bob-why
+        source: oncall-channel
+        text: |
+          Checkout on-call moved from Alice Moreno to Bob Okafor because Alice joined the fraud project.
+    changes:
+      - supersede_by:
+          old: search service is owned by the Discovery team
+          new: search service is owned by the Platform team
+        reason: announced handover, effective March
+      - supersede_by:
+          old: on-call for checkout is Alice Moreno
+          new: on-call for checkout is Bob Okafor
+        reason: on-call rotation
+
+  - phase: mar
+    docs:
+      - id: runbook-copy
+        source: search-runbook
+        text: |
+          The search service is owned by the Discovery team.
+
+  - phase: apr
+    docs:
+      - id: register-checkout-commerce
+        source: service-register
+        text: |
+          The checkout service is owned by the Commerce team.
+      - id: checkout-why
+        source: reorg-memo
+        text: |
+          Checkout moved from the Payments team to the Commerce team after the storefront reorg.
+    changes:
+      - supersede_by:
+          old: checkout service is owned by the Payments team
+          new: checkout service is owned by the Commerce team
+        reason: storefront reorg
+
+  - phase: may
+    docs:
+      - id: register-billing-ledger
+        source: service-register
+        valid_from: mar
+        text: |
+          The billing service is owned by the Ledger team.
+      - id: billing-why
+        source: finance-sync
+        valid_from: mar
+        text: |
+          Billing moved from the Revenue team to the Ledger team in March, but the change was only recorded in May.
+      - id: search-correction
+        source: service-register
+        valid_from: mar
+        text: |
+          The search service is owned by the Relevance team.
+      - id: search-correction-why
+        source: eng-announcements
+        valid_from: mar
+        text: |
+          The February search announcement named the wrong team, and the Relevance team took search over in March.
+    changes:
+      - supersede_by:
+          old: billing service is owned by the Revenue team
+          new: billing service is owned by the Ledger team
+        reason: late-recorded March handover
+      - retract: search service is owned by the Platform team
+        reason: the February announcement named the wrong team
+
+  - phase: jun
+    docs:
+      - id: escalation-page
+        source: escalation-wiki
+        text: |
+          For checkout escalations page the Payments team, which owns the checkout service.
+      - id: oncall-chen
+        source: pagerduty-export
+        text: |
+          The primary on-call for checkout is Chen Liu.
+    changes:
+      - supersede_by:
+          old: on-call for checkout is Bob Okafor
+          new: on-call for checkout is Chen Liu
+        reason: on-call rotation
+
+warmup:
+  - who owns the checkout service
+  - who owns the search service
+
+probes:
+  # Current truth.
+  - id: now-checkout
+    class: current
+    query: who owns the checkout service
+    expect: checkout service is owned by the Commerce team
+    must_not:
+      - checkout service is owned by the Payments team
+      - Payments team, which owns the checkout service
+  - id: now-search
+    class: current
+    query: who owns the search service
+    expect: search service is owned by the Relevance team
+    must_not:
+      - search service is owned by the Platform team
+      - search service is owned by the Discovery team
+  - id: now-billing
+    class: current
+    query: who owns the billing service
+    expect: billing service is owned by the Ledger team
+    must_not:
+      - billing service is owned by the Revenue team
+  - id: now-oncall
+    class: current
+    query: who is the primary on-call for checkout
+    expect: on-call for checkout is Chen Liu
+    must_not:
+      - on-call for checkout is Alice Moreno
+      - on-call for checkout is Bob Okafor
+
+  # What changed and why.
+  - id: why-checkout
+    class: change_why
+    query: why did checkout move to the Commerce team
+    expect: after the storefront reorg
+  - id: why-oncall
+    class: change_why
+    query: why did the checkout on-call change from Alice Moreno
+    expect: joined the fraud project
+  - id: why-billing
+    class: change_why
+    query: when did billing move to the Ledger team
+    expect: only recorded in May
+  - id: why-search
+    class: change_why
+    query: why was the search owner corrected to the Relevance team
+    expect: named the wrong team
+
+as_of_probes:
+  # Valid-time history: who owned X then, with today's knowledge.
+  - id: valid-feb-search
+    class: valid_history
+    valid_as_of: feb
+    query: who owns the search service
+    expect: search service is owned by the Discovery team
+    must_not:
+      - search service is owned by the Platform team
+      - search service is owned by the Relevance team
+  - id: valid-apr-search
+    class: valid_history
+    valid_as_of: apr
+    query: who owns the search service
+    expect: search service is owned by the Relevance team
+    must_not:
+      - search service is owned by the Platform team
+      - search service is owned by the Discovery team
+  - id: valid-apr-billing
+    class: valid_history
+    valid_as_of: apr
+    query: who owns the billing service
+    expect: billing service is owned by the Ledger team
+    must_not:
+      - billing service is owned by the Revenue team
+  - id: valid-mar-checkout
+    class: valid_history
+    valid_as_of: mar
+    query: who owns the checkout service
+    expect: checkout service is owned by the Payments team
+    must_not:
+      - checkout service is owned by the Commerce team
+  - id: valid-jan-oncall
+    class: valid_history
+    valid_as_of: jan
+    query: who is the primary on-call for checkout
+    expect: on-call for checkout is Alice Moreno
+    must_not:
+      - on-call for checkout is Bob Okafor
+      - on-call for checkout is Chen Liu
+
+  # Knowledge-time history: what the brain believed then about who owned X
+  # then. Not yet known facts are forbidden; so is a belief already ended.
+  - id: known-feb-search
+    class: known_history
+    recorded_as_of: feb
+    query: who owns the search service
+    expect: search service is owned by the Discovery team
+    must_not:
+      - search service is owned by the Relevance team
+  - id: known-apr-search
+    class: known_history
+    recorded_as_of: apr
+    query: who owns the search service
+    expect: search service is owned by the Platform team
+    must_not:
+      - search service is owned by the Relevance team
+      - search service is owned by the Discovery team
+  - id: known-apr-billing
+    class: known_history
+    recorded_as_of: apr
+    query: who owns the billing service
+    expect: billing service is owned by the Revenue team
+    must_not:
+      - billing service is owned by the Ledger team
+  - id: known-mar-checkout
+    class: known_history
+    recorded_as_of: mar
+    query: who owns the checkout service
+    expect: checkout service is owned by the Payments team
+    must_not:
+      - checkout service is owned by the Commerce team
+  - id: known-feb-oncall
+    class: known_history
+    recorded_as_of: feb
+    query: who is the primary on-call for checkout
+    expect: on-call for checkout is Bob Okafor
+    must_not:
+      - on-call for checkout is Alice Moreno
+      - on-call for checkout is Chen Liu
+
+process:
+  dedupe_threshold: 0.92
+  forget_below_trust: 0.45
+  forget_refuted: true
+  decay_associations: true
+  decay_inhibition: true

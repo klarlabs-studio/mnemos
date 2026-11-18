@@ -15,7 +15,10 @@ import (
 //
 // 2: timeline scenarios (seed.phases, as_of_* metrics), raw-retrieval baselines
 // (scenarios[].baselines, baseline_summary) and per-scenario question lists.
-const ReportVersion = 2
+//
+// 3: per-class accuracy metrics (accuracy_<class>) and the per-system cost
+// report (scenarios[].cost).
+const ReportVersion = 3
 
 // Report is the harness's complete machine-readable output.
 type Report struct {
@@ -108,6 +111,10 @@ func Limitations() []string {
 			"two lexical retrievers plus Mnemos's structure. It says nothing about dense-retrieval RAG.",
 		"Baselines are compared with the untreated arm only. They are not consolidated, so comparing " +
 			"them with the treatment arm would mix the process effect into the baseline effect.",
+		"Cost figures are single-run wall times on tens of documents. Mnemos's stored bytes are a " +
+			"SQLite file dominated by schema and history tables, the baselines' an in-memory index; " +
+			"embedding is the free stub, so a real provider's ingest and query cost is absent; and " +
+			"nothing here says how either side's cost grows with corpus size.",
 		"Timeline phases are milliseconds apart on the wall clock, not days. Valid-time freshness and " +
 			"decay see no age difference between phases, and a wall-clock step backwards during a run " +
 			"would misorder them (TestRun_TimelinePhasesAreOrderedOnTheWriteClock guards the order). " +
@@ -301,6 +308,33 @@ func writeBaselines(p func(string, ...any), s ScenarioResult) {
 	for _, b := range s.Baselines {
 		p("    vs %s: %d mnemos-better, %d baseline-better, %d tie, %d unknown\n",
 			b.Name, b.Summary.MnemosBetter, b.Summary.BaselineBetter, b.Summary.Tie, b.Summary.Unknown)
+	}
+	p("\n")
+	writeCost(p, s.Cost)
+}
+
+// writeCost renders the cost side: what each system spent to give the answers
+// in the baseline table. Wall-clock figures; no verdict is drawn from them.
+func writeCost(p func(string, ...any), c CostReport) {
+	if len(c.Systems) == 0 {
+		return
+	}
+	p("  COST (wall-clock, varies run to run; corpus %d bytes of raw text)\n", c.CorpusBytes)
+	p("    %-17s %10s %11s %12s %8s %10s %10s  %s\n",
+		"system", "build_ms", "curation_ms", "stored_bytes", "queries", "q_mean_ms", "q_max_ms", "rows")
+	for _, s := range c.Systems {
+		kinds := make([]string, 0, len(s.Rows))
+		for k := range s.Rows {
+			kinds = append(kinds, k)
+		}
+		sort.Strings(kinds)
+		rows := make([]string, len(kinds))
+		for i, k := range kinds {
+			rows[i] = fmt.Sprintf("%s=%d", k, s.Rows[k])
+		}
+		p("    %-17s %10.2f %11.2f %12d %8d %10.3f %10.3f  %s\n",
+			s.System, s.BuildMS, s.CurationMS, s.StoredBytes, s.Queries, s.QueryMeanMS, s.QueryMaxMS,
+			strings.Join(rows, " "))
 	}
 	p("\n")
 }

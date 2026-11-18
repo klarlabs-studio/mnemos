@@ -3,6 +3,7 @@ package brainbench
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"go.klarlabs.de/mnemos"
@@ -22,6 +23,12 @@ const (
 	// MetricAsOfValid is the share of valid-as-of probes answered correctly:
 	// "what is known now about T?".
 	MetricAsOfValid = "as_of_valid_accuracy"
+
+	// MetricClassAccuracyPrefix prefixes the per-class accuracy metrics:
+	// accuracy_<class> is the share of a class's probes (ordinary and as-of
+	// alike) answered correctly by the strict rule — expected text in the
+	// results and no forbidden text.
+	MetricClassAccuracyPrefix = "accuracy_"
 )
 
 // question is one retrieval request plus its gold.
@@ -31,6 +38,7 @@ type question struct {
 	Limit   int
 	Expect  string
 	MustNot []string
+	Class   string
 
 	// RecordedAsOf and AsOf are zero for an ordinary probe. An as-of probe
 	// sets exactly one of them.
@@ -55,11 +63,11 @@ func buildQuestions(sc Scenario, phases PhaseTimes) (questionSet, error) {
 	var qs questionSet
 	for _, p := range sc.Probes {
 		qs.probes = append(qs.probes, question{
-			ID: p.ID, Text: p.Query, Limit: limitOr(p.Limit), Expect: p.Expect, MustNot: p.MustNot,
+			ID: p.ID, Text: p.Query, Limit: limitOr(p.Limit), Expect: p.Expect, MustNot: p.MustNot, Class: p.Class,
 		})
 	}
 	for _, p := range sc.AsOfProbes {
-		q := question{ID: p.ID, Text: p.Query, Limit: limitOr(p.Limit), Expect: p.Expect, MustNot: p.MustNot}
+		q := question{ID: p.ID, Text: p.Query, Limit: limitOr(p.Limit), Expect: p.Expect, MustNot: p.MustNot, Class: p.Class}
 		phase := p.RecordedAsOf + p.ValidAsOf
 		w, ok := phases[phase]
 		if !ok || w.End.IsZero() {
@@ -88,6 +96,36 @@ type battery struct {
 	// answerer. Tests compare it across answerers.
 	asked   []string
 	metrics []Metric
+	// latencies holds each question's wall-clock retrieval time, in asking
+	// order. Cost only: wall time varies run to run, so it is never a metric.
+	latencies []time.Duration
+	outcomes  []Outcome
+}
+
+// answered is one question with the texts the answerer returned for it.
+type answered struct {
+	q     question
+	texts []string
+	took  time.Duration
+}
+
+// answerLog times every retrieval and keeps what it returned, so
+// the per-class tally and the cost report read the very answers the scored
+// metrics were computed from rather than asking a second time (Mnemos recall
+// writes back, so a second ask would not be the same question).
+type answerLog struct {
+	r   retriever
+	log *[]answered
+}
+
+func (rr answerLog) retrieve(ctx context.Context, q question) ([]string, error) {
+	began := time.Now()
+	texts, err := rr.r.retrieve(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	*rr.log = append(*rr.log, answered{q: q, texts: texts, took: time.Since(began)})
+	return texts, nil
 }
 
 // runBattery puts every question to r and scores the answers.
@@ -97,18 +135,78 @@ type battery struct {
 // write-backs out of the reconstruction being scored.
 func runBattery(ctx context.Context, r retriever, qs questionSet) (battery, error) {
 	var b battery
-	asOf, err := scoreAsOf(ctx, r, qs.asOf, &b.asked)
+	var log []answered
+	rec := answerLog{r: r, log: &log}
+	asOf, err := scoreAsOf(ctx, rec, qs.asOf, &b.asked)
 	if err != nil {
 		return battery{}, err
 	}
-	answer, err := scoreAnswers(ctx, r, qs.probes, &b.asked)
+	answer, err := scoreAnswers(ctx, rec, qs.probes, &b.asked)
 	if err != nil {
 		return battery{}, err
 	}
-	b.metrics = make([]Metric, 0, len(answer)+len(asOf))
+	classes := scoreClasses(log)
+	b.metrics = make([]Metric, 0, len(answer)+len(asOf)+len(classes))
 	b.metrics = append(b.metrics, answer...)
 	b.metrics = append(b.metrics, asOf...)
+	b.metrics = append(b.metrics, classes...)
+	for _, a := range log {
+		b.latencies = append(b.latencies, a.took)
+		b.outcomes = append(b.outcomes, Outcome{
+			ID: a.q.ID, Class: a.q.Class, Rank: rankOf(a.texts, a.q.Expect),
+			Forbidden: anyForbidden(a.texts, a.q.MustNot), Correct: correct(a.texts, a.q),
+		})
+	}
 	return b, nil
+}
+
+// Outcome is how one answerer did on one question, so a class accuracy can be
+// traced back to the probes behind it.
+type Outcome struct {
+	ID    string `json:"id"`
+	Class string `json:"class,omitempty"`
+	// Rank is the 1-based rank of the first result containing the expected
+	// text, 0 when it was not returned.
+	Rank int `json:"rank"`
+	// Forbidden is true when any must_not text was returned.
+	Forbidden bool `json:"forbidden,omitempty"`
+	// Correct applies the strict rule: returned, and nothing forbidden.
+	Correct bool `json:"correct"`
+}
+
+// correct is the strict rule: the expected text is returned and no forbidden
+// text is. Returning the current owner beside the previous one is not an
+// answer to "who owns it now".
+func correct(texts []string, q question) bool {
+	return rankOf(texts, q.Expect) > 0 && !anyForbidden(texts, q.MustNot)
+}
+
+// scoreClasses emits one accuracy_<class> metric per class declared in the
+// battery, in name order. Probes without a class are not tallied, and a
+// scenario that declares no class emits nothing: there is no class whose
+// accuracy is unknown, only classes nobody asked about.
+func scoreClasses(log []answered) []Metric {
+	n := make(map[string]int)
+	ok := make(map[string]int)
+	for _, a := range log {
+		if a.q.Class == "" {
+			continue
+		}
+		n[a.q.Class]++
+		if correct(a.texts, a.q) {
+			ok[a.q.Class]++
+		}
+	}
+	names := make([]string, 0, len(n))
+	for c := range n {
+		names = append(names, c)
+	}
+	sort.Strings(names)
+	out := make([]Metric, 0, len(names))
+	for _, c := range names {
+		out = append(out, KnownMetric(MetricClassAccuracyPrefix+c, HigherBetter, ratio(ok[c], n[c]), n[c], "ratio"))
+	}
+	return out
 }
 
 // rankOf returns the 1-based rank of the first text containing expect, or 0.
@@ -188,16 +286,16 @@ func scoreAsOf(ctx context.Context, r retriever, qs []question, asked *[]string)
 			return nil, fmt.Errorf("brainbench: as-of probe %s: %w", q.ID, err)
 		}
 		*asked = append(*asked, q.ID)
-		correct := rankOf(texts, q.Expect) > 0 && !anyForbidden(texts, q.MustNot)
+		right := correct(texts, q)
 		if !q.RecordedAsOf.IsZero() {
 			recN++
-			if correct {
+			if right {
 				recOK++
 			}
 			continue
 		}
 		valN++
-		if correct {
+		if right {
 			valOK++
 		}
 	}

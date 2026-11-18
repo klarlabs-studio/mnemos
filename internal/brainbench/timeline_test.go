@@ -202,7 +202,15 @@ func TestScenario_ValidateTimeline(t *testing.T) {
 		want string
 	}{
 		{"corpus and timeline", func(s *Scenario) { s.Corpus = []Doc{{ID: "x", Text: "t"}} }, "not both"},
-		{"valid_from in the future", func(s *Scenario) { s.Timeline[0].Docs[0].ValidFrom = "thursday" }, "valid_from"},
+		{"valid_from an unknown phase", func(s *Scenario) { s.Timeline[0].Docs[0].ValidFrom = "friday" }, "valid_from"},
+		{"supersede_by without new", func(s *Scenario) {
+			s.Timeline[2].Changes[0] = Change{SupersedeBy: &SupersedeEdge{Old: "pool size is 50"}}
+		}, "supersede_by needs old and new"},
+		{"supersede and supersede_by", func(s *Scenario) {
+			s.Timeline[2].Changes[1].SupersedeBy = &SupersedeEdge{Old: "a", New: "b"}
+		}, "exactly one of retract"},
+		{"class not an identifier", func(s *Scenario) { s.Probes[0].Class = "Current Truth" }, "class"},
+		{"as-of class not an identifier", func(s *Scenario) { s.AsOfProbes[0].Class = "9lives" }, "class"},
 		{"unknown as-of phase", func(s *Scenario) { s.AsOfProbes[0].RecordedAsOf = "friday" }, "unknown phase"},
 		{"both axes", func(s *Scenario) { s.AsOfProbes[0].ValidAsOf = "monday" }, "exactly one of recorded_as_of"},
 		{"two ops in one change", func(s *Scenario) { s.Timeline[2].Changes[0].Archive = "x" }, "exactly one of retract"},
