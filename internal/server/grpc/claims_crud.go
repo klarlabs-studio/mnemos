@@ -32,6 +32,11 @@ func (s *Server) GetBelief(ctx context.Context, req *mnemosv1.GetBeliefRequest) 
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	return beliefDetailToProto(c), nil
+}
+
+// beliefDetailToProto renders a library Claim as a BeliefDetail.
+func beliefDetailToProto(c mnemos.Claim) *mnemosv1.BeliefDetail {
 	out := &mnemosv1.BeliefDetail{
 		Id: c.ID, Statement: c.Statement, Type: c.Type,
 		Confidence: c.Confidence, TrustScore: c.TrustScore, Lifecycle: string(c.Lifecycle),
@@ -45,7 +50,7 @@ func (s *Server) GetBelief(ctx context.Context, req *mnemosv1.GetBeliefRequest) 
 	if !c.RecordedAt.IsZero() {
 		out.RecordedAt = timestamppb.New(c.RecordedAt)
 	}
-	return out, nil
+	return out
 }
 
 // SetBeliefLifecycle transitions a belief's lifecycle.

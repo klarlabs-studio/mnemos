@@ -68,27 +68,6 @@ type IncidentQuery struct {
 	Offset   int
 }
 
-// ProvenanceSignal is one weighted component of a claim's credibility score.
-type ProvenanceSignal struct {
-	Name         string
-	Value        float64
-	Weight       float64
-	Contribution float64
-	Detail       string
-}
-
-// ClaimProvenance is a claim's credibility breakdown.
-type ClaimProvenance struct {
-	ClaimID        string
-	ClaimText      string
-	Score          float64
-	Signals        []ProvenanceSignal
-	Rationale      string
-	ProseRationale string
-	SourceDocument string
-	Liveness       string
-}
-
 // IncidentAnalysis is the "why were we wrong" post-mortem of an incident.
 type IncidentAnalysis struct {
 	Incident Incident
@@ -220,7 +199,7 @@ func toPublicIncidentAnalysis(r query.WhyWereWeWrongReport) IncidentAnalysis {
 	}
 	if p := r.RootClaim; p != nil {
 		prov := &ClaimProvenance{
-			ClaimID: p.ClaimID, ClaimText: p.ClaimText, Score: p.Score, Rationale: p.Rationale,
+			ClaimID: p.ClaimID, Text: p.ClaimText, Score: p.Score, Rationale: p.Rationale,
 			ProseRationale: p.ProseRationale, SourceDocument: p.SourceDocument, Liveness: string(p.Liveness),
 		}
 		for _, s := range p.Signals {

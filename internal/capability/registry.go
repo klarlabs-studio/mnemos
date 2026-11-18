@@ -76,8 +76,8 @@ var Registry = []Capability{
 		ID: "episode.list", Effect: Read,
 		Summary: "List stored episodes",
 		On: map[Transport]Binding{
-			Go: Gap("no episode listing on Memory; Timeline covers the temporal view"), REST: Has("GET /v1/episodes"), GRPC: Has("ListEpisodes"),
-			MCP: Gap("no episode listing tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Events"),
+			Go: Has("ListEvents"), REST: Has("GET /v1/episodes"), GRPC: Has("ListEpisodes"),
+			MCP: Has("list_episodes"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Events"),
 		},
 	},
 	{
@@ -103,17 +103,17 @@ var Registry = []Capability{
 		Summary: "Write a pre-built belief linked to existing evidence",
 		On: map[Transport]Binding{
 			Go: Has("RememberClaim"), REST: Has("POST /v1/beliefs"), GRPC: Has("AppendBeliefs"),
-			MCP: Gap("no tool writes a pre-built belief; remember stores one fact with its own evidence"), MCPLite: Has("remember_claim"), HTTPLite: Has("POST /v1/claims"), Client: Has("Claims"),
+			MCP: Has("remember_belief"), MCPLite: Has("remember_claim"), HTTPLite: Has("POST /v1/claims"), Client: Has("Claims"),
 		},
 	},
 	{
 		ID: "belief.remember_fact", Effect: Write,
 		Summary: "Store one fact as a belief, creating its evidence episode",
 		On: map[Transport]Binding{
-			Go: Has("RememberClaimWithEvidence"), REST: Gap("no single-fact write route"), GRPC: Gap("no single-fact write RPC"),
-			MCP: Has("remember"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no single-fact write"),
+			Go: Has("RememberClaimWithEvidence"), REST: Has("POST /v1/facts"), GRPC: Has("RememberFact"),
+			MCP: Has("remember"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("RememberClaimWithEvidence"),
 		},
-		Notes: "MCP remember and Go RememberClaimWithEvidence are separate implementations of the same idea.",
+		Notes: "REST, gRPC and the client go through Memory.RememberClaimWithEvidence (one observation episode per evidence string, run-scoped tokens refused). MCP remember is a separate implementation that records the fact text itself as its one run-scoped episode.",
 	},
 	{
 		ID: "belief.get", Effect: Read,
@@ -135,8 +135,8 @@ var Registry = []Capability{
 		ID: "belief.scan", Effect: Read,
 		Summary: "Read beliefs valid within a time range",
 		On: map[Transport]Binding{
-			Go: Has("Scan"), REST: Gap("no valid-time range route; GET /v1/beliefs filters by a single as-of instant"), GRPC: Gap("no valid-time range RPC"),
-			MCP: Gap("no valid-time range tool"), MCPLite: Has("scan"), HTTPLite: Has("POST /v1/scan"), Client: Gap("no valid-time range read"),
+			Go: Has("Scan"), REST: Has("GET /v1/scan"), GRPC: Has("ScanBeliefs"),
+			MCP: Has("scan_beliefs"), MCPLite: Has("scan"), HTTPLite: Has("POST /v1/scan"), Client: Has("Scan"),
 		},
 	},
 	{
@@ -144,40 +144,44 @@ var Registry = []Capability{
 		Summary: "Set a belief's curation lifecycle (candidate, promoted, superseded)",
 		On: map[Transport]Binding{
 			Go: Has("SetClaimLifecycle"), REST: Has("POST /v1/beliefs/{id}/lifecycle"), GRPC: Has("SetBeliefLifecycle"),
-			MCP: Gap("no lifecycle tool; memory_promote verifies rather than setting lifecycle"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("SetClaimLifecycle"),
+			MCP: Has("set_belief_lifecycle"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("SetClaimLifecycle"),
 		},
 	},
 	{
 		ID: "belief.govern", Effect: Write,
 		Summary: "Agent governance edits: deprecate, forget, update text, resolve or escalate a dissonance, promote",
 		On: map[Transport]Binding{
-			Go: Gap("no governance edits on Memory"), REST: Gap("no governance edit routes"), GRPC: Gap("no governance edit RPCs"),
+			Go: Has("DeprecateClaim", "UpdateClaim", "ResolveContradiction", "EscalateClaim", "VerifyClaim"),
+			REST: Has("POST /v1/beliefs/{id}/deprecate", "POST /v1/beliefs/{id}/update", "POST /v1/beliefs/{id}/resolve",
+				"POST /v1/beliefs/{id}/escalate", "POST /v1/beliefs/{id}/verify"),
+			GRPC:    Has("DeprecateBelief", "UpdateBelief", "ResolveDissonance", "EscalateBelief", "VerifyBelief"),
 			MCP:     Has("memory_deprecate", "forget", "update", "memory_resolve_dissonance", "memory_escalate", "memory_promote"),
-			MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no governance edits"),
+			MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("DeprecateClaim", "UpdateClaim", "ResolveContradiction", "EscalateClaim", "VerifyClaim"),
 		},
+		Notes: "Every binding runs internal/beliefops. MCP forget and memory_deprecate are one operation (Deprecate) recording different default reasons, so the other transports expose it once; memory_promote is Verify (last_verified, verify_count, last_confirmed) and takes promote:global on every transport. Escalate returns a verdict and writes nothing.",
 	},
 	{
 		ID: "belief.purge", Effect: Write,
 		Summary: "Hard-delete beliefs (and the run's episodes) by run",
 		On: map[Transport]Binding{
 			Go: No("destructive operator action; not part of the embedded API"), REST: Has("DELETE /v1/beliefs"), GRPC: No("destructive operator action; REST only by design"),
-			MCP: No("destructive operator action; MCP forget deprecates instead"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no purge call"),
+			MCP: No("destructive operator action; MCP forget deprecates instead"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("PurgeClaims"),
 		},
 	},
 	{
 		ID: "belief.provenance", Effect: Read,
 		Summary: "Explain where a belief came from",
 		On: map[Transport]Binding{
-			Go: Gap("no provenance read on Memory"), REST: Has("GET /v1/beliefs/{id}/provenance"), GRPC: Gap("no provenance RPC"),
-			MCP: Gap("no provenance tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefProvenance"),
+			Go: Has("ClaimProvenance"), REST: Has("GET /v1/beliefs/{id}/provenance"), GRPC: Has("BeliefProvenance"),
+			MCP: Has("belief_provenance"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefProvenance"),
 		},
 	},
 	{
 		ID: "belief.history", Effect: Read,
 		Summary: "A belief's version chain and status history",
 		On: map[Transport]Binding{
-			Go: Gap("no history read on Memory"), REST: Has("GET /v1/beliefs/{id}/history"), GRPC: Gap("no history RPC"),
-			MCP: Gap("no history tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefHistory"),
+			Go: Has("ClaimHistory"), REST: Has("GET /v1/beliefs/{id}/history"), GRPC: Has("BeliefHistory"),
+			MCP: Has("belief_history"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefHistory"),
 		},
 	},
 	{
@@ -185,16 +189,17 @@ var Registry = []Capability{
 		Summary: "Render a belief as human-editable Markdown",
 		On: map[Transport]Binding{
 			Go: No("a presentation format for HTTP consumers"), REST: Has("GET /v1/beliefs/{id}/export.md"), GRPC: No("a presentation format for HTTP consumers"),
-			MCP: No("a presentation format for HTTP consumers"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no Markdown export"),
+			MCP: No("a presentation format for HTTP consumers"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ExportClaimMarkdown"),
 		},
 	},
 	{
 		ID: "belief.feedback", Effect: Write,
 		Summary: "Record helpful/unhelpful feedback on a belief",
 		On: map[Transport]Binding{
-			Go: Gap("no feedback write on Memory"), REST: Has("POST /v1/beliefs/{id}/feedback"), GRPC: Gap("no feedback RPC"),
-			MCP: Has("record_feedback"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no feedback write"),
+			Go: Has("RecordFeedback"), REST: Has("POST /v1/beliefs/{id}/feedback"), GRPC: Has("RecordBeliefFeedback"),
+			MCP: Has("record_feedback"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("RecordFeedback"),
 		},
+		Notes: "Every binding runs beliefops.RecordFeedback: an unhelpful vote decays confidence and contests the belief at MNEMOS_FEEDBACK_CONTEST_THRESHOLD.",
 	},
 	{
 		ID: "belief.classify", Effect: Read,
@@ -236,7 +241,7 @@ var Registry = []Capability{
 		Summary: "List belief-to-belief associations",
 		On: map[Transport]Binding{
 			Go: No(notLibraryRaw), REST: Has("GET /v1/associations"), GRPC: Has("ListAssociations"),
-			MCP: Gap("only contradictions are listable (dissonance.list)"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Relationships"),
+			MCP: Has("list_associations"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Relationships"),
 		},
 	},
 	{
@@ -259,16 +264,16 @@ var Registry = []Capability{
 		ID: "entity_association.list", Effect: Read,
 		Summary: "List entity-to-entity associations",
 		On: map[Transport]Binding{
-			Go: No(notLibraryRaw), REST: Gap("no entity association route"), GRPC: Has("ListEntityAssociations"),
-			MCP: Gap("no entity association tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no entity association read"),
+			Go: No(notLibraryRaw), REST: Has("GET /v1/entity-associations"), GRPC: Has("ListEntityAssociations"),
+			MCP: Has("list_entity_associations"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ListEntityRelationships"),
 		},
 	},
 	{
 		ID: "entity_association.append", Effect: Write,
 		Summary: "Append entity-to-entity associations",
 		On: map[Transport]Binding{
-			Go: No(notLibraryRaw), REST: Gap("no entity association route"), GRPC: Has("AppendEntityAssociations"),
-			MCP: No("associations are derived, not written by agents"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no entity association write"),
+			Go: No(notLibraryRaw), REST: Has("POST /v1/entity-associations"), GRPC: Has("AppendEntityAssociations"),
+			MCP: No("associations are derived, not written by agents"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("AppendEntityRelationships"),
 		},
 	},
 	{

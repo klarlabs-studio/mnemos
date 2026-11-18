@@ -41,7 +41,7 @@ const evidenceSourceLibrary = "mnemos.library"
 // resolve_incident). One source of truth so the kernel plugin and the
 // executor bindings can't drift.
 func writeActions() []kernel.Action {
-	return []kernel.Action{
+	actions := []kernel.Action{
 		{Name: actionRemember, Effect: axidomain.EffectWriteLocal, Idempotent: false,
 			Description: "Ingest text, extract claims, detect relationships, and persist them."},
 		{Name: actionRememberClaim, Effect: axidomain.EffectWriteLocal, Idempotent: false,
@@ -67,6 +67,7 @@ func writeActions() []kernel.Action {
 		{Name: actionReconcileExpectations, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Close observed predictions into validates/refutes verdicts."},
 	}
+	return append(actions, governanceActions()...)
 }
 
 // buildWriteKernel assembles the axi kernel that governs every public
@@ -86,6 +87,9 @@ func buildWriteKernel(m *memory, budget axi.Budget, evidenceLogPath string) (*ke
 		kernel.ExecutorRef(actionSetExpectation):        setExpectationExecutor{m: m},
 		kernel.ExecutorRef(actionObserveExpectation):    observeExpectationExecutor{m: m},
 		kernel.ExecutorRef(actionReconcileExpectations): reconcileExpectationsExecutor{m: m},
+	}
+	for ref, exec := range governanceExecutors(m) {
+		executors[ref] = exec
 	}
 	return kernel.Build(m.logger, writeActions(), executors, budget, evidenceLogPath)
 }

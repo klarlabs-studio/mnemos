@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/beliefops"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store"
 )
@@ -59,7 +60,7 @@ func newFeedbackFixture(t *testing.T) feedbackFixture {
 	return feedbackFixture{conn: conn, srv: srv, header: "Bearer " + tok}
 }
 
-func postFeedback(t *testing.T, f feedbackFixture, claimID string, body feedbackRequest) (int, feedbackResponse) {
+func postFeedback(t *testing.T, f feedbackFixture, claimID string, body feedbackRequest) (int, beliefops.FeedbackResult) {
 	t.Helper()
 	buf, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, f.srv.URL+"/v1/beliefs/"+claimID+"/feedback", bytes.NewReader(buf))
@@ -70,7 +71,7 @@ func postFeedback(t *testing.T, f feedbackFixture, claimID string, body feedback
 		t.Fatalf("POST: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	var out feedbackResponse
+	var out beliefops.FeedbackResult
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 	return resp.StatusCode, out
 }

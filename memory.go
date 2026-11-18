@@ -545,10 +545,6 @@ var ErrExpectationsUnsupported = govwrite.ErrExpectationsUnsupported
 // claim carries no expectation to resolve. Test with errors.Is.
 var ErrExpectationNotFound = govwrite.ErrExpectationNotFound
 
-// ErrClaimNotFound is returned by [Memory.Expect] when the claim does not
-// exist: a prediction about nothing could never be credited. Test with errors.Is.
-var ErrClaimNotFound = govwrite.ErrBeliefNotFound
-
 // Reconciliation is the result of closing one structured expectation against its
 // observed value — the prediction-error event.
 type Reconciliation struct {
@@ -1227,6 +1223,55 @@ type Memory interface {
 	// the gRPC UnretractEpisode RPC.
 	UnretractEvent(ctx context.Context, eventID, reason string) (EventUnretraction, error)
 
+	// DeprecateClaim marks a claim deprecated, recording reason (or a default)
+	// and the Memory's actor on the status transition; the claim, its evidence
+	// and its history stay readable. It is the memory_deprecate / forget MCP
+	// tools, REST POST /v1/beliefs/{id}/deprecate and the gRPC DeprecateBelief
+	// RPC. Errors wrap [ErrClaimNotFound] or [ErrInvalidArgument].
+	DeprecateClaim(ctx context.Context, claimID, reason string) (ClaimStatusChange, error)
+
+	// UpdateClaim rewrites a claim's text, and its confidence when confidence
+	// > 0, recording reason on the change. It is the update MCP tool, REST
+	// POST /v1/beliefs/{id}/update and the gRPC UpdateBelief RPC.
+	UpdateClaim(ctx context.Context, claimID, text string, confidence float64, reason string) (ClaimRevision, error)
+
+	// ResolveContradiction settles two contradicting claims: the winner
+	// becomes resolved, the loser deprecated, both transitions carrying
+	// reason. It is the memory_resolve_dissonance MCP tool, REST POST
+	// /v1/beliefs/{id}/resolve and the gRPC ResolveDissonance RPC.
+	ResolveContradiction(ctx context.Context, winnerID, loserID, reason string) error
+
+	// EscalateClaim records that the caller cannot settle a claim alone and
+	// asks for a human decision. It returns the escalation and writes nothing.
+	// It is the memory_escalate MCP tool, REST POST /v1/beliefs/{id}/escalate
+	// and the gRPC EscalateBelief RPC.
+	EscalateClaim(ctx context.Context, claimID, reason string) (ClaimEscalation, error)
+
+	// VerifyClaim re-verifies a claim against fresh evidence: last_verified
+	// and verify_count move, last_confirmed is stamped, and trust follows. It
+	// returns the verification instant. It is the memory_promote MCP tool,
+	// REST POST /v1/beliefs/{id}/verify and the gRPC VerifyBelief RPC.
+	VerifyClaim(ctx context.Context, claimID string) (time.Time, error)
+
+	// RecordFeedback records whether a recalled claim was useful. A helpful
+	// vote resets the negative streak; an unhelpful one extends it, decays
+	// confidence, and contests an active claim at the threshold
+	// (MNEMOS_FEEDBACK_DECAY, MNEMOS_FEEDBACK_CONTEST_THRESHOLD). It is the
+	// record_feedback MCP tool, REST POST /v1/beliefs/{id}/feedback and the
+	// gRPC RecordBeliefFeedback RPC.
+	RecordFeedback(ctx context.Context, claimID string, helpful bool, note string) (FeedbackResult, error)
+
+	// ClaimProvenance explains how a claim's trust score was computed. It is
+	// REST GET /v1/beliefs/{id}/provenance, the belief_provenance MCP tool
+	// and the gRPC BeliefProvenance RPC.
+	ClaimProvenance(ctx context.Context, claimID string) (ClaimProvenance, error)
+
+	// ClaimHistory returns a claim's version chain newest first (empty for a
+	// claim with no recorded versions). It is REST GET
+	// /v1/beliefs/{id}/history, the belief_history MCP tool and the gRPC
+	// BeliefHistory RPC.
+	ClaimHistory(ctx context.Context, claimID string) ([]ClaimVersion, error)
+
 	// RecordDecision persists an agent decision (belief -> plan -> outcome
 	// audit record) through the governed write path and returns its id.
 	// Statement is required; RiskLevel defaults to "medium" when empty.
@@ -1490,6 +1535,13 @@ type Memory interface {
 	// surfaced as additional events with [Event.Type] reflecting the
 	// detected pattern.
 	Timeline(ctx context.Context, q TimelineQuery) ([]Event, error)
+
+	// ListEvents returns stored events newest first (by timestamp, then id),
+	// optionally confined to one run and paged by Limit/Offset. It is the
+	// browse REST GET /v1/episodes, the gRPC ListEpisodes RPC and the
+	// list_episodes MCP tool serve; [Memory.Timeline] is the chronological,
+	// type-filtered view.
+	ListEvents(ctx context.Context, q EventListQuery) ([]Event, error)
 
 	// Signals returns the temporal patterns the bundled Chronos engine detects
 	// over a run's event series — trend / spike / stall / anomaly and the like

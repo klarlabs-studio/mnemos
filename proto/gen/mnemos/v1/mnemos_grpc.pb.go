@@ -75,6 +75,16 @@ const (
 	MnemosService_GetExpectation_FullMethodName           = "/mnemos.v1.MnemosService/GetExpectation"
 	MnemosService_RecordObservation_FullMethodName        = "/mnemos.v1.MnemosService/RecordObservation"
 	MnemosService_ReconcileExpectations_FullMethodName    = "/mnemos.v1.MnemosService/ReconcileExpectations"
+	MnemosService_RememberFact_FullMethodName             = "/mnemos.v1.MnemosService/RememberFact"
+	MnemosService_ScanBeliefs_FullMethodName              = "/mnemos.v1.MnemosService/ScanBeliefs"
+	MnemosService_DeprecateBelief_FullMethodName          = "/mnemos.v1.MnemosService/DeprecateBelief"
+	MnemosService_UpdateBelief_FullMethodName             = "/mnemos.v1.MnemosService/UpdateBelief"
+	MnemosService_ResolveDissonance_FullMethodName        = "/mnemos.v1.MnemosService/ResolveDissonance"
+	MnemosService_EscalateBelief_FullMethodName           = "/mnemos.v1.MnemosService/EscalateBelief"
+	MnemosService_VerifyBelief_FullMethodName             = "/mnemos.v1.MnemosService/VerifyBelief"
+	MnemosService_RecordBeliefFeedback_FullMethodName     = "/mnemos.v1.MnemosService/RecordBeliefFeedback"
+	MnemosService_BeliefProvenance_FullMethodName         = "/mnemos.v1.MnemosService/BeliefProvenance"
+	MnemosService_BeliefHistory_FullMethodName            = "/mnemos.v1.MnemosService/BeliefHistory"
 )
 
 // MnemosServiceClient is the client API for MnemosService service.
@@ -237,6 +247,47 @@ type MnemosServiceClient interface {
 	// ReconcileExpectations closes every observed prediction into a
 	// validates/refutes verdict.
 	ReconcileExpectations(ctx context.Context, in *ReconcileExpectationsRequest, opts ...grpc.CallOption) (*ReconcileExpectationsResponse, error)
+	// --- Belief writes, governance and per-belief reads (one implementation
+	// with REST, MCP and the Go library: internal/beliefops and the Memory
+	// facade). An unknown belief is NOT_FOUND, a malformed request
+	// INVALID_ARGUMENT. ---
+	// RememberFact stores one fact as a belief, recording each evidence string
+	// as an observation episode it links to (REST POST /v1/facts, MCP
+	// remember's library twin). Requires claims:write; a run-scoped token is
+	// PERMISSION_DENIED because the episodes carry no run.
+	RememberFact(ctx context.Context, in *RememberFactRequest, opts ...grpc.CallOption) (*RememberFactResponse, error)
+	// ScanBeliefs returns beliefs valid within a time window, ordered by
+	// valid_from (REST GET /v1/scan). A run-scoped token is PERMISSION_DENIED:
+	// a scan spans every run.
+	ScanBeliefs(ctx context.Context, in *ScanBeliefsRequest, opts ...grpc.CallOption) (*ScanBeliefsResponse, error)
+	// DeprecateBelief marks a belief deprecated (MCP memory_deprecate / forget,
+	// REST POST /v1/beliefs/{id}/deprecate). Requires claims:write.
+	DeprecateBelief(ctx context.Context, in *DeprecateBeliefRequest, opts ...grpc.CallOption) (*BeliefStatusChange, error)
+	// UpdateBelief rewrites a belief's text and optionally its confidence
+	// (MCP update, REST POST /v1/beliefs/{id}/update). Requires claims:write.
+	UpdateBelief(ctx context.Context, in *UpdateBeliefRequest, opts ...grpc.CallOption) (*BeliefRevision, error)
+	// ResolveDissonance settles two contradicting beliefs: winner resolved,
+	// loser deprecated (MCP memory_resolve_dissonance, REST POST
+	// /v1/beliefs/{id}/resolve). Requires claims:write.
+	ResolveDissonance(ctx context.Context, in *ResolveDissonanceRequest, opts ...grpc.CallOption) (*ResolveDissonanceResponse, error)
+	// EscalateBelief asks for a human decision on a belief and returns the
+	// escalation; it writes nothing (MCP memory_escalate, REST POST
+	// /v1/beliefs/{id}/escalate). Requires claims:write.
+	EscalateBelief(ctx context.Context, in *EscalateBeliefRequest, opts ...grpc.CallOption) (*BeliefEscalation, error)
+	// VerifyBelief re-verifies a belief against fresh evidence (MCP
+	// memory_promote, REST POST /v1/beliefs/{id}/verify). Requires
+	// promote:global.
+	VerifyBelief(ctx context.Context, in *VerifyBeliefRequest, opts ...grpc.CallOption) (*VerifyBeliefResponse, error)
+	// RecordBeliefFeedback records a helpful/unhelpful vote (MCP
+	// record_feedback, REST POST /v1/beliefs/{id}/feedback). Requires
+	// claims:write.
+	RecordBeliefFeedback(ctx context.Context, in *RecordBeliefFeedbackRequest, opts ...grpc.CallOption) (*BeliefFeedback, error)
+	// BeliefProvenance explains how a belief's trust was computed (REST GET
+	// /v1/beliefs/{id}/provenance).
+	BeliefProvenance(ctx context.Context, in *BeliefProvenanceRequest, opts ...grpc.CallOption) (*BeliefProvenance, error)
+	// BeliefHistory returns a belief's version chain newest first (REST GET
+	// /v1/beliefs/{id}/history).
+	BeliefHistory(ctx context.Context, in *BeliefHistoryRequest, opts ...grpc.CallOption) (*BeliefHistoryResponse, error)
 }
 
 type mnemosServiceClient struct {
@@ -807,6 +858,106 @@ func (c *mnemosServiceClient) ReconcileExpectations(ctx context.Context, in *Rec
 	return out, nil
 }
 
+func (c *mnemosServiceClient) RememberFact(ctx context.Context, in *RememberFactRequest, opts ...grpc.CallOption) (*RememberFactResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RememberFactResponse)
+	err := c.cc.Invoke(ctx, MnemosService_RememberFact_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) ScanBeliefs(ctx context.Context, in *ScanBeliefsRequest, opts ...grpc.CallOption) (*ScanBeliefsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScanBeliefsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ScanBeliefs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) DeprecateBelief(ctx context.Context, in *DeprecateBeliefRequest, opts ...grpc.CallOption) (*BeliefStatusChange, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeliefStatusChange)
+	err := c.cc.Invoke(ctx, MnemosService_DeprecateBelief_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) UpdateBelief(ctx context.Context, in *UpdateBeliefRequest, opts ...grpc.CallOption) (*BeliefRevision, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeliefRevision)
+	err := c.cc.Invoke(ctx, MnemosService_UpdateBelief_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) ResolveDissonance(ctx context.Context, in *ResolveDissonanceRequest, opts ...grpc.CallOption) (*ResolveDissonanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveDissonanceResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ResolveDissonance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) EscalateBelief(ctx context.Context, in *EscalateBeliefRequest, opts ...grpc.CallOption) (*BeliefEscalation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeliefEscalation)
+	err := c.cc.Invoke(ctx, MnemosService_EscalateBelief_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) VerifyBelief(ctx context.Context, in *VerifyBeliefRequest, opts ...grpc.CallOption) (*VerifyBeliefResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(VerifyBeliefResponse)
+	err := c.cc.Invoke(ctx, MnemosService_VerifyBelief_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) RecordBeliefFeedback(ctx context.Context, in *RecordBeliefFeedbackRequest, opts ...grpc.CallOption) (*BeliefFeedback, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeliefFeedback)
+	err := c.cc.Invoke(ctx, MnemosService_RecordBeliefFeedback_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) BeliefProvenance(ctx context.Context, in *BeliefProvenanceRequest, opts ...grpc.CallOption) (*BeliefProvenance, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeliefProvenance)
+	err := c.cc.Invoke(ctx, MnemosService_BeliefProvenance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) BeliefHistory(ctx context.Context, in *BeliefHistoryRequest, opts ...grpc.CallOption) (*BeliefHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeliefHistoryResponse)
+	err := c.cc.Invoke(ctx, MnemosService_BeliefHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MnemosServiceServer is the server API for MnemosService service.
 // All implementations must embed UnimplementedMnemosServiceServer
 // for forward compatibility.
@@ -967,6 +1118,47 @@ type MnemosServiceServer interface {
 	// ReconcileExpectations closes every observed prediction into a
 	// validates/refutes verdict.
 	ReconcileExpectations(context.Context, *ReconcileExpectationsRequest) (*ReconcileExpectationsResponse, error)
+	// --- Belief writes, governance and per-belief reads (one implementation
+	// with REST, MCP and the Go library: internal/beliefops and the Memory
+	// facade). An unknown belief is NOT_FOUND, a malformed request
+	// INVALID_ARGUMENT. ---
+	// RememberFact stores one fact as a belief, recording each evidence string
+	// as an observation episode it links to (REST POST /v1/facts, MCP
+	// remember's library twin). Requires claims:write; a run-scoped token is
+	// PERMISSION_DENIED because the episodes carry no run.
+	RememberFact(context.Context, *RememberFactRequest) (*RememberFactResponse, error)
+	// ScanBeliefs returns beliefs valid within a time window, ordered by
+	// valid_from (REST GET /v1/scan). A run-scoped token is PERMISSION_DENIED:
+	// a scan spans every run.
+	ScanBeliefs(context.Context, *ScanBeliefsRequest) (*ScanBeliefsResponse, error)
+	// DeprecateBelief marks a belief deprecated (MCP memory_deprecate / forget,
+	// REST POST /v1/beliefs/{id}/deprecate). Requires claims:write.
+	DeprecateBelief(context.Context, *DeprecateBeliefRequest) (*BeliefStatusChange, error)
+	// UpdateBelief rewrites a belief's text and optionally its confidence
+	// (MCP update, REST POST /v1/beliefs/{id}/update). Requires claims:write.
+	UpdateBelief(context.Context, *UpdateBeliefRequest) (*BeliefRevision, error)
+	// ResolveDissonance settles two contradicting beliefs: winner resolved,
+	// loser deprecated (MCP memory_resolve_dissonance, REST POST
+	// /v1/beliefs/{id}/resolve). Requires claims:write.
+	ResolveDissonance(context.Context, *ResolveDissonanceRequest) (*ResolveDissonanceResponse, error)
+	// EscalateBelief asks for a human decision on a belief and returns the
+	// escalation; it writes nothing (MCP memory_escalate, REST POST
+	// /v1/beliefs/{id}/escalate). Requires claims:write.
+	EscalateBelief(context.Context, *EscalateBeliefRequest) (*BeliefEscalation, error)
+	// VerifyBelief re-verifies a belief against fresh evidence (MCP
+	// memory_promote, REST POST /v1/beliefs/{id}/verify). Requires
+	// promote:global.
+	VerifyBelief(context.Context, *VerifyBeliefRequest) (*VerifyBeliefResponse, error)
+	// RecordBeliefFeedback records a helpful/unhelpful vote (MCP
+	// record_feedback, REST POST /v1/beliefs/{id}/feedback). Requires
+	// claims:write.
+	RecordBeliefFeedback(context.Context, *RecordBeliefFeedbackRequest) (*BeliefFeedback, error)
+	// BeliefProvenance explains how a belief's trust was computed (REST GET
+	// /v1/beliefs/{id}/provenance).
+	BeliefProvenance(context.Context, *BeliefProvenanceRequest) (*BeliefProvenance, error)
+	// BeliefHistory returns a belief's version chain newest first (REST GET
+	// /v1/beliefs/{id}/history).
+	BeliefHistory(context.Context, *BeliefHistoryRequest) (*BeliefHistoryResponse, error)
 	mustEmbedUnimplementedMnemosServiceServer()
 }
 
@@ -1144,6 +1336,36 @@ func (UnimplementedMnemosServiceServer) RecordObservation(context.Context, *Reco
 }
 func (UnimplementedMnemosServiceServer) ReconcileExpectations(context.Context, *ReconcileExpectationsRequest) (*ReconcileExpectationsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReconcileExpectations not implemented")
+}
+func (UnimplementedMnemosServiceServer) RememberFact(context.Context, *RememberFactRequest) (*RememberFactResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RememberFact not implemented")
+}
+func (UnimplementedMnemosServiceServer) ScanBeliefs(context.Context, *ScanBeliefsRequest) (*ScanBeliefsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScanBeliefs not implemented")
+}
+func (UnimplementedMnemosServiceServer) DeprecateBelief(context.Context, *DeprecateBeliefRequest) (*BeliefStatusChange, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeprecateBelief not implemented")
+}
+func (UnimplementedMnemosServiceServer) UpdateBelief(context.Context, *UpdateBeliefRequest) (*BeliefRevision, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateBelief not implemented")
+}
+func (UnimplementedMnemosServiceServer) ResolveDissonance(context.Context, *ResolveDissonanceRequest) (*ResolveDissonanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveDissonance not implemented")
+}
+func (UnimplementedMnemosServiceServer) EscalateBelief(context.Context, *EscalateBeliefRequest) (*BeliefEscalation, error) {
+	return nil, status.Error(codes.Unimplemented, "method EscalateBelief not implemented")
+}
+func (UnimplementedMnemosServiceServer) VerifyBelief(context.Context, *VerifyBeliefRequest) (*VerifyBeliefResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method VerifyBelief not implemented")
+}
+func (UnimplementedMnemosServiceServer) RecordBeliefFeedback(context.Context, *RecordBeliefFeedbackRequest) (*BeliefFeedback, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordBeliefFeedback not implemented")
+}
+func (UnimplementedMnemosServiceServer) BeliefProvenance(context.Context, *BeliefProvenanceRequest) (*BeliefProvenance, error) {
+	return nil, status.Error(codes.Unimplemented, "method BeliefProvenance not implemented")
+}
+func (UnimplementedMnemosServiceServer) BeliefHistory(context.Context, *BeliefHistoryRequest) (*BeliefHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BeliefHistory not implemented")
 }
 func (UnimplementedMnemosServiceServer) mustEmbedUnimplementedMnemosServiceServer() {}
 func (UnimplementedMnemosServiceServer) testEmbeddedByValue()                       {}
@@ -2174,6 +2396,186 @@ func _MnemosService_ReconcileExpectations_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_RememberFact_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RememberFactRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).RememberFact(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_RememberFact_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).RememberFact(ctx, req.(*RememberFactRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_ScanBeliefs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScanBeliefsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ScanBeliefs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ScanBeliefs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ScanBeliefs(ctx, req.(*ScanBeliefsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_DeprecateBelief_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeprecateBeliefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).DeprecateBelief(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_DeprecateBelief_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).DeprecateBelief(ctx, req.(*DeprecateBeliefRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_UpdateBelief_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateBeliefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).UpdateBelief(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_UpdateBelief_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).UpdateBelief(ctx, req.(*UpdateBeliefRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_ResolveDissonance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveDissonanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ResolveDissonance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ResolveDissonance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ResolveDissonance(ctx, req.(*ResolveDissonanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_EscalateBelief_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EscalateBeliefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).EscalateBelief(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_EscalateBelief_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).EscalateBelief(ctx, req.(*EscalateBeliefRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_VerifyBelief_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(VerifyBeliefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).VerifyBelief(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_VerifyBelief_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).VerifyBelief(ctx, req.(*VerifyBeliefRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_RecordBeliefFeedback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordBeliefFeedbackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).RecordBeliefFeedback(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_RecordBeliefFeedback_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).RecordBeliefFeedback(ctx, req.(*RecordBeliefFeedbackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_BeliefProvenance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BeliefProvenanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).BeliefProvenance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_BeliefProvenance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).BeliefProvenance(ctx, req.(*BeliefProvenanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_BeliefHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BeliefHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).BeliefHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_BeliefHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).BeliefHistory(ctx, req.(*BeliefHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MnemosService_ServiceDesc is the grpc.ServiceDesc for MnemosService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2404,6 +2806,46 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReconcileExpectations",
 			Handler:    _MnemosService_ReconcileExpectations_Handler,
+		},
+		{
+			MethodName: "RememberFact",
+			Handler:    _MnemosService_RememberFact_Handler,
+		},
+		{
+			MethodName: "ScanBeliefs",
+			Handler:    _MnemosService_ScanBeliefs_Handler,
+		},
+		{
+			MethodName: "DeprecateBelief",
+			Handler:    _MnemosService_DeprecateBelief_Handler,
+		},
+		{
+			MethodName: "UpdateBelief",
+			Handler:    _MnemosService_UpdateBelief_Handler,
+		},
+		{
+			MethodName: "ResolveDissonance",
+			Handler:    _MnemosService_ResolveDissonance_Handler,
+		},
+		{
+			MethodName: "EscalateBelief",
+			Handler:    _MnemosService_EscalateBelief_Handler,
+		},
+		{
+			MethodName: "VerifyBelief",
+			Handler:    _MnemosService_VerifyBelief_Handler,
+		},
+		{
+			MethodName: "RecordBeliefFeedback",
+			Handler:    _MnemosService_RecordBeliefFeedback_Handler,
+		},
+		{
+			MethodName: "BeliefProvenance",
+			Handler:    _MnemosService_BeliefProvenance_Handler,
+		},
+		{
+			MethodName: "BeliefHistory",
+			Handler:    _MnemosService_BeliefHistory_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -17,6 +17,7 @@ import (
 	mcp "go.klarlabs.de/mcp"
 	"go.klarlabs.de/mcp/protocol"
 	mnemos "go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/beliefops"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/extract"
@@ -579,7 +580,7 @@ func handleMCP(args []string) {
 		Description("Record whether a recalled belief was actually useful. A helpful vote resets the negative streak; an unhelpful one extends it. Mirrors POST /v1/beliefs/<id>/feedback.").
 		OutputSchema(mcpRecordFeedbackOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordFeedbackInput) (mcpRecordFeedbackOutput, error) {
-			return mcpRunRecordFeedback(ctx, input)
+			return mcpRunRecordFeedback(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("record_outcome").
@@ -877,6 +878,9 @@ func handleMCP(args []string) {
 			}
 			return mcpAnalogousClaims(ctx, mem, input)
 		})
+
+	// --- Browses, belief writes and per-belief reads (mcp_beliefops.go) ---
+	registerBeliefOpsTools(srv, mcpActor, getMem, getMemForBrain)
 
 	// --- Claim reads + advanced recall (parity with HTTP/gRPC) ---
 	srv.Tool("get_belief").
@@ -2021,17 +2025,11 @@ func mcpRunMemoryEscalate(ctx context.Context, _ string, input mcpMemoryEscalate
 		return mcpMemoryEscalateOutput{}, err
 	}
 	defer closeConn(conn)
-	eng := query.NewEngine(conn.Events, conn.Claims, conn.Relationships)
-	verdict, err := eng.EscalateClaimForAgent(ctx, input.ClaimID, input.Reason)
+	esc, err := beliefops.Escalate(ctx, conn, input.ClaimID, input.Reason)
 	if err != nil {
-		return mcpMemoryEscalateOutput{}, err
+		return mcpMemoryEscalateOutput{}, mcpBeliefOpError(err)
 	}
-	return mcpMemoryEscalateOutput{
-		ClaimID:          input.ClaimID,
-		Action:           string(verdict.Action),
-		EscalationReason: verdict.EscalationReason,
-		Rationale:        verdict.Rationale,
-	}, nil
+	return mcpMemoryEscalateOutput(esc), nil
 }
 
 func mcpRunMemoryDeprecate(ctx context.Context, actor string, input mcpMemoryDeprecateInput) (mcpMemoryDeprecateOutput, error) {
@@ -2042,30 +2040,24 @@ func mcpRunMemoryDeprecate(ctx context.Context, actor string, input mcpMemoryDep
 	if err != nil {
 		return mcpMemoryDeprecateOutput{}, err
 	}
+	ch, err := mcpRunDeprecate(ctx, actor, input.ClaimID, input.Reason, beliefops.ReasonDeprecate)
+	return mcpMemoryDeprecateOutput(ch), err
+}
+
+// mcpRunDeprecate is memory_deprecate and forget: one operation
+// (beliefops.Deprecate) recording a different fallback reason. ctx must
+// already be scoped to the belief's brain (mcpScopeToClaimBrain).
+func mcpRunDeprecate(ctx context.Context, actor, claimID, reason, fallback string) (beliefops.StatusChange, error) {
 	gw, err := openWriter(ctx)
 	if err != nil {
-		return mcpMemoryDeprecateOutput{}, err
+		return beliefops.StatusChange{}, err
 	}
 	defer closeWriter(gw)
-	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.ClaimID})
-	if err != nil || len(existing) == 0 {
-		return mcpMemoryDeprecateOutput{}, fmt.Errorf("claim %s not found", input.ClaimID)
+	ch, err := beliefops.Deprecate(ctx, gw.Conn(), gw, beliefops.Edit{ClaimID: claimID, Reason: reason, Actor: actor}, fallback)
+	if err != nil {
+		return beliefops.StatusChange{}, mcpBeliefOpError(err)
 	}
-	old := existing[0].Status
-	updated := existing[0]
-	updated.Status = domain.ClaimStatusDeprecated
-	reason := input.Reason
-	if reason == "" {
-		reason = "agent-deprecated"
-	}
-	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
-		return mcpMemoryDeprecateOutput{}, err
-	}
-	return mcpMemoryDeprecateOutput{
-		ClaimID:   input.ClaimID,
-		OldStatus: string(old),
-		NewStatus: string(domain.ClaimStatusDeprecated),
-	}, nil
+	return ch, nil
 }
 
 func mcpRunMemoryResolve(ctx context.Context, actor string, input mcpMemoryResolveInput) (mcpMemoryResolveOutput, error) {
@@ -2088,28 +2080,13 @@ func mcpRunMemoryResolve(ctx context.Context, actor string, input mcpMemoryResol
 		return mcpMemoryResolveOutput{}, err
 	}
 	defer closeWriter(gw)
-	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.WinnerID, input.LoserID})
-	if err != nil || len(existing) < 2 {
-		return mcpMemoryResolveOutput{}, fmt.Errorf("both claims must exist")
+	res, err := beliefops.Resolve(ctx, gw.Conn(), gw, beliefops.ResolveRequest{
+		WinnerID: input.WinnerID, LoserID: input.LoserID, Reason: input.Reason, Actor: actor,
+	})
+	if err != nil {
+		return mcpMemoryResolveOutput{}, mcpBeliefOpError(err)
 	}
-	reason := input.Reason
-	if reason == "" {
-		reason = "agent-resolved-contradiction"
-	}
-	updates := make([]domain.Claim, 0, 2)
-	for _, c := range existing {
-		switch c.ID {
-		case input.WinnerID:
-			c.Status = domain.ClaimStatusResolved
-		case input.LoserID:
-			c.Status = domain.ClaimStatusDeprecated
-		}
-		updates = append(updates, c)
-	}
-	if _, err := gw.Claims(ctx, updates, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
-		return mcpMemoryResolveOutput{}, err
-	}
-	return mcpMemoryResolveOutput{WinnerID: input.WinnerID, LoserID: input.LoserID}, nil
+	return mcpMemoryResolveOutput(res), nil
 }
 
 func mcpRunMemoryPromote(ctx context.Context, actor string, input mcpMemoryPromoteInput) (mcpMemoryPromoteOutput, error) {
@@ -2126,14 +2103,11 @@ func mcpRunMemoryPromote(ctx context.Context, actor string, input mcpMemoryPromo
 		return mcpMemoryPromoteOutput{}, err
 	}
 	defer closeWriter(gw)
-	now := time.Now().UTC()
-	if err := gw.MarkVerified(ctx, input.ClaimID, now, 0); err != nil {
-		return mcpMemoryPromoteOutput{}, err
+	v, err := beliefops.Verify(ctx, gw.Conn(), gw, input.ClaimID, time.Now())
+	if err != nil {
+		return mcpMemoryPromoteOutput{}, mcpBeliefOpError(err)
 	}
-	return mcpMemoryPromoteOutput{
-		ClaimID:    input.ClaimID,
-		VerifiedAt: now.Format(time.RFC3339),
-	}, nil
+	return mcpMemoryPromoteOutput{ClaimID: v.ClaimID, VerifiedAt: v.VerifiedAt.Format(time.RFC3339)}, nil
 }
 
 func mcpRunMemoryContext(ctx context.Context, input mcpMemoryContextInput) (mcpMemoryContextOutput, error) {
@@ -2328,39 +2302,16 @@ func mcpRunForget(ctx context.Context, actor string, input mcpForgetInput) (mcpF
 	if err != nil {
 		return mcpForgetOutput{}, err
 	}
-	gw, err := openWriter(ctx)
-	if err != nil {
-		return mcpForgetOutput{}, err
-	}
-	defer closeWriter(gw)
-	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.ClaimID})
-	if err != nil || len(existing) == 0 {
-		return mcpForgetOutput{}, fmt.Errorf("claim %s not found", input.ClaimID)
-	}
-	old := existing[0].Status
-	updated := existing[0]
-	updated.Status = domain.ClaimStatusDeprecated
-	reason := input.Reason
-	if reason == "" {
-		reason = "agent-forget"
-	}
-	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
-		return mcpForgetOutput{}, err
-	}
-	return mcpForgetOutput{
-		ClaimID:   input.ClaimID,
-		OldStatus: string(old),
-		NewStatus: string(domain.ClaimStatusDeprecated),
-	}, nil
+	ch, err := mcpRunDeprecate(ctx, actor, input.ClaimID, input.Reason, beliefops.ReasonForget)
+	return mcpForgetOutput(ch), err
 }
 
 func mcpRunUpdate(ctx context.Context, actor string, input mcpUpdateInput) (mcpUpdateOutput, error) {
 	claimID := strings.TrimSpace(input.ClaimID)
-	newText := strings.TrimSpace(input.NewText)
 	if claimID == "" {
 		return mcpUpdateOutput{}, fmt.Errorf("claim_id is required")
 	}
-	if newText == "" {
+	if strings.TrimSpace(input.NewText) == "" {
 		return mcpUpdateOutput{}, fmt.Errorf("new_text is required")
 	}
 	if input.Confidence < 0 || input.Confidence > 1 {
@@ -2377,28 +2328,14 @@ func mcpRunUpdate(ctx context.Context, actor string, input mcpUpdateInput) (mcpU
 		return mcpUpdateOutput{}, err
 	}
 	defer closeWriter(gw)
-	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{claimID})
-	if err != nil || len(existing) == 0 {
-		return mcpUpdateOutput{}, fmt.Errorf("claim %s not found", claimID)
+	rev, err := beliefops.Update(ctx, gw.Conn(), gw, beliefops.UpdateRequest{
+		Edit: beliefops.Edit{ClaimID: claimID, Reason: input.Reason, Actor: actor},
+		Text: input.NewText, Confidence: input.Confidence,
+	})
+	if err != nil {
+		return mcpUpdateOutput{}, mcpBeliefOpError(err)
 	}
-	oldText := existing[0].Text
-	updated := existing[0]
-	updated.Text = newText
-	if input.Confidence > 0 {
-		updated.Confidence = input.Confidence
-	}
-	reason := input.Reason
-	if reason == "" {
-		reason = "agent-update"
-	}
-	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
-		return mcpUpdateOutput{}, err
-	}
-	return mcpUpdateOutput{
-		ClaimID: claimID,
-		OldText: oldText,
-		NewText: newText,
-	}, nil
+	return mcpUpdateOutput{ClaimID: rev.ClaimID, OldText: rev.OldText, NewText: rev.NewText}, nil
 }
 
 func mcpRunSearchMemory(ctx context.Context, input mcpSearchMemoryInput) (mcpSearchMemoryOutput, error) {

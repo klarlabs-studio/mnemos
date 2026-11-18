@@ -183,16 +183,7 @@ func whyWrongToProto(r query.WhyWereWeWrongReport) *mnemosv1.WhyWereWeWrongRespo
 		out.AffectedDecisions = append(out.AffectedDecisions, decisionToProto(d))
 	}
 	if p := r.RootClaim; p != nil {
-		root := &mnemosv1.BeliefProvenance{
-			BeliefId: p.ClaimID, Statement: p.ClaimText, Score: p.Score, Rationale: p.Rationale,
-			ProseRationale: p.ProseRationale, SourceDocument: p.SourceDocument, Liveness: string(p.Liveness),
-		}
-		for _, sig := range p.Signals {
-			root.Signals = append(root.Signals, &mnemosv1.ProvenanceSignal{
-				Name: sig.Name, Value: sig.Value, Weight: sig.Weight, Contribution: sig.Contribution, Detail: sig.Detail,
-			})
-		}
-		out.RootBelief = root
+		out.RootBelief = provenanceToProto(*p)
 	}
 	return out
 }

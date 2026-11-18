@@ -453,6 +453,10 @@ func (c *Client) do(ctx context.Context, method, path string, body, dst any) err
 	if dst == nil {
 		return nil
 	}
+	if raw, ok := dst.(*rawBody); ok {
+		*raw = respBody
+		return nil
+	}
 	if err := json.Unmarshal(respBody, dst); err != nil {
 		return fmt.Errorf("decode %s response: %w", path, err)
 	}
