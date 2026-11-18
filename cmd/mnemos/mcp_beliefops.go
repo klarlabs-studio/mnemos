@@ -232,6 +232,9 @@ type mcpRememberBeliefInput struct {
 
 type mcpRememberBeliefOutput struct {
 	BeliefID string `json:"belief_id"`
+	// Known is true when the brain already held the belief: the episodes were
+	// linked to it and no belief was written.
+	Known bool `json:"known"`
 }
 
 // mcpRunRememberBelief writes through Memory.RememberClaim, the
@@ -261,14 +264,14 @@ func mcpRunRememberBelief(ctx context.Context, mem mnemos.Memory, actor string, 
 	if err != nil {
 		return mcpRememberBeliefOutput{}, userInputError(fmt.Errorf("valid_until: %w", err))
 	}
-	id, err := mem.RememberClaim(ctx, mnemos.ClaimItem{
+	got, err := mem.RememberClaimDetailed(ctx, mnemos.ClaimItem{
 		Text: in.Text, Type: in.Type, Confidence: in.Confidence, EventIDs: in.EpisodeIDs,
 		ValidFrom: from, ValidUntil: until, CreatedBy: actor,
 	})
 	if err != nil {
 		return mcpRememberBeliefOutput{}, err
 	}
-	return mcpRememberBeliefOutput{BeliefID: id}, nil
+	return mcpRememberBeliefOutput{BeliefID: got.ID, Known: got.Known}, nil
 }
 
 // --- scan_beliefs ------------------------------------------------------------
