@@ -1091,6 +1091,124 @@ paths:
                   signals:
                     type: array
                     items: { $ref: "#/components/schemas/Signal" }
+  /v1/beliefs/{id}/{edit}:
+    post:
+      summary: Governance edit on a belief (deprecate, update, resolve, escalate, verify)
+      description: |
+        The REST face of the governance operations the MCP tools
+        `memory_deprecate`/`forget`, `update`, `memory_resolve_dissonance`,
+        `memory_escalate` and `memory_promote` perform; all run the same
+        implementation (internal/beliefops).
+
+        - `deprecate`: status → deprecated, `reason` recorded on the transition.
+        - `update`: replaces the text (`text`, required) and, when `confidence` > 0, the confidence.
+        - `resolve`: the belief in the path wins (→ resolved); `loser_id` (required) → deprecated.
+        - `escalate`: returns an escalation verdict carrying `reason`; writes nothing.
+        - `verify`: re-verifies the belief (last_verified, verify_count, last_confirmed).
+
+        `verify` requires `promote:global` (as `memory_promote` does); the
+        others require `claims:write`. The body is optional except where noted.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: edit, in: path, required: true, schema: { type: string, enum: [deprecate, update, resolve, escalate, verify] } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                text: { type: string }
+                confidence: { type: number, minimum: 0, maximum: 1 }
+                loser_id: { type: string }
+      responses:
+        "200": { description: The edit's receipt }
+        "400": { description: Malformed request, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Belief not found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/facts:
+    post:
+      summary: Store one fact as a belief with its evidence
+      description: |
+        Each non-blank `evidence` string becomes an observation episode the
+        new belief links to (Memory.RememberClaimWithEvidence). Requires
+        `claims:write`; a run-scoped token is refused because the episodes
+        carry no run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, evidence]
+              properties:
+                text: { type: string }
+                evidence: { type: array, items: { type: string } }
+                valid_from: { type: string, description: "RFC 3339 or YYYY-MM-DD; default now" }
+      responses:
+        "201": { description: "Created: { belief_id }" }
+        "400": { description: Missing text or evidence, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/scan:
+    get:
+      summary: Beliefs valid within a time window
+      description: |
+        Beliefs whose valid-time interval overlaps [valid_from, valid_until),
+        ordered by valid_from, capped at 1000 (Memory.Scan). A run-scoped
+        token is refused: a scan spans every run.
+      parameters:
+        - { name: valid_from, in: query, schema: { type: string } }
+        - { name: valid_until, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: "{ beliefs: [...] }" }
+        "400": { description: Unparseable instant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/entity-associations:
+    get:
+      summary: List entity-to-entity associations
+      parameters:
+        - { name: entity_id, in: query, schema: { type: string }, description: "With entity_type: edges touching this entity" }
+        - { name: entity_type, in: query, schema: { type: string } }
+        - { name: kind, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: "{ edges, total, limit, offset }" }
+        "400": { description: entity_id without entity_type, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Append entity-to-entity associations (idempotent by id)
+      description: Requires `relationships:write`, like gRPC AppendEntityAssociations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                edges:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, kind, from_id, from_type, to_id, to_type]
+                    properties:
+                      id: { type: string }
+                      kind: { type: string }
+                      from_id: { type: string }
+                      from_type: { type: string }
+                      to_id: { type: string }
+                      to_type: { type: string }
+                      created_at: { type: string }
+                      created_by: { type: string }
+      responses:
+        "200": { description: "{ accepted }" }
+        "400": { description: Invalid edge, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 components:
   securitySchemes:
     bearerAuth:

@@ -499,6 +499,9 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux.HandleFunc("/v1/incidents", makeIncidentsHandler(conn, gw))
 	mux.HandleFunc("/v1/federation/export", makeFederationExportHandler(conn))
 	mux.HandleFunc("/v1/incidents/", makeIncidentSubresourceHandler(conn, gw))
+	mux.HandleFunc("/v1/entity-associations", makeEntityAssociationsHandler(conn, gw))
+	mux.HandleFunc("/v1/facts", makeFactsHandler(mem))
+	mux.HandleFunc("/v1/scan", makeScanHandler(mem))
 	// Connected-brain reads (v0.66): the library's cognitive layer over HTTP.
 	// Delegate to the Memory facade; 503 when it's unavailable.
 	mux.HandleFunc("/v1/who-knows", makeWhoKnowsHandler(mem))
@@ -2554,6 +2557,7 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 //
 //	GET /v1/beliefs/<id>/provenance  → trust provenance report for the belief
 //	GET /v1/beliefs/<id>/export.md   → human-readable markdown export with provenance annotations
+//	POST /v1/beliefs/<id>/{deprecate,update,resolve,escalate,verify} → governance edits (serve_beliefops.go)
 func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
@@ -2591,6 +2595,8 @@ func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnem
 			makeObservationHandler(conn, claimID)(w, r)
 		case "analogous":
 			makeAnalogousHandler(mem, claimID)(w, r)
+		case "deprecate", "update", "resolve", "escalate", "verify":
+			makeBeliefEditHandler(conn, gw, claimID, subresource)(w, r)
 		default:
 			writeError(w, http.StatusNotFound, fmt.Sprintf("unknown subresource %q", subresource))
 		}
