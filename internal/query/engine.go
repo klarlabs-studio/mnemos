@@ -844,7 +844,15 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 	// salience bias is enabled (ADR 0013 §4), a bounded stakes term is blended into
 	// the similarity score so a high-stakes belief outranks a trivial one of equal
 	// similarity; off by default so ordinary recall is unchanged.
-	claims = e.rankClaimsByHybrid(ctx, q, claims, opts.Salient && !opts.Ablate.Salience)
+	// Trust and freshness (ADR 0039) re-weigh relevance by a bounded factor,
+	// measured at the read's instant so an as-of read ranks as the brain would
+	// have ranked then.
+	claims = e.rankClaims(ctx, q, claims, rankTerms{
+		salience:    opts.Salient && !opts.Ablate.Salience,
+		currencyAt:  readInstant(opts, nowUTC),
+		noTrust:     opts.Ablate.Trust,
+		noFreshness: opts.Ablate.Freshness,
+	})
 
 	// Boost claims matching the question's intent (e.g., "decisions" → decision type).
 	if !opts.Ablate.IntentBoost {
@@ -1896,6 +1904,13 @@ func (e Engine) rankClaimsByCosine(ctx context.Context, question string, claims 
 // materially better match still wins. With salienceBias false it is byte-for-byte
 // the pre-existing hybrid ranker.
 func (e Engine) rankClaimsByHybrid(ctx context.Context, question string, claims []domain.Claim, salienceBias bool) []domain.Claim {
+	return e.rankClaims(ctx, question, claims, rankTerms{salience: salienceBias})
+}
+
+// rankClaims is the claim ranker recall uses. Relevance is the hybrid score;
+// terms selects the bounded re-weights applied to it: the trust and freshness
+// factors (ADR 0039), then the additive salience and inhibition terms.
+func (e Engine) rankClaims(ctx context.Context, question string, claims []domain.Claim, terms rankTerms) []domain.Claim {
 	if len(claims) <= 1 {
 		return claims
 	}
@@ -1935,10 +1950,14 @@ func (e Engine) rankClaimsByHybrid(ctx context.Context, question string, claims 
 		if s == 0 {
 			s = -1 // signal-less claim; sinks below any positive hit but keeps original order
 		} else {
+			// Trust and freshness (ADR 0039): a multiplicative discount of the
+			// belief's own relevance, so it can reorder matches but never lift a
+			// belief that does not match. Signal-less claims never reach here.
+			s = applyCurrency(s, currencyFactor(cl, terms))
 			// Bounded stakes term (ADR 0013 §4): tips ties toward the higher-stakes
 			// belief. Opt-in (salienceBias). Applied only to signal-bearing claims so a
 			// signal-less claim stays pinned below any hit at its -1 sentinel.
-			if salienceBias {
+			if terms.salience {
 				s += salienceScoreDelta(cl)
 			}
 			// Competitive-inhibition penalty (ADR 0016): a suppressed contradiction
