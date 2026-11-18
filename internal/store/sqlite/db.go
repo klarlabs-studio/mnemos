@@ -158,6 +158,11 @@ CREATE TABLE IF NOT EXISTS claims (
 CREATE TABLE IF NOT EXISTS claim_evidence (
 	claim_id TEXT NOT NULL,
 	event_id TEXT NOT NULL,
+	-- created_at (ADR 0036 step 3): when the link was recorded, RFC 3339.
+	-- '' on links written before the column existed; a recorded-as-of read
+	-- then uses the later of the claim's created_at and the event's
+	-- ingested_at (recorded.LinkRecordedAt).
+	created_at TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY (claim_id, event_id),
 	FOREIGN KEY (claim_id) REFERENCES claims(id)
 );
@@ -234,6 +239,20 @@ CREATE TABLE IF NOT EXISTS claim_validity_history (
 	FOREIGN KEY (claim_id) REFERENCES claims(id)
 );
 CREATE INDEX IF NOT EXISTS idx_claim_validity_history_claim_id ON claim_validity_history(claim_id);
+
+-- claim_credit_history (ADR 0036 step 3): every change ApplyBeliefCredit makes
+-- to a claim's applied net credit (confidence_components["credit:applied"]).
+-- claims holds the current value; this is the history behind it, so the
+-- credit a belief held at an earlier instant can be recovered.
+CREATE TABLE IF NOT EXISTS claim_credit_history (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	claim_id TEXT NOT NULL,
+	from_credit REAL NOT NULL DEFAULT 0,
+	to_credit REAL NOT NULL DEFAULT 0,
+	changed_at TEXT NOT NULL,
+	FOREIGN KEY (claim_id) REFERENCES claims(id)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_credit_history_claim_id ON claim_credit_history(claim_id);
 
 -- claim_versions (Refs #38) — append-only audit trail of every text /
 -- confidence / status snapshot a claim has held. Side table so the
@@ -684,7 +703,9 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // to the empty string (not archived).
 // v32 (ADR 0034) adds claim_validity_history, created by the CREATE TABLE IF
 // NOT EXISTS that runs on every open.
-const currentSchemaVersion = 32
+// v33 (ADR 0036 step 3) adds claim_evidence.created_at (no backfill; see
+// expectedColumns) and claim_credit_history (CREATE TABLE IF NOT EXISTS).
+const currentSchemaVersion = 33
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -805,6 +826,12 @@ var expectedColumns = []addMissingColumn{
 	// v29 - normalised-text identity for the write-time duplicate check.
 	// backfillClaimTextKeys fills it for rows written before it existed.
 	{"claims", "text_key", "TEXT NOT NULL DEFAULT ''"},
+	// v33 - evidence-link recording time (ADR 0036 step 3). Deliberately NOT
+	// backfilled: existing links stay '' and a recorded-as-of read derives
+	// their time with one rule on every backend (recorded.LinkRecordedAt), so
+	// the rule lives in code that can be read and tested, not in a one-shot
+	// UPDATE.
+	{"claim_evidence", "created_at", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for

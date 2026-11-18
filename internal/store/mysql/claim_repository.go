@@ -196,12 +196,14 @@ func (r ClaimRepository) UpsertEvidence(ctx context.Context, links []domain.Clai
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt := `INSERT IGNORE INTO claim_evidence (claim_id, event_id) VALUES (?, ?)`
+	// INSERT IGNORE keeps the original created_at: a link is recorded once.
+	stmt := `INSERT IGNORE INTO claim_evidence (claim_id, event_id, created_at) VALUES (?, ?, ?)`
+	now := time.Now().UTC()
 	for _, link := range links {
 		if err := link.Validate(); err != nil {
 			return fmt.Errorf("invalid claim evidence: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, stmt, link.ClaimID, link.EventID); err != nil {
+		if _, err := tx.ExecContext(ctx, stmt, link.ClaimID, link.EventID, domain.EvidenceRecordedAt(link, now)); err != nil {
 			return fmt.Errorf("upsert claim evidence (%s,%s): %w", link.ClaimID, link.EventID, err)
 		}
 	}
@@ -239,16 +241,29 @@ func (r ClaimRepository) ListEvidenceByClaimIDs(ctx context.Context, claimIDs []
 	}
 	placeholders, args := inPlaceholders(claimIDs)
 	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
-	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id FROM claim_evidence WHERE claim_id IN (`+placeholders+`)`, args...)
+	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id, created_at FROM claim_evidence WHERE claim_id IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list evidence by claim ids: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return scanEvidenceRows(rows)
+}
+
+// scanEvidenceRows reads (claim_id, event_id, created_at) rows. A NULL
+// created_at (a link from before the column, ADR 0036 step 3) reads as the
+// zero time.
+func scanEvidenceRows(rows *sql.Rows) ([]domain.ClaimEvidence, error) {
 	out := make([]domain.ClaimEvidence, 0)
 	for rows.Next() {
-		var ev domain.ClaimEvidence
-		if err := rows.Scan(&ev.ClaimID, &ev.EventID); err != nil {
+		var (
+			ev        domain.ClaimEvidence
+			createdAt sql.NullTime
+		)
+		if err := rows.Scan(&ev.ClaimID, &ev.EventID, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan claim evidence row: %w", err)
+		}
+		if createdAt.Valid {
+			ev.CreatedAt = createdAt.Time.UTC()
 		}
 		out = append(out, ev)
 	}
@@ -281,8 +296,8 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `
-INSERT IGNORE INTO claim_evidence (claim_id, event_id)
-SELECT ?, event_id FROM claim_evidence WHERE claim_id = ?`,
+INSERT IGNORE INTO claim_evidence (claim_id, event_id, created_at)
+SELECT ?, event_id, created_at FROM claim_evidence WHERE claim_id = ?`,
 		toClaimID, fromClaimID,
 	); err != nil {
 		return fmt.Errorf("copy evidence %s -> %s: %w", fromClaimID, toClaimID, err)
@@ -384,20 +399,12 @@ func (r ClaimRepository) CountAll(ctx context.Context) (int64, error) {
 
 // ListAllEvidence returns every (claim_id, event_id) link.
 func (r ClaimRepository) ListAllEvidence(ctx context.Context) ([]domain.ClaimEvidence, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id FROM claim_evidence`)
+	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id, created_at FROM claim_evidence`)
 	if err != nil {
 		return nil, fmt.Errorf("list all claim evidence: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]domain.ClaimEvidence, 0)
-	for rows.Next() {
-		var ev domain.ClaimEvidence
-		if err := rows.Scan(&ev.ClaimID, &ev.EventID); err != nil {
-			return nil, fmt.Errorf("scan claim_evidence row: %w", err)
-		}
-		out = append(out, ev)
-	}
-	return out, rows.Err()
+	return scanEvidenceRows(rows)
 }
 
 // DeleteAll wipes claims plus the rows owned by claims (claim_evidence,

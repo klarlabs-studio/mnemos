@@ -176,8 +176,13 @@ CREATE INDEX IF NOT EXISTS idx_claim_entities_entity_id ON claim_entities(entity
 CREATE TABLE IF NOT EXISTS claim_evidence (
   claim_id text NOT NULL REFERENCES claims(id),
   event_id text NOT NULL REFERENCES events(id),
+  created_at timestamptz,
   PRIMARY KEY (claim_id, event_id)
 );
+-- created_at (ADR 0036 step 3): when the link was recorded. NULL on links
+-- written before the column existed; a recorded-as-of read then uses the later
+-- of the claim's created_at and the event's ingested_at (recorded.LinkRecordedAt).
+ALTER TABLE claim_evidence ADD COLUMN IF NOT EXISTS created_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_event_id ON claim_evidence(event_id);
 

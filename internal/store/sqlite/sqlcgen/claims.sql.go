@@ -618,17 +618,19 @@ func (q *Queries) UpsertClaim(ctx context.Context, arg UpsertClaimParams) error 
 }
 
 const upsertClaimEvidence = `-- name: UpsertClaimEvidence :exec
-INSERT INTO claim_evidence (claim_id, event_id)
-VALUES (?, ?)
+INSERT INTO claim_evidence (claim_id, event_id, created_at)
+VALUES (?, ?, ?)
 ON CONFLICT(claim_id, event_id) DO NOTHING
 `
 
 type UpsertClaimEvidenceParams struct {
-	ClaimID string `json:"claim_id"`
-	EventID string `json:"event_id"`
+	ClaimID   string `json:"claim_id"`
+	EventID   string `json:"event_id"`
+	CreatedAt string `json:"created_at"`
 }
 
+// DO NOTHING keeps the original created_at: a link is recorded once.
 func (q *Queries) UpsertClaimEvidence(ctx context.Context, arg UpsertClaimEvidenceParams) error {
-	_, err := q.db.ExecContext(ctx, upsertClaimEvidence, arg.ClaimID, arg.EventID)
+	_, err := q.db.ExecContext(ctx, upsertClaimEvidence, arg.ClaimID, arg.EventID, arg.CreatedAt)
 	return err
 }

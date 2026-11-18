@@ -510,6 +510,28 @@ func (c Belief) HalfLifeClassified() bool {
 type BeliefEvidence struct {
 	ClaimID string
 	EventID string
+	// CreatedAt is when the brain recorded the link (ADR 0036 step 3), which
+	// can be later than the episode's ingestion: extraction may run later, and
+	// a restatement attaches an older episode to an existing belief. A write
+	// leaving it zero is stamped with the store's clock; a re-upsert of an
+	// existing link keeps the original time. Zero on read means the link
+	// predates the column (see recorded.LinkRecordedAt for the rule then).
+	CreatedAt time.Time
+}
+
+// Key returns the link's identity, (claim, event), without its timestamp.
+// Deduplicate links on Key, never on the struct: two reads of the same link
+// can carry different CreatedAt precision.
+func (e BeliefEvidence) Key() [2]string { return [2]string{e.ClaimID, e.EventID} }
+
+// EvidenceRecordedAt is the time a backend stores for a link it is writing:
+// the link's own CreatedAt when the caller set one, else now. Every backend's
+// UpsertEvidence goes through it so they stamp alike.
+func EvidenceRecordedAt(link BeliefEvidence, now time.Time) time.Time {
+	if !link.CreatedAt.IsZero() {
+		return link.CreatedAt.UTC()
+	}
+	return now.UTC()
 }
 
 // ClaimEvidence is the pre-ADR-0011 name for BeliefEvidence; kept as a

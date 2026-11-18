@@ -200,14 +200,16 @@ func (r ClaimRepository) UpsertEvidence(ctx context.Context, links []domain.Clai
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// DO NOTHING keeps the original created_at: a link is recorded once.
 	stmt := fmt.Sprintf(`
-INSERT INTO %s (claim_id, event_id) VALUES ($1, $2)
+INSERT INTO %s (claim_id, event_id, created_at) VALUES ($1, $2, $3)
 ON CONFLICT (claim_id, event_id) DO NOTHING`, qualify(r.ns, "claim_evidence"))
+	now := time.Now().UTC()
 	for _, link := range links {
 		if err := link.Validate(); err != nil {
 			return fmt.Errorf("invalid claim evidence: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, stmt, link.ClaimID, link.EventID); err != nil {
+		if _, err := tx.ExecContext(ctx, stmt, link.ClaimID, link.EventID, domain.EvidenceRecordedAt(link, now)); err != nil {
 			return fmt.Errorf("upsert claim evidence (%s,%s): %w", link.ClaimID, link.EventID, err)
 		}
 	}
@@ -242,16 +244,29 @@ func (r ClaimRepository) ListEvidenceByClaimIDs(ctx context.Context, claimIDs []
 		return []domain.ClaimEvidence{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT claim_id, event_id FROM %s WHERE claim_id = ANY($1)`, qualify(r.ns, "claim_evidence")), pgArray(claimIDs))
+SELECT claim_id, event_id, created_at FROM %s WHERE claim_id = ANY($1)`, qualify(r.ns, "claim_evidence")), pgArray(claimIDs))
 	if err != nil {
 		return nil, fmt.Errorf("list evidence by claim ids: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return scanEvidenceRows(rows)
+}
+
+// scanEvidenceRows reads (claim_id, event_id, created_at) rows. A NULL
+// created_at (a link from before the column, ADR 0036 step 3) reads as the
+// zero time.
+func scanEvidenceRows(rows *sql.Rows) ([]domain.ClaimEvidence, error) {
 	out := make([]domain.ClaimEvidence, 0)
 	for rows.Next() {
-		var ev domain.ClaimEvidence
-		if err := rows.Scan(&ev.ClaimID, &ev.EventID); err != nil {
+		var (
+			ev        domain.ClaimEvidence
+			createdAt sql.NullTime
+		)
+		if err := rows.Scan(&ev.ClaimID, &ev.EventID, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan claim evidence row: %w", err)
+		}
+		if createdAt.Valid {
+			ev.CreatedAt = createdAt.Time.UTC()
 		}
 		out = append(out, ev)
 	}
@@ -283,8 +298,8 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-INSERT INTO %s (claim_id, event_id)
-SELECT $1, event_id FROM %s WHERE claim_id = $2
+INSERT INTO %s (claim_id, event_id, created_at)
+SELECT $1, event_id, created_at FROM %s WHERE claim_id = $2
 ON CONFLICT (claim_id, event_id) DO NOTHING`,
 		qualify(r.ns, "claim_evidence"), qualify(r.ns, "claim_evidence")),
 		toClaimID, fromClaimID,
@@ -392,21 +407,13 @@ func (r ClaimRepository) CountAll(ctx context.Context) (int64, error) {
 // ListAllEvidence satisfies the corresponding ports method.
 func (r ClaimRepository) ListAllEvidence(ctx context.Context) ([]domain.ClaimEvidence, error) {
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(
-		`SELECT claim_id, event_id FROM %s`, qualify(r.ns, "claim_evidence"),
+		`SELECT claim_id, event_id, created_at FROM %s`, qualify(r.ns, "claim_evidence"),
 	))
 	if err != nil {
 		return nil, fmt.Errorf("list all claim evidence: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]domain.ClaimEvidence, 0)
-	for rows.Next() {
-		var ev domain.ClaimEvidence
-		if err := rows.Scan(&ev.ClaimID, &ev.EventID); err != nil {
-			return nil, fmt.Errorf("scan claim_evidence row: %w", err)
-		}
-		out = append(out, ev)
-	}
-	return out, rows.Err()
+	return scanEvidenceRows(rows)
 }
 
 // DeleteAll satisfies the corresponding ports method. Wipes claims

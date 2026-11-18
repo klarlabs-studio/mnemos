@@ -36,6 +36,17 @@ type TrustInput struct {
 	Credit float64
 }
 
+// CreditChange is one change to a belief's applied net credit
+// ([CreditAppliedComponentKey]). The claims row holds the current value; these
+// rows are the history behind it, so the credit a belief held at an earlier
+// instant can be recovered (ADR 0036 step 3). From is the value before the
+// change, To the value after.
+type CreditChange struct {
+	ClaimID   string
+	From, To  float64
+	ChangedAt time.Time
+}
+
 // AppliedCredit returns the net credit stored in a claim's components, or 0.
 func AppliedCredit(components map[string]float64) float64 {
 	return components[CreditAppliedComponentKey]

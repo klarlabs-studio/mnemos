@@ -225,15 +225,15 @@ func restoreStoredUpdates(ctx context.Context, conn *store.Conn, claims, kept []
 // the (claim, event) pairs the rewrite makes identical.
 func rewriteLinks(links []domain.ClaimEvidence, remap map[string]string) []domain.ClaimEvidence {
 	out := make([]domain.ClaimEvidence, 0, len(links))
-	seen := make(map[domain.ClaimEvidence]struct{}, len(links))
+	seen := make(map[[2]string]struct{}, len(links))
 	for _, l := range links {
 		if to, ok := remap[l.ClaimID]; ok {
 			l.ClaimID = to
 		}
-		if _, dup := seen[l]; dup {
+		if _, dup := seen[l.Key()]; dup {
 			continue
 		}
-		seen[l] = struct{}{}
+		seen[l.Key()] = struct{}{}
 		out = append(out, l)
 	}
 	return out

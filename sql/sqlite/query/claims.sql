@@ -93,8 +93,9 @@ SET last_verified = ?,
 WHERE id = ?;
 
 -- name: UpsertClaimEvidence :exec
-INSERT INTO claim_evidence (claim_id, event_id)
-VALUES (?, ?)
+-- DO NOTHING keeps the original created_at: a link is recorded once.
+INSERT INTO claim_evidence (claim_id, event_id, created_at)
+VALUES (?, ?, ?)
 ON CONFLICT(claim_id, event_id) DO NOTHING;
 
 -- name: ListAllClaims :many
