@@ -2,7 +2,7 @@ module go.klarlabs.de/mnemos
 
 go 1.26.2
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 require (
 	github.com/felixgeelhaar/chronos v0.6.0

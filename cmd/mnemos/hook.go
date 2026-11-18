@@ -140,7 +140,7 @@ func hostedClient(timeout time.Duration) *client.Client {
 }
 
 // recallClaim is the transport-agnostic slice of a retrieved claim that the
-// recall injection needs, so the local (mcpQueryOutput) and hosted
+// recall injection needs, so the local (recallOutput) and hosted
 // (client.SearchResponse) paths share one renderer.
 type recallClaim struct {
 	Type       string
