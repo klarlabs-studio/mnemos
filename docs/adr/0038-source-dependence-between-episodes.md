@@ -195,9 +195,11 @@ evidence depends on a *different*, still retracted episode stays withdrawn.
 - **Verbatim text without a citation.** Copying is not detected from text
   alone, for the same reason: identical sentences are also what independent
   corroboration looks like.
-- **Citations of sources the brain has not stored yet.** A reference is
-  resolved when its episode is written. A document that cites a source ingested
-  later records nothing.
+- ~~**Citations of sources the brain has not stored yet.**~~ Resolved since
+  this ADR first shipped: a citation whose source is not stored yet is kept as
+  a pending reference, and the dependency is recorded when the source is
+  written. See [Late citations](#late-citations) for the mechanism, its bound
+  and what remains out of scope.
 - **A source named differently from its `source_input_id`.** Production
   ingestion assigns random input ids (`in_…`) and records a file's path, so a
   prose citation of a file by title resolves only if the path or id is in the
@@ -211,6 +213,97 @@ evidence depends on a *different*, still retracted episode stays withdrawn.
 A model-assisted pass could propose dependencies for the uncited cases, as a
 reviewed suggestion and never as an automatic edge. That is out of scope here,
 per the strategy's "deterministic first, model-assisted only where needed".
+
+## Late citations
+
+A reference is resolved when its episode is written, and a document is often
+ingested before the source it cites. Without more, that citation is forgotten,
+and the document counts as independent evidence for as long as the brain
+lives. Since retraction follows dependence and trust discounts it, the order
+of ingestion would decide both. So a reference that resolves to nothing is
+kept until its source arrives.
+
+**Pending keys.** `provenance.DetectAll` returns, next to the dependencies,
+the lookup keys of every reference that resolved to no stored episode,
+stamped with the episode that made the reference. All keys use one canonical
+form (`provenance.CanonicalKey`): lower-case, with `-`, `_`, `/`, `.` and
+whitespace collapsed to single spaces.
+
+- An exact reference (a metadata id or a URL) leaves the canonical form of
+  each identifier that matched nothing. Each identifier resolves on its own,
+  so one stored id in `cites: a, b` does not hide the other.
+- A named reference leaves every contiguous word run of its phrase (at most
+  twelve words, joined by single spaces, a lone stop word excluded), plus the
+  canonical form of each whole token. The whole token differs from a run only
+  when it holds another character, as in `inline:ev_1`.
+- Not pending: a reference that resolved; an ambiguous one (its phrase spells
+  two sources, so no later source can make it specific); an exact identifier
+  that matched anything, the citing document included; and any key equal to
+  one of the citing document's own keys.
+- One episode records at most 256 keys, and a key longer than 512 characters
+  is not recorded (MySQL's key-prefix limit sets that size, and every backend
+  stores the same keys).
+
+The rows live in `pending_references` (`event_id`, `lookup_key`,
+`created_at`, key `(event_id, lookup_key)`, indexed on `lookup_key`). They
+are append-only with insert-ignore, on SQLite (schema v37), libSQL (through
+SQLite), memory, Postgres (in the RLS `scoped` list) and MySQL. Destroying an
+event clears its rows, as it clears its dependencies.
+
+**Resolution.** `pipeline.RecordEventDependencies` works in both directions on
+every write. After recording the written episodes' own dependencies and
+pending keys, it computes each written episode's keys (`provenance.EpisodeKeys`:
+its id, its `source_input_id` and its `input_source_path`, which holds a file
+path or URL) and lists the pending rows under them, skipping rows of the
+episodes being written. Each citing document is detected again with the
+normal resolver, which now finds the new source. A key is only a pre-filter:
+two spellings that share a canonical form share a key, and the resolver
+decides. The resulting dependencies are appended, and a matched row is deleted
+unless its key is still pending after the re-detection.
+
+The unit of re-detection is the citing document's write, as at write time: the
+episodes of its `source_input_id` that share its ingestion time. A citation
+applies to every episode of its document in the write that stored it, and to
+no episode a different write stored under the same source id. Capture streams
+share one (`agent_remember`, `float-back`), and loading the whole source would
+spread one remembered episode's citation across the stream. A caller that
+gives chunks of one document different ingestion times gets the dependency on
+the citing chunk only. That under-records and never over-records.
+
+**Trust.** A late dependency changes trust for beliefs evidenced by the citing
+episode and by the source. Trust counts an evidence episode that depends on
+another evidence episode of the same belief as a repeat (§3). The beliefs
+evidenced by the citing episodes (`ClaimRepository.ListByEventIDs`) are
+rescored with the scoped scorer, as `PersistArtifacts` rescores what it
+touched. The source's own evidence, written after its episode by
+`PersistArtifacts`, is rescored there as before.
+
+**Bound.** One write re-detects at most `pipeline.MaxLateCitingDocuments` (32)
+citing documents. Each costs a source lookup and one resolver pass over its
+references, so the bound keeps a write's cost independent of how many
+documents ever cited what it brings. The oldest pending citations go first.
+The rest keep their rows and resolve when another episode carrying the key is
+written. A source cited by more than 32 documents and never written again
+leaves the excess pending.
+
+**Out of scope.**
+
+- *A source retracted before the late dependency was recorded.* Retraction
+  (§4) follows the dependencies stored when it runs. A late dependency is
+  normally recorded by the write that stores the source, before anything can
+  retract it. When it is not (the citing document was past the bound on that
+  write), a retraction of the source in between judges the citing document's
+  beliefs without the dependency and does not withdraw them. Recording the
+  dependency afterwards does not re-run the retraction. Un-retracting and
+  retracting again applies the dependencies stored by then.
+- *A source that grows after it resolved.* Once a citation resolves, its rows
+  are gone. A later episode added to the same source in a separate write is
+  not linked to documents that already resolved against its earlier episodes.
+  This matches write time, where a citation resolves against the episodes
+  stored at that moment.
+- *Keys the canonical form cannot unify.* Resolution is case-sensitive and
+  exact on identifiers, as at write time. A key match whose spelling the
+  resolver does not accept keeps the row pending.
 
 ## Consequences
 
