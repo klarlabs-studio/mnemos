@@ -190,6 +190,22 @@ CREATE TABLE IF NOT EXISTS claim_status_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_claim_id ON claim_status_history(claim_id);
+
+-- claim_validity_history (ADR 0034): every change to a claim's valid_to or
+-- archived_at, with who and why. claims holds the current value; this is the
+-- history behind it. Values are RFC 3339 text, '' for unset.
+CREATE TABLE IF NOT EXISTS claim_validity_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  claim_id TEXT NOT NULL,
+  field TEXT NOT NULL,
+  from_value TEXT NOT NULL DEFAULT '',
+  to_value TEXT NOT NULL DEFAULT '',
+  changed_at TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  changed_by TEXT NOT NULL DEFAULT '<system>',
+  FOREIGN KEY (claim_id) REFERENCES claims(id)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_validity_history_claim_id ON claim_validity_history(claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_changed_at ON claim_status_history(changed_at);
 
 CREATE TABLE IF NOT EXISTS embeddings (

@@ -56,7 +56,7 @@ func TestBrowseBeliefs_CursorPagesPartitionTheFilterAcrossBackends(t *testing.T)
 			t.Fatalf("%s: %v", b.name, err)
 		}
 		for i := 0; i < 90; i += 7 { // some beliefs superseded mid-range
-			if err := b.conn.Claims.SetValidity(ctx, claims[i].ID, base.Add(10*time.Second)); err != nil {
+			if err := b.conn.Claims.SetValidity(ctx, claims[i].ID, base.Add(10*time.Second), domain.ChangeNote{}); err != nil {
 				t.Fatalf("%s: %v", b.name, err)
 			}
 		}

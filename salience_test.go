@@ -120,7 +120,7 @@ func TestConsolidate_SalienceRaisesReplayPriority(t *testing.T) {
 	}
 	// Invalidate it the way production does: valid_to is owned by SetValidity,
 	// and Upsert never writes it on any backend.
-	if err := m.conn.Claims.SetValidity(ctx, "invalid_high", now); err != nil {
+	if err := m.conn.Claims.SetValidity(ctx, "invalid_high", now, domain.ChangeNote{}); err != nil {
 		t.Fatalf("invalidate invalid_high: %v", err)
 	}
 

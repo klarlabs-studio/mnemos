@@ -32,7 +32,7 @@ func TestSetValidity_RoundTripsThroughLoad(t *testing.T) {
 	}
 
 	cutoff := now
-	if err := repo.SetValidity(ctx, "cl1", cutoff); err != nil {
+	if err := repo.SetValidity(ctx, "cl1", cutoff, domain.ChangeNote{}); err != nil {
 		t.Fatalf("SetValidity: %v", err)
 	}
 	loaded, err := repo.ListByIDs(ctx, []string{"cl1"})
@@ -47,7 +47,7 @@ func TestSetValidity_RoundTripsThroughLoad(t *testing.T) {
 	}
 
 	// Clearing it returns zero again.
-	if err := repo.SetValidity(ctx, "cl1", time.Time{}); err != nil {
+	if err := repo.SetValidity(ctx, "cl1", time.Time{}, domain.ChangeNote{}); err != nil {
 		t.Fatalf("clear validity: %v", err)
 	}
 	loaded, err = repo.ListByIDs(ctx, []string{"cl1"})

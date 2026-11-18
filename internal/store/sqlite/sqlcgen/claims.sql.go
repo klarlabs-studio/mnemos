@@ -7,7 +7,6 @@ package sqlcgen
 
 import (
 	"context"
-	"database/sql"
 	"strings"
 )
 
@@ -440,23 +439,6 @@ func (q *Queries) MarkClaimVerified(ctx context.Context, arg MarkClaimVerifiedPa
 	return err
 }
 
-const setClaimValidity = `-- name: SetClaimValidity :exec
-UPDATE claims SET valid_to = ? WHERE id = ?
-`
-
-type SetClaimValidityParams struct {
-	ValidTo sql.NullString `json:"valid_to"`
-	ID      string         `json:"id"`
-}
-
-// Atomic supersession primitive: mark a claim as no longer valid as
-// of the given timestamp. Pass NULL to clear valid_to (un-supersede
-// the claim), useful when a resolution is reverted.
-func (q *Queries) SetClaimValidity(ctx context.Context, arg SetClaimValidityParams) error {
-	_, err := q.db.ExecContext(ctx, setClaimValidity, arg.ValidTo, arg.ID)
-	return err
-}
-
 const updateClaimTrust = `-- name: UpdateClaimTrust :exec
 UPDATE claims SET trust_score = ?, trust_computed_at = ?, trust_model_version = ? WHERE id = ?
 `
@@ -580,7 +562,7 @@ type UpsertClaimParams struct {
 }
 
 // ON CONFLICT preserves trust_score and valid_to (computed/managed
-// separately via UpdateClaimTrust and SetClaimValidity), but does
+// separately via UpdateClaimTrust and ClaimRepository.SetValidity), but does
 // refresh valid_from: re-extracting a claim with newer evidence is
 // a legitimate "this fact is observed again from <ts>" signal.
 //

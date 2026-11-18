@@ -73,7 +73,7 @@ func healthBrain(t *testing.T, dsn string) (m *memory, dangling int) {
 	// not write valid_to, so without this the forgotten beliefs stay live there.
 	for _, c := range claims {
 		if !c.ValidTo.IsZero() {
-			if err := m.conn.Claims.SetValidity(ctx, c.ID, c.ValidTo); err != nil {
+			if err := m.conn.Claims.SetValidity(ctx, c.ID, c.ValidTo, domain.ChangeNote{}); err != nil {
 				t.Fatal(err)
 			}
 		}

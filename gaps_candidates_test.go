@@ -38,7 +38,7 @@ func TestKnowledgeGaps_CandidatesEqualTheFullSweep(t *testing.T) {
 			}
 			for _, c := range hyps {
 				if !c.ValidTo.IsZero() {
-					if err := m.conn.Claims.SetValidity(ctx, c.ID, c.ValidTo); err != nil {
+					if err := m.conn.Claims.SetValidity(ctx, c.ID, c.ValidTo, domain.ChangeNote{}); err != nil {
 						t.Fatal(err)
 					}
 				}

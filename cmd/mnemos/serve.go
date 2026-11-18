@@ -1828,7 +1828,7 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 	// valid_to has its own governed write (the upsert never touches it), so a
 	// re-append cannot reopen a closed belief by omitting the field.
 	for _, c := range closes {
-		if err := gw.SetValidity(ctx, c.id, c.at); err != nil {
+		if err := gw.SetValidity(ctx, c.id, c.at, govwrite.ClaimReason{Reason: "api: POST /v1/beliefs valid_to", ChangedBy: actor}); err != nil {
 			writeInternalError(w, "set valid_to", err)
 			return
 		}

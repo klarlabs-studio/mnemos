@@ -380,7 +380,7 @@ func TestClaimRepository_SetValidity(t *testing.T) {
 		t.Fatalf("Upsert: %v", err)
 	}
 	cutoff := time.Now().UTC()
-	if err := conn.Claims.SetValidity(ctx, "cl-V", cutoff); err != nil {
+	if err := conn.Claims.SetValidity(ctx, "cl-V", cutoff, domain.ChangeNote{}); err != nil {
 		t.Fatalf("SetValidity: %v", err)
 	}
 	got, err := conn.Claims.ListByIDs(ctx, []string{"cl-V"})
@@ -390,7 +390,7 @@ func TestClaimRepository_SetValidity(t *testing.T) {
 	if len(got) != 1 || got[0].ValidTo.IsZero() {
 		t.Fatalf("after SetValidity, ValidTo not set: %+v", got)
 	}
-	if err := conn.Claims.SetValidity(ctx, "cl-V", time.Time{}); err != nil {
+	if err := conn.Claims.SetValidity(ctx, "cl-V", time.Time{}, domain.ChangeNote{}); err != nil {
 		t.Fatalf("SetValidity zero: %v", err)
 	}
 	got, _ = conn.Claims.ListByIDs(ctx, []string{"cl-V"})
@@ -398,7 +398,7 @@ func TestClaimRepository_SetValidity(t *testing.T) {
 		t.Errorf("after SetValidity(zero), ValidTo = %v, want zero", got[0].ValidTo)
 	}
 
-	if err := conn.Claims.SetValidity(ctx, "missing", cutoff); err == nil {
+	if err := conn.Claims.SetValidity(ctx, "missing", cutoff, domain.ChangeNote{}); err == nil {
 		t.Error("SetValidity on missing claim accepted; expected error")
 	}
 }

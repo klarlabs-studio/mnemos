@@ -311,7 +311,7 @@ func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID st
 //
 // The set is the canonical one from [ports.ClaimRepository], narrowed to
 // the tables this backend declares: claim_evidence,
-// claim_status_history, then the claim row. MySQL has no
+// claim_status_history, claim_validity_history, then the claim row. MySQL has no
 // claim_versions, claim_feedback or claim_expectations table, so there
 // is nothing to clear for those — if one is ever added to schema.sql it
 // must be added here in the same change, or a delete on MySQL will mean
@@ -325,6 +325,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	for _, q := range []string{
 		`DELETE FROM claim_evidence WHERE claim_id = ?`,
 		`DELETE FROM claim_status_history WHERE claim_id = ?`,
+		`DELETE FROM claim_validity_history WHERE claim_id = ?`,
 		`DELETE FROM claims WHERE id = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, claimID); err != nil {
@@ -412,6 +413,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history`); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_validity_history`); err != nil {
+		return fmt.Errorf("delete claim_validity_history: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claims`); err != nil {
 		return fmt.Errorf("delete claims: %w", err)
@@ -541,56 +545,6 @@ func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, 
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, sql.ErrNoRows)
-	}
-	return nil
-}
-
-// Archive stops surfacing a claim from at (ADR 0034); valid time and status
-// are untouched.
-func (r ClaimRepository) Archive(ctx context.Context, claimID string, at time.Time) error {
-	if at.IsZero() {
-		return fmt.Errorf("archive %s: zero time", claimID)
-	}
-	if _, err := r.db.ExecContext(ctx, `UPDATE claims SET archived_at = ? WHERE id = ?`, at.UTC(), claimID); err != nil {
-		return fmt.Errorf("archive %s: %w", claimID, err)
-	}
-	return nil
-}
-
-// Unarchive clears archived_at on whichever of ids are archived and returns
-// how many were.
-func (r ClaimRepository) Unarchive(ctx context.Context, ids []string) (int, error) {
-	if len(ids) == 0 {
-		return 0, nil
-	}
-	placeholders, args := inPlaceholders(ids)
-	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
-	res, err := r.db.ExecContext(ctx, `UPDATE claims SET archived_at = NULL WHERE archived_at IS NOT NULL AND id IN (`+placeholders+`)`, args...)
-	if err != nil {
-		return 0, fmt.Errorf("unarchive claims: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	return int(n), nil
-}
-
-// SetValidity updates the claim's valid_to.
-func (r ClaimRepository) SetValidity(ctx context.Context, claimID string, validTo time.Time) error {
-	var args []any
-	var stmt string
-	if validTo.IsZero() {
-		stmt = `UPDATE claims SET valid_to = NULL WHERE id = ?`
-		args = []any{claimID}
-	} else {
-		stmt = `UPDATE claims SET valid_to = ? WHERE id = ?`
-		args = []any{validTo.UTC(), claimID}
-	}
-	res, err := r.db.ExecContext(ctx, stmt, args...)
-	if err != nil {
-		return fmt.Errorf("set validity for %s: %w", claimID, err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
 	}
 	return nil
 }

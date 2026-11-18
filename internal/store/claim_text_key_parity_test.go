@@ -32,7 +32,7 @@ func TestListLiveByTextKeys_AgreesAcrossBackends(t *testing.T) {
 		if err := b.conn.Claims.Upsert(ctx, claims); err != nil {
 			t.Fatalf("%s: upsert: %v", b.name, err)
 		}
-		if err := b.conn.Claims.SetValidity(ctx, "c-tk-expired", at); err != nil {
+		if err := b.conn.Claims.SetValidity(ctx, "c-tk-expired", at, domain.ChangeNote{}); err != nil {
 			t.Fatalf("%s: set validity: %v", b.name, err)
 		}
 

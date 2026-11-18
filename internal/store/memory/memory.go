@@ -121,6 +121,7 @@ type state struct {
 	claims           map[string]storedClaim
 	claimOrder       []string
 	statusHistory    map[string][]storedTransition  // claim_id -> transitions in insertion order
+	validityHistory  []domain.ValidityChange        // every claim's validity changes, in insertion order
 	evidence         map[string]map[string]struct{} // claim_id -> set of event_ids (de-duped)
 	relationships    map[string]storedRelationship
 	embeddings       map[embeddingKey]storedEmbedding
@@ -220,6 +221,7 @@ func (s *state) clear() {
 	s.claims = map[string]storedClaim{}
 	s.claimOrder = nil
 	s.statusHistory = map[string][]storedTransition{}
+	s.validityHistory = nil
 	s.evidence = map[string]map[string]struct{}{}
 	s.relationships = map[string]storedRelationship{}
 	s.embeddings = map[embeddingKey]storedEmbedding{}

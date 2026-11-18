@@ -64,7 +64,7 @@ func TestWriter_SetValidity_PersistsAndRecordsEvidence(t *testing.T) {
 	seedClaim(t, w, "cl_sv1")
 
 	cutoff := time.Now().UTC().Add(24 * time.Hour)
-	if err := w.SetValidity(ctx, "cl_sv1", cutoff); err != nil {
+	if err := w.SetValidity(ctx, "cl_sv1", cutoff, govwrite.ClaimReason{}); err != nil {
 		t.Fatalf("SetValidity: %v", err)
 	}
 	assertEvidence(t, w, "mnemos.write.set_validity")

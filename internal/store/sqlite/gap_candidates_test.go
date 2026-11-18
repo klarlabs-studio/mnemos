@@ -36,7 +36,7 @@ func TestGapCandidates_RoutesAgree(t *testing.T) {
 	}
 	// Closed validity goes through SetValidity; Upsert does not write it.
 	for i := 0; i < 60; i += 11 {
-		if err := claims.SetValidity(ctx, fmt.Sprintf("c%02d", i), now.Add(-time.Hour)); err != nil {
+		if err := claims.SetValidity(ctx, fmt.Sprintf("c%02d", i), now.Add(-time.Hour), domain.ChangeNote{}); err != nil {
 			t.Fatal(err)
 		}
 	}

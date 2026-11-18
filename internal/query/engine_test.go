@@ -82,14 +82,17 @@ func (f fakeClaimRepo) ListByTestRequirementRef(_ context.Context, ref string) (
 	}
 	return out, nil
 }
-func (f fakeClaimRepo) SetValidity(_ context.Context, _ string, _ time.Time) error {
+func (f fakeClaimRepo) SetValidity(_ context.Context, _ string, _ time.Time, _ domain.ChangeNote) error {
 	return nil
 }
-func (f fakeClaimRepo) Archive(_ context.Context, _ string, _ time.Time) error {
+func (f fakeClaimRepo) Archive(_ context.Context, _ string, _ time.Time, _ domain.ChangeNote) error {
 	return nil
 }
-func (f fakeClaimRepo) Unarchive(_ context.Context, _ []string) (int, error) {
+func (f fakeClaimRepo) Unarchive(_ context.Context, _ []string, _ domain.ChangeNote) (int, error) {
 	return 0, nil
+}
+func (f fakeClaimRepo) ListValidityHistory(_ context.Context, _ string) ([]domain.ValidityChange, error) {
+	return nil, nil
 }
 func (f fakeClaimRepo) SetLifecycle(_ context.Context, _ string, _ domain.ClaimLifecycle) error {
 	return nil

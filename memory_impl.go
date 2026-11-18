@@ -1921,7 +1921,8 @@ func (m *memory) forgetRefutedClaims(ctx context.Context) (int, error) {
 		}
 		// Archived, not ended: the refutes edge records the verdict, and
 		// declaring the belief never true is a deliberate act (ADR 0034).
-		if err := m.conn.Claims.Archive(ctx, c.ID, now); err != nil {
+		note := domain.ChangeNote{Reason: "consolidate: refuted by an observed outcome", ChangedBy: m.actorID}
+		if err := m.conn.Claims.Archive(ctx, c.ID, now, note); err != nil {
 			return n, fmt.Errorf("archive refuted claim %s: %w", c.ID, err)
 		}
 		n++
@@ -2000,7 +2001,8 @@ func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64, prot
 			protectedSkipped++
 			continue
 		}
-		if err := m.conn.Claims.Archive(ctx, c.ID, now); err != nil {
+		note := domain.ChangeNote{Reason: fmt.Sprintf("consolidate: trust %.3f below %.3f", c.TrustScore, belowTrust), ChangedBy: m.actorID}
+		if err := m.conn.Claims.Archive(ctx, c.ID, now, note); err != nil {
 			return forgotten, protectedSkipped, fmt.Errorf("archive stale claim %s: %w", c.ID, err)
 		}
 		forgotten++

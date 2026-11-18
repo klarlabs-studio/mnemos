@@ -298,7 +298,7 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 	// A write that restates an archived belief, or adds evidence to it, brings
 	// it back (ADR 0034): it was archived for going unreinforced, and this is
 	// the reinforcement. The fold above routed the restatement onto it.
-	if _, err := conn.Claims.Unarchive(ctx, affected); err != nil {
+	if _, err := conn.Claims.Unarchive(ctx, affected, domain.ChangeNote{Reason: "reinforced: a write added evidence"}); err != nil {
 		return fmt.Errorf("unarchive reinforced claims: %w", err)
 	}
 

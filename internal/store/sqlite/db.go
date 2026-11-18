@@ -219,6 +219,22 @@ CREATE TABLE IF NOT EXISTS claim_status_history (
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_claim_id ON claim_status_history(claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_changed_at ON claim_status_history(changed_at);
 
+-- claim_validity_history (ADR 0034): every change to a claim's valid_to or
+-- archived_at, with who and why. claims holds the current value; this is the
+-- history behind it. Values are RFC 3339 text, '' for unset.
+CREATE TABLE IF NOT EXISTS claim_validity_history (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	claim_id TEXT NOT NULL,
+	field TEXT NOT NULL,
+	from_value TEXT NOT NULL DEFAULT '',
+	to_value TEXT NOT NULL DEFAULT '',
+	changed_at TEXT NOT NULL,
+	reason TEXT NOT NULL DEFAULT '',
+	changed_by TEXT NOT NULL DEFAULT '<system>',
+	FOREIGN KEY (claim_id) REFERENCES claims(id)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_validity_history_claim_id ON claim_validity_history(claim_id);
+
 -- claim_versions (Refs #38) — append-only audit trail of every text /
 -- confidence / status snapshot a claim has held. Side table so the
 -- claim row itself stays slim; consumers asking for the timeline JOIN
@@ -666,7 +682,9 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // v31 (ADR 0034) adds claims.archived_at: automatic forgetting stops
 // surfacing a belief instead of closing its valid time. Existing rows default
 // to the empty string (not archived).
-const currentSchemaVersion = 31
+// v32 (ADR 0034) adds claim_validity_history, created by the CREATE TABLE IF
+// NOT EXISTS that runs on every open.
+const currentSchemaVersion = 32
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,

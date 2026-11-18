@@ -96,6 +96,17 @@ type ClaimStatusHistory struct {
 	ChangedBy  string `json:"changed_by"`
 }
 
+type ClaimValidityHistory struct {
+	ID        int64  `json:"id"`
+	ClaimID   string `json:"claim_id"`
+	Field     string `json:"field"`
+	FromValue string `json:"from_value"`
+	ToValue   string `json:"to_value"`
+	ChangedAt string `json:"changed_at"`
+	Reason    string `json:"reason"`
+	ChangedBy string `json:"changed_by"`
+}
+
 type CognitiveJournal struct {
 	ID        string `json:"id"`
 	At        string `json:"at"`

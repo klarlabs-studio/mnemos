@@ -43,7 +43,7 @@ func seedGuardFixture(t *testing.T, claims []guardClaim, rels []domain.Relations
 			t.Fatalf("upsert %s: %v", g.id, err)
 		}
 		if g.closed {
-			if err := conn.Claims.SetValidity(ctx, g.id, now.Add(time.Hour)); err != nil {
+			if err := conn.Claims.SetValidity(ctx, g.id, now.Add(time.Hour), domain.ChangeNote{}); err != nil {
 				t.Fatalf("close validity %s: %v", g.id, err)
 			}
 		}

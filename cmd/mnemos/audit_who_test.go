@@ -46,6 +46,11 @@ func seedAuditFixture(t *testing.T, conn *store.Conn, now time.Time) {
 	if err := conn.Claims.UpsertWithReasonAs(ctx, []domain.Claim{aliceClaim}, "test", "usr_alice"); err != nil {
 		t.Fatalf("upsert claim for transition: %v", err)
 	}
+
+	// One validity change by bob: he closes his own claim (ADR 0034).
+	if err := conn.Claims.SetValidity(ctx, "cl_bob", rfc(3*time.Minute), domain.ChangeNote{Reason: "superseded", ChangedBy: "usr_bob"}); err != nil {
+		t.Fatalf("set validity: %v", err)
+	}
 }
 
 func TestBuildAuditWhoExport_FiltersByPrincipal(t *testing.T) {
@@ -58,7 +63,7 @@ func TestBuildAuditWhoExport_FiltersByPrincipal(t *testing.T) {
 	}
 	if alice.Counts.Events != 1 || alice.Counts.Claims != 1 ||
 		alice.Counts.Relationships != 1 || alice.Counts.Embeddings != 0 ||
-		alice.Counts.Transitions != 1 {
+		alice.Counts.Transitions != 1 || alice.Counts.Validity != 0 {
 		t.Errorf("alice counts wrong: %+v", alice.Counts)
 	}
 	if len(alice.Events) != 1 || alice.Events[0].ID != "ev_alice" {
@@ -71,8 +76,11 @@ func TestBuildAuditWhoExport_FiltersByPrincipal(t *testing.T) {
 	}
 	if bob.Counts.Events != 1 || bob.Counts.Claims != 1 ||
 		bob.Counts.Relationships != 0 || bob.Counts.Embeddings != 1 ||
-		bob.Counts.Transitions != 0 {
+		bob.Counts.Transitions != 0 || bob.Counts.Validity != 1 {
 		t.Errorf("bob counts wrong: %+v", bob.Counts)
+	}
+	if v := bob.ValidityChanges; len(v) != 1 || v[0].ClaimID != "cl_bob" || v[0].Field != "valid_to" || v[0].From != "" || v[0].To == "" || v[0].Reason != "superseded" {
+		t.Errorf("bob's validity change wrong: %+v", v)
 	}
 }
 

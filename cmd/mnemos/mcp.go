@@ -2323,7 +2323,7 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 	// than on every upsert. Apply it post-insert when the caller set
 	// an explicit TTL.
 	if !validTo.IsZero() {
-		if err := w.SetValidity(ctx, claimID, validTo); err != nil {
+		if err := w.SetValidity(ctx, claimID, validTo, govwrite.ClaimReason{Reason: "agent-remember: valid_until", ChangedBy: actor}); err != nil {
 			return mcpRememberOutput{}, fmt.Errorf("set valid_to: %w", err)
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/domain"
 	mnemosgrpc "go.klarlabs.de/mnemos/internal/server/grpc"
 	"go.klarlabs.de/mnemos/internal/store"
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
@@ -237,7 +238,7 @@ func TestListBeliefs_AsOfFilter(t *testing.T) {
 	// cl-old's window closes at 2026-03-01. cl-current stays open.
 	// Use the store directly because the gRPC surface doesn't expose
 	// SetValidity (it's an internal lifecycle path).
-	if err := conn.Claims.SetValidity(ctx, "cl-old", t0.AddDate(0, 2, 0)); err != nil {
+	if err := conn.Claims.SetValidity(ctx, "cl-old", t0.AddDate(0, 2, 0), domain.ChangeNote{}); err != nil {
 		t.Fatalf("SetValidity: %v", err)
 	}
 

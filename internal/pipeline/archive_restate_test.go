@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 	"testing"
+
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // ADR 0034: a belief archived for going unreinforced is still held. Restating
@@ -13,7 +15,7 @@ func TestPersistArtifacts_RestatementUnarchives(t *testing.T) {
 	for name, conn := range knownClaimStores(t) {
 		persistOne(t, conn, captureEvent("ev-a1", "session-1", "The retry budget is 3 attempts."),
 			knownClaim("cl-held", "The retry budget is 3 attempts"))
-		if err := conn.Claims.Archive(context.Background(), "cl-held", knownAt); err != nil {
+		if err := conn.Claims.Archive(context.Background(), "cl-held", knownAt, domain.ChangeNote{}); err != nil {
 			t.Fatalf("%s: archive: %v", name, err)
 		}
 

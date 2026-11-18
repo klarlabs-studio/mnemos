@@ -396,57 +396,6 @@ func (r ClaimRepository) listByIDsChunk(ctx context.Context, claimIDs []string) 
 	return out, nil
 }
 
-// SetValidity sets a claim's valid_to timestamp. A zero `validTo`
-// clears the column (un-supersedes the claim) — useful when an
-// operator reverts a resolution. Returns an error if the claim does
-// not exist; callers that don't care should ignore sql.ErrNoRows.
-func (r ClaimRepository) SetValidity(ctx context.Context, claimID string, validTo time.Time) error {
-	val := sql.NullString{}
-	if !validTo.IsZero() {
-		val = sql.NullString{String: validTo.UTC().Format(time.RFC3339Nano), Valid: true}
-	}
-	return r.q.SetClaimValidity(ctx, sqlcgen.SetClaimValidityParams{
-		ValidTo: val,
-		ID:      claimID,
-	})
-}
-
-// Archive stops surfacing a claim from at (ADR 0034); valid time and status
-// are untouched. Raw exec, like SetLifecycle.
-func (r ClaimRepository) Archive(ctx context.Context, claimID string, at time.Time) error {
-	if at.IsZero() {
-		return fmt.Errorf("archive %s: zero time", claimID)
-	}
-	if _, err := r.db.ExecContext(ctx, `UPDATE claims SET archived_at = ? WHERE id = ?`, at.UTC().Format(time.RFC3339Nano), claimID); err != nil {
-		return fmt.Errorf("archive %s: %w", claimID, err)
-	}
-	return nil
-}
-
-// Unarchive clears archived_at on whichever of ids are archived and returns
-// how many were.
-func (r ClaimRepository) Unarchive(ctx context.Context, ids []string) (int, error) {
-	total := 0
-	for start := 0; start < len(ids); start += unarchiveBatch {
-		chunk := ids[start:min(start+unarchiveBatch, len(ids))]
-		args := make([]any, len(chunk))
-		for i, id := range chunk {
-			args[i] = id
-		}
-		res, err := r.db.ExecContext(ctx, `UPDATE claims SET archived_at = '' WHERE archived_at <> '' AND id IN (`+placeholders(len(chunk))+`)`, args...)
-		if err != nil {
-			return total, fmt.Errorf("unarchive claims: %w", err)
-		}
-		n, _ := res.RowsAffected()
-		total += int(n)
-	}
-	return total, nil
-}
-
-// unarchiveBatch keeps each Unarchive statement under SQLite's bound-variable
-// limit.
-const unarchiveBatch = 500
-
 // SetLifecycle transitions a claim's promotion state in place. Raw exec
 // (not sqlc) so a single-column update needs no query regeneration.
 func (r ClaimRepository) SetLifecycle(ctx context.Context, claimID string, lifecycle domain.ClaimLifecycle) error {
@@ -755,6 +704,9 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_validity_history WHERE claim_id = ?`, claimID); err != nil {
+		return fmt.Errorf("delete claim_validity_history: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_versions WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_versions: %w", err)
 	}
@@ -820,6 +772,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history`); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_validity_history`); err != nil {
+		return fmt.Errorf("delete claim_validity_history: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_versions`); err != nil {
 		return fmt.Errorf("delete claim_versions: %w", err)

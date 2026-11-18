@@ -584,6 +584,36 @@ type ClaimStatusTransition struct {
 	ChangedBy  string // user id of the actor that triggered the transition
 }
 
+// ValidityField names a claim column whose changes are versioned in the
+// validity history (ADR 0034): valid time, and the archive axis.
+type ValidityField string
+
+// The versioned validity fields.
+const (
+	ValidityFieldValidTo    ValidityField = "valid_to"
+	ValidityFieldArchivedAt ValidityField = "archived_at"
+)
+
+// ValidityChange is one change to a claim's valid time or archive state. The
+// claims row holds the current value for cheap filtering; these rows are the
+// history behind it, so an overwritten interval keeps its who, when and why.
+// A zero From or To means the field was unset.
+type ValidityChange struct {
+	ClaimID   string
+	Field     ValidityField
+	From, To  time.Time
+	ChangedAt time.Time
+	Reason    string
+	ChangedBy string
+}
+
+// ChangeNote is the who and why a validity write records with its change.
+// An empty ChangedBy is stored as SystemUser.
+type ChangeNote struct {
+	Reason    string
+	ChangedBy string
+}
+
 // SystemUser is the sentinel actor recorded on rows that were written by
 // internal pipelines or pre-A.2 data (no real user identity attached).
 // Treated specially by the audit and narrative output paths so it reads
