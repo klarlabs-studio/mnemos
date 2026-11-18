@@ -116,55 +116,57 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 type state struct {
 	mu sync.RWMutex
 
-	events           map[string]storedEvent
-	eventOrder       []string // insertion order, for ListAll
-	claims           map[string]storedClaim
-	claimOrder       []string
-	statusHistory    map[string][]storedTransition   // claim_id -> transitions in insertion order
-	validityHistory  []domain.ValidityChange         // every claim's validity changes, in insertion order
-	evidence         map[string]map[string]time.Time // claim_id -> event_id -> when the link was recorded
-	creditHistory    []domain.CreditChange           // every claim's applied-credit changes, in insertion order
-	closedEvidence   []domain.ClosedEvidence         // evidence links closed instead of deleted (ADR 0036 §8), in closure order
-	closedRels       []domain.ClosedRelationship     // associations closed instead of deleted (ADR 0036 §8), in closure order
-	relationships    map[string]storedRelationship
-	embeddings       map[embeddingKey]storedEmbedding
-	users            map[string]storedUser
-	userOrder        []string
-	usersByEmail     map[string]string // email -> user_id
-	revokedTokens    map[string]storedRevokedToken
-	agents           map[string]storedAgent
-	agentOrder       []string
-	entities         map[string]storedEntity
-	entityOrder      []string                  // insertion order, for List
-	entityByKey      map[entityKey]string      // (normalized_name, type) -> entity_id, dedup index
-	claimEntities    map[claimEntityKey]string // (claim_id, entity_id, role) -> role, dedup index
-	jobs             map[string]storedCompilationJob
-	actions          map[string]storedAction
-	actionOrder      []string
-	outcomes         map[string]storedOutcome
-	outcomeOrder     []string
-	lessons          map[string]storedLesson
-	lessonOrder      []string
-	lessonEvidence   map[string]map[string]struct{} // lesson_id -> set of action_ids
-	decisions        map[string]storedDecision
-	decisionOrder    []string
-	decisionBeliefs  map[string]map[string]struct{} // decision_id -> set of claim_ids
-	playbooks        map[string]storedPlaybook
-	playbookOrder    []string
-	playbookLessons  map[string]map[string]struct{} // playbook_id -> set of lesson_ids
-	lessonVersions   map[string][]storedEntityVersion
-	playbookVersions map[string][]storedEntityVersion
-	entityRels       map[string]domain.EntityRelationship
-	entityRelOrder   []string
-	entityRelKey     map[entityRelKey]string // (kind,from_type,from_id,to_type,to_id) → id
-	incidents        map[string]domain.Incident
-	incidentOrder    []string
-	feedback         map[string]domain.ClaimFeedback
-	claimVersions    map[string][]domain.ClaimVersion     // claim_id -> version chain, append-ordered
-	blocks           map[string]domain.WorkingMemoryBlock // owner\x00label -> working-memory block
-	expectations     map[string]domain.Expectation        // claim_id -> forward expectation
-	globalSchemas    map[string]domain.GlobalSchema       // id -> promoted global (neocortex) schema
-	journalEntries   []domain.JournalEntry                // append-only cognitive journal (ADR 0018), insertion order
+	events          map[string]storedEvent
+	eventOrder      []string // insertion order, for ListAll
+	claims          map[string]storedClaim
+	claimOrder      []string
+	statusHistory   map[string][]storedTransition   // claim_id -> transitions in insertion order
+	validityHistory []domain.ValidityChange         // every claim's validity changes, in insertion order
+	evidence        map[string]map[string]time.Time // claim_id -> event_id -> when the link was recorded
+	creditHistory   []domain.CreditChange           // every claim's applied-credit changes, in insertion order
+	// claim_id -> changes to the row's own trust inputs, in insertion order
+	trustInputHistory map[string][]domain.TrustInputChange
+	closedEvidence    []domain.ClosedEvidence     // evidence links closed instead of deleted (ADR 0036 §8), in closure order
+	closedRels        []domain.ClosedRelationship // associations closed instead of deleted (ADR 0036 §8), in closure order
+	relationships     map[string]storedRelationship
+	embeddings        map[embeddingKey]storedEmbedding
+	users             map[string]storedUser
+	userOrder         []string
+	usersByEmail      map[string]string // email -> user_id
+	revokedTokens     map[string]storedRevokedToken
+	agents            map[string]storedAgent
+	agentOrder        []string
+	entities          map[string]storedEntity
+	entityOrder       []string                  // insertion order, for List
+	entityByKey       map[entityKey]string      // (normalized_name, type) -> entity_id, dedup index
+	claimEntities     map[claimEntityKey]string // (claim_id, entity_id, role) -> role, dedup index
+	jobs              map[string]storedCompilationJob
+	actions           map[string]storedAction
+	actionOrder       []string
+	outcomes          map[string]storedOutcome
+	outcomeOrder      []string
+	lessons           map[string]storedLesson
+	lessonOrder       []string
+	lessonEvidence    map[string]map[string]struct{} // lesson_id -> set of action_ids
+	decisions         map[string]storedDecision
+	decisionOrder     []string
+	decisionBeliefs   map[string]map[string]struct{} // decision_id -> set of claim_ids
+	playbooks         map[string]storedPlaybook
+	playbookOrder     []string
+	playbookLessons   map[string]map[string]struct{} // playbook_id -> set of lesson_ids
+	lessonVersions    map[string][]storedEntityVersion
+	playbookVersions  map[string][]storedEntityVersion
+	entityRels        map[string]domain.EntityRelationship
+	entityRelOrder    []string
+	entityRelKey      map[entityRelKey]string // (kind,from_type,from_id,to_type,to_id) → id
+	incidents         map[string]domain.Incident
+	incidentOrder     []string
+	feedback          map[string]domain.ClaimFeedback
+	claimVersions     map[string][]domain.ClaimVersion     // claim_id -> version chain, append-ordered
+	blocks            map[string]domain.WorkingMemoryBlock // owner\x00label -> working-memory block
+	expectations      map[string]domain.Expectation        // claim_id -> forward expectation
+	globalSchemas     map[string]domain.GlobalSchema       // id -> promoted global (neocortex) schema
+	journalEntries    []domain.JournalEntry                // append-only cognitive journal (ADR 0018), insertion order
 }
 
 // storedEntityVersion is the in-memory analogue of a row in
@@ -178,38 +180,39 @@ type storedEntityVersion struct {
 
 func newState() *state {
 	return &state{
-		events:           map[string]storedEvent{},
-		claims:           map[string]storedClaim{},
-		statusHistory:    map[string][]storedTransition{},
-		evidence:         map[string]map[string]time.Time{},
-		relationships:    map[string]storedRelationship{},
-		embeddings:       map[embeddingKey]storedEmbedding{},
-		users:            map[string]storedUser{},
-		usersByEmail:     map[string]string{},
-		revokedTokens:    map[string]storedRevokedToken{},
-		agents:           map[string]storedAgent{},
-		entities:         map[string]storedEntity{},
-		entityByKey:      map[entityKey]string{},
-		claimEntities:    map[claimEntityKey]string{},
-		jobs:             map[string]storedCompilationJob{},
-		actions:          map[string]storedAction{},
-		outcomes:         map[string]storedOutcome{},
-		lessons:          map[string]storedLesson{},
-		lessonEvidence:   map[string]map[string]struct{}{},
-		decisions:        map[string]storedDecision{},
-		decisionBeliefs:  map[string]map[string]struct{}{},
-		playbooks:        map[string]storedPlaybook{},
-		playbookLessons:  map[string]map[string]struct{}{},
-		lessonVersions:   map[string][]storedEntityVersion{},
-		playbookVersions: map[string][]storedEntityVersion{},
-		entityRels:       map[string]domain.EntityRelationship{},
-		entityRelKey:     map[entityRelKey]string{},
-		incidents:        map[string]domain.Incident{},
-		feedback:         map[string]domain.ClaimFeedback{},
-		claimVersions:    map[string][]domain.ClaimVersion{},
-		blocks:           map[string]domain.WorkingMemoryBlock{},
-		expectations:     map[string]domain.Expectation{},
-		globalSchemas:    map[string]domain.GlobalSchema{},
+		events:            map[string]storedEvent{},
+		claims:            map[string]storedClaim{},
+		statusHistory:     map[string][]storedTransition{},
+		trustInputHistory: map[string][]domain.TrustInputChange{},
+		evidence:          map[string]map[string]time.Time{},
+		relationships:     map[string]storedRelationship{},
+		embeddings:        map[embeddingKey]storedEmbedding{},
+		users:             map[string]storedUser{},
+		usersByEmail:      map[string]string{},
+		revokedTokens:     map[string]storedRevokedToken{},
+		agents:            map[string]storedAgent{},
+		entities:          map[string]storedEntity{},
+		entityByKey:       map[entityKey]string{},
+		claimEntities:     map[claimEntityKey]string{},
+		jobs:              map[string]storedCompilationJob{},
+		actions:           map[string]storedAction{},
+		outcomes:          map[string]storedOutcome{},
+		lessons:           map[string]storedLesson{},
+		lessonEvidence:    map[string]map[string]struct{}{},
+		decisions:         map[string]storedDecision{},
+		decisionBeliefs:   map[string]map[string]struct{}{},
+		playbooks:         map[string]storedPlaybook{},
+		playbookLessons:   map[string]map[string]struct{}{},
+		lessonVersions:    map[string][]storedEntityVersion{},
+		playbookVersions:  map[string][]storedEntityVersion{},
+		entityRels:        map[string]domain.EntityRelationship{},
+		entityRelKey:      map[entityRelKey]string{},
+		incidents:         map[string]domain.Incident{},
+		feedback:          map[string]domain.ClaimFeedback{},
+		claimVersions:     map[string][]domain.ClaimVersion{},
+		blocks:            map[string]domain.WorkingMemoryBlock{},
+		expectations:      map[string]domain.Expectation{},
+		globalSchemas:     map[string]domain.GlobalSchema{},
 	}
 }
 
@@ -229,6 +232,7 @@ func (s *state) clear() {
 	s.creditHistory = nil
 	s.closedEvidence = nil
 	s.closedRels = nil
+	s.trustInputHistory = map[string][]domain.TrustInputChange{}
 	s.relationships = map[string]storedRelationship{}
 	s.embeddings = map[embeddingKey]storedEmbedding{}
 	s.users = map[string]storedUser{}

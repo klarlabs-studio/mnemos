@@ -288,6 +288,22 @@ CREATE TABLE IF NOT EXISTS claim_credit_history (
   CONSTRAINT fk_claim_credit_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- claim_trust_input_history (ADR 0036 §7): every change to a trust input the
+-- claims row stores itself (confidence, half_life_days, last_confirmed). Each
+-- row holds the values the claim carried BEFORE changed_at; claims holds the
+-- values after the last change.
+CREATE TABLE IF NOT EXISTS claim_trust_input_history (
+  id                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  claim_id             VARCHAR(190)    NOT NULL,
+  prior_confidence     DOUBLE          NOT NULL,
+  prior_half_life_days DOUBLE          NOT NULL DEFAULT 0,
+  prior_last_confirmed DATETIME(6)     NULL,
+  changed_at           DATETIME(6)     NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_claim_trust_input_history_claim_id (claim_id),
+  CONSTRAINT fk_claim_trust_input_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- closed_claim_evidence and closed_relationships (ADR 0036 §8): evidence links
 -- and associations ended instead of deleted, by retraction (ADR 0037) and by
 -- semantic-dedupe merges. The row leaves the live table, so no live read sees

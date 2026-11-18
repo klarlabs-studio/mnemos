@@ -187,6 +187,8 @@ type ClaimRepository interface {
 	//	closed_claim_evidence (every backend)
 	//	claim_status_history
 	//	claim_validity_history (every backend)
+	//	claim_credit_history (every backend)
+	//	claim_trust_input_history (every backend)
 	//	claim_versions
 	//	claim_feedback
 	//	claim_expectations
@@ -303,6 +305,18 @@ type BeliefCreditWriter interface {
 // ApplyBeliefCredit, so its current credit is the only one there was.
 type CreditHistoryLister interface {
 	ListCreditHistory(ctx context.Context, claimIDs []string) ([]domain.CreditChange, error)
+}
+
+// TrustInputHistoryLister reads the history of the trust inputs a claims row
+// stores itself: confidence, half_life_days and last_confirmed (ADR 0036 §7).
+// Every write that changes one of them records a [domain.TrustInputChange]
+// holding the values it replaced, in the same transaction, and every backend
+// implements this to read them back, oldest first. A recorded-as-of read uses
+// it to recover the inputs a belief held at T.
+// TestTrustInputHistory_RecordsEveryWritePath fails if a backend's writer
+// changes one of the columns without a row.
+type TrustInputHistoryLister interface {
+	ListTrustInputHistory(ctx context.Context, claimIDs []string) ([]domain.TrustInputChange, error)
 }
 
 // RelationshipRepository persists and retrieves relationships between claims.

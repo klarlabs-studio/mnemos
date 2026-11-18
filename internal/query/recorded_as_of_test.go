@@ -399,6 +399,23 @@ func TestRecordedAsOf_TrustIsReconstructedAtT(t *testing.T) {
 	if err := writer.ApplyBeliefCredit(ctx, "cl-deploy", map[string]float64{domain.CreditAppliedComponentKey: 0.1}, 0.8); err != nil {
 		t.Fatalf("credit: %v", err)
 	}
+	// Thursday also re-extracts the belief with more confidence, verifies it
+	// with a longer half-life and confirms it (ADR 0036 §7).
+	held, err := s.conn.Claims.ListByIDs(ctx, []string{"cl-deploy"})
+	if err != nil || len(held) != 1 {
+		t.Fatalf("reload cl-deploy before restating: %v (%d)", err, len(held))
+	}
+	restated := held[0]
+	restated.Confidence = 0.95
+	if err := s.conn.Claims.Upsert(ctx, []domain.Claim{restated}); err != nil {
+		t.Fatalf("restate with more confidence: %v", err)
+	}
+	if err := s.conn.Claims.MarkVerified(ctx, "cl-deploy", time.Time{}, 365); err != nil {
+		t.Fatalf("verify with a half-life: %v", err)
+	}
+	if err := s.conn.Claims.MarkConfirmed(ctx, "cl-deploy", time.Now().UTC()); err != nil {
+		t.Fatalf("confirm: %v", err)
+	}
 	scorer, ok := s.conn.Claims.(ports.ScopedTrustScorer)
 	if !ok {
 		t.Fatalf("sqlite claims do not implement ScopedTrustScorer")
@@ -445,10 +462,16 @@ func TestRecordedAsOf_TrustIsReconstructedAtT(t *testing.T) {
 		Confidence: 0.8, EvidenceCount: 1, LatestEvidence: stored[0].CreatedAt,
 	}, tuesday)
 	if math.Abs(got-want) > 1e-3 {
-		t.Errorf("trust at Tuesday = %.4f, want %.4f (one source, no credit); today's is %.4f", got, want, today)
+		t.Errorf("trust at Tuesday = %.4f, want %.4f (one source, no credit, Monday's confidence and half-life, unconfirmed); today's is %.4f", got, want, today)
 	}
 	if math.Abs(got-today) < 1e-3 {
-		t.Errorf("trust at Tuesday equals today's %.4f: Thursday's evidence and credit leaked into the past", today)
+		t.Errorf("trust at Tuesday equals today's %.4f: Thursday's evidence, credit, confidence, half-life or confirmation leaked into the past", today)
+	}
+	for _, c := range then.Claims {
+		if c.ID == "cl-deploy" && (c.Confidence != 0.8 || c.HalfLifeDays != 0 || !c.LastConfirmed.IsZero()) {
+			t.Errorf("Tuesday's cl-deploy reads confidence %v, half-life %v, confirmed %v; want Monday's 0.8, 0, never",
+				c.Confidence, c.HalfLifeDays, c.LastConfirmed)
+		}
 	}
 }
 

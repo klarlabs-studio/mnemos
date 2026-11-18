@@ -21,13 +21,17 @@ import (
 //	                (domain.EffectiveEvidenceCount over distinct authors)
 //	latest evidence the freshest such episode's timestamp
 //	credit          the claim's credit history (CreditAt)
-//	last confirmed  the stored value when it is at or before T, else none
-//	confidence,     the stored values: not versioned on every backend, and the
-//	half-life       pipeline does not rewrite them (ADR 0036 §3)
+//	confidence,     the claim's trust-input history (StoredInputsAt): the
+//	half-life,      values replaced by its first change after T, or the stored
+//	last confirmed  values when nothing changed after T. A last confirmation
+//	                still after T (possible only for a row confirmed again
+//	                before the history existed) reads as none
 //
-// last_confirmed keeps only the latest confirmation, so a belief confirmed both
-// before and after T reads as unconfirmed at T. That understates its freshness
-// at T; it never overstates it.
+// One rule covers rows written before the histories existed: a claim with no
+// recorded change reads its stored values, held since creation as far as
+// anything recorded says. That is exact for every claim not changed since, and
+// for one changed since, the first recorded change carries the value it held
+// before.
 
 // LinkRecordedAt returns when the brain recorded an evidence link. A link
 // carries its own time since ADR 0036 step 3. A link written before that has
@@ -66,11 +70,39 @@ func CreditAt(current float64, history []domain.CreditChange, t time.Time) float
 	return history[0].From
 }
 
+// StoredInputsAt returns the confidence, half-life and last confirmation c
+// held at t: the prior values of the first change recorded after t, or c's
+// stored values when nothing changed after t (including a row with no history
+// at all). history is c's trust-input history; other claims' rows are ignored
+// and order does not matter. A last confirmation after t is not one the brain
+// had at t, so it reads as none.
+func StoredInputsAt(c domain.Claim, history []domain.TrustInputChange, t time.Time) (confidence, halfLifeDays float64, lastConfirmed time.Time) {
+	confidence, halfLifeDays, lastConfirmed = c.Confidence, c.HalfLifeDays, c.LastConfirmed
+	var first *domain.TrustInputChange
+	for i := range history {
+		h := &history[i]
+		if h.ClaimID != c.ID || !h.ChangedAt.After(t) {
+			continue
+		}
+		if first == nil || h.ChangedAt.Before(first.ChangedAt) {
+			first = h
+		}
+	}
+	if first != nil {
+		confidence, halfLifeDays, lastConfirmed = first.Confidence, first.HalfLifeDays, first.LastConfirmed
+	}
+	if lastConfirmed.After(t) {
+		lastConfirmed = time.Time{}
+	}
+	return confidence, halfLifeDays, lastConfirmed
+}
+
 // TrustInputAt returns the trust inputs of c as they stood at t. links are c's
 // evidence links (others are ignored), events the episodes they name (an
-// episode missing from events, or ingested after t, is not evidence at t), and
-// credit c's credit history, oldest first. It is pure.
-func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, credit []domain.CreditChange, t time.Time) domain.TrustInput {
+// episode missing from events, or ingested after t, is not evidence at t),
+// credit c's credit history, oldest first, and inputs its trust-input history
+// (StoredInputsAt). It is pure.
+func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, credit []domain.CreditChange, inputs []domain.TrustInputChange, t time.Time) domain.TrustInput {
 	authors := map[string]bool{}
 	counted := map[string]bool{}
 	var latest time.Time
@@ -88,10 +120,7 @@ func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[strin
 			latest = ev.Timestamp
 		}
 	}
-	var confirmed time.Time
-	if !c.LastConfirmed.After(t) {
-		confirmed = c.LastConfirmed
-	}
+	confidence, halfLife, confirmed := StoredInputsAt(c, inputs, t)
 	var history []domain.CreditChange
 	for _, ch := range credit {
 		if ch.ClaimID == c.ID {
@@ -99,17 +128,17 @@ func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[strin
 		}
 	}
 	return domain.TrustInput{
-		Confidence:     c.Confidence,
+		Confidence:     confidence,
 		EvidenceCount:  domain.EffectiveEvidenceCount(len(authors), len(counted)),
 		LatestEvidence: latest,
 		LastConfirmed:  confirmed,
-		HalfLifeDays:   c.HalfLifeDays,
+		HalfLifeDays:   halfLife,
 		Credit:         CreditAt(domain.AppliedCredit(c.ConfidenceComponents), history, t),
 	}
 }
 
 // TrustAt returns c's trust at t from its inputs at t: trust.At, the one trust
 // function, over TrustInputAt.
-func TrustAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, credit []domain.CreditChange, t time.Time) float64 {
-	return trust.At(TrustInputAt(c, links, events, credit, t), t)
+func TrustAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, credit []domain.CreditChange, inputs []domain.TrustInputChange, t time.Time) float64 {
+	return trust.At(TrustInputAt(c, links, events, credit, inputs, t), t)
 }

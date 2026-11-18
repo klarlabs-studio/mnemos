@@ -68,7 +68,8 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 	defer rollbackTx(tx)
 
 	qtx := r.q.WithTx(tx)
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	writtenAt := time.Now().UTC()
+	now := writtenAt.Format(time.RFC3339Nano)
 	existed := make(map[string]bool, len(claims))
 
 	for _, claim := range claims {
@@ -82,6 +83,10 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 		}
 		// currentClaimStatus returns "" only for a claim not yet stored.
 		existed[claim.ID] = existed[claim.ID] || priorStatus != ""
+		priorInputs, err := readTrustInputs(ctx, tx, claim.ID)
+		if err != nil {
+			return err
+		}
 
 		// valid_from defaults to created_at when the caller hasn't
 		// already populated it (legacy code paths and tests). The
@@ -137,8 +142,10 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 			// "team" — which would silently reset a claim curated as `personal` on
 			// any partial re-write. Reads still normalise, so an empty stored value
 			// presents as domain.DefaultVisibility exactly as before.
-			Visibility:           string(claim.Visibility),
-			ConfidenceComponents: encodeConfidenceComponents(claim.ConfidenceComponents),
+			Visibility: string(claim.Visibility),
+			// The conflict rule for the column, applied here against the row
+			// read in this transaction (domain.UpsertComponents).
+			ConfidenceComponents: encodeConfidenceComponents(domain.UpsertComponents(claim.ConfidenceComponents, priorInputs.components)),
 			Lifecycle:            string(claim.Lifecycle),
 			SubjectClass:         string(claim.SubjectClass),
 			Durability:           string(claim.Durability.Normalized()),
@@ -147,6 +154,9 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 		})
 		if err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
+		}
+		if err := recordTrustInputChange(ctx, tx, claim.ID, priorInputs, writtenAt); err != nil {
+			return err
 		}
 
 		// Append a claim_versions snapshot for every write (Refs #38).
@@ -441,12 +451,39 @@ func (r ClaimRepository) MarkVerified(ctx context.Context, claimID string, verif
 	if verifiedAt.IsZero() {
 		verifiedAt = time.Now().UTC()
 	}
-	return r.q.MarkClaimVerified(ctx, sqlcgen.MarkClaimVerifiedParams{
-		LastVerified: verifiedAt.UTC().Format(time.RFC3339Nano),
-		Column2:      halfLifeDays,
-		HalfLifeDays: halfLifeDays,
-		ID:           claimID,
+	return r.versionedTrustInputWrite(ctx, claimID, func(q *sqlcgen.Queries) error {
+		return q.MarkClaimVerified(ctx, sqlcgen.MarkClaimVerifiedParams{
+			LastVerified: verifiedAt.UTC().Format(time.RFC3339Nano),
+			Column2:      halfLifeDays,
+			HalfLifeDays: halfLifeDays,
+			ID:           claimID,
+		})
 	})
+}
+
+// versionedTrustInputWrite runs write, a single-claim statement that may change
+// claimID's stored trust inputs, in a transaction that versions the change
+// (recordTrustInputChange).
+func (r ClaimRepository) versionedTrustInputWrite(ctx context.Context, claimID string, write func(*sqlcgen.Queries) error) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin trust input write tx: %w", err)
+	}
+	defer rollbackTx(tx)
+	prior, err := readTrustInputs(ctx, tx, claimID)
+	if err != nil {
+		return err
+	}
+	if err := write(r.q.WithTx(tx)); err != nil {
+		return err
+	}
+	if err := recordTrustInputChange(ctx, tx, claimID, prior, time.Now().UTC()); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit trust input write tx: %w", err)
+	}
+	return nil
 }
 
 // MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed].
@@ -454,9 +491,11 @@ func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, conf
 	if confirmedAt.IsZero() {
 		confirmedAt = time.Now().UTC()
 	}
-	return r.q.MarkClaimConfirmed(ctx, sqlcgen.MarkClaimConfirmedParams{
-		LastConfirmed: confirmedAt.UTC().Format(time.RFC3339Nano),
-		ID:            claimID,
+	return r.versionedTrustInputWrite(ctx, claimID, func(q *sqlcgen.Queries) error {
+		return q.MarkClaimConfirmed(ctx, sqlcgen.MarkClaimConfirmedParams{
+			LastConfirmed: confirmedAt.UTC().Format(time.RFC3339Nano),
+			ID:            claimID,
+		})
 	})
 }
 
@@ -653,23 +692,20 @@ func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, 
 		return fmt.Errorf("begin apply belief credit tx: %w", err)
 	}
 	defer rollbackTx(tx)
-	var raw string
-	if err := tx.QueryRowContext(ctx, `SELECT confidence_components FROM claims WHERE id = ?`, claimID).Scan(&raw); err != nil {
-		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, err)
+	prior, err := readTrustInputs(ctx, tx, claimID)
+	if err != nil {
+		return err
 	}
-	from := domain.AppliedCredit(decodeConfidenceComponents(raw))
-	to := domain.AppliedCredit(components)
+	if !prior.found {
+		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, sql.ErrNoRows)
+	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE claims SET confidence_components = ?, trust_score = ? WHERE id = ?`,
 		encodeConfidenceComponents(components), trustScore, claimID); err != nil {
 		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
 	}
-	if from != to {
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO claim_credit_history (claim_id, from_credit, to_credit, changed_at) VALUES (?, ?, ?, ?)`,
-			claimID, from, to, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-			return fmt.Errorf("record credit change of %s: %w", claimID, err)
-		}
+	if err := recordTrustInputChange(ctx, tx, claimID, prior, time.Now().UTC()); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit apply belief credit tx: %w", err)
@@ -808,6 +844,9 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_credit_history WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_credit_history: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_trust_input_history WHERE claim_id = ?`, claimID); err != nil {
+		return fmt.Errorf("delete claim_trust_input_history: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_versions WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_versions: %w", err)
 	}
@@ -870,6 +909,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_credit_history`); err != nil {
 		return fmt.Errorf("delete claim_credit_history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_trust_input_history`); err != nil {
+		return fmt.Errorf("delete claim_trust_input_history: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_versions`); err != nil {
 		return fmt.Errorf("delete claim_versions: %w", err)

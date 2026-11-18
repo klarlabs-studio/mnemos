@@ -254,6 +254,22 @@ CREATE TABLE IF NOT EXISTS claim_credit_history (
 );
 CREATE INDEX IF NOT EXISTS idx_claim_credit_history_claim_id ON claim_credit_history(claim_id);
 
+-- claim_trust_input_history (ADR 0036 §7): every change to a trust input the
+-- claims row stores itself (confidence, half_life_days, last_confirmed). Each
+-- row holds the values the claim carried BEFORE changed_at; claims holds the
+-- values after the last change, so the inputs a belief held at an earlier
+-- instant can be recovered.
+CREATE TABLE IF NOT EXISTS claim_trust_input_history (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	claim_id TEXT NOT NULL,
+	prior_confidence REAL NOT NULL,
+	prior_half_life_days REAL NOT NULL DEFAULT 0,
+	prior_last_confirmed TEXT NOT NULL DEFAULT '',
+	changed_at TEXT NOT NULL,
+	FOREIGN KEY (claim_id) REFERENCES claims(id)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_trust_input_history_claim_id ON claim_trust_input_history(claim_id);
+
 -- closed_claim_evidence and closed_relationships (ADR 0036 §8): evidence links
 -- and associations that were ended instead of deleted, by retraction (ADR 0037)
 -- and by semantic-dedupe merges. The row leaves the live table, so no live read
@@ -740,10 +756,12 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // NOT EXISTS that runs on every open.
 // v33 (ADR 0036 step 3) adds claim_evidence.created_at (no backfill; see
 // expectedColumns) and claim_credit_history (CREATE TABLE IF NOT EXISTS).
-// v34 (ADR 0036 §8) adds closed_claim_evidence and closed_relationships
-// (CREATE TABLE IF NOT EXISTS): retraction and merges close links and edges
-// instead of deleting them.
-const currentSchemaVersion = 34
+// v34 (ADR 0036 §7) adds claim_trust_input_history (CREATE TABLE IF NOT
+// EXISTS); no backfill, a claim without history reads its stored values.
+// v35 (ADR 0036 §8) adds closed_claim_evidence and closed_relationships
+// (CREATE TABLE IF NOT EXISTS): retraction, merges and prunes close links
+// and edges instead of deleting them.
+const currentSchemaVersion = 35
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
