@@ -46,6 +46,10 @@ import (
 // journal. Every other table is still censused. A rule rather than a list, so a
 // history table added later is budgeted without anyone remembering to add it,
 // and so this tool never names a closed table (TestClosedRows_OnlyRecordedReadsSeeThem).
+// pending_references (ADR 0038, late citations) is censused but deliberately
+// not a history table: it is a work queue whose rows are deleted when the
+// source they wait for is written, so its size is a backlog, not a record of
+// changes, and per-operation growth is the wrong budget for it.
 func isHistoryTable(name string) bool {
 	return strings.HasSuffix(name, "_history") || strings.HasPrefix(name, "closed_") || name == "cognitive_journal"
 }
