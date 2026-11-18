@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"go.klarlabs.de/mnemos/internal/beliefops"
 	"go.klarlabs.de/mnemos/internal/domain"
 	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
 )
@@ -412,21 +413,16 @@ func (s *Server) AppendReflexes(ctx context.Context, req *mnemosv1.AppendReflexe
 // EntityAssociations (polymorphic edges)
 // ---------------------------------------------------------------------------
 
-// ListEntityAssociations returns polymorphic cross-entity edges.
+// ListEntityAssociations returns polymorphic cross-entity edges
+// (beliefops.ListEntityRelationships, shared with REST
+// GET /v1/entity-associations and the list_entity_associations MCP tool).
 func (s *Server) ListEntityAssociations(ctx context.Context, req *mnemosv1.ListEntityAssociationsRequest) (*mnemosv1.ListEntityAssociationsResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
-	var edges []domain.EntityRelationship
-	var err error
-	switch {
-	case req.EntityId != "" && req.EntityType != "":
-		edges, err = s.connFor(ctx).EntityRels.ListByEntity(ctx, req.EntityId, req.EntityType)
-	case req.Kind != "":
-		edges, err = s.connFor(ctx).EntityRels.ListByKind(ctx, req.Kind)
-	default:
-		edges, err = s.connFor(ctx).EntityRels.ListAll(ctx)
-	}
+	edges, err := beliefops.ListEntityRelationships(ctx, s.connFor(ctx), beliefops.EntityFilter{
+		EntityID: req.EntityId, EntityType: req.EntityType, Kind: req.Kind,
+	})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list entity_associations: %v", err)
+		return nil, beliefOpStatus("list entity_associations", err)
 	}
 	total := len(edges)
 	page := paginate(edges, limit, offset)
@@ -437,45 +433,34 @@ func (s *Server) ListEntityAssociations(ctx context.Context, req *mnemosv1.ListE
 	return &mnemosv1.ListEntityAssociationsResponse{Edges: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
 }
 
-// AppendEntityAssociations writes polymorphic edges idempotently.
+// AppendEntityAssociations writes polymorphic edges idempotently
+// (beliefops.AppendEntityRelationships, shared with REST
+// POST /v1/entity-associations).
 func (s *Server) AppendEntityAssociations(ctx context.Context, req *mnemosv1.AppendEntityAssociationsRequest) (*mnemosv1.AppendResponse, error) {
 	// relationships:write, not claims:write: these are edges, the same resource
-	// family AppendAssociations already gates on. There is no REST twin to
-	// copy (this surface is gRPC-only), so the neighbouring RPC decides it.
+	// family AppendAssociations already gates on.
 	if err := s.requireScope(ctx, domain.ScopeRelationshipsWrite); err != nil {
 		return nil, err
-	}
-	if len(req.Edges) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "edges array is empty")
 	}
 	if len(req.Edges) > maxBatchRecords {
 		return nil, status.Errorf(codes.InvalidArgument, "edges batch size %d exceeds max %d", len(req.Edges), maxBatchRecords)
 	}
-	actor := actorFromContext(ctx)
 	edges := make([]domain.EntityRelationship, 0, len(req.Edges))
-	for i, e := range req.Edges {
-		if e.Id == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "edges[%d].id is required", i)
-		}
-		createdAt := time.Now().UTC()
+	for _, e := range req.Edges {
+		var createdAt time.Time
 		if e.CreatedAt != nil {
 			createdAt = e.CreatedAt.AsTime()
 		}
 		edges = append(edges, domain.EntityRelationship{
-			ID:        e.Id,
-			Kind:      domain.RelationshipType(e.Kind),
-			FromID:    e.FromId,
-			FromType:  e.FromType,
-			ToID:      e.ToId,
-			ToType:    e.ToType,
-			CreatedAt: createdAt,
-			CreatedBy: firstNonEmptyStr(e.CreatedBy, actor),
+			ID: e.Id, Kind: domain.RelationshipType(e.Kind), FromID: e.FromId, FromType: e.FromType,
+			ToID: e.ToId, ToType: e.ToType, CreatedAt: createdAt, CreatedBy: e.CreatedBy,
 		})
 	}
-	if _, err := s.writerFor(ctx).EntityRels(ctx, edges); err != nil {
-		return nil, status.Errorf(codes.Internal, "upsert entity_associations: %v", err)
+	n, err := beliefops.AppendEntityRelationships(ctx, s.writerFor(ctx), edges, actorFromContext(ctx), time.Now())
+	if err != nil {
+		return nil, beliefOpStatus("upsert entity_associations", err)
 	}
-	return &mnemosv1.AppendResponse{Accepted: int32(len(edges))}, nil
+	return &mnemosv1.AppendResponse{Accepted: int32(n)}, nil //nolint:gosec // bounded by maxBatchRecords
 }
 
 // ---------------------------------------------------------------------------

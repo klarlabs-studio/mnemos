@@ -110,7 +110,7 @@ var Registry = []Capability{
 		ID: "belief.remember_fact", Effect: Write,
 		Summary: "Store one fact as a belief, creating its evidence episode",
 		On: map[Transport]Binding{
-			Go: Has("RememberClaimWithEvidence"), REST: Has("POST /v1/facts"), GRPC: Gap("no single-fact write RPC"),
+			Go: Has("RememberClaimWithEvidence"), REST: Has("POST /v1/facts"), GRPC: Has("RememberFact"),
 			MCP: Has("remember"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no single-fact write"),
 		},
 		Notes: "MCP remember and Go RememberClaimWithEvidence are separate implementations of the same idea.",
@@ -135,7 +135,7 @@ var Registry = []Capability{
 		ID: "belief.scan", Effect: Read,
 		Summary: "Read beliefs valid within a time range",
 		On: map[Transport]Binding{
-			Go: Has("Scan"), REST: Has("GET /v1/scan"), GRPC: Gap("no valid-time range RPC"),
+			Go: Has("Scan"), REST: Has("GET /v1/scan"), GRPC: Has("ScanBeliefs"),
 			MCP: Gap("no valid-time range tool"), MCPLite: Has("scan"), HTTPLite: Has("POST /v1/scan"), Client: Gap("no valid-time range read"),
 		},
 	},
@@ -154,7 +154,7 @@ var Registry = []Capability{
 			Go: Has("DeprecateClaim", "UpdateClaim", "ResolveContradiction", "EscalateClaim", "VerifyClaim"),
 			REST: Has("POST /v1/beliefs/{id}/deprecate", "POST /v1/beliefs/{id}/update", "POST /v1/beliefs/{id}/resolve",
 				"POST /v1/beliefs/{id}/escalate", "POST /v1/beliefs/{id}/verify"),
-			GRPC:    Gap("no governance edit RPCs"),
+			GRPC:    Has("DeprecateBelief", "UpdateBelief", "ResolveDissonance", "EscalateBelief", "VerifyBelief"),
 			MCP:     Has("memory_deprecate", "forget", "update", "memory_resolve_dissonance", "memory_escalate", "memory_promote"),
 			MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no governance edits"),
 		},
@@ -171,7 +171,7 @@ var Registry = []Capability{
 		ID: "belief.provenance", Effect: Read,
 		Summary: "Explain where a belief came from",
 		On: map[Transport]Binding{
-			Go: Has("ClaimProvenance"), REST: Has("GET /v1/beliefs/{id}/provenance"), GRPC: Gap("no provenance RPC"),
+			Go: Has("ClaimProvenance"), REST: Has("GET /v1/beliefs/{id}/provenance"), GRPC: Has("BeliefProvenance"),
 			MCP: Gap("no provenance tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefProvenance"),
 		},
 	},
@@ -179,7 +179,7 @@ var Registry = []Capability{
 		ID: "belief.history", Effect: Read,
 		Summary: "A belief's version chain and status history",
 		On: map[Transport]Binding{
-			Go: Has("ClaimHistory"), REST: Has("GET /v1/beliefs/{id}/history"), GRPC: Gap("no history RPC"),
+			Go: Has("ClaimHistory"), REST: Has("GET /v1/beliefs/{id}/history"), GRPC: Has("BeliefHistory"),
 			MCP: Gap("no history tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefHistory"),
 		},
 	},
@@ -195,7 +195,7 @@ var Registry = []Capability{
 		ID: "belief.feedback", Effect: Write,
 		Summary: "Record helpful/unhelpful feedback on a belief",
 		On: map[Transport]Binding{
-			Go: Has("RecordFeedback"), REST: Has("POST /v1/beliefs/{id}/feedback"), GRPC: Gap("no feedback RPC"),
+			Go: Has("RecordFeedback"), REST: Has("POST /v1/beliefs/{id}/feedback"), GRPC: Has("RecordBeliefFeedback"),
 			MCP: Has("record_feedback"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no feedback write"),
 		},
 	},

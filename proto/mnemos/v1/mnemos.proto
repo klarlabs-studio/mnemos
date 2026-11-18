@@ -139,6 +139,48 @@ service MnemosService {
   rpc Timeline(TimelineRequest) returns (TimelineResponse);
   // Signals returns detected temporal patterns.
   rpc Signals(SignalsRequest) returns (SignalsResponse);
+
+  // --- Belief writes, governance and per-belief reads (one implementation
+  // with REST, MCP and the Go library: internal/beliefops and the Memory
+  // facade). An unknown belief is NOT_FOUND, a malformed request
+  // INVALID_ARGUMENT. ---
+  // RememberFact stores one fact as a belief, recording each evidence string
+  // as an observation episode it links to (REST POST /v1/facts, MCP
+  // remember's library twin). Requires claims:write; a run-scoped token is
+  // PERMISSION_DENIED because the episodes carry no run.
+  rpc RememberFact(RememberFactRequest) returns (RememberFactResponse);
+  // ScanBeliefs returns beliefs valid within a time window, ordered by
+  // valid_from (REST GET /v1/scan). A run-scoped token is PERMISSION_DENIED:
+  // a scan spans every run.
+  rpc ScanBeliefs(ScanBeliefsRequest) returns (ScanBeliefsResponse);
+  // DeprecateBelief marks a belief deprecated (MCP memory_deprecate / forget,
+  // REST POST /v1/beliefs/{id}/deprecate). Requires claims:write.
+  rpc DeprecateBelief(BeliefEditRequest) returns (BeliefStatusChange);
+  // UpdateBelief rewrites a belief's text and optionally its confidence
+  // (MCP update, REST POST /v1/beliefs/{id}/update). Requires claims:write.
+  rpc UpdateBelief(UpdateBeliefRequest) returns (BeliefRevision);
+  // ResolveDissonance settles two contradicting beliefs: winner resolved,
+  // loser deprecated (MCP memory_resolve_dissonance, REST POST
+  // /v1/beliefs/{id}/resolve). Requires claims:write.
+  rpc ResolveDissonance(ResolveDissonanceRequest) returns (ResolveDissonanceResponse);
+  // EscalateBelief asks for a human decision on a belief and returns the
+  // escalation; it writes nothing (MCP memory_escalate, REST POST
+  // /v1/beliefs/{id}/escalate). Requires claims:write.
+  rpc EscalateBelief(BeliefEditRequest) returns (BeliefEscalation);
+  // VerifyBelief re-verifies a belief against fresh evidence (MCP
+  // memory_promote, REST POST /v1/beliefs/{id}/verify). Requires
+  // promote:global.
+  rpc VerifyBelief(VerifyBeliefRequest) returns (VerifyBeliefResponse);
+  // RecordBeliefFeedback records a helpful/unhelpful vote (MCP
+  // record_feedback, REST POST /v1/beliefs/{id}/feedback). Requires
+  // claims:write.
+  rpc RecordBeliefFeedback(RecordBeliefFeedbackRequest) returns (BeliefFeedback);
+  // BeliefProvenance explains how a belief's trust was computed (REST GET
+  // /v1/beliefs/{id}/provenance).
+  rpc BeliefProvenance(BeliefProvenanceRequest) returns (BeliefProvenanceResponse);
+  // BeliefHistory returns a belief's version chain newest first (REST GET
+  // /v1/beliefs/{id}/history).
+  rpc BeliefHistory(BeliefHistoryRequest) returns (BeliefHistoryResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -855,3 +897,116 @@ message SignalsRequest {
   int32  limit          = 3;
 }
 message SignalsResponse { repeated MemorySignal signals = 1; }
+
+// ---------------------------------------------------------------------------
+// Belief writes, governance and per-belief reads
+// ---------------------------------------------------------------------------
+
+message RememberFactRequest {
+  string                    text       = 1;
+  repeated string           evidence   = 2;
+  google.protobuf.Timestamp valid_from = 3; // unset = now
+}
+message RememberFactResponse { string belief_id = 1; }
+
+message ScanBeliefsRequest {
+  google.protobuf.Timestamp valid_from  = 1; // unset = open
+  google.protobuf.Timestamp valid_until = 2; // unset = open
+  int32                     limit       = 3; // 0 = the server cap
+}
+message ScanBeliefsResponse { repeated BeliefDetail beliefs = 1; }
+
+message BeliefEditRequest {
+  string belief_id = 1;
+  string reason    = 2;
+}
+message BeliefStatusChange {
+  string belief_id  = 1;
+  string old_status = 2;
+  string new_status = 3;
+}
+
+message UpdateBeliefRequest {
+  string belief_id  = 1;
+  string text       = 2;
+  double confidence = 3; // 0 keeps the current confidence
+  string reason     = 4;
+}
+message BeliefRevision {
+  string belief_id  = 1;
+  string old_text   = 2;
+  string new_text   = 3;
+  double confidence = 4;
+}
+
+message ResolveDissonanceRequest {
+  string winner_id = 1;
+  string loser_id  = 2;
+  string reason    = 3;
+}
+message ResolveDissonanceResponse {
+  string winner_id = 1;
+  string loser_id  = 2;
+}
+
+message BeliefEscalation {
+  string belief_id         = 1;
+  string action            = 2;
+  string escalation_reason = 3;
+  string rationale         = 4;
+}
+
+message VerifyBeliefRequest { string belief_id = 1; }
+message VerifyBeliefResponse {
+  string                    belief_id   = 1;
+  google.protobuf.Timestamp verified_at = 2;
+}
+
+message RecordBeliefFeedbackRequest {
+  string belief_id = 1;
+  bool   helpful   = 2;
+  string note      = 3;
+}
+message BeliefFeedback {
+  string belief_id                = 1;
+  bool   helpful                  = 2;
+  string new_status               = 3;
+  double new_confidence           = 4;
+  int32  negative_feedback_streak = 5;
+  int32  helpful_count            = 6;
+  bool   auto_contested           = 7;
+}
+
+message BeliefProvenanceRequest { string belief_id = 1; }
+message ProvenanceSignal {
+  string name         = 1;
+  double value        = 2;
+  double weight       = 3;
+  double contribution = 4;
+  string detail       = 5;
+}
+message BeliefProvenanceResponse {
+  string                    belief_id       = 1;
+  string                    belief_text     = 2;
+  double                    score           = 3;
+  repeated ProvenanceSignal signals         = 4;
+  string                    rationale       = 5;
+  string                    prose_rationale = 6;
+  string                    source_document = 7;
+  string                    liveness        = 8;
+}
+
+message BeliefHistoryRequest { string belief_id = 1; }
+message BeliefVersion {
+  string                    belief_id  = 1;
+  int32                     version    = 2;
+  string                    text       = 3;
+  double                    confidence = 4;
+  string                    status     = 5;
+  google.protobuf.Timestamp written_at = 6;
+  string                    written_by = 7;
+}
+message BeliefHistoryResponse {
+  string                 belief_id = 1;
+  repeated BeliefVersion versions  = 2;
+}
