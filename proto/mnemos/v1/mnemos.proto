@@ -108,6 +108,16 @@ service MnemosService {
   // NOT_FOUND. Repeating it writes nothing and returns the stored record with
   // already_retracted set.
   rpc RetractEpisode(RetractEpisodeRequest) returns (RetractEpisodeResponse);
+  // UnretractEpisode clears an episode's retraction (ADR 0037 §8): beliefs
+  // the retraction deprecated return to their earlier status unless something
+  // else changed them since (reported as skipped, with the reason), and
+  // beliefs it rescored get the episode back as evidence. The same operation
+  // as REST POST /v1/episodes/{id}/unretract and the unretract_episode MCP
+  // tool. Requires claims:write; an unknown episode, or one outside the
+  // token's runs, is NOT_FOUND; one that was never retracted is
+  // FAILED_PRECONDITION. Repeating it writes nothing and returns the stored
+  // record with already_unretracted set.
+  rpc UnretractEpisode(UnretractEpisodeRequest) returns (UnretractEpisodeResponse);
   // Classify reports whether a candidate statement fits established knowledge or is novel.
   rpc Classify(ClassifyRequest) returns (ClassifyResponse);
   // GetDecision returns a single recorded decision by id.
@@ -679,6 +689,44 @@ message RescoredBelief {
 message RetractionDecisionExposure {
   string decision_id      = 1;
   repeated string beliefs = 2;
+}
+
+message UnretractEpisodeRequest {
+  string episode_id = 1;
+  string reason     = 2; // optional; recorded with the un-retraction
+}
+message UnretractEpisodeResponse {
+  string episode_id                        = 1;
+  google.protobuf.Timestamp unretracted_at = 2;
+  string unretracted_by                    = 3;
+  string reason                            = 4;
+  int32 generation                         = 5; // generation of the cleared retraction
+  google.protobuf.Timestamp retracted_at   = 6; // of the cleared retraction
+  string retracted_by                      = 7;
+  bool already_unretracted                 = 8;
+  UnretractionImpact impact                = 9;
+}
+// UnretractionImpact is what an un-retraction changed, and what it left alone
+// and why.
+message UnretractionImpact {
+  repeated RestoredBelief restored_beliefs = 1;
+  repeated SkippedBelief skipped_beliefs   = 2;
+  repeated RelinkedBelief relinked_beliefs = 3;
+  repeated string uncertainty              = 4;
+}
+message RestoredBelief {
+  string id     = 1;
+  string status = 2;
+}
+message SkippedBelief {
+  string id     = 1;
+  string reason = 2;
+}
+message RelinkedBelief {
+  string id           = 1;
+  string status       = 2;
+  double trust_before = 3;
+  double trust_after  = 4;
 }
 
 message ClassifyRequest { string text = 1; }

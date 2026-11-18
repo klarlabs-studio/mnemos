@@ -50,6 +50,7 @@ const (
 	MnemosService_GetBelief_FullMethodName                = "/mnemos.v1.MnemosService/GetBelief"
 	MnemosService_SetBeliefLifecycle_FullMethodName       = "/mnemos.v1.MnemosService/SetBeliefLifecycle"
 	MnemosService_RetractEpisode_FullMethodName           = "/mnemos.v1.MnemosService/RetractEpisode"
+	MnemosService_UnretractEpisode_FullMethodName         = "/mnemos.v1.MnemosService/UnretractEpisode"
 	MnemosService_Classify_FullMethodName                 = "/mnemos.v1.MnemosService/Classify"
 	MnemosService_GetDecision_FullMethodName              = "/mnemos.v1.MnemosService/GetDecision"
 	MnemosService_Recall_FullMethodName                   = "/mnemos.v1.MnemosService/Recall"
@@ -147,6 +148,16 @@ type MnemosServiceClient interface {
 	// NOT_FOUND. Repeating it writes nothing and returns the stored record with
 	// already_retracted set.
 	RetractEpisode(ctx context.Context, in *RetractEpisodeRequest, opts ...grpc.CallOption) (*RetractEpisodeResponse, error)
+	// UnretractEpisode clears an episode's retraction (ADR 0037 §8): beliefs
+	// the retraction deprecated return to their earlier status unless something
+	// else changed them since (reported as skipped, with the reason), and
+	// beliefs it rescored get the episode back as evidence. The same operation
+	// as REST POST /v1/episodes/{id}/unretract and the unretract_episode MCP
+	// tool. Requires claims:write; an unknown episode, or one outside the
+	// token's runs, is NOT_FOUND; one that was never retracted is
+	// FAILED_PRECONDITION. Repeating it writes nothing and returns the stored
+	// record with already_unretracted set.
+	UnretractEpisode(ctx context.Context, in *UnretractEpisodeRequest, opts ...grpc.CallOption) (*UnretractEpisodeResponse, error)
 	// Classify reports whether a candidate statement fits established knowledge or is novel.
 	Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error)
 	// GetDecision returns a single recorded decision by id.
@@ -486,6 +497,16 @@ func (c *mnemosServiceClient) RetractEpisode(ctx context.Context, in *RetractEpi
 	return out, nil
 }
 
+func (c *mnemosServiceClient) UnretractEpisode(ctx context.Context, in *UnretractEpisodeRequest, opts ...grpc.CallOption) (*UnretractEpisodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UnretractEpisodeResponse)
+	err := c.cc.Invoke(ctx, MnemosService_UnretractEpisode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *mnemosServiceClient) Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ClassifyResponse)
@@ -653,6 +674,16 @@ type MnemosServiceServer interface {
 	// NOT_FOUND. Repeating it writes nothing and returns the stored record with
 	// already_retracted set.
 	RetractEpisode(context.Context, *RetractEpisodeRequest) (*RetractEpisodeResponse, error)
+	// UnretractEpisode clears an episode's retraction (ADR 0037 §8): beliefs
+	// the retraction deprecated return to their earlier status unless something
+	// else changed them since (reported as skipped, with the reason), and
+	// beliefs it rescored get the episode back as evidence. The same operation
+	// as REST POST /v1/episodes/{id}/unretract and the unretract_episode MCP
+	// tool. Requires claims:write; an unknown episode, or one outside the
+	// token's runs, is NOT_FOUND; one that was never retracted is
+	// FAILED_PRECONDITION. Repeating it writes nothing and returns the stored
+	// record with already_unretracted set.
+	UnretractEpisode(context.Context, *UnretractEpisodeRequest) (*UnretractEpisodeResponse, error)
 	// Classify reports whether a candidate statement fits established knowledge or is novel.
 	Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error)
 	// GetDecision returns a single recorded decision by id.
@@ -774,6 +805,9 @@ func (UnimplementedMnemosServiceServer) SetBeliefLifecycle(context.Context, *Set
 }
 func (UnimplementedMnemosServiceServer) RetractEpisode(context.Context, *RetractEpisodeRequest) (*RetractEpisodeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RetractEpisode not implemented")
+}
+func (UnimplementedMnemosServiceServer) UnretractEpisode(context.Context, *UnretractEpisodeRequest) (*UnretractEpisodeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UnretractEpisode not implemented")
 }
 func (UnimplementedMnemosServiceServer) Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Classify not implemented")
@@ -1378,6 +1412,24 @@ func _MnemosService_RetractEpisode_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_UnretractEpisode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnretractEpisodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).UnretractEpisode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_UnretractEpisode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).UnretractEpisode(ctx, req.(*UnretractEpisodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MnemosService_Classify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ClassifyRequest)
 	if err := dec(in); err != nil {
@@ -1652,6 +1704,10 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RetractEpisode",
 			Handler:    _MnemosService_RetractEpisode_Handler,
+		},
+		{
+			MethodName: "UnretractEpisode",
+			Handler:    _MnemosService_UnretractEpisode_Handler,
 		},
 		{
 			MethodName: "Classify",

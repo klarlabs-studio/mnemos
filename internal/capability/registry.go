@@ -64,6 +64,15 @@ var Registry = []Capability{
 		Notes: "Every binding and `mnemos retract-event` go through internal/retraction.Run (id, existence and run-scope checks) and govwrite's one retraction: Writer.RetractEvent on the daemon surfaces, ApplyRetraction inside the library's governed kernel. REST, MCP and the CLI return the same retraction.Report. watch_file calls Writer.RetractEvent for text a revised or deleted file no longer contains.",
 	},
 	{
+		ID: "episode.unretract", Effect: Write,
+		Summary: "Clear an episode's retraction: restore the beliefs it deprecated that nothing changed since, relink the ones it rescored (ADR 0037 §8)",
+		On: map[Transport]Binding{
+			Go: Has("UnretractEvent"), REST: Has("POST /v1/episodes/{id}/unretract"), GRPC: Has("UnretractEpisode"),
+			MCP: Has("unretract_episode"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("UnretractEvent"),
+		},
+		Notes: "Every binding and `mnemos unretract-event` go through internal/retraction.Unretract (id, existence, run-scope and was-it-ever-retracted checks) and govwrite's one un-retraction: Writer.UnretractEvent on the daemon surfaces, ApplyUnretraction inside the library's governed kernel. REST, MCP and the CLI return the same retraction.UnretractionReport. A never-retracted episode is REST 409 / gRPC FailedPrecondition.",
+	},
+	{
 		ID: "episode.list", Effect: Read,
 		Summary: "List stored episodes",
 		On: map[Transport]Binding{

@@ -717,6 +717,13 @@ func handleMCP(args []string) {
 			return mcpRunRetractEpisode(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
+	srv.Tool("unretract_episode").
+		Description("Clear the retraction of an episode that turned out to be sound, so it counts as evidence again. Nothing is deleted: the un-retraction is recorded next to the retraction (who, when, why). Beliefs the retraction deprecated come back to their earlier status, unless something else changed them since (those are listed as skipped, with the reason); beliefs it rescored get the episode back as evidence and are rescored. Refused for an episode that was never retracted. Repeating it changes nothing.").
+		OutputSchema(mcpUnretractEpisodeOutput{}).
+		Handler(func(ctx context.Context, input mcpUnretractEpisodeInput) (mcpUnretractEpisodeOutput, error) {
+			return mcpRunUnretractEpisode(ctx, mcpActorFor(ctx, mcpActor), input)
+		})
+
 	srv.Tool("update").
 		Description("Rewrite a claim's text (and optionally its confidence) when the agent's understanding refines. The reason is recorded in the status history.").
 		OutputSchema(mcpUpdateOutput{}).

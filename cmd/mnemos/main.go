@@ -245,6 +245,8 @@ func main() {
 		handleDeleteEvent(args, flags)
 	case "retract-event":
 		handleRetractEvent(args, flags)
+	case "unretract-event":
+		handleUnretractEvent(args, flags)
 	case "reembed":
 		handleReembed(args, flags)
 	case "recompute-trust":
@@ -1508,6 +1510,8 @@ func printUsage() {
 	fmt.Println("  delete-event <id> [<id>...] [--yes]  Delete events and cascade to derived claims")
 	fmt.Println("  retract-event <id> [--reason <text>] Withdraw an event as evidence (kept, recorded); retracts beliefs")
 	fmt.Println("    [--json]                           left without evidence, rescores the rest, reports the impact")
+	fmt.Println("  unretract-event <id> [--reason <text>] Clear a retraction (recorded); restores the beliefs it")
+	fmt.Println("    [--json]                           deprecated that nothing changed since, relinks the rest")
 	fmt.Println("  reembed [--force] [--dry-run]        (Re)generate claim + event embeddings under the current embed config")
 	fmt.Println("  recompute-trust [--all]              Rebuild trust_score for every claim under the current policy")
 	fmt.Println("  recompute-trust --stale [--dry-run]  Rescore only claims an older trust model scored, in verified,")

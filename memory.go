@@ -1203,6 +1203,20 @@ type Memory interface {
 	// POST /v1/episodes/{id}/retract and the gRPC RetractEpisode RPC.
 	RetractEvent(ctx context.Context, eventID, reason string) (EventRetraction, error)
 
+	// UnretractEvent clears an event's retraction (ADR 0037 §8): the event
+	// counts as evidence again. Nothing is deleted; the un-retraction is
+	// recorded next to the retraction with reason and the Memory's actor.
+	// Claims the retraction deprecated return to their earlier status unless
+	// something else changed them since (those are reported as skipped, with
+	// the reason); claims it rescored get the event back as evidence and are
+	// rescored. Repeating it writes nothing and returns the stored record with
+	// AlreadyUnretracted set. Returns an error wrapping [ErrEventNotFound]
+	// when eventID does not exist and [ErrNotRetracted] when it was never
+	// retracted. It is the same operation as `mnemos unretract-event`, the
+	// unretract_episode MCP tool, REST POST /v1/episodes/{id}/unretract and
+	// the gRPC UnretractEpisode RPC.
+	UnretractEvent(ctx context.Context, eventID, reason string) (EventUnretraction, error)
+
 	// RecordDecision persists an agent decision (belief -> plan -> outcome
 	// audit record) through the governed write path and returns its id.
 	// Statement is required; RiskLevel defaults to "medium" when empty.

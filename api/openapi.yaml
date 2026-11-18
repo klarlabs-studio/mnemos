@@ -235,6 +235,55 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /v1/episodes/{id}/unretract:
+    post:
+      summary: Clear an episode's retraction (ADR 0037 §8)
+      description: |
+        The episode counts as evidence again. Nothing is deleted: the
+        un-retraction is recorded next to the retraction it clears. Beliefs the
+        retraction deprecated return to their earlier status unless something
+        else changed them since (listed in `skipped_beliefs` with the reason);
+        beliefs it rescored get the episode back as evidence and are rescored.
+        Repeating it writes nothing and returns the stored report with
+        `already_unretracted: true`.
+
+        Requires the `claims:write` scope (the same scope as the
+        `unretract_episode` MCP tool). A run-scoped token may un-retract only
+        episodes of its runs; any other episode is a `404`. An episode that
+        was never retracted is a `409`. The body is optional.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: "The retracted episode id." }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, description: "Why the retraction is cleared; recorded with the un-retraction and on every belief it restores." }
+      responses:
+        "200":
+          description: Un-retraction report (the same document as `mnemos unretract-event --json` and `unretract_episode`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Unretraction" }
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Episode not found (or outside the token's runs)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Episode was never retracted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /v1/beliefs:
     get:
       summary: List beliefs
@@ -1153,6 +1202,44 @@ components:
                   decision_id: { type: string }
                   beliefs: { type: array, items: { type: string } }
             outcome_edges: { type: array, items: { type: string } }
+            uncertainty: { type: array, items: { type: string } }
+    Unretraction:
+      type: object
+      properties:
+        episode_id: { type: string }
+        unretracted_at: { type: string, format: date-time }
+        unretracted_by: { type: string }
+        reason: { type: string }
+        generation: { type: integer, description: "Generation of the cleared retraction (1 for the episode's first)." }
+        retracted_at: { type: string, format: date-time, description: "When the cleared retraction was recorded." }
+        retracted_by: { type: string }
+        already_unretracted: { type: boolean }
+        impact:
+          type: object
+          properties:
+            restored_beliefs:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string }
+            skipped_beliefs:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  reason: { type: string }
+            relinked_beliefs:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string }
+                  trust_before: { type: number, format: double }
+                  trust_after: { type: number, format: double }
             uncertainty: { type: array, items: { type: string } }
     BeliefEvidence:
       type: object
