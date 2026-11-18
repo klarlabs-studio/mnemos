@@ -162,6 +162,14 @@ func approxTokenLen(s string) int {
 	return len(s) / approxCharsPerToken
 }
 
+// ApproxTokens is the token estimate the Context Block budgets with. It is
+// exported so a caller packing recalled beliefs into a budget (the brainbench
+// retrieval ablation) counts tokens exactly as MaxTokens does, rather than by
+// a second estimate that could disagree.
+func ApproxTokens(s string) int {
+	return approxTokenLen(s)
+}
+
 // claimSortKey returns the score used to order active claims in the
 // block. TrustScore is preferred when present (>0); otherwise
 // Confidence; otherwise 0.

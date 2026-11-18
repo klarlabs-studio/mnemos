@@ -336,25 +336,30 @@ func readEvents(ctx context.Context, dsn string) ([]domain.Event, error) {
 
 // runBaselines scores every baseline on qs and compares each with mnemos, the
 // untreated arm's measurement.
-func runBaselines(ctx context.Context, events []domain.Event, qs questionSet, mnemosArm MetricSet) ([]BaselineResult, error) {
+func runBaselines(ctx context.Context, events []domain.Event, qs questionSet, mnemosArm MetricSet) ([]BaselineResult, []SystemCost, error) {
 	var out []BaselineResult
+	var costs []SystemCost
 	for _, b := range []struct {
 		name    string
 		recency bool
 	}{{BaselineBM25, false}, {BaselineBM25Recency, true}} {
-		bat, err := runBattery(ctx, newRawRetriever(events, b.recency), qs)
+		began := time.Now()
+		r := newRawRetriever(events, b.recency)
+		build := time.Since(began)
+		bat, err := runBattery(ctx, r, qs)
 		if err != nil {
-			return nil, fmt.Errorf("brainbench: baseline %s: %w", b.name, err)
+			return nil, nil, fmt.Errorf("brainbench: baseline %s: %w", b.name, err)
 		}
+		costs = append(costs, baselineCost(b.name, r, build, bat.latencies))
 		res := BaselineResult{
 			Name:        b.name,
 			Description: baselineDescriptions[b.name],
-			Metrics:     MetricSet{Metrics: bat.metrics, Questions: bat.asked},
+			Metrics:     MetricSet{Metrics: bat.metrics, Questions: bat.asked, Outcomes: bat.outcomes},
 		}
 		res.Comparisons, res.Summary = compareWithBaseline(mnemosArm, res.Metrics)
 		out = append(out, res)
 	}
-	return out, nil
+	return out, costs, nil
 }
 
 // compareWithBaseline diffs every metric the baseline measures against the
