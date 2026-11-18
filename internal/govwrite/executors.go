@@ -50,6 +50,9 @@ func (e eventsExecutor) Execute(ctx context.Context, input any, _ axidomain.Capa
 		}
 		ids = append(ids, evt.ID)
 	}
+	if err := pipeline.RecordEventDependencies(ctx, e.conn, in.Events); err != nil {
+		return axidomain.ExecutionResult{}, nil, err
+	}
 	return axidomain.ExecutionResult{
 		Data:    writeCount{Accepted: len(ids)},
 		Summary: fmt.Sprintf("appended %d event(s)", len(ids)),

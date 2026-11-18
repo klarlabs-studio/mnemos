@@ -189,6 +189,9 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 			return fmt.Errorf("append event %s: %w", event.ID, err)
 		}
 	}
+	if err := RecordEventDependencies(ctx, conn, events); err != nil {
+		return fmt.Errorf("persist artifacts: %w", err)
+	}
 
 	// Pre-compute earliest evidence-event timestamp per claim. The
 	// claim's valid_from reflects when the *fact was first observed*
