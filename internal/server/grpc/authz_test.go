@@ -182,6 +182,22 @@ func writeRPCs() []writeRPC {
 			_, err := c.UnretractEpisode(ctx, &mnemosv1.UnretractEpisodeRequest{EpisodeId: "ev-scope", Reason: "r"})
 			return err
 		}},
+		{"ProcessText", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.ProcessText(ctx, &mnemosv1.ProcessTextRequest{Text: "t"})
+			return err
+		}},
+		{"SetExpectation", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.SetExpectation(ctx, &mnemosv1.SetExpectationRequest{BeliefId: "cl-scope", Predicted: 1})
+			return err
+		}},
+		{"RecordObservation", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.RecordObservation(ctx, &mnemosv1.RecordObservationRequest{BeliefId: "cl-scope", Observed: 1})
+			return err
+		}},
+		{"ReconcileExpectations", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.ReconcileExpectations(ctx, &mnemosv1.ReconcileExpectationsRequest{})
+			return err
+		}},
 	}
 }
 
