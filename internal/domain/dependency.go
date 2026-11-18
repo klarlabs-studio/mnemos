@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -108,4 +109,39 @@ type BeliefPath struct {
 	BeliefID string   `json:"belief_id"`
 	Outcome  string   `json:"outcome"`
 	Via      []string `json:"via"`
+}
+
+// PendingReference is a citation that named no stored episode when its
+// episode was written (ADR 0038, late citations). LookupKey is a canonical
+// key a later source would carry (provenance.CanonicalKey); when an episode
+// with that key is written, the citing episode's document is detected again
+// and the dependency recorded then. Rows are append-only and keyed by
+// (EventID, LookupKey); a resolved row is deleted.
+type PendingReference struct {
+	EventID   string    `json:"episode_id"`
+	LookupKey string    `json:"lookup_key"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Validate checks that the pending reference names an episode and a key.
+func (p PendingReference) Validate() error {
+	if strings.TrimSpace(p.EventID) == "" || strings.TrimSpace(p.LookupKey) == "" {
+		return errors.New("pending reference needs an episode id and a lookup key")
+	}
+	return nil
+}
+
+// SortPendingReferences orders refs oldest first, then by episode and key:
+// the one order every backend returns them in.
+func SortPendingReferences(refs []PendingReference) {
+	sort.Slice(refs, func(i, j int) bool {
+		a, b := refs[i], refs[j]
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.Before(b.CreatedAt)
+		}
+		if a.EventID != b.EventID {
+			return a.EventID < b.EventID
+		}
+		return a.LookupKey < b.LookupKey
+	})
 }

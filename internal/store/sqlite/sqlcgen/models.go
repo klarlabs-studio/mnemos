@@ -284,6 +284,12 @@ type Outcome struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+type PendingReference struct {
+	EventID   string `json:"event_id"`
+	LookupKey string `json:"lookup_key"`
+	CreatedAt string `json:"created_at"`
+}
+
 type Playbook struct {
 	ID           string  `json:"id"`
 	Trigger      string  `json:"trigger"`

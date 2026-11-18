@@ -26,6 +26,10 @@ func TestGrowth(t *testing.T) {
 	if g, per := growth(before, before, 5); g != nil || per != nil {
 		t.Fatalf("no change reported %v %v", g, per)
 	}
+	// A work queue is censused but not budgeted as history.
+	if g, per := growth(map[string]int64{"pending_references": 0}, map[string]int64{"pending_references": 40}, 5); g["pending_references"] != 40 || per != nil {
+		t.Fatalf("pending_references growth = %v, per op = %v; want censused, not budgeted", g, per)
+	}
 }
 
 // A read that grows a table or commits is a defect; a recall may commit (its

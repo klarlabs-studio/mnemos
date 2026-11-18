@@ -295,6 +295,20 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
   PRIMARY KEY (event_id, depends_on)
 );
 CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
+
+-- pending_references (ADR 0038, late citations): a citation in episode
+-- event_id that named no stored episode when it was written, under a
+-- canonical lookup_key a later source would carry. Writing an episode with
+-- that key re-detects the citing document and deletes the rows it resolved.
+-- Append-only otherwise; no foreign keys: deleting an event clears its rows
+-- explicitly.
+CREATE TABLE IF NOT EXISTS pending_references (
+  event_id TEXT NOT NULL,
+  lookup_key TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (event_id, lookup_key)
+);
+CREATE INDEX IF NOT EXISTS idx_pending_references_lookup_key ON pending_references(lookup_key);
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_changed_at ON claim_status_history(changed_at);
 
 CREATE TABLE IF NOT EXISTS embeddings (

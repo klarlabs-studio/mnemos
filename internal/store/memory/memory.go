@@ -163,12 +163,13 @@ type state struct {
 	incidents         map[string]domain.Incident
 	incidentOrder     []string
 	feedback          map[string]domain.ClaimFeedback
-	claimVersions     map[string][]domain.ClaimVersion     // claim_id -> version chain, append-ordered
-	blocks            map[string]domain.WorkingMemoryBlock // owner\x00label -> working-memory block
-	expectations      map[string]domain.Expectation        // claim_id -> forward expectation
-	globalSchemas     map[string]domain.GlobalSchema       // id -> promoted global (neocortex) schema
-	journalEntries    []domain.JournalEntry                // append-only cognitive journal (ADR 0018), insertion order
-	dependencies      []domain.EventDependency             // source dependence between episodes (ADR 0038), insertion order
+	claimVersions     map[string][]domain.ClaimVersion      // claim_id -> version chain, append-ordered
+	blocks            map[string]domain.WorkingMemoryBlock  // owner\x00label -> working-memory block
+	expectations      map[string]domain.Expectation         // claim_id -> forward expectation
+	globalSchemas     map[string]domain.GlobalSchema        // id -> promoted global (neocortex) schema
+	journalEntries    []domain.JournalEntry                 // append-only cognitive journal (ADR 0018), insertion order
+	dependencies      []domain.EventDependency              // source dependence between episodes (ADR 0038), insertion order
+	pendingRefs       map[[2]string]domain.PendingReference // late citations (ADR 0038): (event_id, lookup_key) -> row
 }
 
 // storedEntityVersion is the in-memory analogue of a row in
@@ -235,6 +236,7 @@ func (s *state) clear() {
 	s.closedEvidence = nil
 	s.closedRels = nil
 	s.dependencies = nil
+	s.pendingRefs = nil
 	s.trustInputHistory = map[string][]domain.TrustInputChange{}
 	s.relationships = map[string]storedRelationship{}
 	s.embeddings = map[embeddingKey]storedEmbedding{}

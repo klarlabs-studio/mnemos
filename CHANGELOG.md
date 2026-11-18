@@ -10,6 +10,16 @@ notable changes.
 
 ### Added
 
+- A citation of a source the brain has not stored yet is no longer forgotten (ADR 0038,
+  late citations). Detection keeps it as a pending reference under canonical lookup keys
+  (new `pending_references` table on SQLite schema v37, libSQL, memory, Postgres with RLS,
+  and MySQL). When an episode carrying one of those keys is written, through
+  `PersistArtifacts`, the governed episode write or `Memory.RememberEvent`, the citing
+  document is detected again. Its dependencies are recorded, its beliefs are rescored, and
+  a later retraction of the source reaches it. One write re-detects at most 32 citing
+  documents (`pipeline.MaxLateCitingDocuments`), oldest citation first. Destroying an
+  episode clears its pending references.
+
 - Brain health is now readable beyond the embedded API (#408): `GET /v1/brain/health`
   (`?full=true` for the exact scan), the `brain_health` MCP tool, and
   `client.BrainHealth`. Read-only. Closes three acknowledged capability gaps (85 → 82).

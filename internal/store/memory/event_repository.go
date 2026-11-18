@@ -95,6 +95,7 @@ func (r EventRepository) DeleteByID(_ context.Context, id string) error {
 	// Deleting an event destroys it: its closed evidence links go with it.
 	r.state.dropClosedEvidenceLocked(func(l domain.ClosedEvidence) bool { return l.EventID == id })
 	r.state.dropDependenciesLocked(func(d domain.EventDependency) bool { return d.EventID == id || d.DependsOn == id })
+	r.state.dropPendingLocked(id)
 	return nil
 }
 
@@ -106,6 +107,7 @@ func (r EventRepository) DeleteAll(_ context.Context) error {
 	r.state.eventOrder = nil
 	r.state.closedEvidence = nil
 	r.state.dependencies = nil
+	r.state.pendingRefs = nil
 	return nil
 }
 

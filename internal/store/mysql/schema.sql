@@ -356,6 +356,21 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
   KEY idx_event_dependencies_depends_on (depends_on)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- pending_references (ADR 0038, late citations): a citation in episode
+-- event_id that named no stored episode when it was written, under a
+-- canonical lookup_key a later source would carry. Writing an episode with
+-- that key re-detects the citing document and deletes the rows it resolved.
+-- lookup_key compares byte-for-byte (utf8mb4_bin) like every other backend;
+-- provenance.MaxLookupKeyLen keeps it within VARCHAR(512) and the key prefix
+-- limit. No foreign keys: deleting an event clears its rows explicitly.
+CREATE TABLE IF NOT EXISTS pending_references (
+  event_id   VARCHAR(190) NOT NULL,
+  lookup_key VARCHAR(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  created_at DATETIME(6)  NOT NULL,
+  PRIMARY KEY (event_id, lookup_key),
+  KEY idx_pending_references_lookup_key (lookup_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS embeddings (
   entity_id   VARCHAR(190) NOT NULL,
   entity_type VARCHAR(64)  NOT NULL,
