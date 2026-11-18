@@ -868,6 +868,9 @@ func handleMCP(args []string) {
 			return mcpAnalogousClaims(ctx, mem, input)
 		})
 
+	// --- Browses, belief writes and per-belief reads (mcp_beliefops.go) ---
+	registerBeliefOpsTools(srv, mcpActor, getMem, getMemForBrain)
+
 	// --- Claim reads + advanced recall (parity with HTTP/gRPC) ---
 	srv.Tool("get_belief").
 		Description("Fetch a single claim's full detail (statement, trust, lifecycle, validity).").

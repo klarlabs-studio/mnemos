@@ -77,7 +77,7 @@ var Registry = []Capability{
 		Summary: "List stored episodes",
 		On: map[Transport]Binding{
 			Go: Has("ListEvents"), REST: Has("GET /v1/episodes"), GRPC: Has("ListEpisodes"),
-			MCP: Gap("no episode listing tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Events"),
+			MCP: Has("list_episodes"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Events"),
 		},
 	},
 	{
@@ -103,7 +103,7 @@ var Registry = []Capability{
 		Summary: "Write a pre-built belief linked to existing evidence",
 		On: map[Transport]Binding{
 			Go: Has("RememberClaim"), REST: Has("POST /v1/beliefs"), GRPC: Has("AppendBeliefs"),
-			MCP: Gap("no tool writes a pre-built belief; remember stores one fact with its own evidence"), MCPLite: Has("remember_claim"), HTTPLite: Has("POST /v1/claims"), Client: Has("Claims"),
+			MCP: Has("remember_belief"), MCPLite: Has("remember_claim"), HTTPLite: Has("POST /v1/claims"), Client: Has("Claims"),
 		},
 	},
 	{
@@ -136,7 +136,7 @@ var Registry = []Capability{
 		Summary: "Read beliefs valid within a time range",
 		On: map[Transport]Binding{
 			Go: Has("Scan"), REST: Has("GET /v1/scan"), GRPC: Has("ScanBeliefs"),
-			MCP: Gap("no valid-time range tool"), MCPLite: Has("scan"), HTTPLite: Has("POST /v1/scan"), Client: Gap("no valid-time range read"),
+			MCP: Has("scan_beliefs"), MCPLite: Has("scan"), HTTPLite: Has("POST /v1/scan"), Client: Gap("no valid-time range read"),
 		},
 	},
 	{
@@ -144,7 +144,7 @@ var Registry = []Capability{
 		Summary: "Set a belief's curation lifecycle (candidate, promoted, superseded)",
 		On: map[Transport]Binding{
 			Go: Has("SetClaimLifecycle"), REST: Has("POST /v1/beliefs/{id}/lifecycle"), GRPC: Has("SetBeliefLifecycle"),
-			MCP: Gap("no lifecycle tool; memory_promote verifies rather than setting lifecycle"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("SetClaimLifecycle"),
+			MCP: Has("set_belief_lifecycle"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("SetClaimLifecycle"),
 		},
 	},
 	{
@@ -172,7 +172,7 @@ var Registry = []Capability{
 		Summary: "Explain where a belief came from",
 		On: map[Transport]Binding{
 			Go: Has("ClaimProvenance"), REST: Has("GET /v1/beliefs/{id}/provenance"), GRPC: Has("BeliefProvenance"),
-			MCP: Gap("no provenance tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefProvenance"),
+			MCP: Has("belief_provenance"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefProvenance"),
 		},
 	},
 	{
@@ -180,7 +180,7 @@ var Registry = []Capability{
 		Summary: "A belief's version chain and status history",
 		On: map[Transport]Binding{
 			Go: Has("ClaimHistory"), REST: Has("GET /v1/beliefs/{id}/history"), GRPC: Has("BeliefHistory"),
-			MCP: Gap("no history tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefHistory"),
+			MCP: Has("belief_history"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("BeliefHistory"),
 		},
 	},
 	{
@@ -239,7 +239,7 @@ var Registry = []Capability{
 		Summary: "List belief-to-belief associations",
 		On: map[Transport]Binding{
 			Go: No(notLibraryRaw), REST: Has("GET /v1/associations"), GRPC: Has("ListAssociations"),
-			MCP: Gap("only contradictions are listable (dissonance.list)"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Relationships"),
+			MCP: Has("list_associations"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("Relationships"),
 		},
 	},
 	{
@@ -263,7 +263,7 @@ var Registry = []Capability{
 		Summary: "List entity-to-entity associations",
 		On: map[Transport]Binding{
 			Go: No(notLibraryRaw), REST: Has("GET /v1/entity-associations"), GRPC: Has("ListEntityAssociations"),
-			MCP: Gap("no entity association tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no entity association read"),
+			MCP: Has("list_entity_associations"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no entity association read"),
 		},
 	},
 	{

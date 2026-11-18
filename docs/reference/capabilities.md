@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-77 capabilities, 64 acknowledged gaps.
+77 capabilities, 56 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -25,29 +25,29 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`episode.append`](#episodeappend) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | [`episode.retract`](#episoderetract) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`episode.unretract`](#episodeunretract) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`episode.list`](#episodelist) | read | ✓ | ✓ | ✓ | GAP | — | — | ✓ |
+| [`episode.list`](#episodelist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`timeline.query`](#timelinequery) | read | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | [`timeline.signals`](#timelinesignals) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`belief.write`](#beliefwrite) | write | ✓ | ✓ | ✓ | GAP | ✓ | ✓ | ✓ |
+| [`belief.write`](#beliefwrite) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | [`belief.remember_fact`](#beliefremember_fact) | write | ✓ | ✓ | ✓ | ✓ | — | — | GAP |
 | [`belief.get`](#beliefget) | read | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | [`belief.list`](#belieflist) | read | — | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`belief.scan`](#beliefscan) | read | ✓ | ✓ | ✓ | GAP | ✓ | ✓ | GAP |
-| [`belief.lifecycle`](#belieflifecycle) | write | ✓ | ✓ | ✓ | GAP | — | — | ✓ |
+| [`belief.scan`](#beliefscan) | read | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | GAP |
+| [`belief.lifecycle`](#belieflifecycle) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.govern`](#beliefgovern) | write | ✓ | ✓ | ✓ | ✓ | — | — | GAP |
 | [`belief.purge`](#beliefpurge) | write | — | ✓ | — | — | — | — | GAP |
-| [`belief.provenance`](#beliefprovenance) | read | ✓ | ✓ | ✓ | GAP | — | — | ✓ |
-| [`belief.history`](#beliefhistory) | read | ✓ | ✓ | ✓ | GAP | — | — | ✓ |
+| [`belief.provenance`](#beliefprovenance) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`belief.history`](#beliefhistory) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.export_markdown`](#beliefexport_markdown) | read | — | ✓ | — | — | — | — | GAP |
 | [`belief.feedback`](#belieffeedback) | write | ✓ | ✓ | ✓ | ✓ | — | — | GAP |
 | [`belief.classify`](#beliefclassify) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.analogous`](#beliefanalogous) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.decision_claims`](#beliefdecision_claims) | read | — | — | — | ✓ | — | — | — |
 | [`belief.which_test_to_trust`](#beliefwhich_test_to_trust) | read | — | — | — | ✓ | — | — | — |
-| [`association.list`](#associationlist) | read | — | ✓ | ✓ | GAP | — | — | ✓ |
+| [`association.list`](#associationlist) | read | — | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`association.append`](#associationappend) | write | — | ✓ | ✓ | — | — | — | ✓ |
 | [`dissonance.list`](#dissonancelist) | read | — | — | — | ✓ | — | — | — |
-| [`entity_association.list`](#entity_associationlist) | read | — | ✓ | ✓ | GAP | — | — | GAP |
+| [`entity_association.list`](#entity_associationlist) | read | — | ✓ | ✓ | ✓ | — | — | GAP |
 | [`entity_association.append`](#entity_associationappend) | write | — | ✓ | ✓ | — | — | — | GAP |
 | [`embedding.list`](#embeddinglist) | read | — | ✓ | ✓ | — | — | — | ✓ |
 | [`embedding.append`](#embeddingappend) | write | — | ✓ | ✓ | — | — | — | ✓ |
@@ -200,7 +200,7 @@ List stored episodes (read).
 | go | `ListEvents` |
 | rest | `GET /v1/episodes` |
 | grpc | `ListEpisodes` |
-| mcp | **GAP** — no episode listing tool |
+| mcp | `list_episodes` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `Events` |
@@ -242,7 +242,7 @@ Write a pre-built belief linked to existing evidence (write).
 | go | `RememberClaim` |
 | rest | `POST /v1/beliefs` |
 | grpc | `AppendBeliefs` |
-| mcp | **GAP** — no tool writes a pre-built belief; remember stores one fact with its own evidence |
+| mcp | `remember_belief` |
 | mcp-lite | `remember_claim` |
 | http-lite | `POST /v1/claims` |
 | client | `Claims` |
@@ -300,7 +300,7 @@ Read beliefs valid within a time range (read).
 | go | `Scan` |
 | rest | `GET /v1/scan` |
 | grpc | `ScanBeliefs` |
-| mcp | **GAP** — no valid-time range tool |
+| mcp | `scan_beliefs` |
 | mcp-lite | `scan` |
 | http-lite | `POST /v1/scan` |
 | client | **GAP** — no valid-time range read |
@@ -314,7 +314,7 @@ Set a belief's curation lifecycle (candidate, promoted, superseded) (write).
 | go | `SetClaimLifecycle` |
 | rest | `POST /v1/beliefs/{id}/lifecycle` |
 | grpc | `SetBeliefLifecycle` |
-| mcp | **GAP** — no lifecycle tool; memory_promote verifies rather than setting lifecycle |
+| mcp | `set_belief_lifecycle` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `SetClaimLifecycle` |
@@ -356,7 +356,7 @@ Explain where a belief came from (read).
 | go | `ClaimProvenance` |
 | rest | `GET /v1/beliefs/{id}/provenance` |
 | grpc | `BeliefProvenance` |
-| mcp | **GAP** — no provenance tool |
+| mcp | `belief_provenance` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `BeliefProvenance` |
@@ -370,7 +370,7 @@ A belief's version chain and status history (read).
 | go | `ClaimHistory` |
 | rest | `GET /v1/beliefs/{id}/history` |
 | grpc | `BeliefHistory` |
-| mcp | **GAP** — no history tool |
+| mcp | `belief_history` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `BeliefHistory` |
@@ -470,7 +470,7 @@ List belief-to-belief associations (read).
 | go | _raw record I/O for remote clients; the library writes and reads through its own Memory operations_ |
 | rest | `GET /v1/associations` |
 | grpc | `ListAssociations` |
-| mcp | **GAP** — only contradictions are listable (dissonance.list) |
+| mcp | `list_associations` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `Relationships` |
@@ -512,7 +512,7 @@ List entity-to-entity associations (read).
 | go | _raw record I/O for remote clients; the library writes and reads through its own Memory operations_ |
 | rest | `GET /v1/entity-associations` |
 | grpc | `ListEntityAssociations` |
-| mcp | **GAP** — no entity association tool |
+| mcp | `list_entity_associations` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | **GAP** — no entity association read |
