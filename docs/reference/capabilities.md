@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-76 capabilities, 84 acknowledged gaps.
+76 capabilities, 83 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -23,7 +23,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`ingest.git`](#ingestgit) | write | — | — | — | ✓ | — | — | — |
 | [`ingest.watch`](#ingestwatch) | write | — | — | — | ✓ | — | — | — |
 | [`episode.append`](#episodeappend) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| [`episode.retract`](#episoderetract) | write | GAP | GAP | GAP | ✓ | — | — | GAP |
+| [`episode.retract`](#episoderetract) | write | ✓ | GAP | GAP | ✓ | — | — | GAP |
 | [`episode.list`](#episodelist) | read | GAP | ✓ | ✓ | GAP | — | — | ✓ |
 | [`timeline.query`](#timelinequery) | read | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | [`timeline.signals`](#timelinesignals) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -164,7 +164,7 @@ Withdraw an episode as evidence: retract beliefs it alone supported, rescore the
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no retraction on Memory |
+| go | `RetractEvent` |
 | rest | **GAP** — no retraction route |
 | grpc | **GAP** — no retraction RPC |
 | mcp | `retract_episode` |
