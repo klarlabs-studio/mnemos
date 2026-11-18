@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // CreditAppliedComponentKey is the reserved confidence_components entry that
 // carries the NET credit a belief currently holds (ADR 0026 §3): the sum of its
@@ -47,6 +50,22 @@ type CreditChange struct {
 	ChangedAt time.Time
 }
 
+// TrustInputChange is one change to the trust inputs a claims row stores
+// itself: confidence, the per-claim half-life and the last explicit
+// confirmation (ADR 0036 §7). It holds the values the claim carried BEFORE
+// ChangedAt, when the brain recorded the change; the claims row holds the
+// values after the last change. A belief's inputs at an instant T are
+// therefore the prior values of its first change after T, or the stored values
+// when nothing changed after T. Credit and evidence have their own histories
+// ([CreditChange], claim_evidence.created_at).
+type TrustInputChange struct {
+	ClaimID       string
+	Confidence    float64
+	HalfLifeDays  float64
+	LastConfirmed time.Time
+	ChangedAt     time.Time
+}
+
 // AppliedCredit returns the net credit stored in a claim's components, or 0.
 func AppliedCredit(components map[string]float64) float64 {
 	return components[CreditAppliedComponentKey]
@@ -62,4 +81,48 @@ type TrustScoring struct {
 	At           time.Time
 	ModelVersion string
 	Score        func(TrustInput) float64
+}
+
+// UpsertComponents returns the confidence_components an upsert stores, given
+// the incoming map and the stored one (ADR 0036 §7). It is the conflict rule
+// for the column, applied identically by every backend in the upsert's
+// transaction, and the same rule #334 applies to half_life_days: a write that
+// carries nothing must not erase curation nothing can reconstruct.
+//
+//   - incoming empty: the stored map stands. Re-extraction rebuilds a claim from
+//     text and carries no components, so a blind assignment erased applied
+//     credit, salience and inhibition on every re-ingest.
+//   - incoming carries credit (any credit:* key): incoming wins as given.
+//   - otherwise: incoming, plus the stored credit:* keys. A write that sets only
+//     a salience or a global tag does not reset the belief's credit.
+//
+// Clearing credit is not expressible through an upsert. The statement that owns
+// the column is ports.BeliefCreditWriter.ApplyBeliefCredit, which writes the
+// map exactly as given (credit assignment, salience tagging, inhibition decay).
+func UpsertComponents(incoming, stored map[string]float64) map[string]float64 {
+	if len(incoming) == 0 {
+		return stored
+	}
+	for k := range incoming {
+		if strings.HasPrefix(k, CreditComponentPrefix) {
+			return incoming
+		}
+	}
+	var out map[string]float64
+	for k, v := range stored {
+		if !strings.HasPrefix(k, CreditComponentPrefix) {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]float64, len(incoming)+1)
+			for ik, iv := range incoming {
+				out[ik] = iv
+			}
+		}
+		out[k] = v
+	}
+	if out == nil {
+		return incoming
+	}
+	return out
 }

@@ -226,6 +226,22 @@ CREATE TABLE IF NOT EXISTS claim_credit_history (
   FOREIGN KEY (claim_id) REFERENCES claims(id)
 );
 CREATE INDEX IF NOT EXISTS idx_claim_credit_history_claim_id ON claim_credit_history(claim_id);
+
+-- claim_trust_input_history (ADR 0036 §7): every change to a trust input the
+-- claims row stores itself (confidence, half_life_days, last_confirmed). Each
+-- row holds the values the claim carried BEFORE changed_at; claims holds the
+-- values after the last change, so the inputs a belief held at an earlier
+-- instant can be recovered.
+CREATE TABLE IF NOT EXISTS claim_trust_input_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  claim_id TEXT NOT NULL,
+  prior_confidence REAL NOT NULL,
+  prior_half_life_days REAL NOT NULL DEFAULT 0,
+  prior_last_confirmed TEXT NOT NULL DEFAULT '',
+  changed_at TEXT NOT NULL,
+  FOREIGN KEY (claim_id) REFERENCES claims(id)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_trust_input_history_claim_id ON claim_trust_input_history(claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_changed_at ON claim_status_history(changed_at);
 
 CREATE TABLE IF NOT EXISTS embeddings (

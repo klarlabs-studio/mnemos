@@ -10,7 +10,9 @@
   `GET /v1/beliefs?recorded_as_of=`, gRPC `ListBeliefs.recorded_as_of` and
   `ports.ClaimRepository` (`ListMergedInto`). Step 3 amends
   `domain.ClaimEvidence` (`CreatedAt`), the `claim_evidence` table on every
-  backend, and adds `claim_credit_history` and `ports.CreditHistoryLister`
+  backend, and adds `claim_credit_history` and `ports.CreditHistoryLister`.
+  §7 adds `claim_trust_input_history` and `ports.TrustInputHistoryLister` on
+  every backend
 
 ## Context
 
@@ -80,17 +82,18 @@ returns the same answer.
 
 ### 3. What is not reconstructed, stated rather than approximated
 
-- **Trust.** Reconstructed by step 3 (§7), with two inputs held at their
-  stored value: confidence and the per-claim half-life. A belief confirmed both
-  before and after T reads as unconfirmed at T, since `last_confirmed` keeps
-  only the latest confirmation.
+- **Trust.** Reconstructed by step 3 (§7), every input: evidence, credit,
+  confidence, half-life and the last explicit confirmation.
 - **Merges.** Reconstructed from the redirect, with the approximations stated
   in §5. Step 2.
-- **Text and confidence.** The pipeline never rewrites a stored claim's text;
-  confidence changes are versioned only on SQLite and memory (`claim_versions`).
-  Not rewound.
-- **History older than its table.** Validity changes made before ADR 0034 step 2
-  have no history row; the stored value is used.
+- **Text.** The pipeline never rewrites a stored claim's text. Not rewound.
+- **`last_verified`, `verify_count`.** Rehearsal bookkeeping (recall and replay
+  bump them), not trust inputs (ADR 0026), and not versioned: versioning them
+  would add a history write to every recall. A recorded-as-of read returns their
+  stored values.
+- **History older than its table.** Validity changes made before ADR 0034 step 2,
+  credit applied before step 3 and trust-input changes made before §7's history
+  have no row; the stored value is used (§7 states the rule).
 - **Browse.** Uses the same views (§6). Step 2.
 
 ### 4. Cost
@@ -201,8 +204,7 @@ over the inputs as they stood at T, scored at T (`recorded.TrustInputAt`, pure;
 | evidence count | links recorded by T to episodes ingested by T, graded by independence (`domain.EffectiveEvidenceCount` over distinct episode authors), as the stores grade them |
 | latest evidence | the freshest such episode's timestamp |
 | credit | the applied net credit from `claim_credit_history`, by the same rule as status (§1); no history, the stored value |
-| last confirmed | the stored value when at or before T, else none |
-| confidence, half-life | the stored values (§3) |
+| confidence, half-life, last confirmed | from `claim_trust_input_history`: the prior values of the first change recorded after T; nothing changed after T, the stored values. A last confirmation still after T reads as none |
 
 What made it possible:
 
@@ -214,7 +216,7 @@ What made it possible:
   (`RepointEvidence`) moves a link with its time. The episode's `ingested_at`
   is not enough: extraction can run after ingestion, and a restatement attaches
   an already-ingested episode to an older belief.
-- **Backfill rule, explicit and in one place.** Existing rows are not
+- **Backfill rule for links, explicit and in one place.** Existing rows are not
   backfilled. A link with no recorded time reads as recorded at the later of
   its claim's `created_at` and its episode's `ingested_at`
   (`recorded.LinkRecordedAt`): it cannot predate either, and it is exact for a
@@ -222,11 +224,27 @@ What made it possible:
   is early only when extraction ran after both, which nothing recorded dates.
   The rule lives in code rather than a one-shot `UPDATE` so every backend
   applies the same one, and a mixed-precision text comparison in SQL cannot
-  get it wrong.
-- **Credit is versioned.** `ApplyBeliefCredit` records a row in
-  `claim_credit_history` (claim, from, to, changed_at) in the same transaction
-  whenever it changes the applied net credit; a write that leaves it unchanged
-  (inhibition decay, an idempotent re-run) records nothing. Read through the
+  get it wrong. No recorded source holds a better time to backfill from:
+  `compilation_jobs` names the events of a CLI `extract` run but not the links
+  it wrote, the hook, REST, gRPC and MCP write paths record no job naming events
+  at all, `cognitive_journal` has no link kind, `claim_versions` dates claim
+  writes, not links (a restatement links without rewriting the claim), and the
+  kernel audit log is a process-local file outside the store.
+- **Credit is versioned, and only an explicit write changes it.** Two writers
+  set `confidence_components`. `ApplyBeliefCredit` owns the column and writes
+  the map exactly as given; it is the only way to clear credit (credit
+  assignment, salience tagging and inhibition decay use it). The upsert
+  applies `domain.UpsertComponents` against the row it read in its
+  transaction, identically on every backend: an incoming empty map keeps the
+  stored one, incoming credit (any `credit:*` key) wins as given, and any
+  other incoming map keeps the stored `credit:*` keys. A re-ingest therefore
+  no longer erases applied credit, salience or inhibition, the hazard #334
+  fixed for `half_life_days`; `TestUpsert_ACreditlessRewriteKeepsAppliedCredit`
+  pins it per backend. Both writers record a row in `claim_credit_history`
+  (claim, from, to, changed_at) in the same transaction whenever the stored
+  applied net credit changed, through the same before/after comparison as the
+  trust inputs below; a write that leaves it unchanged (inhibition decay, an
+  idempotent re-run, a credit-less restatement) records nothing. Read through the
   optional `ports.CreditHistoryLister`. Every backend that implements
   `ports.BeliefCreditWriter` carries the table: SQLite (and libSQL), memory,
   Postgres (registered in the ADR-0007 RLS `scoped` array, so it gets a tenant
@@ -234,12 +252,51 @@ What made it possible:
   and MySQL the current value is read `FOR UPDATE`, so concurrent credit
   writes each record the value they replaced. Delete and cascade paths clear
   it. `TestCreditHistory_RecordsEveryAppliedCreditChange` fails if a backend
-  implements the writer without the lister. Credit applied before the table
+  implements the writer without the lister, or if either writer changes the
+  credit without a row; the AST guard below covers `confidence_components`
+  too. Credit applied before the table
   existed has no history, and reads as the stored value.
+- **The row's own trust inputs are versioned.** Confidence, `half_life_days`
+  and `last_confirmed` are overwritten in place by three writers on every
+  backend: the upsert (confidence; a non-zero half-life, per its conflict
+  rule), `MarkVerified` (a non-zero half-life) and `MarkConfirmed`.
+  `claim_versions` could not serve: it exists only on SQLite and memory,
+  snapshots text, confidence and status on every upsert whether or not they
+  changed, and misses the other two writers and columns. One table,
+  `claim_trust_input_history` (claim, prior confidence, prior half-life, prior
+  last confirmation, changed_at), is written on SQLite (and libSQL), memory,
+  Postgres (in the RLS `scoped` array) and MySQL. Each writer reads the three
+  values before its statement and after it, in the same transaction (`FOR
+  UPDATE` on Postgres and MySQL), and records the prior values only when the
+  row changed, so whatever conflict rule the statement applied, the history
+  matches what was stored. Memory writes every claim row through one function,
+  `putClaimLocked`, which records. Delete and cascade paths clear the table.
+  Read through `ports.TrustInputHistoryLister`; the view applies the same
+  values to the claim it returns, so a read at T also shows the confidence,
+  half-life and confirmation the brain held at T.
+- **Every writer is covered, and a new one cannot slip in.**
+  `TestTrustInputHistory_RecordsEveryWritePath` drives each writer on every
+  backend and asserts the rows the lister returns.
+  `TestTrustInputWriters_RecordHistory` reads the SQL backends' Go AST
+  (literals and string constants, sqlc's generated queries included) and fails
+  if any function holding SQL that assigns one of the three columns, or
+  `confidence_components`, on `claims` reaches an entry point without passing through
+  `recordTrustInputChange`; `TestMemoryClaimWritesGoThroughPutClaimLocked`
+  fails on any other write into memory's claims map.
+- **Rows written before the history: one rule.** A claim with no recorded
+  change reads its stored values, held since creation as far as anything
+  recorded says (`recorded.StoredInputsAt`). It is exact for every claim not
+  changed since the history shipped; a claim changed since gets its earlier
+  values from its first recorded change, which holds what it replaced. Only a
+  change made before the history existed is lost, and nothing recorded it. A
+  last confirmation that the rule would place after T reads as none, so it
+  understates freshness rather than overstating it.
 
 Today's reads are unchanged: only the recorded views rescore. The cost is one
-evidence read, one event read and one credit-history read per view call, on the
-recorded-as-of path only.
+evidence read, one event read, one credit-history read and one trust-input
+history read per view call, on the recorded-as-of path only. On the write path,
+each upsert, verification and confirmation reads the three columns once more
+inside its transaction, and writes a history row only when one changed.
 
 ## Consequences
 
@@ -269,10 +326,13 @@ recorded-as-of path only.
    narratives; no write-backs on time-travel reads. **Implemented.**
 2. Merge-aware rewind (follow `merged_into` redirects backward when a winner was
    recorded after T); browse uses the same rewind. **Implemented** (§5, §6).
-3. Trust at T: timestamp evidence links and version credit, then compute
-   `trust.At` over the inputs as of T. **Implemented** (§7). Confidence and
-   half-life stay at their stored values, and `last_confirmed` is unversioned
-   (§3). Acceptance: `TestRecordedAsOf_TrustIsReconstructedAtT` (SQLite): a
-   Monday episode linked on Thursday and a Thursday credit change today's trust
-   and not Tuesday's; the link time round-trips on every backend
+3. Trust at T: timestamp evidence links and version credit, confidence,
+   half-life and confirmation, then compute `trust.At` over the inputs as of T.
+   **Implemented** (§7). Acceptance: `TestRecordedAsOf_TrustIsReconstructedAtT`
+   (SQLite, through recall): a Monday episode linked on Thursday, a Thursday
+   credit, a Thursday restatement with more confidence, a Thursday half-life
+   and a Thursday confirmation change today's trust and not Tuesday's;
+   `TestRecordedAsOf_StoredTrustInputsAreReconstructedAtT` shows the same for
+   confidence, half-life and a belief confirmed before and after T on every
+   backend; the link time round-trips on every backend
    (`TestClaimEvidence_RecordedAtRoundTripsOnEveryBackend`).
