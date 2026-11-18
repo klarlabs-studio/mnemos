@@ -88,8 +88,11 @@ type rememberClaimInput struct {
 	RunID      string   `json:"run_id" jsonschema:"description=Optional run grouping id"`
 }
 
-type claimIDOutput struct {
+// rememberedClaimOutput is remember_claim's result: the claim holding the
+// belief, and whether the brain already held it.
+type rememberedClaimOutput struct {
 	ClaimID string `json:"claim_id"`
+	Known   bool   `json:"known"`
 }
 
 type rememberEventInput struct {
@@ -168,9 +171,9 @@ func registerTools(srv *Server, store mnemos.Store) {
 
 	srv.Tool("remember_claim").
 		Description("Persist a pre-built claim. Claims require evidence: supply event_ids.").
-		OutputSchema(claimIDOutput{}).
-		Handler(func(ctx context.Context, in rememberClaimInput) (claimIDOutput, error) {
-			id, err := store.RememberClaim(ctx, mnemos.ClaimItem{
+		OutputSchema(rememberedClaimOutput{}).
+		Handler(func(ctx context.Context, in rememberClaimInput) (rememberedClaimOutput, error) {
+			got, err := store.RememberClaimDetailed(ctx, mnemos.ClaimItem{
 				Text:       in.Text,
 				Type:       in.Type,
 				Confidence: in.Confidence,
@@ -178,9 +181,9 @@ func registerTools(srv *Server, store mnemos.Store) {
 				RunID:      in.RunID,
 			})
 			if err != nil {
-				return claimIDOutput{}, err
+				return rememberedClaimOutput{}, err
 			}
-			return claimIDOutput{ClaimID: id}, nil
+			return rememberedClaimOutput{ClaimID: got.ID, Known: got.Known}, nil
 		})
 
 	srv.Tool("remember_event").

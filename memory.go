@@ -54,6 +54,16 @@ import (
 	"go.klarlabs.de/mnemos/internal/govwrite"
 )
 
+// RememberedClaim reports where a remembered claim landed.
+type RememberedClaim struct {
+	// ID is the claim that holds the belief: the new claim, or the one the
+	// brain already held when the write restated it.
+	ID string
+	// Known is true when the brain already held the belief, so the write
+	// linked its evidence to the existing claim instead of adding one.
+	Known bool
+}
+
 // ClaimItem is a pre-built claim an agent runtime can hand to Mnemos
 // directly, bypassing the extraction pipeline. Use this when the
 // agent has already derived structured assertions (with its own model,
@@ -210,6 +220,13 @@ type Item struct {
 
 	// Metadata is free-form key/value context attached to the source
 	// event. Searchable; not used for ranking by default.
+	//
+	// The key "session_id" names the agent session the content came from
+	// and is stored on the episode under that same key, which is what
+	// session-aware processing reads: one session is one evidence origin,
+	// so replaying it adds no evidence, and contradictions within one
+	// session are not flagged. Every other key is stored prefixed with
+	// "input_".
 	Metadata map[string]string
 
 	// Source is an optional human-readable label for where the
@@ -1170,8 +1187,10 @@ type Memory interface {
 	// Claims require evidence: a ClaimItem with no (non-blank) EventIDs
 	// is rejected before any write runs, and nothing is persisted.
 	//
-	// Returns the generated claim ID so the caller can reference the
-	// claim in future relationship edges or evidence links.
+	// Returns the id of the claim that holds the belief, so the caller can
+	// reference it in future relationship edges or evidence links: the new
+	// claim's id, or — when the brain already held the belief — the existing
+	// claim's id (see [Memory.RememberClaimDetailed]).
 	RememberClaim(ctx context.Context, claim ClaimItem) (string, error)
 
 	// RememberClaimWithEvidence is a convenience over RememberEvent +
@@ -1184,6 +1203,23 @@ type Memory interface {
 	// returns an error and persists nothing. validFrom defaults to now
 	// when zero.
 	RememberClaimWithEvidence(ctx context.Context, text string, evidence []string, validFrom time.Time) (string, error)
+
+	// RememberClaimDetailed is [Memory.RememberClaim] reporting whether the
+	// brain already held the belief. A claim whose text (normalised), scope
+	// and audience match a live belief is a restatement: its evidence links to
+	// the held belief, no second claim is written, and the held belief's id is
+	// returned with Known set. Evidence from an origin the belief already has
+	// (the same capture session, or the same content) is not linked again, so
+	// repetition never raises trust. The restatement's other fields
+	// (confidence, type, lifecycle, salience) do not overwrite the held
+	// belief. A claim with ValidUntil set is history and is always stored as
+	// its own row.
+	RememberClaimDetailed(ctx context.Context, claim ClaimItem) (RememberedClaim, error)
+
+	// RememberClaimWithEvidenceDetailed is [Memory.RememberClaimWithEvidence]
+	// reporting whether the brain already held the belief, with the folding
+	// rules of [Memory.RememberClaimDetailed].
+	RememberClaimWithEvidenceDetailed(ctx context.Context, text string, evidence []string, validFrom time.Time) (RememberedClaim, error)
 
 	// SetClaimLifecycle transitions an existing claim's promotion state
 	// ([ClaimLifecycleCandidate] / [ClaimLifecyclePromoted] /

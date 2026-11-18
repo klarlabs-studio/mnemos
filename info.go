@@ -74,8 +74,15 @@ func embedderLabel(cfg config) string {
 // "here's a statement and the references backing it" case. See the
 // [Memory] interface for the contract.
 func (m *memory) RememberClaimWithEvidence(ctx context.Context, text string, evidence []string, validFrom time.Time) (string, error) {
+	got, err := m.RememberClaimWithEvidenceDetailed(ctx, text, evidence, validFrom)
+	return got.ID, err
+}
+
+// RememberClaimWithEvidenceDetailed implements
+// [Memory.RememberClaimWithEvidenceDetailed].
+func (m *memory) RememberClaimWithEvidenceDetailed(ctx context.Context, text string, evidence []string, validFrom time.Time) (RememberedClaim, error) {
 	if strings.TrimSpace(text) == "" {
-		return "", errors.New("mnemos: RememberClaimWithEvidence: text is required")
+		return RememberedClaim{}, errors.New("mnemos: RememberClaimWithEvidence: text is required")
 	}
 	if validFrom.IsZero() {
 		validFrom = time.Now().UTC()
@@ -91,15 +98,15 @@ func (m *memory) RememberClaimWithEvidence(ctx context.Context, text string, evi
 		// generates one internally but does not return it).
 		eid := uuid.NewString()
 		if err := m.RememberEvent(ctx, Event{ID: eid, At: validFrom, Type: "observation", Content: ref}); err != nil {
-			return "", err
+			return RememberedClaim{}, err
 		}
 		eventIDs = append(eventIDs, eid)
 	}
 	if len(eventIDs) == 0 {
-		return "", errors.New("mnemos: RememberClaimWithEvidence: at least one non-blank evidence reference is required")
+		return RememberedClaim{}, errors.New("mnemos: RememberClaimWithEvidence: at least one non-blank evidence reference is required")
 	}
 
-	return m.RememberClaim(ctx, ClaimItem{
+	return m.RememberClaimDetailed(ctx, ClaimItem{
 		Text:      text,
 		Type:      "fact",
 		EventIDs:  eventIDs,

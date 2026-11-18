@@ -48,6 +48,7 @@ exactly once, and why the census is read before the probes fire.
 | `forbidden_hit_rate` | lower better | Does a superseded statement still surface? Unknown when no probe declares `must_not`. |
 | `gold_survival` | higher better | **Is the knowledge still there at all?** |
 | `as_of_recorded_accuracy`, `as_of_valid_accuracy` | higher better | Timeline scenarios only; see below. Unknown elsewhere. |
+| `accuracy_<class>` | higher better | Strict accuracy per probe class, for scenarios that declare `class:`; see below. |
 | `contested_claims`, `contradiction_edges` | lower better | Unresolved dissonance. |
 | `noise_fraction` | lower better | Share of valid claims that `extract.IsJunk` — mnemos's own shipped narration filter — rejects. |
 | `trust_decay_by_identity` | lower better | The ADR 0032 trust-decay ratio counted per belief identity, not per claim row. Unknown when too few beliefs approach the floor. |
@@ -117,8 +118,20 @@ runs; within a run every arm is a byte-copy of one seed measured against the
 same instants, so the noise arm still has to reproduce the control exactly.
 `TestRun_TimelinePhasesAreOrderedOnTheWriteClock` guards the ordering.
 
-A document can set `valid_from: <earlier phase>`: the root cause written down on
-Thursday was true since Monday's deploy. That is what separates the two axes.
+A document can set `valid_from: <phase>` in either direction, which is what
+separates the two axes. An earlier phase is a fact learned late: the root cause
+written down on Thursday was true since Monday's deploy. A later phase is a
+change announced ahead: written in February, in force from March. That later
+phase's start is not known when the document is ingested, so the seeder reserves
+an instant on the write clock 2 s ahead, and when the phase begins it waits for
+that instant and starts there. If the phases in between outrun the reservation,
+seeding fails instead of placing March before February
+(`TestPhaseStart_ReservationOverrunIsAnError`).
+
+`supersede_by: {old, new}` ends the old claim's valid time where the successor's
+begins, the cutoff `mnemos resolve --supersedes` uses. `supersede: <target>`
+ends it at the moment the change is applied. Only `supersede_by` can express a
+change recorded after it took effect, or one announced before.
 
 | Metric | Direction | What it tells you |
 |---|---|---|
@@ -132,6 +145,23 @@ scenario that asks nothing on that axis. They are measured on every arm, so a
 process that corrupts history regresses them;
 `TestRun_ReportsRegressionWhenAsOfAnswersBreak` asserts that a merge-everything
 dedupe is reported as a regression.
+
+### Probe classes
+
+Any probe, ordinary or as-of, may set `class: <identifier>`. Each class present
+gets an `accuracy_<class>` metric (higher better), scored by the strict rule
+above over that class's probes, on every arm and every baseline. A scenario with
+no classes emits none. Every report also carries the per-question `outcomes`
+(rank of the expected text, whether anything forbidden came back, correct or
+not) for the untreated Mnemos arm and for each baseline, so a class accuracy
+traces back to the probes behind it.
+
+`ownership_timeline.yaml` uses four classes: `current` (who owns X now),
+`valid_history` (who owned X then, with today's knowledge), `known_history`
+(what the brain believed then about who owned X then) and `change_why` (what
+changed and why). Its world has a change announced ahead, one recorded late,
+one corrected afterwards (retract), and two uncurated stale restatements: one
+verbatim, one reworded.
 
 ### Raw-retrieval baseline
 
@@ -168,6 +198,16 @@ store the baseline does not have. Verdicts are `mnemos-better`,
 `baseline_summary`. They never feed the A/B `summary`, the scenario verdict or
 `-fail-on-regression`: a baseline win is a finding about retrieval semantics,
 not a regression caused by a process, and the two must not hide each other.
+
+**Cost.** Every scenario also reports what each system spent (`cost` in the
+JSON, the COST block in the table): build time (the Mnemos ingest path summed
+over documents, against chunking and tokenising for a baseline), curation time,
+stored bytes (the untreated arm's SQLite file, schema and history tables
+included, against the baseline's in-memory chunk and token bytes), row counts,
+and per-question latency (mean, p50, max). These are wall-clock numbers that
+vary run to run, so they are not metrics, feed no verdict and are not checked by
+the noise arm. They are there so "an accuracy gain at acceptable cost" can be
+read off one table.
 
 What the comparison cannot say is in the report's limitations. In short: the
 baseline sees documents only, so a timeline's structured curation has no
@@ -255,6 +295,29 @@ report stays more precise (1.0 vs 0.75), because the baseline also deletes the
 corroborated sentence's chunk, and recall now ties (0.6). Before ADR 0038 the
 two tied at 0.6, and the blog's copy kept the false claim alive (`SQ-R`).
 
+
+## Retrieval ablation (`make retrieval-ablation`)
+
+A third mode, separate from the A/B verdict, asks whether Mnemos's ranking puts
+more *useful* beliefs into a fixed token budget than similarity alone
+(`go run ./tools/brainbench -mode ablation [-budgets 64,256]`). Every scenario
+question is answered under each policy on its own copy of the warmed seed, then
+the ranked list is packed into each budget (32 to 2048 tokens) with the
+Context Block's chars/4 estimate and stop rule. A question succeeds when the
+packed context holds its `expect` text and none of its `must_not` texts.
+
+The policies are the shipped agent recall (`mnemos_default`), similarity only
+(dense+BM25 with every other component off, plus dense-only and lexical-only
+variants), one leave-one-out row per ranking component, the opt-in priming and
+hop expansion, and the two raw BM25 baselines. Every Mnemos policy is a
+`query.AnswerOptions` passed to `query.Engine.Recall`; components are switched
+off through `query.Ablation`, which no surface exposes. A test fails if an
+`Ablation` field gains no leave-one-out row.
+
+Read the per-question grid, not only the totals: the suite has 23 questions,
+and in the current run the whole gap between the default and similarity only is
+four of them, in two scenarios.
+
 ## What it does **not** measure
 
 The full list ships inside every report, because a JSON file gets pasted into an
@@ -329,9 +392,11 @@ timeline:
       - retract: disk saturation
       - archive: restart the payments database first
       - contradict: {from: pool change starving, to: disk saturation}
+      - supersede_by: {old: pool size is 50, new: pool size is 200}  # ends at new's valid_from
 
 as_of_probes:
   - id: believed-tue
+    class: known_history            # optional; scores accuracy_known_history
     recorded_as_of: tuesday         # or valid_as_of — exactly one
     query: what caused the payments outage
     expect: disk saturation

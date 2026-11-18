@@ -25,6 +25,25 @@ notable changes.
 
 ### Changed
 
+- **Behaviour change: restating a belief the brain already holds no longer creates a second
+  belief on the single-fact write paths.** `Memory.RememberClaim`,
+  `RememberClaimWithEvidence`, REST `POST /v1/facts`, gRPC `RememberFact`, the client,
+  MCP `remember` / `remember_belief` and the lite `remember_claim` / `POST /v1/claims` now
+  fold a restatement onto the held belief exactly as ingest does
+  (`pipeline.CollapseKnownClaims`): its evidence links to the held belief (at most once per
+  origin, so repetition never raises trust), and the **held belief's id** is returned.
+  scalebench measured 20 of 20 restatements writing a fresh row with its own tokens and
+  ~22 edges. A claim written with `ValidUntil` set is history and is still stored as its
+  own row. Responses say which happened: `RememberedClaim{ID, Known}` from the new
+  `Memory.RememberClaimDetailed` / `RememberClaimWithEvidenceDetailed` and
+  `client.RememberClaimWithEvidenceDetailed`; `"known"` on the REST, MCP and lite
+  responses and `known` on gRPC `RememberFactResponse`. REST `POST /v1/facts` and lite
+  `POST /v1/claims` answer `200` instead of `201` for a restatement.
+- `Memory.Remember` honours `Item.Metadata["session_id"]`: it is stored on the episode as
+  `session_id` (previously `input_session_id`, a key no reader looked at), so a replayed
+  session adds no evidence and no second episode, and contradictions within one session are
+  dropped, as for `process_text`. Episodes already stored with `input_session_id` are read
+  as carrying that session.
 - `GET /v1/incidents` returns a paged envelope (`{"incidents","total","limit","offset"}`)
   instead of a bare array, and `GET /v1/incidents/{id}/why-wrong` returns snake_case keys
   (`incident`, `root_belief`, `affected_decisions`, `explanation`) instead of Go field names.

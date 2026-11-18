@@ -108,7 +108,12 @@ type factRequest struct {
 }
 
 type factResponse struct {
+	// BeliefID is the belief that holds the fact: the new one, or the one the
+	// brain already held when the fact restated it.
 	BeliefID string `json:"belief_id"`
+	// Known is true when the brain already held the belief, so the fact's
+	// evidence was linked to it instead of a new belief being written.
+	Known bool `json:"known"`
 }
 
 // makeFactsHandler serves POST /v1/facts through Memory.RememberClaimWithEvidence,
@@ -143,12 +148,18 @@ func makeFactsHandler(mem mnemos.Memory) http.HandlerFunc {
 			}
 			validFrom = t
 		}
-		id, err := mem.RememberClaimWithEvidence(r.Context(), req.Text, req.Evidence, validFrom)
+		got, err := mem.RememberClaimWithEvidenceDetailed(r.Context(), req.Text, req.Evidence, validFrom)
 		if err != nil {
 			writeInternalError(w, "remember fact", err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, factResponse{BeliefID: id})
+		// 201 when a belief was created; 200 when the fact restated one the
+		// brain already held and only its evidence was added.
+		code := http.StatusCreated
+		if got.Known {
+			code = http.StatusOK
+		}
+		writeJSON(w, code, factResponse{BeliefID: got.ID, Known: got.Known})
 	}
 }
 

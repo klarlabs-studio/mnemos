@@ -239,7 +239,7 @@ Write a pre-built belief linked to existing evidence (write).
 
 | Transport | Binding |
 |---|---|
-| go | `RememberClaim` |
+| go | `RememberClaim`, `RememberClaimDetailed` |
 | rest | `POST /v1/beliefs` |
 | grpc | `AppendBeliefs` |
 | mcp | `remember_belief` |
@@ -253,15 +253,15 @@ Store one fact as a belief, creating its evidence episode (write).
 
 | Transport | Binding |
 |---|---|
-| go | `RememberClaimWithEvidence` |
+| go | `RememberClaimWithEvidence`, `RememberClaimWithEvidenceDetailed` |
 | rest | `POST /v1/facts` |
 | grpc | `RememberFact` |
 | mcp | `remember` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | `RememberClaimWithEvidence` |
+| client | `RememberClaimWithEvidence`, `RememberClaimWithEvidenceDetailed` |
 
-> REST, gRPC and the client go through Memory.RememberClaimWithEvidence (one observation episode per evidence string, run-scoped tokens refused). MCP remember is a separate implementation that records the fact text itself as its one run-scoped episode.
+> REST, gRPC and the client go through Memory.RememberClaimWithEvidence (one observation episode per evidence string, run-scoped tokens refused). MCP remember is a separate implementation that records the fact text itself as its one run-scoped episode. Every binding folds a restatement of a held belief onto it (pipeline.CollapseKnownClaims), returning the held belief id and known=true.
 
 ### belief.get
 

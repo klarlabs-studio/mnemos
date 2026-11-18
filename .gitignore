@@ -38,6 +38,7 @@ mutation-*.log
 # numbers are only meaningful next to the code revision that produced them, so
 # a stale checked-in report is worse than none.
 brainbench.json
+retrieval-ablation.json
 
 # Nox local state — but the baseline IS committed on purpose: the shared go-ci
 # security gate stays report-only until a baseline is tracked, and only then

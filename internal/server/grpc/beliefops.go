@@ -83,11 +83,11 @@ func (s *Server) RememberFact(ctx context.Context, req *mnemosv1.RememberFactReq
 	if req.GetValidFrom() != nil {
 		validFrom = req.GetValidFrom().AsTime()
 	}
-	id, err := mem.RememberClaimWithEvidence(ctx, req.GetText(), req.GetEvidence(), validFrom)
+	got, err := mem.RememberClaimWithEvidenceDetailed(ctx, req.GetText(), req.GetEvidence(), validFrom)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "remember fact: %v", err)
 	}
-	return &mnemosv1.RememberFactResponse{BeliefId: id}, nil
+	return &mnemosv1.RememberFactResponse{BeliefId: got.ID, Known: got.Known}, nil
 }
 
 // ScanBeliefs returns beliefs valid within a window through Memory.Scan.

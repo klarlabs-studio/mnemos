@@ -51,6 +51,9 @@ type Engine struct {
 	dependencies ports.EventDependencyRepository
 	// journal records event retractions (ADR 0037); see WithRetractions.
 	journal ports.JournalRepository
+	// noInhibition drops the competitive-inhibition penalty from the claim
+	// ranker. Set only by an Ablation; false is shipped recall.
+	noInhibition bool
 }
 
 // eventVectorTopK is how many candidate events the native vector path pulls
@@ -240,6 +243,10 @@ type AnswerOptions struct {
 	// the returned claims, order and confidence are identical either way. The
 	// fixed status strings for an empty corpus or an unknown run are still set.
 	SkipAnswerText bool
+	// Ablate switches off individual ranking components for a controlled
+	// experiment. The zero value is shipped recall and no surface sets it;
+	// see Ablation.
+	Ablate Ablation
 }
 
 // Answer searches all stored events for the best answer to the given question.
@@ -274,6 +281,7 @@ func (e Engine) AnswerWithOptions(ctx context.Context, question string, opts Ans
 	// corrective pass all share one vector instead of each buying their own
 	// round-trip to the embedding provider.
 	ctx = withQueryVectorMemo(ctx)
+	e = e.ablated(opts.Ablate)
 	if !opts.RecordedAsOf.IsZero() {
 		e = e.recordedAt(opts.RecordedAsOf) // ADR 0036
 	}
@@ -734,6 +742,7 @@ func (e Engine) AnswerForRunWithOptions(ctx context.Context, question, runID str
 	}
 	// One question embedding for the whole recall — see AnswerWithOptions.
 	ctx = withQueryVectorMemo(ctx)
+	e = e.ablated(opts.Ablate)
 	if !opts.RecordedAsOf.IsZero() {
 		e = e.recordedAt(opts.RecordedAsOf) // ADR 0036
 	}
@@ -838,10 +847,12 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 	// salience bias is enabled (ADR 0013 §4), a bounded stakes term is blended into
 	// the similarity score so a high-stakes belief outranks a trivial one of equal
 	// similarity; off by default so ordinary recall is unchanged.
-	claims = e.rankClaimsByHybrid(ctx, q, claims, opts.Salient)
+	claims = e.rankClaimsByHybrid(ctx, q, claims, opts.Salient && !opts.Ablate.Salience)
 
 	// Boost claims matching the question's intent (e.g., "decisions" → decision type).
-	claims = boostClaimsByQuestionIntent(q, claims)
+	if !opts.Ablate.IntentBoost {
+		claims = boostClaimsByQuestionIntent(q, claims)
+	}
 
 	// Track hop distance per claim — direct claims are hop 0; expansion
 	// fills in 1..opts.Hops for claims reached via supports/contradicts edges.
@@ -1937,7 +1948,9 @@ func (e Engine) rankClaimsByHybrid(ctx context.Context, question string, claims 
 			// loser ranks lower. Always applied (a persisted suppression must keep
 			// biasing later recalls), but inert when the claim carries no inhibition
 			// component — so recall is unchanged until inhibition is used.
-			s += inhibitionScoreDelta(cl)
+			if !e.noInhibition {
+				s += inhibitionScoreDelta(cl)
+			}
 		}
 		scoredClaims = append(scoredClaims, scored{claim: cl, score: s, idx: i})
 	}

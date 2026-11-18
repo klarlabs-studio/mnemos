@@ -102,7 +102,7 @@ var Registry = []Capability{
 		ID: "belief.write", Effect: Write,
 		Summary: "Write a pre-built belief linked to existing evidence",
 		On: map[Transport]Binding{
-			Go: Has("RememberClaim"), REST: Has("POST /v1/beliefs"), GRPC: Has("AppendBeliefs"),
+			Go: Has("RememberClaim", "RememberClaimDetailed"), REST: Has("POST /v1/beliefs"), GRPC: Has("AppendBeliefs"),
 			MCP: Has("remember_belief"), MCPLite: Has("remember_claim"), HTTPLite: Has("POST /v1/claims"), Client: Has("Claims"),
 		},
 	},
@@ -110,10 +110,10 @@ var Registry = []Capability{
 		ID: "belief.remember_fact", Effect: Write,
 		Summary: "Store one fact as a belief, creating its evidence episode",
 		On: map[Transport]Binding{
-			Go: Has("RememberClaimWithEvidence"), REST: Has("POST /v1/facts"), GRPC: Has("RememberFact"),
-			MCP: Has("remember"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("RememberClaimWithEvidence"),
+			Go: Has("RememberClaimWithEvidence", "RememberClaimWithEvidenceDetailed"), REST: Has("POST /v1/facts"), GRPC: Has("RememberFact"),
+			MCP: Has("remember"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("RememberClaimWithEvidence", "RememberClaimWithEvidenceDetailed"),
 		},
-		Notes: "REST, gRPC and the client go through Memory.RememberClaimWithEvidence (one observation episode per evidence string, run-scoped tokens refused). MCP remember is a separate implementation that records the fact text itself as its one run-scoped episode.",
+		Notes: "REST, gRPC and the client go through Memory.RememberClaimWithEvidence (one observation episode per evidence string, run-scoped tokens refused). MCP remember is a separate implementation that records the fact text itself as its one run-scoped episode. Every binding folds a restatement of a held belief onto it (pipeline.CollapseKnownClaims), returning the held belief id and known=true.",
 	},
 	{
 		ID: "belief.get", Effect: Read,

@@ -13,6 +13,33 @@ import (
 // leaves it empty and is unaffected by anything in this file.
 const SessionMetadataKey = "session_id"
 
+// legacySessionMetadataKey is where Memory.Remember stored a caller's
+// Item.Metadata["session_id"] before it was promoted to SessionMetadataKey:
+// ingest prefixes input metadata with "input_", so the session landed under a
+// key no session-aware reader looked at. Episodes stored that way are still
+// read as carrying their session.
+const legacySessionMetadataKey = "input_session_id"
+
+// EventSession returns the session an episode's metadata names, or "" when it
+// names none. It is the one reader of an episode's session: SessionMetadataKey
+// wins, and episodes stored before Remember wrote that key are read from the
+// legacy key.
+func EventSession(meta map[string]string) string {
+	if s := meta[SessionMetadataKey]; s != "" {
+		return s
+	}
+	return meta[legacySessionMetadataKey]
+}
+
+// eventScope reads one scope key from an episode's metadata, resolving the
+// session through EventSession.
+func eventScope(meta map[string]string, metadataKey string) string {
+	if metadataKey == SessionMetadataKey {
+		return EventSession(meta)
+	}
+	return meta[metadataKey]
+}
+
 // DropIntraSessionContradictions removes `contradicts` edges whose two claims
 // were both extracted from the same session.
 //
@@ -147,7 +174,7 @@ func SessionOfClaims(links []domain.ClaimEvidence, events []domain.Event) map[st
 func scopeOfClaims(links []domain.ClaimEvidence, events []domain.Event, metadataKey string) map[string]string {
 	sessionOfEvent := make(map[string]string, len(events))
 	for _, e := range events {
-		if s := e.Metadata[metadataKey]; s != "" {
+		if s := eventScope(e.Metadata, metadataKey); s != "" {
 			sessionOfEvent[e.ID] = s
 		}
 	}

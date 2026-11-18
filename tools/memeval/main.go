@@ -335,7 +335,7 @@ func evaluate(h Haystack, workdir string, opts options, cfg mnemos.ProviderConfi
 			for _, p := range ps {
 				a.Passages = append(a.Passages, Passage{
 					EpisodeID: p.EpisodeID, Text: p.Text, Score: p.Score,
-					SessionID: p.Metadata["input_session_id"], Date: p.Metadata["input_session_date"],
+					SessionID: pipeline.EventSession(p.Metadata), Date: p.Metadata["input_session_date"],
 				})
 			}
 		}
@@ -414,9 +414,10 @@ func sessionsOf(ctx context.Context, conn *store.Conn, results []mnemos.Result) 
 	}
 	out := make(map[string]sessionSet, len(results))
 	for _, l := range links {
-		// Ingest stores Item.Metadata on the event with an "input_" prefix.
+		// The session rides under its own key; every other Item.Metadata key
+		// is stored with an "input_" prefix.
 		m := meta[l.EventID]
-		sid := m["input_session_id"]
+		sid := pipeline.EventSession(m)
 		if sid == "" {
 			continue
 		}

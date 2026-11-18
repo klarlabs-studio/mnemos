@@ -9852,9 +9852,13 @@ func (x *RememberFactRequest) GetValidFrom() *timestamppb.Timestamp {
 	return nil
 }
 
+// belief_id is the belief that holds the fact: the new one, or the one the
+// brain already held when the fact restated it (known = true; the fact's
+// evidence was linked to it and no belief was written).
 type RememberFactResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	BeliefId      string                 `protobuf:"bytes,1,opt,name=belief_id,json=beliefId,proto3" json:"belief_id,omitempty"`
+	Known         bool                   `protobuf:"varint,2,opt,name=known,proto3" json:"known,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9894,6 +9898,13 @@ func (x *RememberFactResponse) GetBeliefId() string {
 		return x.BeliefId
 	}
 	return ""
+}
+
+func (x *RememberFactResponse) GetKnown() bool {
+	if x != nil {
+		return x.Known
+	}
+	return false
 }
 
 type ScanBeliefsRequest struct {
@@ -11839,9 +11850,10 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1a\n" +
 	"\bevidence\x18\x02 \x03(\tR\bevidence\x129\n" +
 	"\n" +
-	"valid_from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tvalidFrom\"3\n" +
+	"valid_from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tvalidFrom\"I\n" +
 	"\x14RememberFactResponse\x12\x1b\n" +
-	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\"\xa2\x01\n" +
+	"\tbelief_id\x18\x01 \x01(\tR\bbeliefId\x12\x14\n" +
+	"\x05known\x18\x02 \x01(\bR\x05known\"\xa2\x01\n" +
 	"\x12ScanBeliefsRequest\x129\n" +
 	"\n" +
 	"valid_from\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\tvalidFrom\x12;\n" +
