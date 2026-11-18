@@ -260,6 +260,12 @@ type Query struct {
 	// about facts from period P" by pairing RecordedAsOf (when believed)
 	// with AsOf (valid time of the facts). Zero value disables the filter
 	// (the common case — "use the latest knowledge").
+	//
+	// The answer is reconstructed, not filtered (ADR 0036): events ingested
+	// and relationships created after RecordedAsOf are invisible, and each
+	// belief's status, valid time and archive state are rewound to their
+	// recorded values at that instant. Trust is the current value. A
+	// time-travel read applies no retrieval write-backs.
 	RecordedAsOf time.Time
 
 	// IncludeHistory makes the engine also return superseded claim

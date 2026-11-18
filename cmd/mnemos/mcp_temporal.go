@@ -59,8 +59,12 @@ type mcpTimelineQueryOutput struct {
 type mcpRecallAtTimeInput struct {
 	Question string `json:"question" jsonschema:"required,description=Natural language question"`
 	AsOf     string `json:"asOf" jsonschema:"required,description=RFC3339 instant; claims valid at this time are returned"`
-	RunID    string `json:"runId,omitempty" jsonschema:"description=Optional run ID to scope the query"`
-	Hops     int    `json:"hops,omitempty" jsonschema:"description=BFS hop expansion depth through supports/contradicts edges (0-5)"`
+	// RecordedAsOf is the transaction-time axis (ADR 0036): the answer the
+	// brain would have given at that instant, with each belief's status,
+	// validity and contradictions as they were recorded then.
+	RecordedAsOf string `json:"recordedAsOf,omitempty" jsonschema:"description=Optional RFC3339 instant; answer as the brain believed it then (status, validity and contradictions as recorded at that time). Pair with asOf: what did we believe at recordedAsOf about asOf"`
+	RunID        string `json:"runId,omitempty" jsonschema:"description=Optional run ID to scope the query"`
+	Hops         int    `json:"hops,omitempty" jsonschema:"description=BFS hop expansion depth through supports/contradicts edges (0-5)"`
 }
 
 // mcpRunRememberEvent persists a temporal event via the public library
@@ -159,7 +163,8 @@ func mcpRunTimelineQuery(ctx context.Context, input mcpTimelineQueryInput) (mcpT
 
 // mcpRunRecallAtTime answers a query against the state of the
 // knowledge base at a historical instant (claims whose ValidFrom <=
-// AsOf and ValidTo > AsOf are considered).
+// AsOf and ValidTo > AsOf are considered). With RecordedAsOf it answers as
+// the brain believed at that instant (ADR 0036).
 func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (mcpQueryOutput, error) {
 	q := strings.TrimSpace(input.Question)
 	if q == "" {
@@ -171,6 +176,14 @@ func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (mcpQue
 	asOf, err := time.Parse(time.RFC3339, strings.TrimSpace(input.AsOf))
 	if err != nil {
 		return mcpQueryOutput{}, userInputError(fmt.Errorf("invalid asOf timestamp: %w", err))
+	}
+	var recordedAsOf time.Time
+	if raw := strings.TrimSpace(input.RecordedAsOf); raw != "" {
+		recordedAsOf, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return mcpQueryOutput{}, userInputError(fmt.Errorf("invalid recordedAsOf timestamp: %w", err))
+		}
+		recordedAsOf = recordedAsOf.UTC()
 	}
 
 	conn, err := openConn(ctx)
@@ -195,9 +208,10 @@ func mcpRunRecallAtTime(ctx context.Context, input mcpRecallAtTimeInput) (mcpQue
 	hops := max(input.Hops, 0)
 	hops = min(hops, 5)
 	opts := query.AnswerOptions{
-		Hops:     hops,
-		AsOf:     asOf.UTC(),
-		Consumer: domain.ConsumerAgent,
+		Hops:         hops,
+		AsOf:         asOf.UTC(),
+		RecordedAsOf: recordedAsOf,
+		Consumer:     domain.ConsumerAgent,
 	}.WithCognitiveDefaults()
 
 	var answer domain.Answer
