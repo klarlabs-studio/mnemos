@@ -39,6 +39,12 @@ const (
 	MnemosService_AppendDecisions_FullMethodName          = "/mnemos.v1.MnemosService/AppendDecisions"
 	MnemosService_ListReflexes_FullMethodName             = "/mnemos.v1.MnemosService/ListReflexes"
 	MnemosService_AppendReflexes_FullMethodName           = "/mnemos.v1.MnemosService/AppendReflexes"
+	MnemosService_ListGlobalSchemas_FullMethodName        = "/mnemos.v1.MnemosService/ListGlobalSchemas"
+	MnemosService_OpenIncident_FullMethodName             = "/mnemos.v1.MnemosService/OpenIncident"
+	MnemosService_ListIncidents_FullMethodName            = "/mnemos.v1.MnemosService/ListIncidents"
+	MnemosService_GetIncident_FullMethodName              = "/mnemos.v1.MnemosService/GetIncident"
+	MnemosService_ResolveIncident_FullMethodName          = "/mnemos.v1.MnemosService/ResolveIncident"
+	MnemosService_WhyWereWeWrong_FullMethodName           = "/mnemos.v1.MnemosService/WhyWereWeWrong"
 	MnemosService_ListEntityAssociations_FullMethodName   = "/mnemos.v1.MnemosService/ListEntityAssociations"
 	MnemosService_AppendEntityAssociations_FullMethodName = "/mnemos.v1.MnemosService/AppendEntityAssociations"
 	MnemosService_WhoKnows_FullMethodName                 = "/mnemos.v1.MnemosService/WhoKnows"
@@ -118,6 +124,25 @@ type MnemosServiceClient interface {
 	ListReflexes(ctx context.Context, in *ListReflexesRequest, opts ...grpc.CallOption) (*ListReflexesResponse, error)
 	// AppendReflexes writes reflexes idempotently.
 	AppendReflexes(ctx context.Context, in *AppendReflexesRequest, opts ...grpc.CallOption) (*AppendResponse, error)
+	// ListGlobalSchemas returns the schemas promoted to the shared global tier
+	// (ADR 0011/0012) — a different entity from ListSchemas, which returns this
+	// tenant's schemas. The same records as REST GET /v1/schemas. status is
+	// optional (pending | active); anything else is INVALID_ARGUMENT.
+	ListGlobalSchemas(ctx context.Context, in *ListGlobalSchemasRequest, opts ...grpc.CallOption) (*ListGlobalSchemasResponse, error)
+	// --- Incidents (parity with REST /v1/incidents) ---
+	// OpenIncident records an incident. Requires claims:write; a blank title or
+	// unknown severity is INVALID_ARGUMENT.
+	OpenIncident(ctx context.Context, in *OpenIncidentRequest, opts ...grpc.CallOption) (*Incident, error)
+	// ListIncidents returns incidents, optionally by severity and/or status.
+	ListIncidents(ctx context.Context, in *ListIncidentsRequest, opts ...grpc.CallOption) (*ListIncidentsResponse, error)
+	// GetIncident returns one incident; an unknown id is NOT_FOUND.
+	GetIncident(ctx context.Context, in *GetIncidentRequest, opts ...grpc.CallOption) (*Incident, error)
+	// ResolveIncident marks an incident resolved. Requires claims:write; an
+	// unknown id is NOT_FOUND and writes nothing.
+	ResolveIncident(ctx context.Context, in *ResolveIncidentRequest, opts ...grpc.CallOption) (*Incident, error)
+	// WhyWereWeWrong is the post-incident analysis: the incident, its
+	// root-cause belief's provenance and the decisions linked to it.
+	WhyWereWeWrong(ctx context.Context, in *WhyWereWeWrongRequest, opts ...grpc.CallOption) (*WhyWereWeWrongResponse, error)
 	// ListEntityAssociations returns polymorphic cross-entity edges.
 	ListEntityAssociations(ctx context.Context, in *ListEntityAssociationsRequest, opts ...grpc.CallOption) (*ListEntityAssociationsResponse, error)
 	// AppendEntityAssociations writes polymorphic edges idempotently.
@@ -387,6 +412,66 @@ func (c *mnemosServiceClient) AppendReflexes(ctx context.Context, in *AppendRefl
 	return out, nil
 }
 
+func (c *mnemosServiceClient) ListGlobalSchemas(ctx context.Context, in *ListGlobalSchemasRequest, opts ...grpc.CallOption) (*ListGlobalSchemasResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListGlobalSchemasResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListGlobalSchemas_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) OpenIncident(ctx context.Context, in *OpenIncidentRequest, opts ...grpc.CallOption) (*Incident, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Incident)
+	err := c.cc.Invoke(ctx, MnemosService_OpenIncident_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) ListIncidents(ctx context.Context, in *ListIncidentsRequest, opts ...grpc.CallOption) (*ListIncidentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListIncidentsResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListIncidents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) GetIncident(ctx context.Context, in *GetIncidentRequest, opts ...grpc.CallOption) (*Incident, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Incident)
+	err := c.cc.Invoke(ctx, MnemosService_GetIncident_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) ResolveIncident(ctx context.Context, in *ResolveIncidentRequest, opts ...grpc.CallOption) (*Incident, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Incident)
+	err := c.cc.Invoke(ctx, MnemosService_ResolveIncident_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) WhyWereWeWrong(ctx context.Context, in *WhyWereWeWrongRequest, opts ...grpc.CallOption) (*WhyWereWeWrongResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WhyWereWeWrongResponse)
+	err := c.cc.Invoke(ctx, MnemosService_WhyWereWeWrong_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *mnemosServiceClient) ListEntityAssociations(ctx context.Context, in *ListEntityAssociationsRequest, opts ...grpc.CallOption) (*ListEntityAssociationsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListEntityAssociationsResponse)
@@ -644,6 +729,25 @@ type MnemosServiceServer interface {
 	ListReflexes(context.Context, *ListReflexesRequest) (*ListReflexesResponse, error)
 	// AppendReflexes writes reflexes idempotently.
 	AppendReflexes(context.Context, *AppendReflexesRequest) (*AppendResponse, error)
+	// ListGlobalSchemas returns the schemas promoted to the shared global tier
+	// (ADR 0011/0012) — a different entity from ListSchemas, which returns this
+	// tenant's schemas. The same records as REST GET /v1/schemas. status is
+	// optional (pending | active); anything else is INVALID_ARGUMENT.
+	ListGlobalSchemas(context.Context, *ListGlobalSchemasRequest) (*ListGlobalSchemasResponse, error)
+	// --- Incidents (parity with REST /v1/incidents) ---
+	// OpenIncident records an incident. Requires claims:write; a blank title or
+	// unknown severity is INVALID_ARGUMENT.
+	OpenIncident(context.Context, *OpenIncidentRequest) (*Incident, error)
+	// ListIncidents returns incidents, optionally by severity and/or status.
+	ListIncidents(context.Context, *ListIncidentsRequest) (*ListIncidentsResponse, error)
+	// GetIncident returns one incident; an unknown id is NOT_FOUND.
+	GetIncident(context.Context, *GetIncidentRequest) (*Incident, error)
+	// ResolveIncident marks an incident resolved. Requires claims:write; an
+	// unknown id is NOT_FOUND and writes nothing.
+	ResolveIncident(context.Context, *ResolveIncidentRequest) (*Incident, error)
+	// WhyWereWeWrong is the post-incident analysis: the incident, its
+	// root-cause belief's provenance and the decisions linked to it.
+	WhyWereWeWrong(context.Context, *WhyWereWeWrongRequest) (*WhyWereWeWrongResponse, error)
 	// ListEntityAssociations returns polymorphic cross-entity edges.
 	ListEntityAssociations(context.Context, *ListEntityAssociationsRequest) (*ListEntityAssociationsResponse, error)
 	// AppendEntityAssociations writes polymorphic edges idempotently.
@@ -772,6 +876,24 @@ func (UnimplementedMnemosServiceServer) ListReflexes(context.Context, *ListRefle
 }
 func (UnimplementedMnemosServiceServer) AppendReflexes(context.Context, *AppendReflexesRequest) (*AppendResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AppendReflexes not implemented")
+}
+func (UnimplementedMnemosServiceServer) ListGlobalSchemas(context.Context, *ListGlobalSchemasRequest) (*ListGlobalSchemasResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListGlobalSchemas not implemented")
+}
+func (UnimplementedMnemosServiceServer) OpenIncident(context.Context, *OpenIncidentRequest) (*Incident, error) {
+	return nil, status.Error(codes.Unimplemented, "method OpenIncident not implemented")
+}
+func (UnimplementedMnemosServiceServer) ListIncidents(context.Context, *ListIncidentsRequest) (*ListIncidentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListIncidents not implemented")
+}
+func (UnimplementedMnemosServiceServer) GetIncident(context.Context, *GetIncidentRequest) (*Incident, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetIncident not implemented")
+}
+func (UnimplementedMnemosServiceServer) ResolveIncident(context.Context, *ResolveIncidentRequest) (*Incident, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveIncident not implemented")
+}
+func (UnimplementedMnemosServiceServer) WhyWereWeWrong(context.Context, *WhyWereWeWrongRequest) (*WhyWereWeWrongResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WhyWereWeWrong not implemented")
 }
 func (UnimplementedMnemosServiceServer) ListEntityAssociations(context.Context, *ListEntityAssociationsRequest) (*ListEntityAssociationsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListEntityAssociations not implemented")
@@ -1210,6 +1332,114 @@ func _MnemosService_AppendReflexes_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MnemosServiceServer).AppendReflexes(ctx, req.(*AppendReflexesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_ListGlobalSchemas_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGlobalSchemasRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ListGlobalSchemas(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ListGlobalSchemas_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ListGlobalSchemas(ctx, req.(*ListGlobalSchemasRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_OpenIncident_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenIncidentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).OpenIncident(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_OpenIncident_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).OpenIncident(ctx, req.(*OpenIncidentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_ListIncidents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListIncidentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ListIncidents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ListIncidents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ListIncidents(ctx, req.(*ListIncidentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_GetIncident_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetIncidentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).GetIncident(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_GetIncident_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).GetIncident(ctx, req.(*GetIncidentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_ResolveIncident_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveIncidentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ResolveIncident(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ResolveIncident_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ResolveIncident(ctx, req.(*ResolveIncidentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_WhyWereWeWrong_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WhyWereWeWrongRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).WhyWereWeWrong(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_WhyWereWeWrong_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).WhyWereWeWrong(ctx, req.(*WhyWereWeWrongRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1660,6 +1890,30 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AppendReflexes",
 			Handler:    _MnemosService_AppendReflexes_Handler,
+		},
+		{
+			MethodName: "ListGlobalSchemas",
+			Handler:    _MnemosService_ListGlobalSchemas_Handler,
+		},
+		{
+			MethodName: "OpenIncident",
+			Handler:    _MnemosService_OpenIncident_Handler,
+		},
+		{
+			MethodName: "ListIncidents",
+			Handler:    _MnemosService_ListIncidents_Handler,
+		},
+		{
+			MethodName: "GetIncident",
+			Handler:    _MnemosService_GetIncident_Handler,
+		},
+		{
+			MethodName: "ResolveIncident",
+			Handler:    _MnemosService_ResolveIncident_Handler,
+		},
+		{
+			MethodName: "WhyWereWeWrong",
+			Handler:    _MnemosService_WhyWereWeWrong_Handler,
 		},
 		{
 			MethodName: "ListEntityAssociations",

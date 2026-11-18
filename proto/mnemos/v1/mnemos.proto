@@ -76,6 +76,27 @@ service MnemosService {
   // AppendReflexes writes reflexes idempotently.
   rpc AppendReflexes(AppendReflexesRequest) returns (AppendResponse);
 
+  // ListGlobalSchemas returns the schemas promoted to the shared global tier
+  // (ADR 0011/0012) — a different entity from ListSchemas, which returns this
+  // tenant's schemas. The same records as REST GET /v1/schemas. status is
+  // optional (pending | active); anything else is INVALID_ARGUMENT.
+  rpc ListGlobalSchemas(ListGlobalSchemasRequest) returns (ListGlobalSchemasResponse);
+
+  // --- Incidents (parity with REST /v1/incidents) ---
+  // OpenIncident records an incident. Requires claims:write; a blank title or
+  // unknown severity is INVALID_ARGUMENT.
+  rpc OpenIncident(OpenIncidentRequest) returns (Incident);
+  // ListIncidents returns incidents, optionally by severity and/or status.
+  rpc ListIncidents(ListIncidentsRequest) returns (ListIncidentsResponse);
+  // GetIncident returns one incident; an unknown id is NOT_FOUND.
+  rpc GetIncident(GetIncidentRequest) returns (Incident);
+  // ResolveIncident marks an incident resolved. Requires claims:write; an
+  // unknown id is NOT_FOUND and writes nothing.
+  rpc ResolveIncident(ResolveIncidentRequest) returns (Incident);
+  // WhyWereWeWrong is the post-incident analysis: the incident, its
+  // root-cause belief's provenance and the decisions linked to it.
+  rpc WhyWereWeWrong(WhyWereWeWrongRequest) returns (WhyWereWeWrongResponse);
+
   // ListEntityAssociations returns polymorphic cross-entity edges.
   rpc ListEntityAssociations(ListEntityAssociationsRequest) returns (ListEntityAssociationsResponse);
   // AppendEntityAssociations writes polymorphic edges idempotently.
@@ -511,6 +532,114 @@ message ListReflexesResponse {
 }
 
 message AppendReflexesRequest { repeated Reflex reflexes = 1; }
+
+// ---------------------------------------------------------------------------
+// Global (promoted) schemas
+// ---------------------------------------------------------------------------
+
+// GlobalSchema is a de-identified generalisation promoted to the shared
+// global tier. Its provenance is corroboration counts, never tenant ids.
+message GlobalSchema {
+  string                    id               = 1;
+  string                    statement        = 2;
+  Context                   context          = 3;
+  string                    polarity         = 4;
+  int32                     distinct_tenants = 5;
+  int32                     evidence_count   = 6;
+  double                    confidence       = 7;
+  double                    surprise         = 8;
+  bool                      has_surprise     = 9;
+  string                    status           = 10;
+  google.protobuf.Timestamp promoted_at      = 11;
+  string                    created_by       = 12;
+}
+
+message ListGlobalSchemasRequest {
+  Pagination pagination = 1;
+  string     status     = 2; // optional: pending | active
+}
+
+message ListGlobalSchemasResponse {
+  repeated GlobalSchema global_schemas = 1;
+  int32                 total          = 2;
+  int32                 limit          = 3;
+  int32                 offset         = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Incidents
+// ---------------------------------------------------------------------------
+
+message Incident {
+  string                    id                   = 1;
+  string                    title                = 2;
+  string                    summary              = 3;
+  string                    severity             = 4; // critical | high | medium | low
+  string                    status               = 5; // open | resolved | postmortem
+  string                    root_cause_belief_id = 6;
+  repeated string           decision_ids         = 7;
+  repeated string           outcome_ids          = 8;
+  repeated string           timeline_episode_ids = 9;
+  string                    reflex_id            = 10;
+  google.protobuf.Timestamp opened_at            = 11;
+  google.protobuf.Timestamp resolved_at          = 12;
+  string                    created_by           = 13;
+}
+
+message OpenIncidentRequest {
+  string          id                   = 1; // optional; generated when empty
+  string          title                = 2;
+  string          summary              = 3;
+  string          severity             = 4; // default medium
+  string          root_cause_belief_id = 5;
+  repeated string decision_ids         = 6;
+  repeated string outcome_ids          = 7;
+  repeated string timeline_episode_ids = 8;
+}
+
+message ListIncidentsRequest {
+  Pagination pagination = 1;
+  string     severity   = 2; // optional
+  string     status     = 3; // optional
+}
+
+message ListIncidentsResponse {
+  repeated Incident incidents = 1;
+  int32             total     = 2;
+  int32             limit     = 3;
+  int32             offset    = 4;
+}
+
+message GetIncidentRequest { string id = 1; }
+message ResolveIncidentRequest { string id = 1; }
+message WhyWereWeWrongRequest { string incident_id = 1; }
+
+message ProvenanceSignal {
+  string name         = 1;
+  double value        = 2;
+  double weight       = 3;
+  double contribution = 4;
+  string detail       = 5;
+}
+
+// BeliefProvenance is a belief's credibility breakdown.
+message BeliefProvenance {
+  string                    belief_id       = 1;
+  string                    statement       = 2;
+  double                    score           = 3;
+  repeated ProvenanceSignal signals         = 4;
+  string                    rationale       = 5;
+  string                    prose_rationale = 6;
+  string                    source_document = 7;
+  string                    liveness        = 8;
+}
+
+message WhyWereWeWrongResponse {
+  Incident          incident           = 1;
+  BeliefProvenance  root_belief        = 2; // unset when the incident names none or it is not stored
+  repeated Decision affected_decisions = 3;
+  string            explanation        = 4;
+}
 
 // ---------------------------------------------------------------------------
 // EntityAssociations

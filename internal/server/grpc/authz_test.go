@@ -182,6 +182,14 @@ func writeRPCs() []writeRPC {
 			_, err := c.UnretractEpisode(ctx, &mnemosv1.UnretractEpisodeRequest{EpisodeId: "ev-scope", Reason: "r"})
 			return err
 		}},
+		{"OpenIncident", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.OpenIncident(ctx, &mnemosv1.OpenIncidentRequest{Title: "scope probe"})
+			return err
+		}},
+		{"ResolveIncident", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.ResolveIncident(ctx, &mnemosv1.ResolveIncidentRequest{Id: "inc-scope"})
+			return err
+		}},
 	}
 }
 
