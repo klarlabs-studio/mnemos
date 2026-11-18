@@ -267,6 +267,29 @@ func (r ClaimRepository) ListMergedByTextKeys(_ context.Context, keys []string) 
 	return r.listByTextKeys(keys, func(c domain.Claim) bool { return c.MergedInto != "" }), nil
 }
 
+// ListMergedInto implements ports.ClaimRepository: the redirects whose
+// MergedInto is one of targetIDs, oldest first.
+func (r ClaimRepository) ListMergedInto(_ context.Context, targetIDs []string) ([]domain.Claim, error) {
+	out := []domain.Claim{}
+	if len(targetIDs) == 0 {
+		return out, nil
+	}
+	want := make(map[string]struct{}, len(targetIDs))
+	for _, id := range targetIDs {
+		want[id] = struct{}{}
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	for _, sc := range r.state.claims {
+		c := sc.toDomain()
+		if _, ok := want[c.MergedInto]; ok && c.MergedInto != "" {
+			out = append(out, c)
+		}
+	}
+	sortOldestFirst(out)
+	return out, nil
+}
+
 func (r ClaimRepository) listByTextKeys(keys []string, keep func(domain.Claim) bool) []domain.Claim {
 	if len(keys) == 0 {
 		return []domain.Claim{}
@@ -284,13 +307,18 @@ func (r ClaimRepository) listByTextKeys(keys []string, keep func(domain.Claim) b
 			out = append(out, c)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
-			return out[i].CreatedAt.Before(out[j].CreatedAt)
-		}
-		return out[i].ID < out[j].ID
-	})
+	sortOldestFirst(out)
 	return out
+}
+
+// sortOldestFirst orders claims by created_at then id.
+func sortOldestFirst(claims []domain.Claim) {
+	sort.Slice(claims, func(i, j int) bool {
+		if !claims[i].CreatedAt.Equal(claims[j].CreatedAt) {
+			return claims[i].CreatedAt.Before(claims[j].CreatedAt)
+		}
+		return claims[i].ID < claims[j].ID
+	})
 }
 
 // RepointEvidence rewrites every (fromClaimID, eventID) link to

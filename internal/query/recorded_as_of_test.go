@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/store"
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
@@ -162,71 +163,131 @@ func TestRecordedAsOf_IncidentTimelineReconstructsTuesdayBelief(t *testing.T) {
 	}
 }
 
-func TestRewindClaim(t *testing.T) {
-	t0 := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC) // Monday
-	tue := t0.Add(24 * time.Hour)
-	thu := t0.Add(72 * time.Hour)
-	base := domain.Claim{
-		ID: "c", CreatedAt: t0, Status: domain.ClaimStatusDeprecated,
-		ValidTo: thu, ArchivedAt: thu,
-	}
-	insert := domain.ClaimStatusTransition{ToStatus: domain.ClaimStatusActive, ChangedAt: t0}
-	retract := domain.ClaimStatusTransition{FromStatus: domain.ClaimStatusActive, ToStatus: domain.ClaimStatusDeprecated, ChangedAt: thu}
-	ended := domain.ValidityChange{Field: domain.ValidityFieldValidTo, To: thu, ChangedAt: thu}
-	archived := domain.ValidityChange{Field: domain.ValidityFieldArchivedAt, To: thu, ChangedAt: thu}
+// timelineStore is a throwaway SQLite brain for the recorded-as-of scenarios.
+type timelineStore struct {
+	t    *testing.T
+	ctx  context.Context
+	conn *store.Conn
+}
 
-	cases := []struct {
-		name       string
-		claim      domain.Claim
-		status     []domain.ClaimStatusTransition
-		validity   []domain.ValidityChange
-		at         time.Time
-		wantExists bool
-		want       domain.Claim
-	}{
-		{
-			name: "before the claim was recorded it does not exist", claim: base, at: t0.Add(-time.Hour),
-		},
-		{
-			name: "every change after T is undone", claim: base, at: tue, wantExists: true,
-			status:   []domain.ClaimStatusTransition{insert, retract},
-			validity: []domain.ValidityChange{ended, archived},
-			want:     domain.Claim{ID: "c", CreatedAt: t0, Status: domain.ClaimStatusActive},
-		},
-		{
-			name: "changes at or before T are kept", claim: base, at: thu, wantExists: true,
-			status:   []domain.ClaimStatusTransition{insert, retract},
-			validity: []domain.ValidityChange{ended, archived},
-			want:     base,
-		},
-		{
-			name: "only later transitions: the first one's from-state held at T", claim: base, at: tue, wantExists: true,
-			status: []domain.ClaimStatusTransition{retract},
-			want:   domain.Claim{ID: "c", CreatedAt: t0, Status: domain.ClaimStatusActive, ValidTo: thu, ArchivedAt: thu},
-		},
-		{
-			name: "no history: the stored value is the best evidence", claim: base, at: tue, wantExists: true,
-			want: base,
-		},
-		{
-			name: "an empty from-status never blanks a claim", claim: base, at: tue, wantExists: true,
-			status: []domain.ClaimStatusTransition{{ToStatus: domain.ClaimStatusDeprecated, ChangedAt: thu}},
-			want:   base,
-		},
+func openTimeline(t *testing.T) timelineStore {
+	t.Helper()
+	ctx := context.Background()
+	conn, err := store.Open(ctx, "sqlite://"+filepath.Join(t.TempDir(), "timeline.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := rewindClaim(tc.claim, tc.status, tc.validity, tc.at)
-			if ok != tc.wantExists {
-				t.Fatalf("exists = %v, want %v", ok, tc.wantExists)
-			}
-			if !ok {
-				return
-			}
-			if got.Status != tc.want.Status || !got.ValidTo.Equal(tc.want.ValidTo) || !got.ArchivedAt.Equal(tc.want.ArchivedAt) {
-				t.Errorf("got status=%q valid_to=%v archived_at=%v, want status=%q valid_to=%v archived_at=%v",
-					got.Status, got.ValidTo, got.ArchivedAt, tc.want.Status, tc.want.ValidTo, tc.want.ArchivedAt)
-			}
-		})
+	t.Cleanup(func() { _ = conn.Close() })
+	return timelineStore{t: t, ctx: ctx, conn: conn}
+}
+
+// add records a belief and the episode it came from, now.
+func (s timelineStore) add(eventID, claimID, text string) {
+	s.t.Helper()
+	now := time.Now().UTC()
+	ev := domain.Event{
+		ID: eventID, RunID: "timeline", SchemaVersion: "v1", SourceInputID: "timeline",
+		Content: text, Timestamp: now, IngestedAt: now,
 	}
+	if err := s.conn.Events.Append(s.ctx, ev); err != nil {
+		s.t.Fatalf("append %s: %v", eventID, err)
+	}
+	cl := domain.Claim{
+		ID: claimID, Text: text, Type: domain.ClaimTypeFact, Status: domain.ClaimStatusActive,
+		Confidence: 0.8, TrustScore: 0.8, CreatedAt: now, ValidFrom: now.Add(-time.Hour),
+	}
+	if err := s.conn.Claims.Upsert(s.ctx, []domain.Claim{cl}); err != nil {
+		s.t.Fatalf("upsert %s: %v", claimID, err)
+	}
+	if err := s.conn.Claims.UpsertEvidence(s.ctx, []domain.ClaimEvidence{{ClaimID: claimID, EventID: eventID}}); err != nil {
+		s.t.Fatalf("evidence %s: %v", claimID, err)
+	}
+}
+
+// tick returns an instant strictly between the writes before and after it.
+func tick() time.Time {
+	time.Sleep(5 * time.Millisecond)
+	at := time.Now().UTC()
+	time.Sleep(5 * time.Millisecond)
+	return at
+}
+
+// ADR 0036 step 2: a merge after T must not hide what the brain held at T.
+//
+// On Tuesday the brain holds the disk diagnosis and a belief contradicting it.
+// On Thursday a restatement is recorded and semantic dedupe folds the Tuesday
+// diagnosis into it: the diagnosis becomes a redirect, its evidence and its
+// contradiction move onto the Thursday claim. A Tuesday read reaches the
+// Thursday claim through the moved evidence and drops it (recorded after T);
+// before step 2 the Tuesday diagnosis was therefore unreachable, and so was its
+// contradiction.
+func TestRecordedAsOf_MergeAfterTKeepsTheBeliefHeldAtT(t *testing.T) {
+	s := openTimeline(t)
+	ctx := s.ctx
+
+	s.add("ev-disk", "cl-disk", "payments outage cause: database disk saturation")
+	s.add("ev-iops", "cl-iops", "payments outage cause: database disk saturation is ruled out, iops were normal")
+	if err := s.conn.Relationships.Upsert(ctx, []domain.Relationship{{
+		ID: "rel-iops-disk", Type: domain.RelationshipTypeContradicts,
+		FromClaimID: "cl-iops", ToClaimID: "cl-disk", CreatedAt: time.Now().UTC(),
+	}}); err != nil {
+		t.Fatalf("contradiction: %v", err)
+	}
+	tuesday := tick()
+
+	s.add("ev-restated", "cl-restated", "payments outage cause: saturation of the database disk")
+	if _, err := pipeline.ApplySemanticDedupe(ctx, s.conn, pipeline.SemanticDedupePlan{
+		Merges: []pipeline.SemanticMerge{{WinnerID: "cl-restated", DuplicateIDs: []string{"cl-disk"}}},
+	}); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	tick()
+
+	engine := NewEngine(s.conn.Events.(eventLister), s.conn.Claims, s.conn.Relationships)
+	const question = "payments outage cause database disk saturation"
+
+	now, err := engine.AnswerWithOptions(ctx, question, AnswerOptions{})
+	if err != nil {
+		t.Fatalf("answer now: %v", err)
+	}
+	if got := answerIDs(now); !got["cl-restated"] || got["cl-disk"] {
+		t.Fatalf("today's answer = %v, want the merged belief on cl-restated only", got)
+	}
+
+	then, err := engine.AnswerWithOptions(ctx, question, AnswerOptions{RecordedAsOf: tuesday})
+	if err != nil {
+		t.Fatalf("answer as of Tuesday: %v", err)
+	}
+	got := answerIDs(then)
+	if got["cl-restated"] {
+		t.Errorf("Tuesday's answer contains cl-restated, recorded on Thursday")
+	}
+	if !got["cl-disk"] {
+		t.Fatalf("Tuesday's answer = %v, missing cl-disk, which the brain held on Tuesday", got)
+	}
+	for _, c := range then.Claims {
+		if c.ID == "cl-disk" && (c.Status != domain.ClaimStatusActive || c.MergedInto != "") {
+			t.Errorf("cl-disk reads on Tuesday as status=%q merged_into=%q, want active and unmerged", c.Status, c.MergedInto)
+		}
+	}
+	found := false
+	for _, rel := range then.Contradictions {
+		if rel.ID == "rel-iops-disk" {
+			found = true
+			if rel.FromClaimID != "cl-iops" || rel.ToClaimID != "cl-disk" {
+				t.Errorf("Tuesday's contradiction reads %s→%s, want cl-iops→cl-disk as recorded", rel.FromClaimID, rel.ToClaimID)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("Tuesday's answer lost the contradiction cl-iops→cl-disk the merge moved onto cl-restated (got %+v)", then.Contradictions)
+	}
+}
+
+func answerIDs(ans domain.Answer) map[string]bool {
+	out := make(map[string]bool, len(ans.Claims))
+	for _, c := range ans.Claims {
+		out[c.ID] = true
+	}
+	return out
 }

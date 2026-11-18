@@ -47,6 +47,16 @@
 //   - Activity and benefit are reported in separate fields and reconciled in the
 //     verdict: a run with high activity and no metric movement is labelled
 //     ran-no-measurable-effect, not success.
+//
+// # Two further tracks, outside the A/B verdict
+//
+//   - Temporal reconstruction (timeline.go): a scenario may build its brain
+//     phase by phase on the real write clock and ask as-of questions on both
+//     time axes. The as_of_* metrics are measured on every arm like any other
+//     metric, so a process that corrupts history regresses them.
+//   - Raw-retrieval baselines (baseline.go): BM25 over the seed's raw event
+//     texts, asked the identical questions, compared with the untreated arm.
+//     Reported beside the A/B result and never folded into its verdict.
 package brainbench
 
 import (
@@ -73,6 +83,13 @@ type Scenario struct {
 	// the redundancy consolidation is supposed to be tested on.
 	Corpus []Doc `yaml:"corpus"`
 
+	// Timeline replaces Corpus for a temporal-reconstruction scenario: the
+	// brain is built phase by phase on the real write clock, and each phase
+	// may apply curation changes (retract, archive, supersede, contradict)
+	// after its documents are ingested. A scenario sets exactly one of Corpus
+	// and Timeline. See timeline.go for why the phases use real time.
+	Timeline []Phase `yaml:"timeline"`
+
 	// Warmup queries are run against the SEED, before the arms are copied, so
 	// both arms inherit their effects identically.
 	//
@@ -88,6 +105,11 @@ type Scenario struct {
 
 	// Probes are the retrieval questions both arms answer.
 	Probes []Probe `yaml:"probes"`
+
+	// AsOfProbes are time-travel questions, answered against a phase
+	// boundary of the Timeline. Only a timeline scenario can declare them,
+	// because only a timeline has instants to ask about.
+	AsOfProbes []AsOfProbe `yaml:"as_of_probes"`
 
 	// Process is the treatment: the exact consolidation option set under test.
 	Process Process `yaml:"process"`
@@ -128,6 +150,81 @@ type Probe struct {
 
 	// Limit caps results for this probe. 0 uses ProbeDefaultLimit.
 	Limit int `yaml:"limit"`
+}
+
+// AsOfProbe is a question about the past, with its gold answer.
+//
+// Exactly one axis is set, so each probe scores exactly one metric:
+//
+//   - RecordedAsOf names a phase: "what did the brain believe at the end of
+//     that phase?" (transaction time, mnemos.Query.RecordedAsOf).
+//   - ValidAsOf names a phase: "what is known now about the end of that
+//     phase?" (valid time, mnemos.Query.AsOf, read with today's knowledge).
+//
+// A probe is answered correctly only when Expect is in the top results AND no
+// MustNot string is: a time-travel read that returns the right belief beside a
+// belief the brain did not hold then is a wrong reconstruction.
+type AsOfProbe struct {
+	ID           string   `yaml:"id"`
+	Query        string   `yaml:"query"`
+	RecordedAsOf string   `yaml:"recorded_as_of"`
+	ValidAsOf    string   `yaml:"valid_as_of"`
+	Expect       string   `yaml:"expect"`
+	MustNot      []string `yaml:"must_not"`
+	Limit        int      `yaml:"limit"`
+}
+
+// Phase is one step of a timeline: documents ingested, then changes applied.
+type Phase struct {
+	Name    string        `yaml:"phase"`
+	Docs    []TimelineDoc `yaml:"docs"`
+	Changes []Change      `yaml:"changes"`
+}
+
+// TimelineDoc is a document ingested during a phase.
+type TimelineDoc struct {
+	ID     string `yaml:"id"`
+	Source string `yaml:"source"`
+	// ValidFrom names the phase whose start the document's facts hold from.
+	// Empty means the phase it is ingested in. It separates valid time from
+	// transaction time: a root cause written down on Thursday was true since
+	// Monday's deploy.
+	ValidFrom string `yaml:"valid_from"`
+	Text      string `yaml:"text"`
+}
+
+// Change is one curation operation applied after a phase's documents. Each
+// target is a case-insensitive substring that must match exactly one current
+// claim; anything else is an authoring error, not a silent no-op.
+//
+// These are structured operations a raw-retrieval baseline has no equivalent
+// for: the baseline sees the documents only.
+type Change struct {
+	// Retract deprecates the matching claim (a status transition).
+	Retract string `yaml:"retract"`
+	// Archive stops the matching claim surfacing (ADR 0034 archive axis).
+	Archive string `yaml:"archive"`
+	// Supersede ends the matching claim's valid time now.
+	Supersede string `yaml:"supersede"`
+	// Contradict records a contradicts edge between two claims.
+	Contradict *ContradictEdge `yaml:"contradict"`
+	Reason     string          `yaml:"reason"`
+}
+
+// ContradictEdge names the two claims of a contradicts edge.
+type ContradictEdge struct {
+	From string `yaml:"from"`
+	To   string `yaml:"to"`
+}
+
+func (c Change) ops() int {
+	n := 0
+	for _, set := range []bool{c.Retract != "", c.Archive != "", c.Supersede != "", c.Contradict != nil} {
+		if set {
+			n++
+		}
+	}
+	return n
 }
 
 // ProbeDefaultLimit is the top-k used when a probe does not set Limit.
@@ -198,8 +295,14 @@ func (s Scenario) Validate() error {
 	if strings.TrimSpace(s.ID) == "" {
 		return fmt.Errorf("scenario: id is required")
 	}
-	if len(s.Corpus) == 0 {
+	switch {
+	case len(s.Corpus) > 0 && len(s.Timeline) > 0:
+		return fmt.Errorf("scenario %s: set corpus or timeline, not both", s.ID)
+	case len(s.Corpus) == 0 && len(s.Timeline) == 0:
 		return fmt.Errorf("scenario %s: at least one corpus document is required", s.ID)
+	}
+	if err := s.validateTimeline(); err != nil {
+		return err
 	}
 	seenDoc := make(map[string]struct{}, len(s.Corpus))
 	for i, d := range s.Corpus {
@@ -240,6 +343,9 @@ func (s Scenario) Validate() error {
 			return fmt.Errorf("scenario %s: probe %s: limit must not be negative", s.ID, p.ID)
 		}
 	}
+	if err := s.validateAsOfProbes(seenProbe); err != nil {
+		return err
+	}
 	if s.Process.DedupeThreshold < 0 || s.Process.DedupeThreshold > 1 {
 		return fmt.Errorf("scenario %s: process.dedupe_threshold must be in [0, 1]", s.ID)
 	}
@@ -248,6 +354,89 @@ func (s Scenario) Validate() error {
 	}
 	if s.Process.ReplayTopK < 0 {
 		return fmt.Errorf("scenario %s: process.replay_top_k must not be negative", s.ID)
+	}
+	return nil
+}
+
+// validateTimeline checks phase names, doc ids and change shapes.
+func (s Scenario) validateTimeline() error {
+	phases := make(map[string]struct{}, len(s.Timeline))
+	docs := make(map[string]struct{})
+	for i, ph := range s.Timeline {
+		if strings.TrimSpace(ph.Name) == "" {
+			return fmt.Errorf("scenario %s: timeline[%d]: phase is required", s.ID, i)
+		}
+		if _, dup := phases[ph.Name]; dup {
+			return fmt.Errorf("scenario %s: phase %q is duplicated", s.ID, ph.Name)
+		}
+		phases[ph.Name] = struct{}{}
+		if len(ph.Docs) == 0 && len(ph.Changes) == 0 {
+			return fmt.Errorf("scenario %s: phase %s has no docs and no changes", s.ID, ph.Name)
+		}
+		for j, d := range ph.Docs {
+			if strings.TrimSpace(d.ID) == "" {
+				return fmt.Errorf("scenario %s: phase %s docs[%d]: id is required", s.ID, ph.Name, j)
+			}
+			if _, dup := docs[d.ID]; dup {
+				return fmt.Errorf("scenario %s: corpus doc id %q is duplicated", s.ID, d.ID)
+			}
+			docs[d.ID] = struct{}{}
+			if strings.TrimSpace(d.Text) == "" {
+				return fmt.Errorf("scenario %s: doc %s: text is required", s.ID, d.ID)
+			}
+			// valid_from must name this phase or an earlier one: a document
+			// cannot report facts from an instant that has not happened yet.
+			if d.ValidFrom != "" {
+				if _, ok := phases[d.ValidFrom]; !ok {
+					return fmt.Errorf("scenario %s: doc %s: valid_from %q is not this or an earlier phase",
+						s.ID, d.ID, d.ValidFrom)
+				}
+			}
+		}
+		for j, c := range ph.Changes {
+			if c.ops() != 1 {
+				return fmt.Errorf("scenario %s: phase %s changes[%d]: set exactly one of "+
+					"retract, archive, supersede, contradict", s.ID, ph.Name, j)
+			}
+			if c.Contradict != nil &&
+				(strings.TrimSpace(c.Contradict.From) == "" || strings.TrimSpace(c.Contradict.To) == "") {
+				return fmt.Errorf("scenario %s: phase %s changes[%d]: contradict needs from and to", s.ID, ph.Name, j)
+			}
+		}
+	}
+	return nil
+}
+
+// validateAsOfProbes checks the time-travel probes against the timeline.
+func (s Scenario) validateAsOfProbes(seen map[string]struct{}) error {
+	if len(s.AsOfProbes) > 0 && len(s.Timeline) == 0 {
+		return fmt.Errorf("scenario %s: as_of_probes need a timeline to name instants in", s.ID)
+	}
+	phases := make(map[string]struct{}, len(s.Timeline))
+	for _, ph := range s.Timeline {
+		phases[ph.Name] = struct{}{}
+	}
+	for i, p := range s.AsOfProbes {
+		if strings.TrimSpace(p.ID) == "" {
+			return fmt.Errorf("scenario %s: as_of_probes[%d]: id is required", s.ID, i)
+		}
+		if _, dup := seen[p.ID]; dup {
+			return fmt.Errorf("scenario %s: probe id %q is duplicated", s.ID, p.ID)
+		}
+		seen[p.ID] = struct{}{}
+		if strings.TrimSpace(p.Query) == "" || strings.TrimSpace(p.Expect) == "" {
+			return fmt.Errorf("scenario %s: as-of probe %s: query and expect are required", s.ID, p.ID)
+		}
+		if (p.RecordedAsOf == "") == (p.ValidAsOf == "") {
+			return fmt.Errorf("scenario %s: as-of probe %s: set exactly one of recorded_as_of, valid_as_of", s.ID, p.ID)
+		}
+		phase := p.RecordedAsOf + p.ValidAsOf
+		if _, ok := phases[phase]; !ok {
+			return fmt.Errorf("scenario %s: as-of probe %s: unknown phase %q", s.ID, p.ID, phase)
+		}
+		if p.Limit < 0 {
+			return fmt.Errorf("scenario %s: as-of probe %s: limit must not be negative", s.ID, p.ID)
+		}
 	}
 	return nil
 }

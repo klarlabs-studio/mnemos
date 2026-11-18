@@ -42,18 +42,21 @@ func icon(unicode, ascii string) string {
 	return unicode
 }
 
+// printWelcome and printFirstRunHints are diagnostics, so they go to stderr:
+// stdout carries the command's result, and a first run that prefixed
+// `mnemos query`'s JSON with a banner made it unparseable.
 func printWelcome() {
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("  Mnemos - Local-first knowledge engine")
-	fmt.Println("  Eliminating AI hallucination through evidence-backed claims")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("")
-	fmt.Println("  Quick start:")
-	fmt.Println("    mnemos process --text \"Your text here\"")
-	fmt.Println("    mnemos query \"Your question\"")
-	fmt.Println("")
-	fmt.Println("  Documentation: https://github.com/klarlabs-studio/mnemos")
-	fmt.Println("")
+	fmt.Fprintln(os.Stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintln(os.Stderr, "  Mnemos - Local-first knowledge engine")
+	fmt.Fprintln(os.Stderr, "  Eliminating AI hallucination through evidence-backed claims")
+	fmt.Fprintln(os.Stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "  Quick start:")
+	fmt.Fprintln(os.Stderr, "    mnemos process --text \"Your text here\"")
+	fmt.Fprintln(os.Stderr, "    mnemos query \"Your question\"")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "  Documentation: https://github.com/klarlabs-studio/mnemos")
+	fmt.Fprintln(os.Stderr, "")
 }
 
 func printExtractionSummary(claims []domain.Claim, rels []domain.Relationship) {
@@ -107,11 +110,11 @@ func printExtractionSummary(claims []domain.Claim, rels []domain.Relationship) {
 
 func printFirstRunHints() {
 	bulb := icon("💡", "*")
-	fmt.Printf("  %s Tips:\n", bulb)
-	fmt.Println("    - Use 'mnemos process --text <text>' for quick extraction")
-	fmt.Println("    - Use 'mnemos query <question>' to query your knowledge")
-	fmt.Println("    - Use '--run <id>' with query to scope to a specific run")
-	fmt.Println("")
+	fmt.Fprintf(os.Stderr, "  %s Tips:\n", bulb)
+	fmt.Fprintln(os.Stderr, "    - Use 'mnemos process --text <text>' for quick extraction")
+	fmt.Fprintln(os.Stderr, "    - Use 'mnemos query <question>' to query your knowledge")
+	fmt.Fprintln(os.Stderr, "    - Use '--run <id>' with query to scope to a specific run")
+	fmt.Fprintln(os.Stderr, "")
 }
 
 // commands is the full set of top-level commands, used both for typo
