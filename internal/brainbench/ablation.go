@@ -75,7 +75,7 @@ type AblationPolicy struct {
 }
 
 // similarityAblation removes every non-similarity component.
-var similarityAblation = query.Ablation{Curation: true, Salience: true, Inhibition: true, IntentBoost: true}
+var similarityAblation = query.Ablation{Curation: true, Salience: true, Inhibition: true, IntentBoost: true, Trust: true, Freshness: true}
 
 // AblationPolicies is the policy set, reference first.
 func AblationPolicies() []AblationPolicy {
@@ -90,7 +90,7 @@ func AblationPolicies() []AblationPolicy {
 			Description: "shipped agent recall: Consumer=agent, cognitive defaults, hops 0",
 			opts:        query.AnswerOptions{Consumer: agent}},
 		{Name: PolicySimilarityOnly, Kind: PolicySimilarity,
-			Description: "hybrid dense+BM25 similarity only: no curation, no contradiction resolution, no salience, inhibition or intent boost",
+			Description: "hybrid dense+BM25 similarity only: no curation, no contradiction resolution, no salience, inhibition, intent boost, trust or freshness",
 			opts:        query.AnswerOptions{Consumer: user, Ablate: sim}},
 		{Name: "similarity_dense_only", Kind: PolicySimilarity,
 			Description: "similarity_only without the BM25 leg",
@@ -105,6 +105,8 @@ func AblationPolicies() []AblationPolicy {
 		leaveOut("salience", "bounded stakes term", query.Ablation{Salience: true}, agent),
 		leaveOut("inhibition", "competitive-inhibition penalty", query.Ablation{Inhibition: true}, agent),
 		leaveOut("intent_boost", "question-intent claim-type reorder", query.Ablation{IntentBoost: true}, agent),
+		leaveOut("trust", "bounded trust factor on relevance (ADR 0039)", query.Ablation{Trust: true}, agent),
+		leaveOut("freshness", "bounded freshness factor on relevance, at the read's instant (ADR 0039)", query.Ablation{Freshness: true}, agent),
 		{Name: "plus_prime", Kind: PolicyOptIn, Component: "prime",
 			Description: "default plus spreading-activation priming (opt-in since ADR 0030)",
 			opts:        query.AnswerOptions{Consumer: agent, Prime: true}},
@@ -528,8 +530,9 @@ func AblationLimitations() []string {
 			"'- <text>' line per item; the metadata a real context block or recall hook adds (ids, types, trust) is not charged.",
 		"The scenario brains are small. At the larger budgets every retrieved belief fits; the binding count in each " +
 			"cell says on how many questions the budget cut the ranked list at all.",
-		"Trust and freshness are not ranking components in the shipped engine (they reach recall only through " +
-			"MinTrust, off by default, and agent-mode contradiction resolution), so they have no leave-one-out row.",
+		"Ranking orders a context; it cannot remove a statement from it. Once a budget holds both a superseded " +
+			"statement and its replacement, the question fails whatever the order, unless curation or contradiction " +
+			"resolution dropped the older one. Trust and freshness (ADR 0039) therefore show only at budgets that cut the list.",
 		"Hebbian strengthening and reconsolidation are write-backs; Hebbian strength is read only by priming, which " +
 			"is off by default, so they have no leave-one-out row either. plus_prime measures priming.",
 	}

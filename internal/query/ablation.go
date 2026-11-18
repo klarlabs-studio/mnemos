@@ -33,14 +33,14 @@ package query
 //     no longer read at ranking.
 //   - IntentBoost: the reorder that puts claims of the question's inferred
 //     type (decision, hypothesis, fact) first.
+//   - Trust: the bounded trust factor on relevance (ADR 0039). MinTrust, a
+//     caller's filter, is not affected.
+//   - Freshness: the bounded freshness factor on relevance (ADR 0039), the
+//     trust package's decay measured at the read's instant. The stale-claim
+//     flag is not affected.
 //
 // Contradiction resolution needs no field here: it is selected by
 // AnswerOptions.Consumer, and ConsumerUser turns it off.
-//
-// Trust and freshness are not ranking components. Neither enters the claim
-// order: trust is read by MinTrust (off unless set) and, as credibility, by
-// agent-mode contradiction resolution. Freshness only marks stale claims.
-// There is nothing to ablate for either.
 type Ablation struct {
 	Dense       bool
 	Lexical     bool
@@ -48,6 +48,8 @@ type Ablation struct {
 	Salience    bool
 	Inhibition  bool
 	IntentBoost bool
+	Trust       bool
+	Freshness   bool
 }
 
 // ablated returns the engine with the retrieval legs a removes. The ranking
