@@ -14,19 +14,27 @@ import (
 // text_key is one of keys, oldest first. The predicate is liveClaimSQL, the
 // same definition of "live" brain health counts.
 func (r ClaimRepository) ListLiveByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
-	return r.listByTextKeys(ctx, keys, liveClaimSQL)
+	return r.listByColumn(ctx, "text_key", keys, liveClaimSQL)
 }
 
 // ListMergedByTextKeys implements ports.ClaimRepository: the merge redirects
 // whose text_key is one of keys, oldest first.
 func (r ClaimRepository) ListMergedByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
-	return r.listByTextKeys(ctx, keys, `merged_into <> ''`)
+	return r.listByColumn(ctx, "text_key", keys, `merged_into <> ''`)
 }
 
-func (r ClaimRepository) listByTextKeys(ctx context.Context, keys []string, predicate string) ([]domain.Claim, error) {
+// ListMergedInto implements ports.ClaimRepository: the redirects whose
+// merged_into is one of targetIDs, oldest first.
+func (r ClaimRepository) ListMergedInto(ctx context.Context, targetIDs []string) ([]domain.Claim, error) {
+	return r.listByColumn(ctx, "merged_into", targetIDs, `merged_into <> ''`)
+}
+
+// listByColumn returns the claims whose column (a constant, never input) is one
+// of values and that satisfy predicate, oldest first.
+func (r ClaimRepository) listByColumn(ctx context.Context, column string, values []string, predicate string) ([]domain.Claim, error) {
 	out := []domain.Claim{}
-	err := inChunks(keys, func(chunk []string) error {
-		part, err := r.listByTextKeysChunk(ctx, chunk, predicate)
+	err := inChunks(values, func(chunk []string) error {
+		part, err := r.listByColumnChunk(ctx, column, chunk, predicate)
 		out = append(out, part...)
 		return err
 	})
@@ -37,16 +45,16 @@ func (r ClaimRepository) listByTextKeys(ctx context.Context, keys []string, pred
 	return out, nil
 }
 
-func (r ClaimRepository) listByTextKeysChunk(ctx context.Context, keys []string, predicate string) ([]domain.Claim, error) {
-	args := make([]any, len(keys))
-	for i, k := range keys {
-		args[i] = k
+func (r ClaimRepository) listByColumnChunk(ctx context.Context, column string, values []string, predicate string) ([]domain.Claim, error) {
+	args := make([]any, len(values))
+	for i, v := range values {
+		args[i] = v
 	}
-	query := `SELECT ` + scanClaimColumns + ` FROM claims WHERE text_key IN (` +
-		strings.TrimSuffix(strings.Repeat("?,", len(keys)), ",") + `) AND ` + predicate
+	query := `SELECT ` + scanClaimColumns + ` FROM claims WHERE ` + column + ` IN (` +
+		strings.TrimSuffix(strings.Repeat("?,", len(values)), ",") + `) AND ` + predicate
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list claims by text key: %w", err)
+		return nil, fmt.Errorf("list claims by %s: %w", column, err)
 	}
 	defer closeRows(rows)
 
@@ -59,7 +67,7 @@ func (r ClaimRepository) listByTextKeysChunk(ctx context.Context, keys []string,
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate claims by text key: %w", err)
+		return nil, fmt.Errorf("iterate claims by %s: %w", column, err)
 	}
 	return out, nil
 }

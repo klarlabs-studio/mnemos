@@ -74,6 +74,14 @@ type ClaimRepository interface {
 	// belief lands on the claim that absorbed it (#387). No keys returns none.
 	ListMergedByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error)
 
+	// ListMergedInto returns the merge redirects pointing directly at one of
+	// targetIDs — claims whose MergedInto is in targetIDs — oldest first. A
+	// recorded-as-of read walks it backwards from the claim that holds a
+	// merged belief's evidence now to the claims the brain held separately
+	// before the merge (ADR 0036 step 2). Chains are followed by the caller,
+	// one level per call. No ids returns none.
+	ListMergedInto(ctx context.Context, targetIDs []string) ([]domain.Claim, error)
+
 	// ListByTestRequirementRef returns every test_result claim sharing the
 	// given TestRequirementRef, ordered by TestLastRunAt DESC then
 	// CreatedAt DESC. Drives `mnemos trust --test=<ref>` and the

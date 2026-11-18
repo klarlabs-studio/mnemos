@@ -571,6 +571,13 @@ type CompilationJob struct {
 	Error     string
 }
 
+// MergeRedirectReason is the status-history reason written when a semantic
+// dedupe merge turns a claim into a redirect (ADR 0033). The transition that
+// carries it is the time the merge happened, which is what a recorded-as-of
+// read needs to know whether the claim was still held separately at T
+// (ADR 0036 step 2).
+const MergeRedirectReason = "semantic dedupe: merged into the canonical claim"
+
 // ClaimStatusTransition records a single status change on a claim. An
 // ordered series of these forms a claim's lifecycle history: when a claim
 // first appears as active, when it becomes contested, when it resolves or
