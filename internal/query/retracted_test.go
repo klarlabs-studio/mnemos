@@ -79,6 +79,79 @@ func TestRecall_SkipsRetractedEpisodes(t *testing.T) {
 	}
 }
 
+// ADR 0037 §8 with ADR 0036 step 3: retraction unlinks a belief that keeps
+// other evidence, and un-retraction relinks it as a NEW link (recorded now).
+// So a recorded-as-of read inside the retracted window reconstructs trust on
+// the one remaining episode, and a read after the restoration on both.
+func TestRecall_RelinkedBeliefTrustFollowsTheWindow(t *testing.T) {
+	ctx := context.Background()
+	w, err := govwrite.New(ctx, "sqlite://"+filepath.Join(t.TempDir(), "relinked.db"), nil)
+	if err != nil {
+		t.Fatalf("writer: %v", err)
+	}
+	t.Cleanup(func() { _ = w.Close() })
+	conn := w.Conn()
+	now := time.Now().UTC()
+	if _, err := w.Events(ctx, []domain.Event{
+		{ID: "ev-a", RunID: "r", SchemaVersion: "v1", SourceInputID: "a", CreatedBy: "alice",
+			Content: "the checkout queue drains every hour", Timestamp: now, IngestedAt: now},
+		{ID: "ev-b", RunID: "r", SchemaVersion: "v1", SourceInputID: "b", CreatedBy: "bob",
+			Content: "the checkout queue drains every hour, per the runbook", Timestamp: now, IngestedAt: now},
+	}); err != nil {
+		t.Fatalf("events: %v", err)
+	}
+	if _, err := w.Claims(ctx, []domain.Claim{{
+		ID: "cl-queue", Text: "the checkout queue drains every hour", Type: domain.ClaimTypeFact,
+		Status: domain.ClaimStatusActive, Confidence: 0.8, CreatedAt: now, ValidFrom: now.Add(-time.Hour),
+	}}, govwrite.ClaimReason{Reason: "seed"}); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, err := w.EvidenceLinks(ctx, []domain.ClaimEvidence{
+		{ClaimID: "cl-queue", EventID: "ev-a"}, {ClaimID: "cl-queue", EventID: "ev-b"},
+	}); err != nil {
+		t.Fatalf("links: %v", err)
+	}
+	pause := func() time.Time {
+		time.Sleep(5 * time.Millisecond)
+		at := time.Now().UTC()
+		time.Sleep(5 * time.Millisecond)
+		return at
+	}
+	pause()
+	if _, err := w.RetractEvent(ctx, "ev-b", domain.ChangeNote{}); err != nil {
+		t.Fatalf("retract: %v", err)
+	}
+	inWindow := pause()
+	un, err := w.UnretractEvent(ctx, "ev-b", domain.ChangeNote{})
+	if err != nil {
+		t.Fatalf("unretract: %v", err)
+	}
+	if len(un.Impact.Relinked) != 1 {
+		t.Fatalf("relinked = %+v, want cl-queue", un.Impact.Relinked)
+	}
+	afterRestore := pause()
+
+	engine := query.NewEngineWith(conn.Events, conn.Claims, conn.Relationships, query.EngineDeps{Journal: conn.Journal})
+	trustAt := func(at time.Time) float64 {
+		t.Helper()
+		ans, err := engine.Recall(ctx, query.RecallRequest{Question: "checkout queue drains every hour", Options: query.AnswerOptions{RecordedAsOf: at}})
+		if err != nil {
+			t.Fatalf("recall: %v", err)
+		}
+		for _, c := range ans.Claims {
+			if c.ID == "cl-queue" {
+				return c.TrustScore
+			}
+		}
+		t.Fatalf("cl-queue missing from the read recorded at %s", at)
+		return 0
+	}
+	window, restored := trustAt(inWindow), trustAt(afterRestore)
+	if restored <= window {
+		t.Errorf("recorded trust after restoration %.4f, inside the window %.4f: want the relinked second source to count only after restoration", restored, window)
+	}
+}
+
 // ADR 0037 §8: an un-retracted episode is evidence again, and its belief is
 // back. A recorded-as-of read inside the retracted window still hides both;
 // a read after the restoration shows both.

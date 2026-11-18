@@ -278,6 +278,16 @@ decisions and outcome edges were never rewritten, so nothing is restored for
 them. Trust is recomputed, never restored from the report: it reflects the
 evidence the belief has now.
 
+**Recorded trust (ADR 0036 step 3).** A relinked evidence link is a new link:
+it carries the un-retraction's time as its `created_at`, not the time of the
+link the retraction removed. A recorded-as-of read inside the retracted window
+therefore reconstructs a relinked belief's trust on its remaining evidence, and
+a read after the restoration on both (`TestRecall_RelinkedBeliefTrustFollowsTheWindow`).
+A read from before the retraction still misses the removed link, the
+limitation §5 already states, because the retraction deleted it rather than
+closing it. A restored belief kept its link (§5), so its original `created_at`
+stands. Un-retraction writes no credit, so the credit history is untouched.
+
 **Idempotency and errors.**
 
 - Un-retracting an event that was never retracted is a user error
