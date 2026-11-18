@@ -180,9 +180,18 @@ func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []dom
 	// asking for history (--include-history) opt out; --at <date> queries swap
 	// the cutoff for a point-in-time check on valid time alone, because an
 	// archived belief was still valid then (ADR 0034).
+	//
+	// A recorded-as-of read without AsOf asks "valid now" at T, the read's
+	// own now (ADR 0036 §1): the brain at T answered with what was in force
+	// at T. Asking at the wall clock dropped a belief whose recorded end lay
+	// between T and today and admitted one announced at T to start later.
 	if !opts.IncludeHistory {
 		if opts.AsOf.IsZero() {
-			out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(now) && !c.IsArchived() })
+			validAt := now
+			if !opts.RecordedAsOf.IsZero() {
+				validAt = opts.RecordedAsOf
+			}
+			out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(validAt) && !c.IsArchived() })
 		} else {
 			out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(opts.AsOf) })
 		}

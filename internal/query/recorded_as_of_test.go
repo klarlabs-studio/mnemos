@@ -478,3 +478,70 @@ func TestRecordedAsOf_TrustIsReconstructedAtT(t *testing.T) {
 func recordedRelationships(rels ports.RelationshipRepository, claims ports.ClaimRepository, at time.Time) recorded.Relationships {
 	return recorded.Relationships{RelationshipRepository: rels, Claims: claims, At: at}
 }
+
+// ADR 0036 §1: a recorded-as-of read asks the validity filter its question at
+// T, not at the wall clock. In February the brain records that search moves
+// from Discovery to Platform in March: Discovery's valid_to is set to a March
+// instant and Platform's valid_from is that instant. Asked "who owns search"
+// as recorded in February, the brain then answered Discovery — still in force
+// at T — and not Platform, not yet in force. Reading validity at today's clock
+// instead drops Discovery (its valid_to has since passed) and admits Platform,
+// an answer the brain never gave.
+func TestRecordedAsOf_ValidityIsReadAtT(t *testing.T) {
+	s := openTimeline(t)
+	s.add("ev-discovery", "cl-discovery", "the search service is owned by the Discovery team")
+	time.Sleep(5 * time.Millisecond)
+
+	// February: the handover is announced, effective at a later instant.
+	effective := time.Now().UTC().Add(150 * time.Millisecond)
+	now := time.Now().UTC()
+	if err := s.conn.Events.Append(s.ctx, domain.Event{
+		ID: "ev-platform", RunID: "timeline", SchemaVersion: "v1", SourceInputID: "timeline",
+		Content: "the search service is owned by the Platform team", Timestamp: effective, IngestedAt: now,
+	}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if err := s.conn.Claims.Upsert(s.ctx, []domain.Claim{{
+		ID: "cl-platform", Text: "the search service is owned by the Platform team", Type: domain.ClaimTypeFact,
+		Status: domain.ClaimStatusActive, Confidence: 0.8, TrustScore: 0.8, CreatedAt: now, ValidFrom: effective,
+	}}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if err := s.conn.Claims.UpsertEvidence(s.ctx, []domain.ClaimEvidence{{ClaimID: "cl-platform", EventID: "ev-platform"}}); err != nil {
+		t.Fatalf("evidence: %v", err)
+	}
+	if err := s.conn.Claims.SetValidity(s.ctx, "cl-discovery", effective, domain.ChangeNote{Reason: "announced handover"}); err != nil {
+		t.Fatalf("supersede: %v", err)
+	}
+	february := tick()
+	time.Sleep(time.Until(effective) + 5*time.Millisecond)
+
+	engine := NewEngine(s.conn.Events.(eventLister), s.conn.Claims, s.conn.Relationships)
+	ans, err := engine.AnswerWithOptions(s.ctx, "who owns the search service", AnswerOptions{RecordedAsOf: february})
+	if err != nil {
+		t.Fatalf("answer as of February: %v", err)
+	}
+	got := map[string]bool{}
+	for _, c := range ans.Claims {
+		got[c.ID] = true
+	}
+	if !got["cl-discovery"] {
+		t.Errorf("February's answer is missing Discovery, in force in February")
+	}
+	if got["cl-platform"] {
+		t.Errorf("February's answer contains Platform, not in force until March")
+	}
+
+	// Today the handover has happened.
+	ans, err = engine.AnswerWithOptions(s.ctx, "who owns the search service", AnswerOptions{})
+	if err != nil {
+		t.Fatalf("answer now: %v", err)
+	}
+	got = map[string]bool{}
+	for _, c := range ans.Claims {
+		got[c.ID] = true
+	}
+	if !got["cl-platform"] || got["cl-discovery"] {
+		t.Errorf("today's answer = %v, want Platform only", got)
+	}
+}
