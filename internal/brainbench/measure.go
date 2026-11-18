@@ -53,7 +53,13 @@ const (
 //
 // The two handles are opened sequentially, never concurrently: SQLite is
 // single-writer and the library Memory holds a writer.
-func Measure(ctx context.Context, dsn, dbPath string, sc Scenario) (MetricSet, error) {
+//
+// phases are the seed's timeline instants; nil for a corpus scenario.
+func Measure(ctx context.Context, dsn, dbPath string, sc Scenario, phases PhaseTimes) (MetricSet, error) {
+	qs, err := buildQuestions(sc, phases)
+	if err != nil {
+		return MetricSet{}, err
+	}
 	// Census FIRST, deliberately. It is the only read of the arm's unperturbed
 	// state: the library probes that follow apply retrieval write-backs, so a
 	// census taken afterwards would be measuring the harness's own footprint
@@ -62,12 +68,12 @@ func Measure(ctx context.Context, dsn, dbPath string, sc Scenario) (MetricSet, e
 	if err != nil {
 		return MetricSet{}, err
 	}
-	answer, gold, health, err := measureThroughLibrary(ctx, dsn, sc, validTexts)
+	answers, gold, health, err := measureThroughLibrary(ctx, dsn, sc, qs, validTexts)
 	if err != nil {
 		return MetricSet{}, err
 	}
-	out := MetricSet{}
-	out.Metrics = append(out.Metrics, answer...)
+	out := MetricSet{Questions: answers.asked}
+	out.Metrics = append(out.Metrics, answers.metrics...)
 	out.Metrics = append(out.Metrics, gold...)
 	out.Metrics = append(out.Metrics, census...)
 	out.Metrics = append(out.Metrics, health...)
@@ -78,7 +84,7 @@ func Measure(ctx context.Context, dsn, dbPath string, sc Scenario) (MetricSet, e
 // same public facade `mnemos consolidate` and `mnemos health` use, so the
 // harness measures the shipped behaviour rather than a private reimplementation
 // of it.
-func measureThroughLibrary(ctx context.Context, dsn string, sc Scenario, validTexts []string) (answer, gold, health []Metric, err error) {
+func measureThroughLibrary(ctx context.Context, dsn string, sc Scenario, qs questionSet, validTexts []string) (answers battery, gold, health []Metric, err error) {
 	mem, err := mnemos.New(
 		mnemos.WithStorage(dsn),
 		// Passive mode pins rule-based, LLM-free behaviour regardless of what
@@ -89,60 +95,33 @@ func measureThroughLibrary(ctx context.Context, dsn string, sc Scenario, validTe
 		mnemos.WithActor(SeedActor),
 	)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("brainbench: open measurement handle: %w", err)
+		return battery{}, nil, nil, fmt.Errorf("brainbench: open measurement handle: %w", err)
 	}
 	defer func() { _ = mem.Close() }()
 
-	answer, gold, err = measureProbes(ctx, mem, sc, validTexts)
+	answers, err = runBattery(ctx, mnemosRetriever{mem: mem}, qs)
 	if err != nil {
-		return nil, nil, nil, err
+		return battery{}, nil, nil, err
 	}
 	health, err = measureHealth(ctx, mem)
 	if err != nil {
-		return nil, nil, nil, err
+		return battery{}, nil, nil, err
 	}
-	return answer, gold, health, nil
+	return answers, goldSurvival(sc, validTexts), health, nil
 }
 
-// measureProbes computes the answer-quality metrics and the knowledge-survival
-// metric.
-func measureProbes(ctx context.Context, mem mnemos.Memory, sc Scenario, validTexts []string) (answer, gold []Metric, err error) {
+// goldSurvival is the metric that makes the rest trustworthy. A process can
+// raise precision, cut dissonance and shrink the brain simply by deleting
+// claims; only this metric notices, because it asks whether the knowledge a
+// probe expects is still CURRENTLY VALID at all, independent of ranking. It is
+// measured against the census's valid set (valid-time open and not
+// deprecated), not against a Scan — Scan's zero window returns invalidated
+// claims too, so surviving there would mean nothing more than "the row was not
+// deleted", which forgetting never does anyway.
+func goldSurvival(sc Scenario, validTexts []string) []Metric {
 	n := len(sc.Probes)
-	var hits, top1, survived, forbiddenHits, forbiddenProbes int
-	var rrSum float64
-
+	survived := 0
 	for _, p := range sc.Probes {
-		limit := p.Limit
-		if limit == 0 {
-			limit = ProbeDefaultLimit
-		}
-		res, err := mem.Recall(ctx, mnemos.Query{Text: p.Query, Limit: limit})
-		if err != nil {
-			return nil, nil, fmt.Errorf("brainbench: probe %s recall: %w", p.ID, err)
-		}
-		rank := 0
-		for i, r := range res {
-			if containsFold(r.Text, p.Expect) {
-				rank = i + 1
-				break
-			}
-		}
-		if rank > 0 {
-			hits++
-			rrSum += 1 / float64(rank)
-			if rank == 1 {
-				top1++
-			}
-		}
-		if len(p.MustNot) > 0 {
-			forbiddenProbes++
-			for _, r := range res {
-				if matchesAnyFold(r.Text, p.MustNot) {
-					forbiddenHits++
-					break
-				}
-			}
-		}
 		for _, text := range validTexts {
 			if containsFold(text, p.Expect) {
 				survived++
@@ -150,35 +129,7 @@ func measureProbes(ctx context.Context, mem mnemos.Memory, sc Scenario, validTex
 			}
 		}
 	}
-
-	answer = []Metric{
-		KnownMetric(MetricAnswerHitRate, HigherBetter, ratio(hits, n), n, "ratio"),
-		KnownMetric(MetricAnswerPrecision1, HigherBetter, ratio(top1, n), n, "ratio"),
-		KnownMetric(MetricAnswerMRR, HigherBetter, rrSum/float64(max(n, 1)), n, "ratio"),
-	}
-	if forbiddenProbes > 0 {
-		answer = append(answer, KnownMetric(MetricForbiddenHitRate, LowerBetter,
-			ratio(forbiddenHits, forbiddenProbes), forbiddenProbes, "ratio"))
-	} else {
-		// Emitting 0.0 here would read as "the brain never surfaced a
-		// forbidden statement", which is not what was measured — nothing was
-		// measured, because no probe declared one.
-		answer = append(answer, UnknownMetric(MetricForbiddenHitRate, LowerBetter,
-			"no probe in this scenario declares must_not; nothing was measured"))
-	}
-
-	// gold_survival is the metric that makes the rest trustworthy. A process
-	// can raise precision, cut dissonance and shrink the brain simply by
-	// deleting claims; only this metric notices, because it asks whether the
-	// knowledge a probe expects is still CURRENTLY VALID at all, independent of
-	// ranking. It is measured against the census's valid set (valid-time open
-	// and not deprecated), not against a Scan — Scan's zero window returns
-	// invalidated claims too, so surviving there would mean nothing more than
-	// "the row was not deleted", which forgetting never does anyway.
-	gold = []Metric{
-		KnownMetric(MetricGoldSurvival, HigherBetter, ratio(survived, n), n, "ratio"),
-	}
-	return answer, gold, nil
+	return []Metric{KnownMetric(MetricGoldSurvival, HigherBetter, ratio(survived, n), n, "ratio")}
 }
 
 // measureHealth mirrors the ADR 0019 vitals and pathologies into metrics.
