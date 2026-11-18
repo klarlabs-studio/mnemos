@@ -176,6 +176,76 @@ lexical here (stub embedder vs BM25), so this says nothing about dense-retrieval
 RAG; and timeline phases are milliseconds apart, so freshness and decay see no
 age difference between them.
 
+### Evidence retraction (`retraction:` scenarios)
+
+Hypothesis (ADR 0037): dependency maintenance (withdrawing a source and
+propagating that to what rests on it) reduces the unsupported beliefs a brain
+keeps holding. Pass condition: **fewer unsupported beliefs survive than on raw
+retrieval whose retraction deletes the document's chunks, and no fewer
+supported beliefs do.** That baseline is the honest strong-simple one. It is
+what a document store with a search box does, and it keeps every copy,
+restatement and conclusion in other documents.
+
+The track forks its own arms off the warmed seed and leaves the A/B arms alone:
+
+- **reference**: not retracted;
+- **retracted**: the episode is retracted through `Memory.RetractEvent`, the
+  path every surface shares;
+- **noise**: a second retracted copy that must reproduce the retracted arm,
+  or the hypothesis is `unknown`;
+- `raw_bm25` and `raw_bm25_recency` over the event texts **minus the retracted
+  document**.
+
+Gold beliefs carry a role. `original`, `copy` and `derived` are dependents and
+should stop being believed. `corroborated` (stated by the retracted document
+and independently elsewhere) and `independent` must survive. Load-time
+validation checks each role against the documents, so an `original` has to
+appear in the retracted document and a `copy` must not. Before anything is
+retracted, every gold text must match a live claim. A gold text that
+extraction never produced would otherwise score as withdrawn without any
+work.
+
+| Metric | Direction | What it tells you |
+|---|---|---|
+| `unsupported_surviving` | lower better | Share of dependents still held: a live claim, or a visible chunk for the baseline. The hypothesis' metric. |
+| `unsupported_surfaced` | lower better | Share of dependents returned by at least one retraction query. |
+| `supported_surviving` | higher better | **Anti-gaming.** Withdrawing everything near the source wins the row above and loses here. |
+| `supported_surfaced` | higher better | Share of must-survive beliefs still returned. |
+| `impact_precision`, `impact_recall` | higher better | What the retraction withdrew, against the dependent gold. Unknown on the reference arm, which has no report. Precision is unknown when nothing was withdrawn. |
+| `impact_withdrawn`, `impact_rescored` | descriptive | Beliefs (or chunks) withdrawn, and beliefs kept and rescored. |
+
+The effect rows (retracted vs reference) count toward `-fail-on-regression`.
+A retraction that loses a supported belief is a regression caused by the
+operation under test
+(`TestRun_RetractionReportsRegressionWhenCorroboratedBeliefsAreDestroyed`).
+The baseline rows and the hypothesis are findings and do not gate anything.
+
+**How dependents are recognised, which is the finding.** Mnemos follows
+evidence links. A belief whose only live evidence is the retracted episode is
+withdrawn. A belief with any other live evidence is kept and rescored. Two
+consequences follow, and the track measures them as they are instead of
+special-casing the scenario:
+
+- A **verbatim copy** in another document is folded onto the original belief
+  by ingest-time exact-text dedupe. It becomes a second evidence link,
+  indistinguishable from real corroboration. In `evidence_retraction.yaml` the
+  false claim and the corroborated release date are both `SQ-R`: kept and
+  rescored.
+- A **paraphrased copy** or a **conclusion drawn in another document** is a
+  separate belief with its own evidence, and the retraction does not reach it.
+  The impact report names associations touching withdrawn beliefs, but it
+  does not re-evaluate them (ADR 0037 §3).
+
+On that scenario Mnemos and the baseline therefore **tie** on
+`unsupported_surviving` (0.6, so 3 of 5 dependents survive on both) and on
+`supported_surviving` (1.0). The hypothesis is **not supported**. Mnemos's
+report is more precise (1.0 vs 0.75), because the baseline also deletes the
+corroborated sentence's chunk. Its recall is lower (0.4 vs 0.6), because the
+baseline deletes the advisory's copy of the false sentence while the blog's
+copy remains. Mnemos keeps the one belief and rescores it. Closing that gap
+needs provenance between episodes (a copy is not independent evidence). That
+is product work, and the harness does not fake it.
+
 ## What it does **not** measure
 
 The full list ships inside every report, because a JSON file gets pasted into an
@@ -259,6 +329,22 @@ as_of_probes:
     must_not: [starving]
 ```
 
+A scenario adds the retraction track with a `retraction:` block (see
+`evidence_retraction.yaml`):
+
+```yaml
+retraction:
+  episode: advisory               # a document id of this scenario
+  reason: vendor withdrew the advisory
+  limit: 3                        # top-k of the queries (0 = 10)
+  queries: [is CVE-2026-1234 fixed in libfoo 2.3]
+  gold:                           # roles: original | copy | derived (dependents),
+    - text: release fixed the heap overflow   #        corroborated | independent (must survive)
+      role: original
+    - text: released on 3 March 2026
+      role: corroborated
+```
+
 Three things to get right:
 
 - **`age_days` is not cosmetic.** Trust freshness decays on a 90-day half-life.
@@ -291,3 +377,7 @@ Read in this order, which is how the human report is laid out:
 6. **The baseline table**, separately. It compares the untreated arm with raw
    retrieval and says nothing about the process; read `baseline-better` rows as
    loudly as `mnemos-better` ones.
+7. **The retraction track**, for a scenario that has one. Read its per-belief
+   table before the hypothesis line: it shows which dependent survived, and
+   whether it was rescored (kept on evidence Mnemos took as independent) or
+   never reached.
