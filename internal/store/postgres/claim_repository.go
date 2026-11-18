@@ -346,6 +346,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_evidence")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_status_history")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_validity_history")),
+		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_credit_history")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_expectations")),
 		fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, qualify(r.ns, "claims")),
 	} {
@@ -433,6 +434,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claim_validity_history"))); err != nil {
 		return fmt.Errorf("delete claim_validity_history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claim_credit_history"))); err != nil {
+		return fmt.Errorf("delete claim_credit_history: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claims"))); err != nil {
 		return fmt.Errorf("delete claims: %w", err)
@@ -573,17 +577,61 @@ func (r ClaimRepository) SetLifecycle(ctx context.Context, claimID string, lifec
 // caller passes the already-merged map, so the write is a plain assignment and
 // re-running is idempotent. This is what lets credit assignment + salience persist
 // on the hosted backend (they store in confidence_components).
+//
+// A change to the applied net credit is recorded in claim_credit_history in
+// the same transaction (ADR 0036 step 3); a write that leaves it unchanged
+// records nothing. The row lock serialises concurrent credit writes so each
+// history row's from-value is the value it replaced.
 func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, components map[string]float64, trustScore float64) error {
-	stmt := fmt.Sprintf(`UPDATE %s SET confidence_components = $1, trust_score = $2 WHERE id = $3`, qualify(r.ns, "claims"))
-	res, err := r.db.ExecContext(ctx, stmt, encodeConfidenceComponents(components), trustScore, claimID)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("begin apply belief credit tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var raw string
+	if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT confidence_components::text FROM %s WHERE id = $1 FOR UPDATE`, qualify(r.ns, "claims")), claimID).Scan(&raw); err != nil {
+		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, err)
+	}
+	from := domain.AppliedCredit(decodeConfidenceComponents(raw))
+	to := domain.AppliedCredit(components)
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET confidence_components = $1, trust_score = $2 WHERE id = $3`, qualify(r.ns, "claims")),
+		encodeConfidenceComponents(components), trustScore, claimID); err != nil {
 		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, sql.ErrNoRows)
+	if from != to {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s (claim_id, from_credit, to_credit, changed_at) VALUES ($1, $2, $3, $4)`, qualify(r.ns, "claim_credit_history")),
+			claimID, from, to, time.Now().UTC()); err != nil {
+			return fmt.Errorf("record credit change of %s: %w", claimID, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit apply belief credit tx: %w", err)
 	}
 	return nil
+}
+
+// ListCreditHistory implements [ports.CreditHistoryLister]: the applied-credit
+// changes of claimIDs, oldest first.
+func (r ClaimRepository) ListCreditHistory(ctx context.Context, claimIDs []string) ([]domain.CreditChange, error) {
+	out := make([]domain.CreditChange, 0)
+	if len(claimIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`SELECT claim_id, from_credit, to_credit, changed_at
+		FROM %s WHERE claim_id = ANY($1) ORDER BY changed_at, id`, qualify(r.ns, "claim_credit_history")), pgArray(claimIDs))
+	if err != nil {
+		return nil, fmt.Errorf("list credit history: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var c domain.CreditChange
+		if err := rows.Scan(&c.ClaimID, &c.From, &c.To, &c.ChangedAt); err != nil {
+			return nil, fmt.Errorf("scan credit history row: %w", err)
+		}
+		c.ChangedAt = c.ChangedAt.UTC()
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // trustInput is one claim's scoring inputs: its own confidence, how many

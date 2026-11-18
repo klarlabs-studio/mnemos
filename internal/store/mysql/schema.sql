@@ -274,6 +274,20 @@ CREATE TABLE IF NOT EXISTS claim_validity_history (
   CONSTRAINT fk_claim_validity_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- claim_credit_history (ADR 0036 step 3): every change ApplyBeliefCredit makes
+-- to a claim's applied net credit (confidence_components credit:applied), so
+-- the credit a belief held at an earlier instant can be recovered.
+CREATE TABLE IF NOT EXISTS claim_credit_history (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  claim_id    VARCHAR(190)    NOT NULL,
+  from_credit DOUBLE          NOT NULL DEFAULT 0,
+  to_credit   DOUBLE          NOT NULL DEFAULT 0,
+  changed_at  DATETIME(6)     NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_claim_credit_history_claim_id (claim_id),
+  CONSTRAINT fk_claim_credit_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS embeddings (
   entity_id   VARCHAR(190) NOT NULL,
   entity_type VARCHAR(64)  NOT NULL,

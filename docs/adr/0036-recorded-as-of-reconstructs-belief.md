@@ -227,12 +227,14 @@ What made it possible:
   `claim_credit_history` (claim, from, to, changed_at) in the same transaction
   whenever it changes the applied net credit; a write that leaves it unchanged
   (inhibition decay, an idempotent re-run) records nothing. Read through the
-  optional `ports.CreditHistoryLister`. Only SQLite (and libSQL) and memory
-  implement `ports.BeliefCreditWriter`, so only they apply credit and only they
-  carry the table; on Postgres and MySQL credit is never applied, the stored
-  value is the only one there was, and no table (and so no RLS registration)
-  is needed. `TestCreditHistory_RecordsEveryAppliedCreditChange` fails if a
-  backend gains the writer without the lister. Credit applied before the table
+  optional `ports.CreditHistoryLister`. Every backend that implements
+  `ports.BeliefCreditWriter` carries the table: SQLite (and libSQL), memory,
+  Postgres (registered in the ADR-0007 RLS `scoped` array, so it gets a tenant
+  column and policy) and MySQL (isolated by namespace database). On Postgres
+  and MySQL the current value is read `FOR UPDATE`, so concurrent credit
+  writes each record the value they replaced. Delete and cascade paths clear
+  it. `TestCreditHistory_RecordsEveryAppliedCreditChange` fails if a backend
+  implements the writer without the lister. Credit applied before the table
   existed has no history, and reads as the stored value.
 
 Today's reads are unchanged: only the recorded views rescore. The cost is one
