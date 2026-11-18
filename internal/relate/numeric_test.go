@@ -274,3 +274,75 @@ func TestIsBounded_LeavesPlainMeasurementsAlone(t *testing.T) {
 		t.Error("the canonical true positive was lost to the bound exclusion")
 	}
 }
+
+// TestDetect_RestatementWithTrailingWordIsNotANumericContradiction pins the
+// false positive that blocked semantic dedupe on the brainbench
+// redundant_sessions scenario. The unit guesser reads the word after a number
+// as its unit, so "PostgreSQL 16 today" parses as 16 raw:today, "PostgreSQL 16
+// in production" as 16 raw:in and a sentence-final "PostgreSQL 16" as a
+// unitless 16. The single-vs-single rule then called the unit mismatch a
+// disagreement, filing three restatements of one fact as contradicting each
+// other. The recorded contradiction then vetoed the merge (disputedPairs in
+// internal/pipeline), so the near-duplicate the scenario plants was never
+// collapsed and its stale twin stayed live.
+func TestDetect_RestatementWithTrailingWordIsNotANumericContradiction(t *testing.T) {
+	engine := NewEngine()
+	engine.nextID = seqRelationshipIDs()
+	rels, err := engine.Detect([]domain.Claim{
+		{ID: "cl_1", Text: "The billing service runs on PostgreSQL 16"},
+		{ID: "cl_2", Text: "The billing service runs on PostgreSQL 16 today"},
+		{ID: "cl_3", Text: "Billing runs on PostgreSQL 16 in production"},
+	})
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	for _, r := range rels {
+		if r.Type == domain.RelationshipTypeContradicts {
+			t.Errorf("restatements of one value recorded as contradicting: %s -> %s (%s)", r.FromClaimID, r.ToClaimID, r.DerivedBy)
+		}
+	}
+}
+
+// TestNumericValuesAgree_GuessedUnitDoesNotHideAgreementOrDisagreement pins
+// both directions of the single-vs-single rule when a unit is only a guessed
+// word: a guessed word is not evidence of a different quantity, so the
+// magnitudes decide. Recognized families still keep values apart.
+func TestNumericValuesAgree_GuessedUnitDoesNotHideAgreementOrDisagreement(t *testing.T) {
+	cases := []struct {
+		a, b  string
+		agree bool
+	}{
+		{"runs on PostgreSQL 16 today", "runs on PostgreSQL 16", true},
+		{"runs on PostgreSQL 16 in production", "runs on PostgreSQL 16 today", true},
+		{"runs on PostgreSQL 16 today", "runs on PostgreSQL 17", false},
+		{"the user has 12 prior refunds", "the user has 0 prior refunds", false},
+		{"the limit is 5 minutes", "the limit is 5 GB", false},
+		{"the timeout is 30 seconds", "the timeout is 30 today", false},
+	}
+	for _, tc := range cases {
+		if got := numericValuesAgree(extractNumerics(tc.a), extractNumerics(tc.b)); got != tc.agree {
+			t.Errorf("numericValuesAgree(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.agree)
+		}
+	}
+}
+
+// TestDetect_DifferentVersionWithTrailingWordStillContradicts is the guard on
+// the other side: relaxing the guessed-unit rule must not stop a different
+// version from being flagged.
+func TestDetect_DifferentVersionWithTrailingWordStillContradicts(t *testing.T) {
+	engine := NewEngine()
+	engine.nextID = seqRelationshipIDs()
+	rels, err := engine.Detect([]domain.Claim{
+		{ID: "cl_1", Text: "The billing service runs on PostgreSQL 16 today"},
+		{ID: "cl_2", Text: "The billing service runs on PostgreSQL 17"},
+	})
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+	for _, r := range rels {
+		if r.Type == domain.RelationshipTypeContradicts {
+			return
+		}
+	}
+	t.Errorf("PostgreSQL 16 vs 17 must still contradict (got %v)", rels)
+}
