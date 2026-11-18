@@ -105,6 +105,15 @@ type ClaimStatusHistory struct {
 	ChangedBy  string `json:"changed_by"`
 }
 
+type ClaimTrustInputHistory struct {
+	ID                 int64   `json:"id"`
+	ClaimID            string  `json:"claim_id"`
+	PriorConfidence    float64 `json:"prior_confidence"`
+	PriorHalfLifeDays  float64 `json:"prior_half_life_days"`
+	PriorLastConfirmed string  `json:"prior_last_confirmed"`
+	ChangedAt          string  `json:"changed_at"`
+}
+
 type ClaimValidityHistory struct {
 	ID        int64  `json:"id"`
 	ClaimID   string `json:"claim_id"`

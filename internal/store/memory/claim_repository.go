@@ -127,7 +127,7 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 		if _, ok := r.state.claims[claim.ID]; !ok {
 			r.state.claimOrder = append(r.state.claimOrder, claim.ID)
 		}
-		r.state.claims[claim.ID] = stored
+		r.putClaimLocked(claim.ID, stored)
 
 		// Append a claim_versions snapshot for every write (Refs #38).
 		// Done inline rather than via the ClaimVersionRepository to
@@ -385,6 +385,7 @@ func (r ClaimRepository) DeleteCascade(_ context.Context, claimID string) error 
 	delete(r.state.statusHistory, claimID)
 	r.dropValidityHistoryLocked(claimID)
 	r.dropCreditHistoryLocked(claimID)
+	delete(r.state.trustInputHistory, claimID)
 	delete(r.state.claimVersions, claimID)
 	delete(r.state.feedback, claimID)
 	delete(r.state.expectations, claimID)
@@ -471,6 +472,7 @@ func (r ClaimRepository) DeleteAll(_ context.Context) error {
 	r.state.claimOrder = nil
 	r.state.evidence = map[string]map[string]time.Time{}
 	r.state.creditHistory = nil
+	r.state.trustInputHistory = map[string][]domain.TrustInputChange{}
 	r.state.statusHistory = map[string][]storedTransition{}
 	r.state.validityHistory = nil
 	return nil
@@ -547,7 +549,7 @@ func (r ClaimRepository) MarkConfirmed(_ context.Context, claimID string, confir
 		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
 	}
 	c.LastConfirmed = confirmedAt.UTC()
-	r.state.claims[claimID] = c
+	r.putClaimLocked(claimID, c)
 	return nil
 }
 
@@ -571,7 +573,7 @@ func (r ClaimRepository) MarkVerified(_ context.Context, claimID string, verifie
 	if halfLifeDays > 0 {
 		c.HalfLifeDays = halfLifeDays
 	}
-	r.state.claims[claimID] = c
+	r.putClaimLocked(claimID, c)
 	return nil
 }
 
@@ -593,7 +595,7 @@ func (r ClaimRepository) SetValidity(_ context.Context, claimID string, validTo 
 	}
 	r.recordValidityChangeLocked(claimID, domain.ValidityFieldValidTo, c.ValidTo, validTo, note)
 	c.ValidTo = validTo
-	r.state.claims[claimID] = c
+	r.putClaimLocked(claimID, c)
 	return nil
 }
 
@@ -610,7 +612,7 @@ func (r ClaimRepository) Archive(_ context.Context, claimID string, at time.Time
 	}
 	r.recordValidityChangeLocked(claimID, domain.ValidityFieldArchivedAt, c.ArchivedAt, at.UTC(), note)
 	c.ArchivedAt = at.UTC()
-	r.state.claims[claimID] = c
+	r.putClaimLocked(claimID, c)
 	return nil
 }
 
@@ -626,7 +628,7 @@ func (r ClaimRepository) Unarchive(_ context.Context, ids []string, note domain.
 		}
 		r.recordValidityChangeLocked(id, domain.ValidityFieldArchivedAt, c.ArchivedAt, time.Time{}, note)
 		c.ArchivedAt = time.Time{}
-		r.state.claims[id] = c
+		r.putClaimLocked(id, c)
 		n++
 	}
 	return n, nil
@@ -679,7 +681,7 @@ func (r ClaimRepository) SetLifecycle(_ context.Context, claimID string, lifecyc
 		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
 	}
 	c.Lifecycle = lifecycle
-	r.state.claims[claimID] = c
+	r.putClaimLocked(claimID, c)
 	return nil
 }
 
@@ -717,7 +719,7 @@ func (r ClaimRepository) recomputeTrustLocked(ids []string, scoring domain.Trust
 		c.TrustScore = scoring.Score(r.trustInputLocked(id, c))
 		c.TrustComputedAt = scoring.At.UTC()
 		c.TrustModelVersion = scoring.ModelVersion
-		r.state.claims[id] = c
+		r.putClaimLocked(id, c)
 		count++
 	}
 	return count
@@ -790,7 +792,7 @@ func (r ClaimRepository) ApplyBeliefCredit(_ context.Context, claimID string, co
 		c.ConfidenceComponents = cp
 	}
 	c.TrustScore = trustScore
-	r.state.claims[claimID] = c
+	r.putClaimLocked(claimID, c)
 	return nil
 }
 
@@ -1028,5 +1030,41 @@ func (r ClaimRepository) GapCandidates(ctx context.Context, minContradictions in
 		}
 	}
 	r.state.mu.RUnlock()
+	return out, nil
+}
+
+// putClaimLocked stores c as claim id's row. It is the ONLY write of a claim
+// row on this backend, so it is where the trust inputs the row holds itself
+// (confidence, half-life, last confirmation) are versioned (ADR 0036 §7): when
+// the write changes any of them, the values it replaces are recorded with the
+// store's clock. A new claim has no prior values and records nothing. Callers
+// hold state.mu. TestMemoryClaimWritesGoThroughPutClaimLocked fails if a write
+// bypasses it.
+func (r ClaimRepository) putClaimLocked(id string, c storedClaim) {
+	if prior, ok := r.state.claims[id]; ok &&
+		(prior.Confidence != c.Confidence || prior.HalfLifeDays != c.HalfLifeDays || !prior.LastConfirmed.Equal(c.LastConfirmed)) {
+		r.state.trustInputHistory[id] = append(r.state.trustInputHistory[id], domain.TrustInputChange{
+			ClaimID: id, Confidence: prior.Confidence, HalfLifeDays: prior.HalfLifeDays,
+			LastConfirmed: prior.LastConfirmed, ChangedAt: time.Now().UTC(),
+		})
+	}
+	r.state.claims[id] = c
+}
+
+// ListTrustInputHistory implements [ports.TrustInputHistoryLister]: the
+// trust-input changes of claimIDs, oldest first.
+func (r ClaimRepository) ListTrustInputHistory(_ context.Context, claimIDs []string) ([]domain.TrustInputChange, error) {
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	out := make([]domain.TrustInputChange, 0)
+	seen := make(map[string]bool, len(claimIDs))
+	for _, id := range claimIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, r.state.trustInputHistory[id]...)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].ChangedAt.Before(out[j].ChangedAt) })
 	return out, nil
 }

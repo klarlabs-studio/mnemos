@@ -135,6 +135,10 @@ VALUES (?, ?, ?, ?, ?, ?)`
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("look up prior status for %s: %w", claim.ID, err)
 		}
+		priorInputs, err := readTrustInputs(ctx, tx, claim.ID)
+		if err != nil {
+			return err
+		}
 
 		validFrom := claim.ValidFrom
 		if validFrom.IsZero() {
@@ -165,6 +169,9 @@ VALUES (?, ?, ?, ?, ?, ?)`
 			claim.MergedInto,
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
+		}
+		if err := recordTrustInputChange(ctx, tx, claim.ID, priorInputs, now); err != nil {
+			return err
 		}
 
 		newStatus := string(claim.Status)
@@ -343,6 +350,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 		`DELETE FROM claim_status_history WHERE claim_id = ?`,
 		`DELETE FROM claim_validity_history WHERE claim_id = ?`,
 		`DELETE FROM claim_credit_history WHERE claim_id = ?`,
+		`DELETE FROM claim_trust_input_history WHERE claim_id = ?`,
 		`DELETE FROM claims WHERE id = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, claimID); err != nil {
@@ -429,6 +437,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_credit_history`); err != nil {
 		return fmt.Errorf("delete claim_credit_history: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_trust_input_history`); err != nil {
+		return fmt.Errorf("delete claim_trust_input_history: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claims`); err != nil {
 		return fmt.Errorf("delete claims: %w", err)
 	}
@@ -513,20 +524,21 @@ func (r ClaimRepository) MarkVerified(ctx context.Context, claimID string, verif
 	if verifiedAt.IsZero() {
 		verifiedAt = time.Now().UTC()
 	}
-	res, err := r.db.ExecContext(ctx, `
+	return r.versionedTrustInputWrite(ctx, claimID, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `
 UPDATE claims
 SET last_verified = ?,
     verify_count = verify_count + 1,
     half_life_days = CASE WHEN ? > 0 THEN ? ELSE half_life_days END
 WHERE id = ?`, verifiedAt.UTC(), halfLifeDays, halfLifeDays, claimID)
-	if err != nil {
-		return fmt.Errorf("mark verified %s: %w", claimID, err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
-	}
-	return nil
+		if err != nil {
+			return fmt.Errorf("mark verified %s: %w", claimID, err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
+		}
+		return nil
+	})
 }
 
 // MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed]. Unlike
@@ -537,10 +549,12 @@ func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, conf
 	if confirmedAt.IsZero() {
 		confirmedAt = time.Now().UTC()
 	}
-	if _, err := r.db.ExecContext(ctx, `UPDATE claims SET last_confirmed = ? WHERE id = ?`, confirmedAt.UTC(), claimID); err != nil {
-		return fmt.Errorf("mark confirmed %s: %w", claimID, err)
-	}
-	return nil
+	return r.versionedTrustInputWrite(ctx, claimID, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE claims SET last_confirmed = ? WHERE id = ?`, confirmedAt.UTC(), claimID); err != nil {
+			return fmt.Errorf("mark confirmed %s: %w", claimID, err)
+		}
+		return nil
+	})
 }
 
 // ApplyBeliefCredit overwrites the claim's confidence_components map and sets its

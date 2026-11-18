@@ -47,6 +47,22 @@ type CreditChange struct {
 	ChangedAt time.Time
 }
 
+// TrustInputChange is one change to the trust inputs a claims row stores
+// itself: confidence, the per-claim half-life and the last explicit
+// confirmation (ADR 0036 §7). It holds the values the claim carried BEFORE
+// ChangedAt, when the brain recorded the change; the claims row holds the
+// values after the last change. A belief's inputs at an instant T are
+// therefore the prior values of its first change after T, or the stored values
+// when nothing changed after T. Credit and evidence have their own histories
+// ([CreditChange], claim_evidence.created_at).
+type TrustInputChange struct {
+	ClaimID       string
+	Confidence    float64
+	HalfLifeDays  float64
+	LastConfirmed time.Time
+	ChangedAt     time.Time
+}
+
 // AppliedCredit returns the net credit stored in a claim's components, or 0.
 func AppliedCredit(components map[string]float64) float64 {
 	return components[CreditAppliedComponentKey]

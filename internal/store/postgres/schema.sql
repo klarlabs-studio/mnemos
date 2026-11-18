@@ -272,6 +272,20 @@ CREATE TABLE IF NOT EXISTS claim_credit_history (
 );
 CREATE INDEX IF NOT EXISTS idx_claim_credit_history_claim_id ON claim_credit_history(claim_id);
 
+-- claim_trust_input_history (ADR 0036 §7): every change to a trust input the
+-- claims row stores itself (confidence, half_life_days, last_confirmed). Each
+-- row holds the values the claim carried BEFORE changed_at; claims holds the
+-- values after the last change. Registered in the RLS scoped array below.
+CREATE TABLE IF NOT EXISTS claim_trust_input_history (
+  id                   bigserial        PRIMARY KEY,
+  claim_id             text             NOT NULL REFERENCES claims(id),
+  prior_confidence     double precision NOT NULL,
+  prior_half_life_days double precision NOT NULL DEFAULT 0,
+  prior_last_confirmed timestamptz,
+  changed_at           timestamptz      NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_claim_trust_input_history_claim_id ON claim_trust_input_history(claim_id);
+
 -- Embeddings: bytea matches the SQLite BLOB shape and stays the portable
 -- source of truth. When pgvector is installed, a nullable `embedding
 -- public.vector` accelerator column is added below (see the $mnemos_pgvector$
@@ -549,7 +563,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'events','claims','entities','claim_entities','claim_evidence','relationships',
-    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','embeddings','agents','actions',
+    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
     'entity_relationships','working_memory_blocks','claim_expectations',

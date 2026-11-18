@@ -140,6 +140,10 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("look up prior status for %s: %w", claim.ID, err)
 		}
+		priorInputs, err := r.readTrustInputs(ctx, tx, claim.ID)
+		if err != nil {
+			return err
+		}
 
 		validFrom := claim.ValidFrom
 		if validFrom.IsZero() {
@@ -170,6 +174,9 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 			claim.MergedInto,
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
+		}
+		if err := r.recordTrustInputChange(ctx, tx, claim.ID, priorInputs, now); err != nil {
+			return err
 		}
 
 		newStatus := string(claim.Status)
@@ -347,6 +354,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_status_history")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_validity_history")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_credit_history")),
+		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_trust_input_history")),
 		fmt.Sprintf(`DELETE FROM %s WHERE claim_id = $1`, qualify(r.ns, "claim_expectations")),
 		fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, qualify(r.ns, "claims")),
 	} {
@@ -437,6 +445,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claim_credit_history"))); err != nil {
 		return fmt.Errorf("delete claim_credit_history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claim_trust_input_history"))); err != nil {
+		return fmt.Errorf("delete claim_trust_input_history: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s`, qualify(r.ns, "claims"))); err != nil {
 		return fmt.Errorf("delete claims: %w", err)
@@ -530,15 +541,13 @@ SET last_verified = $1,
     verify_count = verify_count + 1,
     half_life_days = CASE WHEN $2 > 0 THEN $2 ELSE half_life_days END
 WHERE id = $3`, qualify(r.ns, "claims"))
-	res, err := r.db.ExecContext(ctx, stmt, verifiedAt.UTC(), halfLifeDays, claimID)
-	if err != nil {
-		return fmt.Errorf("mark verified %s: %w", claimID, err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
-	}
-	return nil
+	return r.versionedTrustInputWrite(ctx, claimID, func(tx *sql.Tx) (sql.Result, error) {
+		res, err := tx.ExecContext(ctx, stmt, verifiedAt.UTC(), halfLifeDays, claimID)
+		if err != nil {
+			return nil, fmt.Errorf("mark verified %s: %w", claimID, err)
+		}
+		return res, nil
+	})
 }
 
 // MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed].
@@ -546,16 +555,15 @@ func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, conf
 	if confirmedAt.IsZero() {
 		confirmedAt = time.Now().UTC()
 	}
-	res, err := r.db.ExecContext(ctx,
-		fmt.Sprintf(`UPDATE %s SET last_confirmed = $1 WHERE id = $2`, qualify(r.ns, "claims")),
-		confirmedAt.UTC(), claimID)
-	if err != nil {
-		return fmt.Errorf("mark confirmed %s: %w", claimID, err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
-	}
-	return nil
+	return r.versionedTrustInputWrite(ctx, claimID, func(tx *sql.Tx) (sql.Result, error) {
+		res, err := tx.ExecContext(ctx,
+			fmt.Sprintf(`UPDATE %s SET last_confirmed = $1 WHERE id = $2`, qualify(r.ns, "claims")),
+			confirmedAt.UTC(), claimID)
+		if err != nil {
+			return nil, fmt.Errorf("mark confirmed %s: %w", claimID, err)
+		}
+		return res, nil
+	})
 }
 
 // SetLifecycle transitions a claim's promotion state in place.

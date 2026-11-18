@@ -254,6 +254,22 @@ CREATE TABLE IF NOT EXISTS claim_credit_history (
 );
 CREATE INDEX IF NOT EXISTS idx_claim_credit_history_claim_id ON claim_credit_history(claim_id);
 
+-- claim_trust_input_history (ADR 0036 §7): every change to a trust input the
+-- claims row stores itself (confidence, half_life_days, last_confirmed). Each
+-- row holds the values the claim carried BEFORE changed_at; claims holds the
+-- values after the last change, so the inputs a belief held at an earlier
+-- instant can be recovered.
+CREATE TABLE IF NOT EXISTS claim_trust_input_history (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	claim_id TEXT NOT NULL,
+	prior_confidence REAL NOT NULL,
+	prior_half_life_days REAL NOT NULL DEFAULT 0,
+	prior_last_confirmed TEXT NOT NULL DEFAULT '',
+	changed_at TEXT NOT NULL,
+	FOREIGN KEY (claim_id) REFERENCES claims(id)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_trust_input_history_claim_id ON claim_trust_input_history(claim_id);
+
 -- claim_versions (Refs #38) — append-only audit trail of every text /
 -- confidence / status snapshot a claim has held. Side table so the
 -- claim row itself stays slim; consumers asking for the timeline JOIN
@@ -705,7 +721,9 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // NOT EXISTS that runs on every open.
 // v33 (ADR 0036 step 3) adds claim_evidence.created_at (no backfill; see
 // expectedColumns) and claim_credit_history (CREATE TABLE IF NOT EXISTS).
-const currentSchemaVersion = 33
+// v34 (ADR 0036 §7) adds claim_trust_input_history (CREATE TABLE IF NOT
+// EXISTS); no backfill, a claim without history reads its stored values.
+const currentSchemaVersion = 34
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
