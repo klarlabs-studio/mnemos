@@ -143,7 +143,7 @@ func runContradictionResolution(ctx context.Context, w *govwrite.Writer, winnerI
 	winner.Status = domain.ClaimStatusResolved
 	loser.Status = domain.ClaimStatusDeprecated
 
-	if _, err := w.Claims(ctx, []domain.Claim{winner, loser}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
+	if _, err := w.Claims(ctx, []domain.Claim{winner, loser}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "persist resolution"))
 		return
 	}
@@ -156,9 +156,9 @@ func runContradictionResolution(ctx context.Context, w *govwrite.Writer, winnerI
 // runSupersession is the v0.8 temporal-validity primitive: close
 // the old claim's valid interval at the new claim's valid_from. The
 // old claim keeps its status (it remained true while it was true);
-// only valid_to changes. The audit trail goes via
-// claim_status_history with the provided reason so reviewers can
-// see who said "this superseded that and when".
+// only valid_to changes. The audit trail goes via the validity
+// history with the provided reason so reviewers can see who said
+// "this superseded that and when".
 func runSupersession(ctx context.Context, w *govwrite.Writer, newID, oldID, reason, actorFlag string) {
 	if newID == oldID {
 		exitWithMnemosError(false, NewUserError("new and old must be different claims"))
@@ -207,10 +207,10 @@ func runSupersession(ctx context.Context, w *govwrite.Writer, newID, oldID, reas
 		exitWithMnemosError(false, NewSystemError(err, "set valid_to on superseded claim"))
 		return
 	}
-	// Status history capture: append a transition row even though
-	// status itself doesn't change, so the audit trail records who
-	// performed the supersession. We re-upsert the same status with
-	// the reason to trigger the history insert in upsertWithReason.
+	// SetValidity above is the audit of who superseded what (the
+	// valid_to change carries reason and actor). This re-upsert adds a
+	// claim_versions snapshot only: supersession is not a decision about
+	// status, so it does not assert one and records no status history row.
 	if _, err := w.Claims(ctx, []domain.Claim{oldClaim}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
 		// Non-fatal: the supersession itself succeeded. Surface as a
 		// warning so the operator knows the audit row didn't land.
