@@ -178,9 +178,12 @@ T (`recordedEvents`, `recordedClaims.ListByEventIDs` in
 
 ### 6. Interaction with merges (ADR 0033)
 
-Semantic dedupe repoints a loser's evidence onto the winner and keeps the loser
-as a deprecated redirect. A retraction follows the links as they are now, so it
-reaches the **winner**:
+Semantic dedupe moves a loser's evidence onto the winner (closing the loser's
+own links, ADR 0036 §8) and keeps the loser as a deprecated redirect. A
+retraction follows the live links, so it reaches the **winner**; the loser's
+closed links are history and are not touched. A recorded-as-of read from
+before the merge still reads the loser on its own closed links, and from
+before the retraction the winner on its link to the episode:
 
 - if the winner has other live evidence (often the loser's, now repointed), it
   is rescored and survives;
