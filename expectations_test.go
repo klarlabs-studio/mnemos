@@ -103,6 +103,10 @@ func TestExpectations_SQLiteBackend(t *testing.T) {
 	if err := mem.RecordObservation(ctx, "missing", 1); err == nil {
 		t.Error("RecordObservation without an expectation should error")
 	}
+	if err := mem.Expect(ctx, "c1", 5, 1, time.Now().Add(time.Hour)); !errors.Is(err, ErrClaimNotFound) {
+		t.Fatalf("Expect on a missing claim: %v, want ErrClaimNotFound", err)
+	}
+	upsertTypedClaim(t, mem.(*memory), "c1", "the batch finishes in five minutes", domain.ClaimTypeHypothesis)
 	if err := mem.Expect(ctx, "c1", 5, 1, time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("Expect: %v", err)
 	}

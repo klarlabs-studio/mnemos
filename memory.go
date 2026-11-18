@@ -50,6 +50,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"go.klarlabs.de/mnemos/internal/govwrite"
 )
 
 // ClaimItem is a pre-built claim an agent runtime can hand to Mnemos
@@ -537,11 +539,15 @@ func clampUnit(x float64) float64 {
 
 // ErrExpectationsUnsupported is returned by the expectation methods on a backend
 // with no expectation store.
-var ErrExpectationsUnsupported = errors.New("mnemos: structured expectations not supported on this backend")
+var ErrExpectationsUnsupported = govwrite.ErrExpectationsUnsupported
 
 // ErrExpectationNotFound is returned by [Memory.RecordObservation] when the
 // claim carries no expectation to resolve. Test with errors.Is.
-var ErrExpectationNotFound = errors.New("mnemos: no expectation for claim")
+var ErrExpectationNotFound = govwrite.ErrExpectationNotFound
+
+// ErrClaimNotFound is returned by [Memory.Expect] when the claim does not
+// exist: a prediction about nothing could never be credited. Test with errors.Is.
+var ErrClaimNotFound = govwrite.ErrBeliefNotFound
 
 // Reconciliation is the result of closing one structured expectation against its
 // observed value — the prediction-error event.
