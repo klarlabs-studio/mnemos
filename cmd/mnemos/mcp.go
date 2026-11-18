@@ -28,6 +28,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/skills"
 	"go.klarlabs.de/mnemos/internal/store"
 	"go.klarlabs.de/mnemos/internal/synthesize"
 	"go.klarlabs.de/mnemos/internal/trust"
@@ -621,6 +622,8 @@ func handleMCP(args []string) {
 		Handler(func(ctx context.Context, input mcpQueryPlaybookInput) (mcpQueryPlaybookOutput, error) {
 			return mcpRunQueryPlaybook(ctx, input)
 		})
+
+	registerSkillTools(srv, mcpActor)
 
 	srv.Tool("synthesize_reflexes").
 		Description("Run one full playbook-synthesis pass over the lessons store and emit derived Playbooks. Idempotent: re-running on the same lessons refreshes confidence without churning ids.").
@@ -1747,15 +1750,7 @@ func mcpRunQueryPlaybook(ctx context.Context, input mcpQueryPlaybookInput) (mcpQ
 		return mcpQueryPlaybookOutput{}, err
 	}
 	defer closeConn(conn)
-	var ps []domain.Playbook
-	switch {
-	case input.Trigger != "":
-		ps, err = conn.Playbooks.ListByTrigger(ctx, input.Trigger)
-	case input.Service != "":
-		ps, err = conn.Playbooks.ListByService(ctx, input.Service)
-	default:
-		ps, err = conn.Playbooks.ListAll(ctx)
-	}
+	ps, err := skills.Reflexes(ctx, conn.Playbooks, skills.ReflexFilter{Trigger: input.Trigger, Service: input.Service})
 	if err != nil {
 		return mcpQueryPlaybookOutput{}, err
 	}
@@ -1807,15 +1802,7 @@ func mcpRunQueryLessons(ctx context.Context, input mcpQueryLessonsInput) (mcpQue
 		return mcpQueryLessonsOutput{}, err
 	}
 	defer closeConn(conn)
-	var ls []domain.Lesson
-	switch {
-	case input.Service != "":
-		ls, err = conn.Lessons.ListByService(ctx, input.Service)
-	case input.Trigger != "":
-		ls, err = conn.Lessons.ListByTrigger(ctx, input.Trigger)
-	default:
-		ls, err = conn.Lessons.ListAll(ctx)
-	}
+	ls, err := skills.Schemas(ctx, conn.Lessons, skills.SchemaFilter{Service: input.Service, Trigger: input.Trigger})
 	if err != nil {
 		return mcpQueryLessonsOutput{}, err
 	}

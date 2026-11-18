@@ -65,6 +65,12 @@ var mcpToolScopes = map[string]string{
 	"recall":              "",
 	"get_blocks":          "",
 	"signals":             "",
+	"list_actions":        "",
+	"list_outcomes":       "",
+	"list_global_schemas": "",
+	"list_incidents":      "",
+	"get_incident":        "",
+	"why_were_we_wrong":   "",
 
 	// --- writes: ingest new events ---
 	"ingest_git_log": domain.ScopeEventsWrite,
@@ -91,6 +97,10 @@ var mcpToolScopes = map[string]string{
 	"memory_deprecate":          domain.ScopeClaimsWrite,
 	"memory_escalate":           domain.ScopeClaimsWrite,
 	"memory_resolve_dissonance": domain.ScopeClaimsWrite,
+	// Incidents are claim-adjacent records; REST and gRPC gate both writes on
+	// claims:write.
+	"open_incident":    domain.ScopeClaimsWrite,
+	"resolve_incident": domain.ScopeClaimsWrite,
 
 	// memory_promote crosses the tenant→global boundary (ADR 0012), which is
 	// exactly what promote:global exists to gate.

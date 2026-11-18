@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-77 capabilities, 80 acknowledged gaps.
+77 capabilities, 50 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -70,22 +70,22 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`expectation.observe`](#expectationobserve) | write | ✓ | ✓ | GAP | ✓ | — | — | ✓ |
 | [`expectation.reconcile`](#expectationreconcile) | write | ✓ | GAP | GAP | GAP | — | — | GAP |
 | [`action.record`](#actionrecord) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`action.list`](#actionlist) | read | GAP | GAP | ✓ | GAP | — | — | GAP |
+| [`action.list`](#actionlist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`outcome.record`](#outcomerecord) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`outcome.list`](#outcomelist) | read | GAP | GAP | ✓ | GAP | — | — | GAP |
+| [`outcome.list`](#outcomelist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`synthesis.run`](#synthesisrun) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`schema.list`](#schemalist) | read | GAP | GAP | ✓ | ✓ | — | — | GAP |
-| [`schema.append`](#schemaappend) | write | — | GAP | ✓ | — | — | — | GAP |
-| [`schema.global_list`](#schemaglobal_list) | read | GAP | ✓ | GAP | GAP | — | — | GAP |
-| [`reflex.list`](#reflexlist) | read | GAP | GAP | ✓ | ✓ | — | — | GAP |
-| [`reflex.append`](#reflexappend) | write | — | GAP | ✓ | — | — | — | GAP |
+| [`schema.list`](#schemalist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`schema.append`](#schemaappend) | write | — | ✓ | ✓ | — | — | — | ✓ |
+| [`schema.global_list`](#schemaglobal_list) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`reflex.list`](#reflexlist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`reflex.append`](#reflexappend) | write | — | ✓ | ✓ | — | — | — | ✓ |
 | [`decision.record`](#decisionrecord) | write | ✓ | GAP | ✓ | ✓ | — | — | GAP |
 | [`decision.get`](#decisionget) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`decision.list`](#decisionlist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`blocks.read`](#blocksread) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`blocks.write`](#blockswrite) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`incident.manage`](#incidentmanage) | write | GAP | ✓ | GAP | GAP | — | — | GAP |
-| [`incident.why_wrong`](#incidentwhy_wrong) | read | GAP | ✓ | GAP | GAP | — | — | GAP |
+| [`incident.manage`](#incidentmanage) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`incident.why_wrong`](#incidentwhy_wrong) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`federation.export`](#federationexport) | read | — | ✓ | — | — | — | — | — |
 | [`infra.liveness`](#infraliveness) | infra | — | ✓ | ✓ | — | — | — | ✓ |
 | [`infra.readiness`](#infrareadiness) | infra | — | ✓ | — | — | — | — | — |
@@ -837,13 +837,15 @@ List recorded actions (read).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no action listing on Memory |
-| rest | **GAP** — no action listing route |
+| go | `ListActions` |
+| rest | `GET /v1/actions` |
 | grpc | `ListActions` |
-| mcp | **GAP** — no action listing tool |
+| mcp | `list_actions` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no action listing |
+| client | `ListActions` |
+
+> Every binding reads through internal/skills.Actions; a run-scoped token sees only its runs and naming another run is refused.
 
 ### outcome.record
 
@@ -865,13 +867,15 @@ List recorded outcomes (read).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no outcome listing on Memory |
-| rest | **GAP** — no outcome listing route |
+| go | `ListOutcomes` |
+| rest | `GET /v1/outcomes` |
 | grpc | `ListOutcomes` |
-| mcp | **GAP** — no outcome listing tool |
+| mcp | `list_outcomes` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no outcome listing |
+| client | `ListOutcomes` |
+
+> Every binding reads through internal/skills.Outcomes; an outcome belongs to its action's run for run-scoped tokens.
 
 ### synthesis.run
 
@@ -895,13 +899,15 @@ List synthesized schemas (lessons) (read).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no schema listing on Memory |
-| rest | **GAP** — no lesson listing route; /v1/schemas lists PROMOTED global schemas |
+| go | `ListLessons` |
+| rest | `GET /v1/tenant-schemas` |
 | grpc | `ListSchemas` |
 | mcp | `query_schemas` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no schema listing |
+| client | `ListLessons` |
+
+> Every binding reads through internal/skills.Schemas. REST names the tenant tier (/v1/tenant-schemas) because /v1/schemas is schema.global_list.
 
 ### schema.append
 
@@ -910,12 +916,14 @@ Append schemas (lessons) authored elsewhere (write).
 | Transport | Binding |
 |---|---|
 | go | _raw record I/O for remote clients; the library writes and reads through its own Memory operations_ |
-| rest | **GAP** — no schema append route |
+| rest | `POST /v1/tenant-schemas` |
 | grpc | `AppendSchemas` |
 | mcp | _schemas are synthesized, not written by agents_ |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no schema append |
+| client | `AppendLessons` |
+
+> REST and gRPC go through internal/skills.AppendSchemas (whole-batch validation, evidence must name stored actions) and govwrite's Writer.Lesson.
 
 ### schema.global_list
 
@@ -923,15 +931,15 @@ List schemas promoted to the shared (global) brain (read).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no promoted-schema read on Memory |
+| go | `ListGlobalSchemas` |
 | rest | `GET /v1/schemas` |
-| grpc | **GAP** — no promoted-schema RPC (ListSchemas is lessons) |
-| mcp | **GAP** — no promoted-schema tool |
+| grpc | `ListGlobalSchemas` |
+| mcp | `list_global_schemas` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no promoted-schema read |
+| client | `ListGlobalSchemas` |
 
-> Same word, different entity from schema.list: gRPC ListSchemas returns tenant lessons, REST /v1/schemas returns promoted global schemas.
+> Same word, different entity from schema.list: gRPC ListSchemas returns tenant lessons, REST /v1/schemas returns promoted global schemas. Every binding reads through internal/skills.GlobalSchemas from the base (cross-tenant) connection.
 
 ### reflex.list
 
@@ -939,13 +947,15 @@ List or match reflexes (playbooks) (read).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no reflex read on Memory |
-| rest | **GAP** — no reflex route |
+| go | `ListPlaybooks` |
+| rest | `GET /v1/reflexes` |
 | grpc | `ListReflexes` |
 | mcp | `query_reflex` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no reflex read |
+| client | `ListPlaybooks` |
+
+> Every binding reads through internal/skills.Reflexes.
 
 ### reflex.append
 
@@ -954,12 +964,14 @@ Append reflexes (playbooks) authored elsewhere (write).
 | Transport | Binding |
 |---|---|
 | go | _raw record I/O for remote clients; the library writes and reads through its own Memory operations_ |
-| rest | **GAP** — no reflex append route |
+| rest | `POST /v1/reflexes` |
 | grpc | `AppendReflexes` |
 | mcp | _reflexes are synthesized, not written by agents_ |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no reflex append |
+| client | `AppendPlaybooks` |
+
+> REST and gRPC go through internal/skills.AppendReflexes (whole-batch validation, derived-from ids must name stored schemas) and govwrite's Writer.Playbook.
 
 ### decision.record
 
@@ -1039,13 +1051,15 @@ Open, list, read and resolve incidents (write).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no incident operations on Memory |
+| go | `OpenIncident`, `ListIncidents`, `GetIncident`, `ResolveIncident` |
 | rest | `POST /v1/incidents`, `GET /v1/incidents`, `GET /v1/incidents/{id}`, `POST /v1/incidents/{id}/resolve` |
-| grpc | **GAP** — no incident RPCs |
-| mcp | **GAP** — no incident tools |
+| grpc | `OpenIncident`, `ListIncidents`, `GetIncident`, `ResolveIncident` |
+| mcp | `open_incident`, `list_incidents`, `get_incident`, `resolve_incident` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no incident calls |
+| client | `OpenIncident`, `ListIncidents`, `GetIncident`, `ResolveIncident` |
+
+> Every binding goes through internal/incident (validation, not-found before any write, author from the caller) and govwrite's incident writes: Writer.Incident/ResolveIncident on the daemon surfaces, ApplyIncident/ApplyResolveIncident inside the library's governed kernel. Incident storage exists on sqlite and memory only; elsewhere every binding reports it unsupported (REST 501, gRPC Unimplemented).
 
 ### incident.why_wrong
 
@@ -1053,13 +1067,15 @@ Post-mortem: which beliefs and decisions led to an incident (read).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no post-mortem read on Memory |
+| go | `WhyWereWeWrong` |
 | rest | `GET /v1/incidents/{id}/why-wrong` |
-| grpc | **GAP** — no post-mortem RPC |
-| mcp | **GAP** — no post-mortem tool |
+| grpc | `WhyWereWeWrong` |
+| mcp | `why_were_we_wrong` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no post-mortem read |
+| client | `WhyWereWeWrong` |
+
+> Every binding runs internal/incident.WhyWereWeWrong; an unknown incident is not-found on every transport.
 
 ### federation.export
 

@@ -455,9 +455,10 @@ var Registry = []Capability{
 		ID: "action.list", Effect: Read,
 		Summary: "List recorded actions",
 		On: map[Transport]Binding{
-			Go: Gap("no action listing on Memory"), REST: Gap("no action listing route"), GRPC: Has("ListActions"),
-			MCP: Gap("no action listing tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no action listing"),
+			Go: Has("ListActions"), REST: Has("GET /v1/actions"), GRPC: Has("ListActions"),
+			MCP: Has("list_actions"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ListActions"),
 		},
+		Notes: "Every binding reads through internal/skills.Actions; a run-scoped token sees only its runs and naming another run is refused.",
 	},
 	{
 		ID: "outcome.record", Effect: Write,
@@ -471,9 +472,10 @@ var Registry = []Capability{
 		ID: "outcome.list", Effect: Read,
 		Summary: "List recorded outcomes",
 		On: map[Transport]Binding{
-			Go: Gap("no outcome listing on Memory"), REST: Gap("no outcome listing route"), GRPC: Has("ListOutcomes"),
-			MCP: Gap("no outcome listing tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no outcome listing"),
+			Go: Has("ListOutcomes"), REST: Has("GET /v1/outcomes"), GRPC: Has("ListOutcomes"),
+			MCP: Has("list_outcomes"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ListOutcomes"),
 		},
+		Notes: "Every binding reads through internal/skills.Outcomes; an outcome belongs to its action's run for run-scoped tokens.",
 	},
 	{
 		ID: "synthesis.run", Effect: Write,
@@ -488,42 +490,46 @@ var Registry = []Capability{
 		ID: "schema.list", Effect: Read,
 		Summary: "List synthesized schemas (lessons)",
 		On: map[Transport]Binding{
-			Go: Gap("no schema listing on Memory"), REST: Gap("no lesson listing route; /v1/schemas lists PROMOTED global schemas"), GRPC: Has("ListSchemas"),
-			MCP: Has("query_schemas"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no schema listing"),
+			Go: Has("ListLessons"), REST: Has("GET /v1/tenant-schemas"), GRPC: Has("ListSchemas"),
+			MCP: Has("query_schemas"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ListLessons"),
 		},
+		Notes: "Every binding reads through internal/skills.Schemas. REST names the tenant tier (/v1/tenant-schemas) because /v1/schemas is schema.global_list.",
 	},
 	{
 		ID: "schema.append", Effect: Write,
 		Summary: "Append schemas (lessons) authored elsewhere",
 		On: map[Transport]Binding{
-			Go: No(notLibraryRaw), REST: Gap("no schema append route"), GRPC: Has("AppendSchemas"),
-			MCP: No("schemas are synthesized, not written by agents"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no schema append"),
+			Go: No(notLibraryRaw), REST: Has("POST /v1/tenant-schemas"), GRPC: Has("AppendSchemas"),
+			MCP: No("schemas are synthesized, not written by agents"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("AppendLessons"),
 		},
+		Notes: "REST and gRPC go through internal/skills.AppendSchemas (whole-batch validation, evidence must name stored actions) and govwrite's Writer.Lesson.",
 	},
 	{
 		ID: "schema.global_list", Effect: Read,
 		Summary: "List schemas promoted to the shared (global) brain",
 		On: map[Transport]Binding{
-			Go: Gap("no promoted-schema read on Memory"), REST: Has("GET /v1/schemas"), GRPC: Gap("no promoted-schema RPC (ListSchemas is lessons)"),
-			MCP: Gap("no promoted-schema tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no promoted-schema read"),
+			Go: Has("ListGlobalSchemas"), REST: Has("GET /v1/schemas"), GRPC: Has("ListGlobalSchemas"),
+			MCP: Has("list_global_schemas"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ListGlobalSchemas"),
 		},
-		Notes: "Same word, different entity from schema.list: gRPC ListSchemas returns tenant lessons, REST /v1/schemas returns promoted global schemas.",
+		Notes: "Same word, different entity from schema.list: gRPC ListSchemas returns tenant lessons, REST /v1/schemas returns promoted global schemas. Every binding reads through internal/skills.GlobalSchemas from the base (cross-tenant) connection.",
 	},
 	{
 		ID: "reflex.list", Effect: Read,
 		Summary: "List or match reflexes (playbooks)",
 		On: map[Transport]Binding{
-			Go: Gap("no reflex read on Memory"), REST: Gap("no reflex route"), GRPC: Has("ListReflexes"),
-			MCP: Has("query_reflex"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no reflex read"),
+			Go: Has("ListPlaybooks"), REST: Has("GET /v1/reflexes"), GRPC: Has("ListReflexes"),
+			MCP: Has("query_reflex"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ListPlaybooks"),
 		},
+		Notes: "Every binding reads through internal/skills.Reflexes.",
 	},
 	{
 		ID: "reflex.append", Effect: Write,
 		Summary: "Append reflexes (playbooks) authored elsewhere",
 		On: map[Transport]Binding{
-			Go: No(notLibraryRaw), REST: Gap("no reflex append route"), GRPC: Has("AppendReflexes"),
-			MCP: No("reflexes are synthesized, not written by agents"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no reflex append"),
+			Go: No(notLibraryRaw), REST: Has("POST /v1/reflexes"), GRPC: Has("AppendReflexes"),
+			MCP: No("reflexes are synthesized, not written by agents"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("AppendPlaybooks"),
 		},
+		Notes: "REST and gRPC go through internal/skills.AppendReflexes (whole-batch validation, derived-from ids must name stored schemas) and govwrite's Writer.Playbook.",
 	},
 
 	// --- Decisions -------------------------------------------------------
@@ -576,18 +582,22 @@ var Registry = []Capability{
 		ID: "incident.manage", Effect: Write,
 		Summary: "Open, list, read and resolve incidents",
 		On: map[Transport]Binding{
-			Go:   Gap("no incident operations on Memory"),
+			Go:   Has("OpenIncident", "ListIncidents", "GetIncident", "ResolveIncident"),
 			REST: Has("POST /v1/incidents", "GET /v1/incidents", "GET /v1/incidents/{id}", "POST /v1/incidents/{id}/resolve"),
-			GRPC: Gap("no incident RPCs"), MCP: Gap("no incident tools"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no incident calls"),
+			GRPC: Has("OpenIncident", "ListIncidents", "GetIncident", "ResolveIncident"),
+			MCP:  Has("open_incident", "list_incidents", "get_incident", "resolve_incident"), MCPLite: No(notLite), HTTPLite: No(notLite),
+			Client: Has("OpenIncident", "ListIncidents", "GetIncident", "ResolveIncident"),
 		},
+		Notes: "Every binding goes through internal/incident (validation, not-found before any write, author from the caller) and govwrite's incident writes: Writer.Incident/ResolveIncident on the daemon surfaces, ApplyIncident/ApplyResolveIncident inside the library's governed kernel. Incident storage exists on sqlite and memory only; elsewhere every binding reports it unsupported (REST 501, gRPC Unimplemented).",
 	},
 	{
 		ID: "incident.why_wrong", Effect: Read,
 		Summary: "Post-mortem: which beliefs and decisions led to an incident",
 		On: map[Transport]Binding{
-			Go: Gap("no post-mortem read on Memory"), REST: Has("GET /v1/incidents/{id}/why-wrong"), GRPC: Gap("no post-mortem RPC"),
-			MCP: Gap("no post-mortem tool"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no post-mortem read"),
+			Go: Has("WhyWereWeWrong"), REST: Has("GET /v1/incidents/{id}/why-wrong"), GRPC: Has("WhyWereWeWrong"),
+			MCP: Has("why_were_we_wrong"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("WhyWereWeWrong"),
 		},
+		Notes: "Every binding runs internal/incident.WhyWereWeWrong; an unknown incident is not-found on every transport.",
 	},
 	{
 		ID: "federation.export", Effect: Read,

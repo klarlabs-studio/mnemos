@@ -28,6 +28,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/incident"
 	markdownpkg "go.klarlabs.de/mnemos/internal/markdown"
 	"go.klarlabs.de/mnemos/internal/page"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -515,7 +516,10 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux.HandleFunc("/v1/passages", makePassagesHandler(mem))
 	// Working memory + skill loop + temporal (v0.69): the last of the cognitive layer.
 	mux.HandleFunc("/v1/blocks", makeBlocksHandler(mem))
-	mux.HandleFunc("/v1/actions", makeActionsHandler(mem))
+	mux.HandleFunc("/v1/actions", makeActionsHandler(conn, mem))
+	mux.HandleFunc("/v1/outcomes", makeOutcomesHandler(conn))
+	mux.HandleFunc("/v1/tenant-schemas", makeTenantSchemasHandler(conn, gw))
+	mux.HandleFunc("/v1/reflexes", makeReflexesHandler(conn, gw))
 	mux.HandleFunc("/v1/actions/", makeActionSubresourceHandler(mem))
 	mux.HandleFunc("/v1/synthesize", makeSynthesizeHandler(mem))
 	mux.HandleFunc("/v1/timeline", makeTimelineHandler(mem))
@@ -2872,11 +2876,14 @@ func makeClaimMarkdownExportHandler(conn *store.Conn, claimID string) http.Handl
 
 // incidentRequest is the body for POST /v1/incidents.
 type incidentRequest struct {
-	ID               string `json:"id"`
-	Title            string `json:"title"`
-	Summary          string `json:"summary"`
-	Severity         string `json:"severity"`
-	RootCauseClaimID string `json:"root_cause_claim_id"`
+	ID               string   `json:"id"`
+	Title            string   `json:"title"`
+	Summary          string   `json:"summary"`
+	Severity         string   `json:"severity"`
+	RootCauseClaimID string   `json:"root_cause_claim_id"`
+	DecisionIDs      []string `json:"decision_ids"`
+	OutcomeIDs       []string `json:"outcome_ids"`
+	TimelineEventIDs []string `json:"timeline_event_ids"`
 	// CreatedBy is accepted and IGNORED. Authorship comes from the
 	// authenticated token (actorFromContext), never from the body — a caller
 	// that could name its own author could file an incident under someone
@@ -2895,7 +2902,7 @@ func makeIncidentsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFun
 		gw := scopedWriter(r.Context(), gw)
 		switch r.Method {
 		case http.MethodPost:
-			openIncidentHandler(gw, w, r)
+			openIncidentHandler(conn, gw, w, r)
 		case http.MethodGet:
 			listIncidentsHandler(conn, w, r)
 		default:
@@ -2904,7 +2911,7 @@ func makeIncidentsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFun
 	}
 }
 
-func openIncidentHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
+func openIncidentHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
 	// Opening an incident is a durable, governed write; it was the only REST
 	// POST that took no scope at all, so a read-only token could file
 	// incidents. Incidents are claim-adjacent records, hence claims:write —
@@ -2917,69 +2924,34 @@ func openIncidentHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid body: %v", err))
 		return
 	}
-	if strings.TrimSpace(req.Title) == "" {
-		writeError(w, http.StatusBadRequest, "title is required")
-		return
-	}
-	id := req.ID
-	if id == "" {
-		gen, err := newID("inc_")
-		if err != nil {
-			writeInternalError(w, "generate incident id", err)
-			return
-		}
-		id = gen
-	}
-	severity := domain.IncidentSeverity(req.Severity)
-	if severity == "" {
-		severity = domain.IncidentSeverityMedium
-	}
 	ctx := r.Context()
-	inc := domain.Incident{
-		ID:               id,
-		Title:            req.Title,
-		Summary:          req.Summary,
-		Severity:         severity,
-		Status:           domain.IncidentStatusOpen,
-		RootCauseClaimID: req.RootCauseClaimID,
-		OpenedAt:         time.Now().UTC(),
+	inc, err := incident.Open(ctx, conn.Incidents, gw.Incident, incident.OpenRequest{
+		ID: req.ID, Title: req.Title, Summary: req.Summary, Severity: req.Severity,
+		RootCauseClaimID: req.RootCauseClaimID, DecisionIDs: req.DecisionIDs,
+		OutcomeIDs: req.OutcomeIDs, TimelineEventIDs: req.TimelineEventIDs,
 		// Attribution follows the token, not req.CreatedBy — every other write
 		// path on this surface stamps the context actor, and a body-supplied
 		// author is forgeable.
-		CreatedBy: actorFromContext(ctx),
-	}
-	if _, err := gw.Incident(ctx, inc); err != nil {
-		writeInternalError(w, "upsert incident", err)
+		Actor: actorFromContext(ctx),
+	})
+	if err != nil {
+		writeIncidentError(w, "open incident", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, inc)
 }
 
+// listIncidentsHandler serves GET /v1/incidents?severity=&status=&limit=&offset=
+// as {"incidents":[...],"total","limit","offset"}, like every paged listing.
 func listIncidentsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
-	if conn.Incidents == nil {
-		writeError(w, http.StatusNotImplemented, "incident storage not available on this backend")
-		return
-	}
-	ctx := r.Context()
-	severityFilter := r.URL.Query().Get("severity")
-	statusFilter := r.URL.Query().Get("status")
-	var (
-		incidents []domain.Incident
-		err       error
-	)
-	switch {
-	case severityFilter != "":
-		incidents, err = conn.Incidents.ListBySeverity(ctx, domain.IncidentSeverity(severityFilter))
-	case statusFilter != "":
-		incidents, err = conn.Incidents.ListByStatus(ctx, domain.IncidentStatus(statusFilter))
-	default:
-		incidents, err = conn.Incidents.ListAll(ctx)
-	}
+	q := r.URL.Query()
+	limit, offset := pageQuery(r)
+	incidents, err := incident.List(r.Context(), conn.Incidents, incident.Filter{Severity: q.Get("severity"), Status: q.Get("status")})
 	if err != nil {
-		writeInternalError(w, "list incidents", err)
+		writeIncidentError(w, "list incidents", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, incidents)
+	writeList(w, "incidents", incidents, limit, offset, func(i domain.Incident) domain.Incident { return i })
 }
 
 // makeIncidentSubresourceHandler handles:
@@ -3012,13 +2984,9 @@ func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.
 		ctx := r.Context()
 		switch {
 		case sub == "" && r.Method == http.MethodGet:
-			inc, found, err := conn.Incidents.GetByID(ctx, id)
+			inc, err := incident.Get(ctx, conn.Incidents, id)
 			if err != nil {
-				writeInternalError(w, "get incident", err)
-				return
-			}
-			if !found {
-				writeError(w, http.StatusNotFound, fmt.Sprintf("incident %q not found", id))
+				writeIncidentError(w, "get incident", err)
 				return
 			}
 			writeJSON(w, http.StatusOK, inc)
@@ -3029,22 +2997,20 @@ func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.
 			if !requireScope(w, r, domain.ScopeClaimsWrite) {
 				return
 			}
-			if err := gw.ResolveIncident(ctx, id, time.Now().UTC()); err != nil {
-				writeInternalError(w, "resolve incident", err)
+			inc, err := incident.Resolve(ctx, conn.Incidents, gw.ResolveIncident, id)
+			if err != nil {
+				writeIncidentError(w, "resolve incident", err)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": string(domain.IncidentStatusResolved)})
+			writeJSON(w, http.StatusOK, map[string]string{"id": inc.ID, "status": string(inc.Status)})
 
 		case sub == "why-wrong" && r.Method == http.MethodGet:
-			eng := query.NewEngine(conn.Events, conn.Claims, conn.Relationships).
-				WithDecisions(conn.Decisions).
-				WithIncidents(conn.Incidents)
-			report, err := eng.WhyWereWeWrong(ctx, id)
+			report, err := incident.WhyWereWeWrong(ctx, conn, id)
 			if err != nil {
-				writeError(w, http.StatusNotFound, fmt.Sprintf("why-wrong analysis failed: %v", err))
+				writeIncidentError(w, "why-wrong analysis", err)
 				return
 			}
-			writeJSON(w, http.StatusOK, report)
+			writeJSON(w, http.StatusOK, whyWrongToDTO(report))
 
 		default:
 			writeError(w, http.StatusNotFound, fmt.Sprintf("unknown incident sub-resource %q", sub))
