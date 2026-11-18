@@ -15,7 +15,9 @@ import (
 //
 // 2: timeline scenarios (seed.phases, as_of_* metrics), raw-retrieval baselines
 // (scenarios[].baselines, baseline_summary) and per-scenario question lists.
-const ReportVersion = 2
+// 3: the evidence-retraction track (scenarios[].retraction,
+// retraction_summary, retraction_baseline_summary, retraction_hypotheses).
+const ReportVersion = 3
 
 // Report is the harness's complete machine-readable output.
 type Report struct {
@@ -33,6 +35,17 @@ type Report struct {
 	// HasRegression: a baseline win is a finding about Mnemos's semantics,
 	// not a regression caused by a process.
 	BaselineSummary map[string]BaselineSummary `json:"baseline_summary"`
+
+	// RetractionSummary totals the retraction tracks' effect comparisons
+	// (retracted arm vs unretracted reference). A retraction that loses a
+	// supported belief is a regression caused by the operation under test, so
+	// it counts in HasRegression.
+	RetractionSummary Summary `json:"retraction_summary"`
+	// RetractionBaselineSummary totals, per baseline, how the retracted arm
+	// compared with raw retrieval whose retraction removed chunks only.
+	RetractionBaselineSummary map[string]BaselineSummary `json:"retraction_baseline_summary"`
+	// RetractionHypotheses counts the retraction tracks' hypothesis verdicts.
+	RetractionHypotheses map[HypothesisVerdict]int `json:"retraction_hypotheses"`
 }
 
 // Config records the conditions the numbers were produced under. It travels
@@ -108,6 +121,16 @@ func Limitations() []string {
 			"two lexical retrievers plus Mnemos's structure. It says nothing about dense-retrieval RAG.",
 		"Baselines are compared with the untreated arm only. They are not consolidated, so comparing " +
 			"them with the treatment arm would mix the process effect into the baseline effect.",
+		"Evidence retraction is judged on author-declared gold roles (original, copy, derived, " +
+			"corroborated, independent). Mnemos recognises a dependent only through evidence links: a " +
+			"verbatim restatement in another document is folded onto the original belief at ingest and " +
+			"counts as independent evidence, and a paraphrase or a conclusion drawn in another document is " +
+			"a separate belief the retraction does not reach. The track measures that gap; it does not " +
+			"model provenance between documents, and no scenario is special-cased to close it.",
+		"Retraction impact precision and recall count beliefs for Mnemos and sentence chunks for the " +
+			"baselines. A baseline 'withdraws' the retracted document's copy of a sentence even when " +
+			"another document still holds it; Mnemos keeps one belief and rescores it. Survival, not the " +
+			"impact report, is what says whether an unsupported statement is still held.",
 		"Timeline phases are milliseconds apart on the wall clock, not days. Valid-time freshness and " +
 			"decay see no age difference between phases, and a wall-clock step backwards during a run " +
 			"would misorder them (TestRun_TimelinePhasesAreOrderedOnTheWriteClock guards the order). " +
@@ -127,29 +150,47 @@ func BuildReport(results []ScenarioResult) Report {
 		Verdicts:    map[RunVerdict]int{},
 
 		BaselineSummary: map[string]BaselineSummary{},
+
+		RetractionBaselineSummary: map[string]BaselineSummary{},
+		RetractionHypotheses:      map[HypothesisVerdict]int{},
 	}
 	for _, s := range results {
+		if rt := s.Retraction; rt != nil {
+			r.RetractionSummary.add(rt.Summary)
+			r.RetractionHypotheses[rt.Hypothesis.Verdict]++
+			for _, b := range rt.Baselines {
+				sum := r.RetractionBaselineSummary[b.Name]
+				sum.add(b.Summary)
+				r.RetractionBaselineSummary[b.Name] = sum
+			}
+		}
 		for _, b := range s.Baselines {
 			sum := r.BaselineSummary[b.Name]
 			sum.add(b.Summary)
 			r.BaselineSummary[b.Name] = sum
 		}
-		r.Summary.Better += s.Summary.Better
-		r.Summary.Worse += s.Summary.Worse
-		r.Summary.Unchanged += s.Summary.Unchanged
-		r.Summary.Changed += s.Summary.Changed
-		r.Summary.Unknown += s.Summary.Unknown
+		r.Summary.add(s.Summary)
 		r.Verdicts[s.Verdict]++
 	}
 	return r
 }
 
-// HasRegression reports whether any scenario degraded a scored metric. Callers
+// add accumulates another summary into s.
+func (s *Summary) add(o Summary) {
+	s.Better += o.Better
+	s.Worse += o.Worse
+	s.Unchanged += o.Unchanged
+	s.Changed += o.Changed
+	s.Unknown += o.Unknown
+}
+
+// HasRegression reports whether any scenario degraded a scored metric, in the
+// process track or the retraction track. Callers
 // that want the harness to gate CI use this; it is not the default, because the
 // harness's job is to report honestly, not to block on a number nobody has
 // baselined yet.
 func (r Report) HasRegression() bool {
-	return r.Summary.Worse > 0
+	return r.Summary.Worse > 0 || r.RetractionSummary.Worse > 0
 }
 
 // WriteJSON emits the machine-readable report.
@@ -234,6 +275,9 @@ func (r Report) WriteHuman(w io.Writer) error {
 			s.Summary.Better, s.Summary.Worse, s.Summary.Unchanged, s.Summary.Changed, s.Summary.Unknown)
 		p("  VERDICT: %s — %s\n\n", s.Verdict, verdictExplanation(s.Verdict))
 		writeBaselines(p, s)
+		if s.Retraction != nil {
+			writeRetraction(p, s.Retraction)
+		}
 	}
 
 	p("──────────────────────────────────────────────────────────────────────\n")
@@ -254,6 +298,27 @@ func (r Report) WriteHuman(w io.Writer) error {
 		b := r.BaselineSummary[n]
 		p("MNEMOS vs %s: %d mnemos-better, %d baseline-better, %d tie, %d unknown\n",
 			n, b.MnemosBetter, b.BaselineBetter, b.Tie, b.Unknown)
+	}
+	if len(r.RetractionHypotheses) > 0 {
+		s := r.RetractionSummary
+		p("RETRACTION: %d better, %d worse, %d unchanged, %d changed-but-unscored, %d unknown\n",
+			s.Better, s.Worse, s.Unchanged, s.Changed, s.Unknown)
+		hyp := make([]string, 0, len(r.RetractionHypotheses))
+		for v, n := range r.RetractionHypotheses {
+			hyp = append(hyp, fmt.Sprintf("%s=%d", v, n))
+		}
+		sort.Strings(hyp)
+		p("RETRACTION HYPOTHESIS: %s\n", strings.Join(hyp, " "))
+		rnames := make([]string, 0, len(r.RetractionBaselineSummary))
+		for n := range r.RetractionBaselineSummary {
+			rnames = append(rnames, n)
+		}
+		sort.Strings(rnames)
+		for _, n := range rnames {
+			b := r.RetractionBaselineSummary[n]
+			p("RETRACTED MNEMOS vs %s: %d mnemos-better, %d baseline-better, %d tie, %d unknown\n",
+				n, b.MnemosBetter, b.BaselineBetter, b.Tie, b.Unknown)
+		}
 	}
 	p("\n")
 
@@ -388,4 +453,92 @@ func wrapIndent(s string, width int, indent string) string {
 		lineLen += len(w)
 	}
 	return b.String()
+}
+
+// writeRetraction renders one scenario's evidence-retraction track.
+func writeRetraction(p func(string, ...any), rt *RetractionResult) {
+	p("  RETRACTION (ADR 0037) — episode %s (%s)\n", rt.Episode, rt.EpisodeID)
+	p("    recognition: %s\n", wrapIndent(rt.Recognition, 72, "                 "))
+	if rt.Validity.Deterministic {
+		p("    measurement deterministic: yes (two retracted arms agreed on every metric)\n")
+	} else {
+		p("    measurement deterministic: NO — %s\n", strings.Join(rt.Validity.NondeterministicMetrics, ", "))
+	}
+	p("    activity: %d beliefs withdrawn or rescored\n", rt.Activity)
+	p("\n    EFFECT (retracted minus unretracted reference)\n")
+	p("    %-34s %10s %10s %10s  %s\n", "metric", "reference", "retracted", "delta", "verdict")
+	for _, c := range rt.Effect {
+		delta := "—"
+		if c.Verdict != VerdictUnknown {
+			delta = fmt.Sprintf("%+.4f", c.Delta)
+		}
+		p("    %-34s %10s %10s %10s  %s%s\n", c.Name, fmtMetric(c.Control), fmtMetric(c.Treatment),
+			delta, verdictMark(c.Verdict), verdictLabel(c))
+		if c.Note != "" {
+			p("    %-34s %s\n", "", "^ "+c.Note)
+		}
+	}
+	p("    VERDICT: %s — %s\n\n", rt.Verdict, verdictExplanation(rt.Verdict))
+
+	if len(rt.Baselines) > 0 {
+		p("    BASELINE (retracted Mnemos arm vs raw retrieval with the document's chunks removed)\n")
+		p("    %-26s %10s", "metric", "mnemos")
+		for _, b := range rt.Baselines {
+			p(" %17s", b.Name)
+		}
+		p("  verdicts\n")
+		for i, c := range rt.Baselines[0].Comparisons {
+			p("    %-26s %10s", c.Name, fmtMetric(c.Mnemos))
+			verdicts := make([]string, 0, len(rt.Baselines))
+			for _, b := range rt.Baselines {
+				if i >= len(b.Comparisons) || b.Comparisons[i].Name != c.Name {
+					p(" %17s", "unknown")
+					verdicts = append(verdicts, string(BaselineUnknown))
+					continue
+				}
+				p(" %17s", fmtMetric(b.Comparisons[i].Baseline))
+				verdicts = append(verdicts, string(b.Comparisons[i].Verdict))
+			}
+			p("  %s\n", strings.Join(verdicts, " / "))
+		}
+		p("\n")
+	}
+
+	p("    PER BELIEF (S surviving, Q surfaced by a query, W withdrawn, R rescored; - = no)\n")
+	p("    %-13s %-40s %9s %9s", "role", "gold", "reference", "retracted")
+	for _, b := range rt.Baselines {
+		p(" %17s", b.Name)
+	}
+	p("\n")
+	for _, it := range rt.Items {
+		p("    %-13s %-40s %9s %9s", it.Role, truncate(it.Text, 40), stateCode(it.Reference), stateCode(it.Retracted))
+		for _, b := range rt.Baselines {
+			p(" %17s", stateCode(it.Baselines[b.Name]))
+		}
+		p("\n")
+	}
+	p("\n    HYPOTHESIS: %s — %s\n", rt.Hypothesis.Verdict, rt.Hypothesis.Statement)
+	for _, reason := range rt.Hypothesis.Reasons {
+		p("      - %s\n", reason)
+	}
+	p("\n")
+}
+
+// stateCode renders an ItemState as four fixed columns.
+func stateCode(s ItemState) string {
+	code := []byte("----")
+	for i, on := range []bool{s.Surviving, s.Surfaced, s.Withdrawn, s.Rescored} {
+		if on {
+			code[i] = "SQWR"[i]
+		}
+	}
+	return string(code)
+}
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
 }
