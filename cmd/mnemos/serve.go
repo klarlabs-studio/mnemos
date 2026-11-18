@@ -486,6 +486,7 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux.Handle("/v1/leads", leadsRateLimitMiddleware(makeLeadsHandler(leadsLogger)))
 	mux.HandleFunc("/v1/process", makeProcessHandler())
 	mux.HandleFunc("/v1/episodes", makeEventsHandler(conn, gw))
+	mux.HandleFunc("/v1/episodes/", makeEpisodeSubresourceHandler(gw))
 	mux.HandleFunc("/v1/beliefs", makeClaimsHandler(conn, gw))
 	mux.HandleFunc("/v1/associations", makeRelationshipsHandler(conn, gw))
 	mux.HandleFunc("/v1/embeddings", makeEmbeddingsHandler(conn, gw))

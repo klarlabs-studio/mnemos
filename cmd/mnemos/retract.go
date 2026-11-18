@@ -7,53 +7,34 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
-	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/retraction"
 	"go.klarlabs.de/mnemos/internal/workflow"
 )
 
 // Event retraction on the CLI and over MCP (ADR 0037).
 //
-// Both surfaces call runRetraction, which calls govwrite.Writer.RetractEvent —
-// the single implementation — and render its report through retractionView, so
-// `mnemos retract-event --json` and the retract_episode tool return the same
-// document for the same store. Only argument parsing and authorization differ.
+// Both surfaces — and REST, gRPC and the Go library — call retraction.Run,
+// which validates the request once and calls govwrite.Writer.RetractEvent, the
+// single implementation, and render its report through retraction.Report, so
+// `mnemos retract-event --json`, the retract_episode tool and REST return the
+// same document for the same store. Only argument parsing and authorization
+// differ.
 
-// retractionView is the wire form of a retraction report, shared by the CLI's
-// JSON output and the MCP tool. Times are RFC 3339 strings.
-type retractionView struct {
-	EpisodeID        string                  `json:"episode_id"`
-	RetractedAt      string                  `json:"retracted_at"`
-	RetractedBy      string                  `json:"retracted_by"`
-	Reason           string                  `json:"reason,omitempty"`
-	AlreadyRetracted bool                    `json:"already_retracted"`
-	Impact           domain.RetractionImpact `json:"impact"`
-}
+// retractionView is the wire form of a retraction report.
+type retractionView = retraction.Report
 
-func newRetractionView(rep domain.EventRetraction) retractionView {
-	return retractionView{
-		EpisodeID:        rep.EventID,
-		RetractedAt:      rep.RetractedAt.UTC().Format(time.RFC3339Nano),
-		RetractedBy:      rep.RetractedBy,
-		Reason:           rep.Reason,
-		AlreadyRetracted: rep.AlreadyRetracted,
-		Impact:           rep.Impact,
-	}
-}
-
-// runRetraction is the one call path from a surface to the retraction.
-func runRetraction(ctx context.Context, w *govwrite.Writer, eventID, reason, actor string) (retractionView, error) {
-	eventID = strings.TrimSpace(eventID)
-	if eventID == "" {
-		return retractionView{}, userInputError(errors.New("an episode id is required"))
-	}
-	rep, err := w.RetractEvent(ctx, eventID, domain.ChangeNote{Reason: strings.TrimSpace(reason), ChangedBy: actor})
+// runRetraction is the one call path from a daemon surface to the retraction.
+// runAllowed, when non-nil, confines the caller to its runs.
+func runRetraction(ctx context.Context, w *govwrite.Writer, eventID, reason, actor string, runAllowed func(string) bool) (retractionView, error) {
+	rep, err := retraction.Run(ctx, w.Conn().Events, w.RetractEvent, retraction.Request{
+		EventID: eventID, Reason: reason, Actor: actor, RunAllowed: runAllowed,
+	})
 	if err != nil {
 		return retractionView{}, err
 	}
-	return newRetractionView(rep), nil
+	return retraction.NewReport(rep), nil
 }
 
 // --- MCP ---
@@ -72,16 +53,9 @@ func mcpRunRetractEpisode(ctx context.Context, actor string, input mcpRetractEpi
 	}
 	defer closeWriter(gw)
 	// A run-scoped token may retract only episodes of its runs.
-	if id := strings.TrimSpace(input.EpisodeID); id != "" {
-		ev, err := gw.Conn().Events.GetByID(ctx, id)
-		if err != nil {
-			return mcpRetractEpisodeOutput{}, fmt.Errorf("episode %s not found", id)
-		}
-		if !mcpRunAllowed(ctx, ev.RunID) {
-			return mcpRetractEpisodeOutput{}, fmt.Errorf("episode %s not found", id)
-		}
-	}
-	return runRetraction(ctx, gw, input.EpisodeID, input.Reason, actor)
+	return runRetraction(ctx, gw, input.EpisodeID, input.Reason, actor, func(runID string) bool {
+		return mcpRunAllowed(ctx, runID)
+	})
 }
 
 // --- CLI ---
@@ -120,7 +94,10 @@ func handleRetractEvent(args []string, f Flags) {
 		if err != nil {
 			return NewUserError("%v", err)
 		}
-		view, err := runRetraction(ctx, w, id, reason, actor)
+		view, err := runRetraction(ctx, w, id, reason, actor, nil)
+		if errors.Is(err, retraction.ErrEventNotFound) {
+			return NewUserError("event %s not found", id)
+		}
 		if err != nil {
 			return NewSystemError(err, "retract event %s", id)
 		}

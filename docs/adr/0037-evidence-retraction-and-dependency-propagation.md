@@ -139,8 +139,18 @@ tool (`retract_episode`, scope `claims:write`) both go through `runRetraction`
 through one view type, so the two surfaces return the same document for the same
 store (`TestRetract_MCPAndCLIShareOneOperation`). The MCP handler additionally
 refuses an episode outside a run-scoped token's allowlist, reporting it as not
-found. The capability is `episode.retract` in `internal/capability`; REST, gRPC,
-the Go library and the Go client are acknowledged gaps.
+found. The capability is `episode.retract` in `internal/capability`.
+
+Every other transport binds the same operation: the Go library
+(`Memory.RetractEvent`), REST (`POST /v1/episodes/{id}/retract`), gRPC
+(`RetractEpisode`) and the Go client (`Client.RetractEvent`). The request checks
+(required id, the event exists, run scope reported as not found) live once in
+`internal/retraction.Run`, which every surface calls, with a sentinel
+`ErrEventNotFound` so REST answers 404 and gRPC `NotFound` rather than 500. The
+daemon surfaces retract through `govwrite.Writer.RetractEvent`; the library
+dispatches through its own governed kernel to `govwrite.ApplyRetraction`, the
+same implementation. REST, MCP and the CLI return the same `retraction.Report`
+document. Every write binding requires `claims:write`.
 
 ### 5. Interaction with ADR 0036 (recorded-as-of reads)
 
@@ -234,8 +244,6 @@ logged and retried on the file's next change; the new version is already stored.
   retraction record.
 - **Un-retraction.** Clearing a retraction needs its own recorded transition
   (back to the prior status), not a deletion of the journal row.
-- **REST, gRPC, Go library and client bindings** (gaps in the capability
-  registry).
 - **Evidence-link timestamps**, which would let a recorded-as-of read restore a
   rescored belief's link to the retracted event (ADR 0036 step 3).
 - **Watch-file path aliasing.** Matching is on the resolved absolute path the
@@ -251,6 +259,7 @@ logged and retried on the file's next change; the new version is already stored.
    the same call; `watch_file` retracts revised and deleted text.
    **Implemented.**
 2. Recall excludes retracted events; persistent refresh flags read by
-   synthesis and decision review; REST/gRPC bindings.
+   synthesis and decision review; REST, gRPC, Go library and client bindings
+   (**bindings implemented**).
 3. Un-retraction as a recorded transition; evidence-link timestamps so as-of
    reads restore rescored links.
