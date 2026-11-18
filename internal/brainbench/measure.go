@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -54,8 +56,9 @@ const (
 // The two handles are opened sequentially, never concurrently: SQLite is
 // single-writer and the library Memory holds a writer.
 //
-// phases are the seed's timeline instants; nil for a corpus scenario.
-func Measure(ctx context.Context, dsn, dbPath string, sc Scenario, phases PhaseTimes) (MetricSet, error) {
+// phases are the seed's timeline instants; nil for a corpus scenario. ids is
+// the treatment's merge identity (see [Identity]), the same map for every arm.
+func Measure(ctx context.Context, dsn, dbPath string, sc Scenario, phases PhaseTimes, ids Identity) (MetricSet, error) {
 	qs, err := buildQuestions(sc, phases)
 	if err != nil {
 		return MetricSet{}, err
@@ -64,7 +67,7 @@ func Measure(ctx context.Context, dsn, dbPath string, sc Scenario, phases PhaseT
 	// state: the library probes that follow apply retrieval write-backs, so a
 	// census taken afterwards would be measuring the harness's own footprint
 	// mixed in with the treatment's.
-	census, validTexts, err := measureCensus(ctx, dsn, dbPath)
+	census, validTexts, err := measureCensus(ctx, dsn, dbPath, ids)
 	if err != nil {
 		return MetricSet{}, err
 	}
@@ -156,9 +159,16 @@ func measureHealth(ctx context.Context, mem mnemos.Memory) ([]Metric, error) {
 		// Every ADR 0019 vital is a badness measure — prediction error,
 		// calibration error, dissonance rate, low-trust fraction, staleness
 		// fraction — except skill_coverage, which is a coverage fraction.
+		//
+		// trust_decay is shown but not scored: it counts claim rows, so a merge
+		// that folds a duplicate away moves it with no belief's freshness
+		// changing. trust_decay_by_identity is its scored form.
 		dir := LowerBetter
-		if v.Name == "skill_coverage" {
+		switch v.Name {
+		case "skill_coverage":
 			dir = HigherBetter
+		case "trust_decay":
+			dir = Descriptive
 		}
 		out = append(out, KnownMetric(name, dir, v.Value, 0, "ratio"))
 	}
@@ -176,7 +186,7 @@ func measureHealth(ctx context.Context, mem mnemos.Memory) ([]Metric, error) {
 
 // measureCensus counts what is physically in the store, and returns the text of
 // every currently-valid claim for the survival check.
-func measureCensus(ctx context.Context, dsn, dbPath string) ([]Metric, []string, error) {
+func measureCensus(ctx context.Context, dsn, dbPath string, ids Identity) ([]Metric, []string, error) {
 	conn, err := store.Open(ctx, dsn)
 	if err != nil {
 		return nil, nil, fmt.Errorf("brainbench: open census handle: %w", err)
@@ -273,6 +283,12 @@ func measureCensus(ctx context.Context, dsn, dbPath string) ([]Metric, []string,
 		KnownMetric(MetricNoiseFraction, LowerBetter, ratio(junk, valid), valid, "ratio"),
 	}
 
+	decay, err := measureIdentityTrustDecay(ctx, conn, claims, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	out = append(out, decay)
+
 	if size, err := dbSize(dbPath); err == nil {
 		out = append(out, KnownMetric(MetricDBBytes, Descriptive, float64(size), 0, "bytes"))
 	} else {
@@ -280,6 +296,22 @@ func measureCensus(ctx context.Context, dsn, dbPath string) ([]Metric, []string,
 			"database file size not readable for this backend"))
 	}
 	return out, validTexts, nil
+}
+
+// measureIdentityTrustDecay reads the canonical trust inputs (ADR 0026) and
+// scores trust_decay per belief identity. A backend without the trust-input
+// capability is unknown, not 0.
+func measureIdentityTrustDecay(ctx context.Context, conn *store.Conn, claims []domain.Claim, ids Identity) (Metric, error) {
+	lister, ok := conn.Claims.(ports.TrustInputLister)
+	if !ok {
+		return UnknownMetric(MetricTrustDecayByIdentity, LowerBetter,
+			"this backend does not expose canonical trust inputs"), nil
+	}
+	inputs, err := lister.ListTrustInputs(ctx, nil)
+	if err != nil {
+		return Metric{}, fmt.Errorf("brainbench: list trust inputs: %w", err)
+	}
+	return identityTrustDecay(claims, inputs, ids, time.Now().UTC()), nil
 }
 
 // dbSize sums the SQLite main file and its sidecars. Ignoring -wal would make
