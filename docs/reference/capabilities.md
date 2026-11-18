@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-77 capabilities, 56 acknowledged gaps.
+77 capabilities, 48 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -29,17 +29,17 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`timeline.query`](#timelinequery) | read | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | [`timeline.signals`](#timelinesignals) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.write`](#beliefwrite) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| [`belief.remember_fact`](#beliefremember_fact) | write | ✓ | ✓ | ✓ | ✓ | — | — | GAP |
+| [`belief.remember_fact`](#beliefremember_fact) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.get`](#beliefget) | read | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | [`belief.list`](#belieflist) | read | — | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`belief.scan`](#beliefscan) | read | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | GAP |
+| [`belief.scan`](#beliefscan) | read | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | [`belief.lifecycle`](#belieflifecycle) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`belief.govern`](#beliefgovern) | write | ✓ | ✓ | ✓ | ✓ | — | — | GAP |
-| [`belief.purge`](#beliefpurge) | write | — | ✓ | — | — | — | — | GAP |
+| [`belief.govern`](#beliefgovern) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`belief.purge`](#beliefpurge) | write | — | ✓ | — | — | — | — | ✓ |
 | [`belief.provenance`](#beliefprovenance) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.history`](#beliefhistory) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`belief.export_markdown`](#beliefexport_markdown) | read | — | ✓ | — | — | — | — | GAP |
-| [`belief.feedback`](#belieffeedback) | write | ✓ | ✓ | ✓ | ✓ | — | — | GAP |
+| [`belief.export_markdown`](#beliefexport_markdown) | read | — | ✓ | — | — | — | — | ✓ |
+| [`belief.feedback`](#belieffeedback) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.classify`](#beliefclassify) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.analogous`](#beliefanalogous) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`belief.decision_claims`](#beliefdecision_claims) | read | — | — | — | ✓ | — | — | — |
@@ -47,8 +47,8 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`association.list`](#associationlist) | read | — | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`association.append`](#associationappend) | write | — | ✓ | ✓ | — | — | — | ✓ |
 | [`dissonance.list`](#dissonancelist) | read | — | — | — | ✓ | — | — | — |
-| [`entity_association.list`](#entity_associationlist) | read | — | ✓ | ✓ | ✓ | — | — | GAP |
-| [`entity_association.append`](#entity_associationappend) | write | — | ✓ | ✓ | — | — | — | GAP |
+| [`entity_association.list`](#entity_associationlist) | read | — | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`entity_association.append`](#entity_associationappend) | write | — | ✓ | ✓ | — | — | — | ✓ |
 | [`embedding.list`](#embeddinglist) | read | — | ✓ | ✓ | — | — | — | ✓ |
 | [`embedding.append`](#embeddingappend) | write | — | ✓ | ✓ | — | — | — | ✓ |
 | [`recall.basic`](#recallbasic) | read | ✓ | — | — | — | ✓ | ✓ | — |
@@ -259,9 +259,9 @@ Store one fact as a belief, creating its evidence episode (write).
 | mcp | `remember` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no single-fact write |
+| client | `RememberClaimWithEvidence` |
 
-> MCP remember and Go RememberClaimWithEvidence are separate implementations of the same idea.
+> REST, gRPC and the client go through Memory.RememberClaimWithEvidence (one observation episode per evidence string, run-scoped tokens refused). MCP remember is a separate implementation that records the fact text itself as its one run-scoped episode.
 
 ### belief.get
 
@@ -303,7 +303,7 @@ Read beliefs valid within a time range (read).
 | mcp | `scan_beliefs` |
 | mcp-lite | `scan` |
 | http-lite | `POST /v1/scan` |
-| client | **GAP** — no valid-time range read |
+| client | `Scan` |
 
 ### belief.lifecycle
 
@@ -331,7 +331,9 @@ Agent governance edits: deprecate, forget, update text, resolve or escalate a di
 | mcp | `memory_deprecate`, `forget`, `update`, `memory_resolve_dissonance`, `memory_escalate`, `memory_promote` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no governance edits |
+| client | `DeprecateClaim`, `UpdateClaim`, `ResolveContradiction`, `EscalateClaim`, `VerifyClaim` |
+
+> Every binding runs internal/beliefops. MCP forget and memory_deprecate are one operation (Deprecate) recording different default reasons, so the other transports expose it once; memory_promote is Verify (last_verified, verify_count, last_confirmed) and takes promote:global on every transport. Escalate returns a verdict and writes nothing.
 
 ### belief.purge
 
@@ -345,7 +347,7 @@ Hard-delete beliefs (and the run's episodes) by run (write).
 | mcp | _destructive operator action; MCP forget deprecates instead_ |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no purge call |
+| client | `PurgeClaims` |
 
 ### belief.provenance
 
@@ -387,7 +389,7 @@ Render a belief as human-editable Markdown (read).
 | mcp | _a presentation format for HTTP consumers_ |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no Markdown export |
+| client | `ExportClaimMarkdown` |
 
 ### belief.feedback
 
@@ -401,7 +403,9 @@ Record helpful/unhelpful feedback on a belief (write).
 | mcp | `record_feedback` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no feedback write |
+| client | `RecordFeedback` |
+
+> Every binding runs beliefops.RecordFeedback: an unhelpful vote decays confidence and contests the belief at MNEMOS_FEEDBACK_CONTEST_THRESHOLD.
 
 ### belief.classify
 
@@ -515,7 +519,7 @@ List entity-to-entity associations (read).
 | mcp | `list_entity_associations` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no entity association read |
+| client | `ListEntityRelationships` |
 
 ### entity_association.append
 
@@ -529,7 +533,7 @@ Append entity-to-entity associations (write).
 | mcp | _associations are derived, not written by agents_ |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no entity association write |
+| client | `AppendEntityRelationships` |
 
 ### embedding.list
 
