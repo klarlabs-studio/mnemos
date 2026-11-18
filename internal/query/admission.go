@@ -94,6 +94,9 @@ func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []dom
 	// winner of one. The evidence and history of a deprecated claim stay
 	// queryable — this governs recall, not retention.
 	out := recallPopulation(claims)
+	if opts.Ablate.Curation {
+		out = append([]domain.Claim(nil), claims...)
+	}
 
 	// Drop claims an LLM judged SESSION-LOCAL: conversational narration stored
 	// as a belief, which was never knowledge.
@@ -182,7 +185,9 @@ func admitClaims(claims []domain.Claim, opts AnswerOptions, now time.Time) []dom
 	// archived belief was still valid then (ADR 0034).
 	if !opts.IncludeHistory {
 		if opts.AsOf.IsZero() {
-			out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(now) && !c.IsArchived() })
+			if !opts.Ablate.Curation {
+				out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(now) && !c.IsArchived() })
+			}
 		} else {
 			out = keepClaims(out, func(c domain.Claim) bool { return c.IsValidAt(opts.AsOf) })
 		}
