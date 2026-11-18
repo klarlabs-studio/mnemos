@@ -184,11 +184,17 @@ CREATE TABLE IF NOT EXISTS claim_entities (
 CREATE TABLE IF NOT EXISTS claim_evidence (
   claim_id VARCHAR(190) NOT NULL,
   event_id VARCHAR(190) NOT NULL,
+  created_at DATETIME(6) NULL,
   PRIMARY KEY (claim_id, event_id),
   KEY idx_claim_evidence_event_id (event_id),
   CONSTRAINT fk_claim_evidence_claim FOREIGN KEY (claim_id) REFERENCES claims(id),
   CONSTRAINT fk_claim_evidence_event FOREIGN KEY (event_id) REFERENCES events(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- created_at (ADR 0036 step 3): when the link was recorded. NULL on links
+-- written before the column existed; a recorded-as-of read then uses the later
+-- of the claim's created_at and the event's ingested_at (recorded.LinkRecordedAt).
+ALTER TABLE claim_evidence ADD COLUMN IF NOT EXISTS created_at DATETIME(6) NULL;
 
 CREATE TABLE IF NOT EXISTS relationships (
   id            VARCHAR(190) NOT NULL,
@@ -266,6 +272,20 @@ CREATE TABLE IF NOT EXISTS claim_validity_history (
   PRIMARY KEY (id),
   KEY idx_claim_validity_history_claim_id (claim_id),
   CONSTRAINT fk_claim_validity_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- claim_credit_history (ADR 0036 step 3): every change ApplyBeliefCredit makes
+-- to a claim's applied net credit (confidence_components credit:applied), so
+-- the credit a belief held at an earlier instant can be recovered.
+CREATE TABLE IF NOT EXISTS claim_credit_history (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  claim_id    VARCHAR(190)    NOT NULL,
+  from_credit DOUBLE          NOT NULL DEFAULT 0,
+  to_credit   DOUBLE          NOT NULL DEFAULT 0,
+  changed_at  DATETIME(6)     NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_claim_credit_history_claim_id (claim_id),
+  CONSTRAINT fk_claim_credit_history_claim FOREIGN KEY (claim_id) REFERENCES claims(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS embeddings (

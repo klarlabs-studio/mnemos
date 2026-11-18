@@ -75,6 +75,14 @@ type Claim struct {
 	ArchivedAt           string         `json:"archived_at"`
 }
 
+type ClaimCreditHistory struct {
+	ID         int64   `json:"id"`
+	ClaimID    string  `json:"claim_id"`
+	FromCredit float64 `json:"from_credit"`
+	ToCredit   float64 `json:"to_credit"`
+	ChangedAt  string  `json:"changed_at"`
+}
+
 type ClaimEntity struct {
 	ClaimID  string `json:"claim_id"`
 	EntityID string `json:"entity_id"`
@@ -82,8 +90,9 @@ type ClaimEntity struct {
 }
 
 type ClaimEvidence struct {
-	ClaimID string `json:"claim_id"`
-	EventID string `json:"event_id"`
+	ClaimID   string `json:"claim_id"`
+	EventID   string `json:"event_id"`
+	CreatedAt string `json:"created_at"`
 }
 
 type ClaimStatusHistory struct {

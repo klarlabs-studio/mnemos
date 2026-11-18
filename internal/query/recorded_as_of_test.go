@@ -2,14 +2,17 @@ package query
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
+	"go.klarlabs.de/mnemos/internal/trust"
 )
 
 // ADR 0036: a recorded-as-of read answers "what did the brain believe at T",
@@ -290,4 +293,91 @@ func answerIDs(ans domain.Answer) map[string]bool {
 		out[c.ID] = true
 	}
 	return out
+}
+
+// ADR 0036 step 3: a recorded-as-of read returns trust as of T.
+//
+// On Monday the deploy belief rests on one episode, and a deploy log from
+// another author is ingested but not yet linked. On Thursday the log is linked
+// to the belief (a second, independent source) and a validated outcome credits
+// it. Today's trust reflects both. Tuesday's must not: the link and the credit
+// were recorded after Tuesday, even though the log itself was ingested before.
+func TestRecordedAsOf_TrustIsReconstructedAtT(t *testing.T) {
+	s := openTimeline(t)
+	ctx := s.ctx
+
+	// Monday.
+	s.add("ev-deploy", "cl-deploy", "payments outage context: the v2 deploy changed the payments connection pool")
+	monday := time.Now().UTC()
+	if err := s.conn.Events.Append(ctx, domain.Event{
+		ID: "ev-deploy-log", RunID: "timeline", SchemaVersion: "v1", SourceInputID: "deploy-log",
+		Content: "deploy log: v2 rolled out, connection pool settings changed", CreatedBy: "ci",
+		Timestamp: monday, IngestedAt: monday,
+	}); err != nil {
+		t.Fatalf("append deploy log: %v", err)
+	}
+	tuesday := tick()
+
+	// Thursday: the log is linked and the belief is credited.
+	if err := s.conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{{ClaimID: "cl-deploy", EventID: "ev-deploy-log"}}); err != nil {
+		t.Fatalf("link deploy log: %v", err)
+	}
+	writer, ok := s.conn.Claims.(ports.BeliefCreditWriter)
+	if !ok {
+		t.Fatalf("sqlite claims do not implement BeliefCreditWriter")
+	}
+	if err := writer.ApplyBeliefCredit(ctx, "cl-deploy", map[string]float64{domain.CreditAppliedComponentKey: 0.1}, 0.8); err != nil {
+		t.Fatalf("credit: %v", err)
+	}
+	scorer, ok := s.conn.Claims.(ports.ScopedTrustScorer)
+	if !ok {
+		t.Fatalf("sqlite claims do not implement ScopedTrustScorer")
+	}
+	if _, err := scorer.RecomputeTrustForClaims(ctx, []string{"cl-deploy"}, trust.Scorer(time.Now().UTC())); err != nil {
+		t.Fatalf("recompute trust: %v", err)
+	}
+	tick()
+
+	stored, err := s.conn.Claims.ListByIDs(ctx, []string{"cl-deploy"})
+	if err != nil || len(stored) != 1 {
+		t.Fatalf("reload cl-deploy: %v (%d)", err, len(stored))
+	}
+	today := stored[0].TrustScore
+
+	engine := NewEngine(s.conn.Events.(eventLister), s.conn.Claims, s.conn.Relationships)
+	const question = "payments outage context v2 deploy connection pool"
+	trustOf := func(ans domain.Answer) (float64, bool) {
+		for _, c := range ans.Claims {
+			if c.ID == "cl-deploy" {
+				return c.TrustScore, true
+			}
+		}
+		return 0, false
+	}
+
+	now, err := engine.AnswerWithOptions(ctx, question, AnswerOptions{})
+	if err != nil {
+		t.Fatalf("answer now: %v", err)
+	}
+	if got, ok := trustOf(now); !ok || got != today {
+		t.Errorf("today's read returns trust %v (found=%v), want the stored %v", got, ok, today)
+	}
+
+	then, err := engine.AnswerWithOptions(ctx, question, AnswerOptions{RecordedAsOf: tuesday})
+	if err != nil {
+		t.Fatalf("answer as of Tuesday: %v", err)
+	}
+	got, ok := trustOf(then)
+	if !ok {
+		t.Fatalf("Tuesday's answer is missing cl-deploy")
+	}
+	want := trust.At(domain.TrustInput{
+		Confidence: 0.8, EvidenceCount: 1, LatestEvidence: stored[0].CreatedAt,
+	}, tuesday)
+	if math.Abs(got-want) > 1e-3 {
+		t.Errorf("trust at Tuesday = %.4f, want %.4f (one source, no credit); today's is %.4f", got, want, today)
+	}
+	if math.Abs(got-today) < 1e-3 {
+		t.Errorf("trust at Tuesday equals today's %.4f: Thursday's evidence and credit leaked into the past", today)
+	}
 }

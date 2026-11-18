@@ -626,7 +626,7 @@ func TestServe_Auth_AgentRunWhitelist_BlocksRelationshipWithCrossRunClaim(t *tes
 	seedEventConn(t, conn, "ev_other", "run-other", "x", "i2", `{}`, now)
 	seedClaimConn(t, conn, "cl_mine", "x", "fact", "active", 0.8, now)
 	seedClaimConn(t, conn, "cl_other", "x", "fact", "active", 0.8, now)
-	if _, err := db.Exec(`INSERT INTO claim_evidence VALUES ('cl_mine','ev_mine'), ('cl_other','ev_other')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO claim_evidence (claim_id, event_id) VALUES ('cl_mine','ev_mine'), ('cl_other','ev_other')`); err != nil {
 		t.Fatalf("seed evidence: %v", err)
 	}
 

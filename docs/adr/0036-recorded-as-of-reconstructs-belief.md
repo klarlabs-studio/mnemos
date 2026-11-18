@@ -1,6 +1,6 @@
 # ADR 0036: A recorded-as-of read reconstructs what the brain believed
 
-- **Status:** Accepted; steps 1 and 2 implemented.
+- **Status:** Accepted; steps 1, 2 and 3 implemented.
 - **Date:** 2026-11-17
 - **Deciders:** Felix Geelhaar
 - **Builds on:** ADR 0034 (time axes; `claim_validity_history`)
@@ -8,7 +8,9 @@
   `query --recorded-at`, `/v1/search?recorded_as_of=`, gRPC `RecordedAsOf`;
   adds `recordedAsOf` to the `recall_at_time` MCP tool. Step 2 amends
   `GET /v1/beliefs?recorded_as_of=`, gRPC `ListBeliefs.recorded_as_of` and
-  `ports.ClaimRepository` (`ListMergedInto`)
+  `ports.ClaimRepository` (`ListMergedInto`). Step 3 amends
+  `domain.ClaimEvidence` (`CreatedAt`), the `claim_evidence` table on every
+  backend, and adds `claim_credit_history` and `ports.CreditHistoryLister`
 
 ## Context
 
@@ -78,10 +80,10 @@ returns the same answer.
 
 ### 3. What is not reconstructed, stated rather than approximated
 
-- **Trust.** `trust_score` and recall credibility are current values. Trust at
-  T needs the evidence count as of T (`claim_evidence` has no timestamp) and the
-  credit as of T (not versioned). `MinTrust` and agent-mode contradiction
-  resolution therefore use current trust on a recorded-as-of read. Step 3.
+- **Trust.** Reconstructed by step 3 (§7), with two inputs held at their
+  stored value: confidence and the per-claim half-life. A belief confirmed both
+  before and after T reads as unconfirmed at T, since `last_confirmed` keeps
+  only the latest confirmation.
 - **Merges.** Reconstructed from the redirect, with the approximations stated
   in §5. Step 2.
 - **Text and confidence.** The pipeline never rewrites a stored claim's text;
@@ -184,6 +186,61 @@ every caller can use it without a cycle, and none re-implements it:
 A recorded-as-of browse of status `active` therefore lists exactly the beliefs
 a recorded-as-of recall can admit, on every backend.
 
+### 7. Trust at T (step 3)
+
+A stored `trust_score` is `trust.At` (ADR 0026) over today's inputs. A
+recorded-as-of read that returned it reported Thursday's corroboration and
+credit as Tuesday's belief, and `MinTrust`, ranking and agent-mode
+contradiction resolution acted on it. The views now replace it with `trust.At`
+over the inputs as they stood at T, scored at T (`recorded.TrustInputAt`, pure;
+`Claims.scoreAt` applies it to every claim the view returns, and stamps
+`TrustComputedAt = T`):
+
+| Input | At T |
+|---|---|
+| evidence count | links recorded by T to episodes ingested by T, graded by independence (`domain.EffectiveEvidenceCount` over distinct episode authors), as the stores grade them |
+| latest evidence | the freshest such episode's timestamp |
+| credit | the applied net credit from `claim_credit_history`, by the same rule as status (§1); no history, the stored value |
+| last confirmed | the stored value when at or before T, else none |
+| confidence, half-life | the stored values (§3) |
+
+What made it possible:
+
+- **Evidence links carry when they were recorded.** `claim_evidence.created_at`
+  on every backend (SQLite/libSQL `TEXT NOT NULL DEFAULT ''`, Postgres
+  `timestamptz` NULL, MySQL `DATETIME(6)` NULL, memory per link). Writes stamp
+  the caller's `ClaimEvidence.CreatedAt` or the store's clock
+  (`domain.EvidenceRecordedAt`); a re-upsert keeps the original; a merge
+  (`RepointEvidence`) moves a link with its time. The episode's `ingested_at`
+  is not enough: extraction can run after ingestion, and a restatement attaches
+  an already-ingested episode to an older belief.
+- **Backfill rule, explicit and in one place.** Existing rows are not
+  backfilled. A link with no recorded time reads as recorded at the later of
+  its claim's `created_at` and its episode's `ingested_at`
+  (`recorded.LinkRecordedAt`): it cannot predate either, and it is exact for a
+  claim extracted from an episode as it was ingested and for a restatement. It
+  is early only when extraction ran after both, which nothing recorded dates.
+  The rule lives in code rather than a one-shot `UPDATE` so every backend
+  applies the same one, and a mixed-precision text comparison in SQL cannot
+  get it wrong.
+- **Credit is versioned.** `ApplyBeliefCredit` records a row in
+  `claim_credit_history` (claim, from, to, changed_at) in the same transaction
+  whenever it changes the applied net credit; a write that leaves it unchanged
+  (inhibition decay, an idempotent re-run) records nothing. Read through the
+  optional `ports.CreditHistoryLister`. Every backend that implements
+  `ports.BeliefCreditWriter` carries the table: SQLite (and libSQL), memory,
+  Postgres (registered in the ADR-0007 RLS `scoped` array, so it gets a tenant
+  column and policy) and MySQL (isolated by namespace database). On Postgres
+  and MySQL the current value is read `FOR UPDATE`, so concurrent credit
+  writes each record the value they replaced. Delete and cascade paths clear
+  it. `TestCreditHistory_RecordsEveryAppliedCreditChange` fails if a backend
+  implements the writer without the lister. Credit applied before the table
+  existed has no history, and reads as the stored value.
+
+Today's reads are unchanged: only the recorded views rescore. The cost is one
+evidence read, one event read and one credit-history read per view call, on the
+recorded-as-of path only.
+
 ## Consequences
 
 - `query --recorded-at`, `/v1/search?recorded_as_of=` and gRPC answer the
@@ -213,4 +270,9 @@ a recorded-as-of recall can admit, on every backend.
 2. Merge-aware rewind (follow `merged_into` redirects backward when a winner was
    recorded after T); browse uses the same rewind. **Implemented** (§5, §6).
 3. Trust at T: timestamp evidence links and version credit, then compute
-   `trust.At` over the inputs as of T.
+   `trust.At` over the inputs as of T. **Implemented** (§7). Confidence and
+   half-life stay at their stored values, and `last_confirmed` is unversioned
+   (§3). Acceptance: `TestRecordedAsOf_TrustIsReconstructedAtT` (SQLite): a
+   Monday episode linked on Thursday and a Thursday credit change today's trust
+   and not Tuesday's; the link time round-trips on every backend
+   (`TestClaimEvidence_RecordedAtRoundTripsOnEveryBackend`).

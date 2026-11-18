@@ -167,16 +167,21 @@ func (r ClaimRepository) UpsertEvidence(_ context.Context, links []domain.ClaimE
 	}
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
+	now := time.Now().UTC()
 	for _, link := range links {
 		if err := link.Validate(); err != nil {
 			return fmt.Errorf("invalid claim evidence: %w", err)
 		}
 		set, ok := r.state.evidence[link.ClaimID]
 		if !ok {
-			set = map[string]struct{}{}
+			set = map[string]time.Time{}
 			r.state.evidence[link.ClaimID] = set
 		}
-		set[link.EventID] = struct{}{}
+		// A link is recorded once; a re-upsert keeps the original time,
+		// like the SQL backends' ON CONFLICT DO NOTHING.
+		if _, exists := set[link.EventID]; !exists {
+			set[link.EventID] = domain.EvidenceRecordedAt(link, now)
+		}
 	}
 	return nil
 }
@@ -231,8 +236,8 @@ func (r ClaimRepository) ListEvidenceByClaimIDs(_ context.Context, claimIDs []st
 		if !ok {
 			continue
 		}
-		for evID := range set {
-			out = append(out, domain.ClaimEvidence{ClaimID: cid, EventID: evID})
+		for evID, at := range set {
+			out = append(out, domain.ClaimEvidence{ClaimID: cid, EventID: evID, CreatedAt: at})
 		}
 	}
 	return out, nil
@@ -332,11 +337,15 @@ func (r ClaimRepository) RepointEvidence(_ context.Context, fromClaimID, toClaim
 	}
 	dst, ok := r.state.evidence[toClaimID]
 	if !ok {
-		dst = map[string]struct{}{}
+		dst = map[string]time.Time{}
 		r.state.evidence[toClaimID] = dst
 	}
-	for evID := range src {
-		dst[evID] = struct{}{}
+	// A moved link keeps its recorded time; one the winner already holds
+	// keeps the winner's (INSERT OR IGNORE on the SQL backends).
+	for evID, at := range src {
+		if _, held := dst[evID]; !held {
+			dst[evID] = at
+		}
 	}
 	delete(r.state.evidence, fromClaimID)
 	return nil
@@ -375,6 +384,7 @@ func (r ClaimRepository) DeleteCascade(_ context.Context, claimID string) error 
 	delete(r.state.evidence, claimID)
 	delete(r.state.statusHistory, claimID)
 	r.dropValidityHistoryLocked(claimID)
+	r.dropCreditHistoryLocked(claimID)
 	delete(r.state.claimVersions, claimID)
 	delete(r.state.feedback, claimID)
 	delete(r.state.expectations, claimID)
@@ -446,8 +456,8 @@ func (r ClaimRepository) ListAllEvidence(_ context.Context) ([]domain.ClaimEvide
 	defer r.state.mu.RUnlock()
 	out := make([]domain.ClaimEvidence, 0)
 	for cid, set := range r.state.evidence {
-		for evID := range set {
-			out = append(out, domain.ClaimEvidence{ClaimID: cid, EventID: evID})
+		for evID, at := range set {
+			out = append(out, domain.ClaimEvidence{ClaimID: cid, EventID: evID, CreatedAt: at})
 		}
 	}
 	return out, nil
@@ -459,7 +469,8 @@ func (r ClaimRepository) DeleteAll(_ context.Context) error {
 	defer r.state.mu.Unlock()
 	r.state.claims = map[string]storedClaim{}
 	r.state.claimOrder = nil
-	r.state.evidence = map[string]map[string]struct{}{}
+	r.state.evidence = map[string]map[string]time.Time{}
+	r.state.creditHistory = nil
 	r.state.statusHistory = map[string][]storedTransition{}
 	r.state.validityHistory = nil
 	return nil
@@ -764,6 +775,11 @@ func (r ClaimRepository) ApplyBeliefCredit(_ context.Context, claimID string, co
 	if !ok {
 		return fmt.Errorf("apply belief credit: claim %s not found", claimID)
 	}
+	if from, to := domain.AppliedCredit(c.ConfidenceComponents), domain.AppliedCredit(components); from != to {
+		r.state.creditHistory = append(r.state.creditHistory, domain.CreditChange{
+			ClaimID: claimID, From: from, To: to, ChangedAt: time.Now().UTC(),
+		})
+	}
 	if len(components) == 0 {
 		c.ConfidenceComponents = nil
 	} else {
@@ -776,6 +792,36 @@ func (r ClaimRepository) ApplyBeliefCredit(_ context.Context, claimID string, co
 	c.TrustScore = trustScore
 	r.state.claims[claimID] = c
 	return nil
+}
+
+// ListCreditHistory implements [ports.CreditHistoryLister]: the applied-credit
+// changes of claimIDs, oldest first.
+func (r ClaimRepository) ListCreditHistory(_ context.Context, claimIDs []string) ([]domain.CreditChange, error) {
+	want := make(map[string]bool, len(claimIDs))
+	for _, id := range claimIDs {
+		want[id] = true
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	out := make([]domain.CreditChange, 0)
+	for _, ch := range r.state.creditHistory {
+		if want[ch.ClaimID] {
+			out = append(out, ch)
+		}
+	}
+	return out, nil
+}
+
+// dropCreditHistoryLocked removes claimID's credit history. Callers hold
+// state.mu.
+func (r ClaimRepository) dropCreditHistoryLocked(claimID string) {
+	kept := r.state.creditHistory[:0]
+	for _, ch := range r.state.creditHistory {
+		if ch.ClaimID != claimID {
+			kept = append(kept, ch)
+		}
+	}
+	r.state.creditHistory = kept
 }
 
 // AverageTrust returns the mean trust score across every stored

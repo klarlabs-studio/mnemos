@@ -267,6 +267,17 @@ type BeliefCreditWriter interface {
 	ApplyBeliefCredit(ctx context.Context, claimID string, components map[string]float64, trustScore float64) error
 }
 
+// CreditHistoryLister is the optional capability to read the history of a
+// belief's applied net credit (ADR 0036 step 3). Every backend that implements
+// [BeliefCreditWriter] records a [domain.CreditChange] whenever
+// ApplyBeliefCredit changes the applied credit, and implements this to read
+// them back, oldest first. A recorded-as-of read uses it to recover the credit
+// a belief held at T; a backend without it never applies credit through
+// ApplyBeliefCredit, so its current credit is the only one there was.
+type CreditHistoryLister interface {
+	ListCreditHistory(ctx context.Context, claimIDs []string) ([]domain.CreditChange, error)
+}
+
 // RelationshipRepository persists and retrieves relationships between claims.
 type RelationshipRepository interface {
 	Upsert(ctx context.Context, relationships []domain.Relationship) error

@@ -120,9 +120,10 @@ type state struct {
 	eventOrder       []string // insertion order, for ListAll
 	claims           map[string]storedClaim
 	claimOrder       []string
-	statusHistory    map[string][]storedTransition  // claim_id -> transitions in insertion order
-	validityHistory  []domain.ValidityChange        // every claim's validity changes, in insertion order
-	evidence         map[string]map[string]struct{} // claim_id -> set of event_ids (de-duped)
+	statusHistory    map[string][]storedTransition   // claim_id -> transitions in insertion order
+	validityHistory  []domain.ValidityChange         // every claim's validity changes, in insertion order
+	evidence         map[string]map[string]time.Time // claim_id -> event_id -> when the link was recorded
+	creditHistory    []domain.CreditChange           // every claim's applied-credit changes, in insertion order
 	relationships    map[string]storedRelationship
 	embeddings       map[embeddingKey]storedEmbedding
 	users            map[string]storedUser
@@ -178,7 +179,7 @@ func newState() *state {
 		events:           map[string]storedEvent{},
 		claims:           map[string]storedClaim{},
 		statusHistory:    map[string][]storedTransition{},
-		evidence:         map[string]map[string]struct{}{},
+		evidence:         map[string]map[string]time.Time{},
 		relationships:    map[string]storedRelationship{},
 		embeddings:       map[embeddingKey]storedEmbedding{},
 		users:            map[string]storedUser{},
@@ -222,7 +223,8 @@ func (s *state) clear() {
 	s.claimOrder = nil
 	s.statusHistory = map[string][]storedTransition{}
 	s.validityHistory = nil
-	s.evidence = map[string]map[string]struct{}{}
+	s.evidence = map[string]map[string]time.Time{}
+	s.creditHistory = nil
 	s.relationships = map[string]storedRelationship{}
 	s.embeddings = map[embeddingKey]storedEmbedding{}
 	s.users = map[string]storedUser{}

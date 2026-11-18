@@ -10,7 +10,9 @@
 // through these views, so a recorded-as-of read answers the same way
 // everywhere. There is one rewind and many callers, deliberately.
 //
-// What cannot be reconstructed (trust, text, history older than its table, and
+// Trust is reconstructed too: the views replace the stored trust_score with
+// trust.At over the inputs as they stood at T (trust.go, ADR 0036 §7). What
+// cannot be reconstructed (text, confidence, history older than its table, and
 // the merge approximations described on Claims and Relationships) is listed in
 // the ADR; it is current, not approximated silently.
 package recorded
