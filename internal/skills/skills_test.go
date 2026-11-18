@@ -126,8 +126,19 @@ func TestOutcomes_FollowTheirActionsRun(t *testing.T) {
 func TestSchemasAndReflexes_AppendThenList(t *testing.T) {
 	conn := openStore(t)
 	ctx := context.Background()
+	for _, id := range []string{"a1", "a2", "a3", "a4"} {
+		if err := conn.Actions.Append(ctx, domain.Action{ID: id, Kind: "rollback", Subject: "api", Actor: "x", At: time.Now().UTC()}); err != nil {
+			t.Fatalf("seed action %s: %v", id, err)
+		}
+	}
+	if _, err := skills.AppendSchemas(ctx, conn.Actions, func(ctx context.Context, l domain.Lesson) (string, error) {
+		t.Fatal("a schema citing an unknown action must not be written")
+		return "", nil
+	}, "agent-1", []domain.Lesson{{ID: "ls-x", Statement: "s", Evidence: []string{"a-missing"}, Confidence: 0.5}}); !errors.Is(err, skills.ErrInvalidRecord) {
+		t.Fatalf("unknown evidence action: got %v, want ErrInvalidRecord", err)
+	}
 
-	n, err := skills.AppendSchemas(ctx, func(ctx context.Context, l domain.Lesson) (string, error) {
+	n, err := skills.AppendSchemas(ctx, conn.Actions, func(ctx context.Context, l domain.Lesson) (string, error) {
 		return l.ID, conn.Lessons.Append(ctx, l)
 	}, "agent-1", []domain.Lesson{
 		{ID: "ls-1", Statement: "roll back api on 5xx", Trigger: "5xx", Scope: domain.Scope{Service: "api"}, Evidence: []string{"a1"}, Confidence: 0.8},
@@ -148,7 +159,7 @@ func TestSchemasAndReflexes_AppendThenList(t *testing.T) {
 	}
 
 	// All-or-nothing: an invalid element writes nothing.
-	_, err = skills.AppendSchemas(ctx, func(ctx context.Context, l domain.Lesson) (string, error) {
+	_, err = skills.AppendSchemas(ctx, conn.Actions, func(ctx context.Context, l domain.Lesson) (string, error) {
 		return l.ID, conn.Lessons.Append(ctx, l)
 	}, "agent-1", []domain.Lesson{
 		{ID: "ls-3", Statement: "ok", Evidence: []string{"a3"}, Confidence: 0.5},
@@ -161,7 +172,7 @@ func TestSchemasAndReflexes_AppendThenList(t *testing.T) {
 		t.Errorf("an invalid batch must write nothing; store holds %d schemas", len(all))
 	}
 
-	n, err = skills.AppendReflexes(ctx, func(ctx context.Context, p domain.Playbook) (string, error) {
+	n, err = skills.AppendReflexes(ctx, conn.Lessons, func(ctx context.Context, p domain.Playbook) (string, error) {
 		return p.ID, conn.Playbooks.Append(ctx, p)
 	}, "agent-1", []domain.Playbook{{
 		ID: "pb-1", Trigger: "5xx", Statement: "respond to 5xx", Scope: domain.Scope{Service: "api"}, Confidence: 0.6,
@@ -174,7 +185,7 @@ func TestSchemasAndReflexes_AppendThenList(t *testing.T) {
 	if err != nil || len(refl) != 1 || len(refl[0].Steps) != 1 || refl[0].CreatedBy != "agent-1" {
 		t.Fatalf("Reflexes: %+v %v", refl, err)
 	}
-	if _, err := skills.AppendReflexes(ctx, nil, "a", nil); !errors.Is(err, skills.ErrInvalidRecord) {
+	if _, err := skills.AppendReflexes(ctx, conn.Lessons, nil, "a", nil); !errors.Is(err, skills.ErrInvalidRecord) {
 		t.Errorf("empty batch: got %v, want ErrInvalidRecord", err)
 	}
 }

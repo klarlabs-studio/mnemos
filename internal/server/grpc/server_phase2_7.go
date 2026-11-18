@@ -211,7 +211,7 @@ func (s *Server) AppendSchemas(ctx context.Context, req *mnemosv1.AppendSchemasR
 			CreatedBy:    l.CreatedBy,
 		})
 	}
-	accepted, err := skills.AppendSchemas(ctx, s.writerFor(ctx).Lesson, actorFromContext(ctx), lessons)
+	accepted, err := skills.AppendSchemas(ctx, s.writerFor(ctx).Conn().Actions, s.writerFor(ctx).Lesson, actorFromContext(ctx), lessons)
 	if err != nil {
 		return nil, skillsStatus("append schemas", err)
 	}
@@ -336,7 +336,7 @@ func (s *Server) AppendReflexes(ctx context.Context, req *mnemosv1.AppendReflexe
 			CreatedBy:          p.CreatedBy,
 		})
 	}
-	accepted, err := skills.AppendReflexes(ctx, s.writerFor(ctx).Playbook, actorFromContext(ctx), playbooks)
+	accepted, err := skills.AppendReflexes(ctx, s.writerFor(ctx).Conn().Lessons, s.writerFor(ctx).Playbook, actorFromContext(ctx), playbooks)
 	if err != nil {
 		return nil, skillsStatus("append reflexes", err)
 	}
