@@ -1059,7 +1059,7 @@ Open, list, read and resolve incidents (write).
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `OpenIncident`, `ListIncidents`, `GetIncident`, `ResolveIncident` |
 
-> Every binding goes through internal/incident (validation, not-found before any write, author from the caller) and govwrite's incident writes: Writer.Incident/ResolveIncident on the daemon surfaces, ApplyIncident/ApplyResolveIncident inside the library's governed kernel. Incident storage exists on sqlite and memory only; elsewhere every binding reports it unsupported (REST 501, gRPC Unimplemented).
+> Every binding goes through internal/incident (validation, not-found before any write, author from the caller) and govwrite's incident writes: Writer.Incident/ResolveIncident on the daemon surfaces, ApplyIncident/ApplyResolveIncident inside the library's governed kernel. Every backend stores incidents (memory, sqlite, libSQL via the sqlite repository, Postgres under RLS, MySQL per namespace). The REST incident document keeps its original keys (root_cause_claim_id, timeline_event_ids, playbook_id) deliberately: renaming them would break the wire; gRPC and MCP use the brain-native names.
 
 ### incident.why_wrong
 

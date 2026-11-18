@@ -334,6 +334,7 @@ func newStoreConn(db pgQuerier, ns string, vectorEnabled bool, raw any, closer f
 		Blocks:        BlockRepository{db: db, ns: ns},
 		Expectations:  ExpectationRepository{db: db, ns: ns},
 		GlobalSchemas: GlobalSchemaRepository{db: db, ns: ns},
+		Incidents:     IncidentRepository{db: db, ns: ns},
 		Journal:       JournalRepository{db: db, ns: ns},
 		Raw:           raw,
 		Closer:        closer,

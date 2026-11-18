@@ -104,8 +104,8 @@ func TestErrors(t *testing.T) {
 	if _, err := incident.List(ctx, conn.Incidents, incident.Filter{Status: "closed"}); !errors.Is(err, incident.ErrInvalid) {
 		t.Errorf("bad status filter: got %v, want ErrInvalid", err)
 	}
-	if _, err := incident.List(ctx, nil, incident.Filter{}); !errors.Is(err, incident.ErrUnsupported) {
-		t.Errorf("nil repo: got %v, want ErrUnsupported", err)
+	if _, err := incident.List(ctx, nil, incident.Filter{}); err == nil {
+		t.Error("a connection without an incident repository must be an error, not a panic or an empty list")
 	}
 }
 

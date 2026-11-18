@@ -2963,10 +2963,6 @@ func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
 		gw := scopedWriter(r.Context(), gw)
-		if conn.Incidents == nil {
-			writeError(w, http.StatusNotImplemented, "incident storage not available on this backend")
-			return
-		}
 		// Strip "/v1/incidents/" prefix and split remainder.
 		prefix := "/v1/incidents/"
 		tail := strings.TrimPrefix(r.URL.Path, prefix)

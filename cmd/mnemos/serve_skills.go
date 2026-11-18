@@ -361,8 +361,6 @@ func writeIncidentError(w http.ResponseWriter, label string, err error) {
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, incident.ErrNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, incident.ErrUnsupported):
-		writeError(w, http.StatusNotImplemented, err.Error())
 	default:
 		writeInternalError(w, label, err)
 	}

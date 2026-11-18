@@ -17,10 +17,6 @@ import (
 // ErrIncidentNotFound is returned (wrapped) when an incident id does not exist.
 var ErrIncidentNotFound = incident.ErrNotFound
 
-// ErrIncidentsUnsupported is returned (wrapped) on a backend without incident
-// storage.
-var ErrIncidentsUnsupported = incident.ErrUnsupported
-
 // ErrInvalidIncident is returned (wrapped) for an incident request that fails
 // validation: a blank title, an unknown severity or status.
 var ErrInvalidIncident = incident.ErrInvalid

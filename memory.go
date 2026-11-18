@@ -1259,8 +1259,7 @@ type Memory interface {
 
 	// OpenIncident records an incident through the governed write path and
 	// returns it as stored. Wraps [ErrInvalidIncident] for a blank title or
-	// unknown severity and [ErrIncidentsUnsupported] on a backend without
-	// incident storage. Same operation as REST POST /v1/incidents, gRPC
+	// unknown severity. Every backend stores incidents. Same operation as REST POST /v1/incidents, gRPC
 	// OpenIncident and the open_incident MCP tool (internal/incident).
 	OpenIncident(ctx context.Context, item IncidentItem) (Incident, error)
 

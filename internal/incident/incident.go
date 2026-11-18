@@ -11,11 +11,10 @@
 //     ([ErrInvalid]) and is attributed to the caller's actor;
 //   - list filters are checked against the severity and status vocabularies;
 //   - reading, resolving or analysing an id that does not exist is
-//     [ErrNotFound], never a write or an internal error;
-//   - a backend without incident storage is [ErrUnsupported].
+//     [ErrNotFound], never a write or an internal error.
 //
 // Sentinel errors rather than message matching are what let REST answer
-// 400/404/501 and gRPC InvalidArgument/NotFound/Unimplemented consistently.
+// 400/404 and gRPC InvalidArgument/NotFound consistently.
 package incident
 
 import (
@@ -36,8 +35,10 @@ import (
 // ErrNotFound is returned when the incident does not exist.
 var ErrNotFound = errors.New("incident not found")
 
-// ErrUnsupported is returned on a backend without incident storage.
-var ErrUnsupported = errors.New("incident storage not available on this backend")
+// errNotWired reports a connection built without an incident repository.
+// Every backend provides one (memory, sqlite, libSQL, Postgres, MySQL), so this
+// is a construction bug, never a property of the backend.
+var errNotWired = errors.New("incident repository not wired on this connection")
 
 // ErrInvalid is returned for a request that fails validation.
 var ErrInvalid = errors.New("invalid incident request")
@@ -68,7 +69,7 @@ type OpenRequest struct {
 // incident as written.
 func Open(ctx context.Context, repo ports.IncidentRepository, write WriteFunc, req OpenRequest) (domain.Incident, error) {
 	if repo == nil {
-		return domain.Incident{}, ErrUnsupported
+		return domain.Incident{}, errNotWired
 	}
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
@@ -114,7 +115,7 @@ type Filter struct {
 // List returns the incidents matching f.
 func List(ctx context.Context, repo ports.IncidentRepository, f Filter) ([]domain.Incident, error) {
 	if repo == nil {
-		return nil, ErrUnsupported
+		return nil, errNotWired
 	}
 	if err := checkFilter(f); err != nil {
 		return nil, err
@@ -149,7 +150,7 @@ func List(ctx context.Context, repo ports.IncidentRepository, f Filter) ([]domai
 // Get returns one incident.
 func Get(ctx context.Context, repo ports.IncidentRepository, id string) (domain.Incident, error) {
 	if repo == nil {
-		return domain.Incident{}, ErrUnsupported
+		return domain.Incident{}, errNotWired
 	}
 	id = strings.TrimSpace(id)
 	if id == "" {
@@ -182,7 +183,7 @@ func Resolve(ctx context.Context, repo ports.IncidentRepository, resolve Resolve
 // its root-cause belief's provenance, and the decisions built on it.
 func WhyWereWeWrong(ctx context.Context, conn *store.Conn, id string) (query.WhyWereWeWrongReport, error) {
 	if conn.Incidents == nil {
-		return query.WhyWereWeWrongReport{}, ErrUnsupported
+		return query.WhyWereWeWrongReport{}, errNotWired
 	}
 	inc, err := Get(ctx, conn.Incidents, id)
 	if err != nil {

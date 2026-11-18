@@ -536,6 +536,28 @@ CREATE TABLE IF NOT EXISTS global_schemas (
 CREATE INDEX IF NOT EXISTS idx_global_schemas_status ON global_schemas(status);
 CREATE INDEX IF NOT EXISTS idx_global_schemas_promoted_at ON global_schemas(promoted_at);
 
+-- Incidents (mirrors the SQLite table). Tenant data: registered in the RLS
+-- `scoped` array below.
+CREATE TABLE IF NOT EXISTS incidents (
+  id                      text        PRIMARY KEY,
+  title                   text        NOT NULL,
+  summary                 text        NOT NULL DEFAULT '',
+  severity                text        NOT NULL,
+  status                  text        NOT NULL DEFAULT 'open',
+  timeline_event_ids_json jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  root_cause_claim_id     text        NOT NULL DEFAULT '',
+  decision_ids_json       jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  outcome_ids_json        jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  playbook_id             text        NOT NULL DEFAULT '',
+  opened_at               timestamptz NOT NULL,
+  resolved_at             timestamptz,
+  created_by              text        NOT NULL DEFAULT '<system>'
+);
+CREATE INDEX IF NOT EXISTS idx_incidents_severity ON incidents(severity);
+CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+CREATE INDEX IF NOT EXISTS idx_incidents_opened_at ON incidents(opened_at);
+CREATE INDEX IF NOT EXISTS idx_incidents_root_cause_claim_id ON incidents(root_cause_claim_id);
+
 -- ADR 0007: per-tenant isolation WITHIN a namespace. Each data table gets a
 -- `tenant` column defaulted from the `mnemos.tenant` GUC (pinned per connection by
 -- the provider), plus row-level security that filters every read/write to the
@@ -553,7 +575,7 @@ DECLARE
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
     'entity_relationships','working_memory_blocks','claim_expectations',
-    'cognitive_journal'
+    'cognitive_journal','incidents'
   ];
 BEGIN
   FOREACH t IN ARRAY scoped LOOP

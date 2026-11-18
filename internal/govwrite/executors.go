@@ -2,7 +2,6 @@ package govwrite
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -432,9 +431,6 @@ func (e incidentExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 // and the daemon share one implementation. Every other caller goes through
 // [Writer.Incident].
 func ApplyIncident(ctx context.Context, conn *store.Conn, incident domain.Incident) error {
-	if conn.Incidents == nil {
-		return errors.New("upsert incident: incident storage not available on this backend")
-	}
 	if err := conn.Incidents.Upsert(ctx, incident); err != nil {
 		return fmt.Errorf("upsert incident: %w", err)
 	}
@@ -445,9 +441,6 @@ func ApplyIncident(ctx context.Context, conn *store.Conn, incident domain.Incide
 // library-kernel counterpart of [Writer.ResolveIncident], as [ApplyIncident]
 // is of [Writer.Incident].
 func ApplyResolveIncident(ctx context.Context, conn *store.Conn, incidentID string, resolvedAt time.Time) error {
-	if conn.Incidents == nil {
-		return errors.New("resolve incident: incident storage not available on this backend")
-	}
 	if err := conn.Incidents.Resolve(ctx, incidentID, resolvedAt); err != nil {
 		return fmt.Errorf("resolve incident: %w", err)
 	}

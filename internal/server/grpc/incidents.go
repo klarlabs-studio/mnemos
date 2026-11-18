@@ -46,8 +46,6 @@ func incidentStatus(op string, err error) error {
 		return status.Errorf(codes.InvalidArgument, "%s: %v", op, err)
 	case errors.Is(err, incident.ErrNotFound):
 		return status.Errorf(codes.NotFound, "%s: %v", op, err)
-	case errors.Is(err, incident.ErrUnsupported):
-		return status.Errorf(codes.Unimplemented, "%s: %v", op, err)
 	}
 	return status.Errorf(codes.Internal, "%s: %v", op, err)
 }
