@@ -37,7 +37,7 @@ const evidenceSourceLibrary = "mnemos.library"
 // set_claim_lifecycle, retract_event, unretract_event). One source of truth so the kernel plugin and the
 // executor bindings can't drift.
 func writeActions() []kernel.Action {
-	return []kernel.Action{
+	actions := []kernel.Action{
 		{Name: actionRemember, Effect: axidomain.EffectWriteLocal, Idempotent: false,
 			Description: "Ingest text, extract claims, detect relationships, and persist them."},
 		{Name: actionRememberClaim, Effect: axidomain.EffectWriteLocal, Idempotent: false,
@@ -53,6 +53,7 @@ func writeActions() []kernel.Action {
 		{Name: actionUnretractEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Clear an event's retraction: restore the claims it deprecated that nothing changed since, relink the ones it rescored (ADR 0037 §8)."},
 	}
+	return append(actions, governanceActions()...)
 }
 
 // buildWriteKernel assembles the axi kernel that governs every public
@@ -67,6 +68,9 @@ func buildWriteKernel(m *memory, budget axi.Budget, evidenceLogPath string) (*ke
 		kernel.ExecutorRef(actionSetClaimLifecycle): setClaimLifecycleExecutor{m: m},
 		kernel.ExecutorRef(actionRetractEvent):      retractEventExecutor{m: m},
 		kernel.ExecutorRef(actionUnretractEvent):    unretractEventExecutor{m: m},
+	}
+	for ref, exec := range governanceExecutors(m) {
+		executors[ref] = exec
 	}
 	return kernel.Build(m.logger, writeActions(), executors, budget, evidenceLogPath)
 }

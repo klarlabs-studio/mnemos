@@ -54,6 +54,20 @@ type UpdateRequest struct {
 	Confidence float64
 }
 
+// Validate reports a malformed update (ErrInvalid) without reading the store.
+func (r UpdateRequest) Validate() error {
+	if strings.TrimSpace(r.ClaimID) == "" {
+		return invalid("belief id is required")
+	}
+	if strings.TrimSpace(r.Text) == "" {
+		return invalid("new text is required")
+	}
+	if r.Confidence < 0 || r.Confidence > 1 {
+		return invalid("confidence must be in [0, 1]")
+	}
+	return nil
+}
+
 // Revision is the receipt of an update.
 type Revision struct {
 	ClaimID    string  `json:"belief_id"`
@@ -65,13 +79,10 @@ type Revision struct {
 // Update rewrites a belief's text (and optionally its confidence), recording
 // the reason on the change.
 func Update(ctx context.Context, conn *store.Conn, w Writer, req UpdateRequest) (Revision, error) {
+	if err := req.Validate(); err != nil {
+		return Revision{}, err
+	}
 	text := strings.TrimSpace(req.Text)
-	if text == "" {
-		return Revision{}, invalid("new text is required")
-	}
-	if req.Confidence < 0 || req.Confidence > 1 {
-		return Revision{}, invalid("confidence must be in [0, 1]")
-	}
 	claims, err := loadClaims(ctx, conn, strings.TrimSpace(req.ClaimID))
 	if err != nil {
 		return Revision{}, err
@@ -97,6 +108,19 @@ type ResolveRequest struct {
 	Actor    string
 }
 
+// Validate reports a malformed resolution (ErrInvalid) without reading the
+// store.
+func (r ResolveRequest) Validate() error {
+	winner, loser := strings.TrimSpace(r.WinnerID), strings.TrimSpace(r.LoserID)
+	if winner == "" || loser == "" {
+		return invalid("winner_id and loser_id are required")
+	}
+	if winner == loser {
+		return invalid("winner_id and loser_id must differ")
+	}
+	return nil
+}
+
 // Resolution is the receipt of a resolved dissonance.
 type Resolution struct {
 	WinnerID string `json:"winner_id"`
@@ -106,13 +130,10 @@ type Resolution struct {
 // Resolve moves the winner to resolved and the loser to deprecated, both
 // transitions carrying the reason. Both beliefs must exist.
 func Resolve(ctx context.Context, conn *store.Conn, w Writer, req ResolveRequest) (Resolution, error) {
+	if err := req.Validate(); err != nil {
+		return Resolution{}, err
+	}
 	winner, loser := strings.TrimSpace(req.WinnerID), strings.TrimSpace(req.LoserID)
-	if winner == "" || loser == "" {
-		return Resolution{}, invalid("winner_id and loser_id are required")
-	}
-	if winner == loser {
-		return Resolution{}, invalid("winner_id and loser_id must differ")
-	}
 	claims, err := loadClaims(ctx, conn, winner, loser)
 	if err != nil {
 		return Resolution{}, err

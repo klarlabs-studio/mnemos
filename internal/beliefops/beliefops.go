@@ -60,6 +60,18 @@ const (
 	ReasonResolve   = "agent-resolved-contradiction"
 )
 
+// Require reports ErrInvalid for a blank id and ErrNotFound for an unknown
+// one. Callers that run an operation inside a kernel which flattens errors to
+// text (the root library) call it first, so the sentinel survives.
+func Require(ctx context.Context, conn *store.Conn, ids ...string) error {
+	trimmed := make([]string, len(ids))
+	for i, id := range ids {
+		trimmed[i] = strings.TrimSpace(id)
+	}
+	_, err := loadClaims(ctx, conn, trimmed...)
+	return err
+}
+
 // loadClaims returns the named claims in request order, or ErrNotFound when
 // any is missing.
 func loadClaims(ctx context.Context, conn *store.Conn, ids ...string) ([]domain.Claim, error) {
