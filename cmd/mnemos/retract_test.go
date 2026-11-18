@@ -36,7 +36,7 @@ func TestRetract_MCPAndCLIShareOneOperation(t *testing.T) {
 		t.Fatalf("openWriter: %v", err)
 	}
 	defer closeWriter(gw)
-	viaCLI, err := runRetraction(ctx, gw, remembered.EventID, "again", "operator")
+	viaCLI, err := runRetraction(ctx, gw, remembered.EventID, "again", "operator", nil)
 	if err != nil {
 		t.Fatalf("CLI path: %v", err)
 	}
