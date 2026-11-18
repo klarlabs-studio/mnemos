@@ -805,6 +805,17 @@ type EventDependencyRepository interface {
 	// ListDependents returns the dependencies ON the given episodes
 	// (incoming): the episodes that depend on them.
 	ListDependents(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
+
+	// AppendPending records citations that named no stored episode yet
+	// (ADR 0038, late citations), ignoring any (EventID, LookupKey) already
+	// stored.
+	AppendPending(ctx context.Context, refs []domain.PendingReference) error
+	// ListPendingByKeys returns the pending citations whose lookup key is one
+	// of keys, oldest first. No keys returns none.
+	ListPendingByKeys(ctx context.Context, keys []string) ([]domain.PendingReference, error)
+	// DeletePending removes the given (EventID, LookupKey) rows; CreatedAt is
+	// ignored and a row that is not stored is not an error.
+	DeletePending(ctx context.Context, refs []domain.PendingReference) error
 }
 
 // EntityRelationshipRepository persists polymorphic edges between

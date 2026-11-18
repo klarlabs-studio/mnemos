@@ -323,6 +323,20 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
 );
 CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
 
+-- pending_references (ADR 0038, late citations): a citation in episode
+-- event_id that named no stored episode when it was written, under a
+-- canonical lookup_key a later source would carry. Writing an episode with
+-- that key re-detects the citing document and deletes the rows it resolved.
+-- Append-only otherwise; no foreign keys: deleting an event clears its rows
+-- explicitly.
+CREATE TABLE IF NOT EXISTS pending_references (
+	event_id TEXT NOT NULL,
+	lookup_key TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	PRIMARY KEY (event_id, lookup_key)
+);
+CREATE INDEX IF NOT EXISTS idx_pending_references_lookup_key ON pending_references(lookup_key);
+
 -- claim_versions (Refs #38) — append-only audit trail of every text /
 -- confidence / status snapshot a claim has held. Side table so the
 -- claim row itself stays slim; consumers asking for the timeline JOIN
@@ -781,7 +795,10 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // and edges instead of deleting them.
 // v36 (ADR 0038) adds event_dependencies (CREATE TABLE IF NOT EXISTS): source
 // dependence between episodes, read by retraction and trust.
-const currentSchemaVersion = 36
+// v37 (ADR 0038, late citations) adds pending_references and its lookup_key
+// index (CREATE TABLE/INDEX IF NOT EXISTS, run on every open): citations whose
+// source was not stored yet, resolved when that source is written.
+const currentSchemaVersion = 37
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,

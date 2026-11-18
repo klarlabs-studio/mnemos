@@ -123,6 +123,10 @@ func (r EventRepository) DeleteByID(ctx context.Context, id string) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM event_dependencies WHERE event_id = ? OR depends_on = ?`, id, id); err != nil {
 		return fmt.Errorf("delete dependencies of event %s: %w", id, err)
 	}
+	// ... and the citations it left pending (ADR 0038, late citations).
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM pending_references WHERE event_id = ?`, id); err != nil {
+		return fmt.Errorf("delete pending references of event %s: %w", id, err)
+	}
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM events WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("delete event %s: %w", id, err)
 	}
@@ -136,6 +140,9 @@ func (r EventRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM event_dependencies`); err != nil {
 		return fmt.Errorf("delete event dependencies: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM pending_references`); err != nil {
+		return fmt.Errorf("delete pending references: %w", err)
 	}
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM events`); err != nil {
 		return fmt.Errorf("delete all events: %w", err)

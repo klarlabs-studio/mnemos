@@ -339,6 +339,20 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
 );
 CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
 
+-- pending_references (ADR 0038, late citations): a citation in episode
+-- event_id that named no stored episode when it was written, under a
+-- canonical lookup_key a later source would carry. Writing an episode with
+-- that key re-detects the citing document and deletes the rows it resolved.
+-- No foreign keys: deleting an event clears its rows explicitly. In the RLS
+-- scoped array below.
+CREATE TABLE IF NOT EXISTS pending_references (
+  event_id   text        NOT NULL,
+  lookup_key text        NOT NULL,
+  created_at timestamptz NOT NULL,
+  PRIMARY KEY (event_id, lookup_key)
+);
+CREATE INDEX IF NOT EXISTS idx_pending_references_lookup_key ON pending_references(lookup_key);
+
 -- Embeddings: bytea matches the SQLite BLOB shape and stays the portable
 -- source of truth. When pgvector is installed, a nullable `embedding
 -- public.vector` accelerator column is added below (see the $mnemos_pgvector$
@@ -638,7 +652,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'events','claims','entities','claim_entities','claim_evidence','relationships',
-    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','closed_claim_evidence','closed_relationships','event_dependencies','embeddings','agents','actions',
+    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','closed_claim_evidence','closed_relationships','event_dependencies','pending_references','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
     'entity_relationships','working_memory_blocks','claim_expectations',
