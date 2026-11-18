@@ -107,22 +107,50 @@ func (r Claims) rewind(ctx context.Context, claims []domain.Claim) ([]domain.Cla
 	return r.scoreAt(ctx, out)
 }
 
-// scoreAt replaces each claim's stored trust_score, today's, with its trust at
-// At (TrustAt). It reads the claims' evidence through the view, so merges and
-// the event bound apply, the episodes those links name, and the credit
-// history. Without Events the view cannot date evidence and the stored score
-// stands; both callers (recall, browse) set it.
+// scoreAt returns claims as the brain scored them at At. It rewinds the trust
+// inputs the claims row stores itself (confidence, half-life, last
+// confirmation) from the trust-input history (StoredInputsAt), then replaces
+// the stored trust_score, today's, with the trust at At (TrustAt). Trust reads
+// the claims' evidence through the view, so merges and the event bound apply,
+// the episodes those links name and the credit history. Without Events the
+// view cannot date evidence and the stored score stands; both callers (recall,
+// browse) set it.
 func (r Claims) scoreAt(ctx context.Context, claims []domain.Claim) ([]domain.Claim, error) {
-	if r.Events == nil || len(claims) == 0 {
+	if len(claims) == 0 {
 		return claims, nil
 	}
 	ids := make([]string, len(claims))
 	for i, c := range claims {
 		ids[i] = c.ID
 	}
+	var inputs []domain.TrustInputChange
+	if lister, ok := r.ClaimRepository.(ports.TrustInputHistoryLister); ok {
+		var err error
+		if inputs, err = lister.ListTrustInputHistory(ctx, ids); err != nil {
+			return nil, fmt.Errorf("trust input history: %w", err)
+		}
+	}
+	inputsOf := make(map[string][]domain.TrustInputChange)
+	for _, ch := range inputs {
+		inputsOf[ch.ClaimID] = append(inputsOf[ch.ClaimID], ch)
+	}
+	if r.Events != nil {
+		if err := r.trustAt(ctx, claims, ids, inputsOf); err != nil {
+			return nil, err
+		}
+	}
+	for i := range claims {
+		c := &claims[i]
+		c.Confidence, c.HalfLifeDays, c.LastConfirmed = StoredInputsAt(*c, inputsOf[c.ID], r.At)
+	}
+	return claims, nil
+}
+
+// trustAt sets each claim's TrustScore to its trust at At.
+func (r Claims) trustAt(ctx context.Context, claims []domain.Claim, ids []string, inputsOf map[string][]domain.TrustInputChange) error {
 	links, err := r.ListEvidenceByClaimIDs(ctx, ids)
 	if err != nil {
-		return nil, fmt.Errorf("evidence for trust at %s: %w", r.At.Format(time.RFC3339), err)
+		return fmt.Errorf("evidence for trust at %s: %w", r.At.Format(time.RFC3339), err)
 	}
 	eventIDs := make([]string, 0, len(links))
 	byClaim := make(map[string][]domain.ClaimEvidence, len(claims))
@@ -134,7 +162,7 @@ func (r Claims) scoreAt(ctx context.Context, claims []domain.Claim) ([]domain.Cl
 	if len(eventIDs) > 0 {
 		evs, err := r.Events.ListByIDs(ctx, eventIDs)
 		if err != nil {
-			return nil, fmt.Errorf("evidence events for trust: %w", err)
+			return fmt.Errorf("evidence events for trust: %w", err)
 		}
 		for _, ev := range evs {
 			events[ev.ID] = ev
@@ -143,7 +171,7 @@ func (r Claims) scoreAt(ctx context.Context, claims []domain.Claim) ([]domain.Cl
 	var credit []domain.CreditChange
 	if lister, ok := r.ClaimRepository.(ports.CreditHistoryLister); ok {
 		if credit, err = lister.ListCreditHistory(ctx, ids); err != nil {
-			return nil, fmt.Errorf("credit history: %w", err)
+			return fmt.Errorf("credit history: %w", err)
 		}
 	}
 	creditOf := make(map[string][]domain.CreditChange)
@@ -152,11 +180,11 @@ func (r Claims) scoreAt(ctx context.Context, claims []domain.Claim) ([]domain.Cl
 	}
 	for i := range claims {
 		c := &claims[i]
-		c.TrustScore = TrustAt(*c, byClaim[c.ID], events, creditOf[c.ID], r.At)
+		c.TrustScore = TrustAt(*c, byClaim[c.ID], events, creditOf[c.ID], inputsOf[c.ID], r.At)
 		c.TrustComputedAt = r.At
 		c.TrustModelVersion = trust.ModelVersion
 	}
-	return claims, nil
+	return nil
 }
 
 // mergedAway returns every claim merged into one of claims, transitively,
