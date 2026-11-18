@@ -433,8 +433,11 @@ paths:
         *counts* (`distinct_tenants` / `evidence_count`), never tenant ids or
         raw evidence. Returns `503` on a backend without a promoted-schema
         store.
+        Not this tenant's schemas: those are `/v1/tenant-schemas`.
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [pending, active] } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
       responses:
         "200":
           description: Promoted schemas
@@ -447,6 +450,13 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/GlobalSchema" }
                   total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "400":
+          description: Unknown status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "503":
           description: Promoted-schema store not available on this backend
@@ -773,6 +783,64 @@ paths:
                   recombinations:
                     type: array
                     items: { $ref: "#/components/schemas/Recombination" }
+  /v1/predictive-error:
+    get:
+      summary: Hierarchical prediction error (ADR 0017)
+      description: |
+        Prediction error per level of the memory hierarchy (outcome, schema,
+        dissonance, calibration), the aggregate over the levels with data, and
+        the hotspot level. `levels_measured: 0` means `total` is unmeasured,
+        not perfect. Read-only; the same report as the `predictive_error` MCP
+        tool and `Memory.PredictiveError`.
+      tags: [cognitive]
+      responses:
+        "200":
+          description: Prediction-error report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  levels:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        level: { type: string }
+                        error: { type: number }
+                        samples: { type: integer }
+                        basis: { type: string }
+                  total: { type: number }
+                  hotspot: { type: string }
+                  levels_measured: { type: integer }
+  /v1/expectations/reconcile:
+    post:
+      summary: Reconcile observed expectations
+      description: |
+        Closes every observed-but-open expectation into a validates/refutes
+        verdict and returns each one's surprise. The consolidate pass does the
+        same on its schedule. Requires the `claims:write` scope.
+      tags: [cognitive]
+      responses:
+        "200":
+          description: The reconciliations performed (empty when nothing was open and observed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reconciliations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        belief_id: { type: string }
+                        predicted: { type: number }
+                        observed: { type: number }
+                        surprise: { type: number }
+                        confirmed: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/classify:
     get:
       summary: Classify a candidate statement against the store
@@ -816,6 +884,43 @@ paths:
                   decisions:
                     type: array
                     items: { $ref: "#/components/schemas/Decision" }
+    post:
+      summary: Record a decision
+      description: |
+        Records an agent decision with the beliefs that justified it and the
+        alternatives considered. The server assigns the id. The same
+        implementation as the `record_decision` MCP tool; the response is the
+        decision as stored. Requires the `claims:write` scope.
+      tags: [cognitive]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [statement, risk_level]
+              properties:
+                statement: { type: string }
+                plan: { type: string }
+                reasoning: { type: string }
+                risk_level: { type: string, enum: [low, medium, high, critical] }
+                beliefs: { type: array, items: { type: string } }
+                alternatives: { type: array, items: { type: string } }
+                outcome_id: { type: string }
+                chosen_at: { type: string, description: "RFC 3339 or YYYY-MM-DD; defaults to now." }
+      responses:
+        "201":
+          description: The recorded decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Decision" }
+        "400":
+          description: Invalid body, risk level or chosen_at
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/decisions/{id}:
     get:
       summary: Get one decision
@@ -926,6 +1031,32 @@ paths:
               schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
   /v1/actions:
+    get:
+      summary: List recorded actions (skill loop)
+      description: |
+        Same records as gRPC ListActions and the list_actions MCP tool. A
+        run-scoped token sees only its runs' actions; naming another run is
+        `403`.
+      tags: [cognitive]
+      parameters:
+        - { name: subject, in: query, schema: { type: string } }
+        - { name: run_id, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: One page of actions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actions: { type: array, items: { $ref: "#/components/schemas/Action" } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       summary: Record an action (skill loop)
       description: |
@@ -1000,6 +1131,233 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/outcomes:
+    get:
+      summary: List recorded outcomes (skill loop)
+      description: |
+        Same records as gRPC ListOutcomes and the list_outcomes MCP tool. An
+        outcome belongs to its action's run: a run-scoped token sees only
+        outcomes of its runs' actions.
+      tags: [cognitive]
+      parameters:
+        - { name: action_id, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: One page of outcomes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  outcomes: { type: array, items: { $ref: "#/components/schemas/Outcome" } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/tenant-schemas:
+    get:
+      summary: List this tenant's schemas
+      description: |
+        Schemas synthesized from (or appended alongside) this tenant's
+        action→outcome chains. Same records as gRPC ListSchemas and the
+        query_schemas MCP tool. Promoted global schemas are `/v1/schemas`.
+      tags: [cognitive]
+      parameters:
+        - { name: service, in: query, schema: { type: string } }
+        - { name: trigger, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: One page of schemas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemas: { type: array, items: { $ref: "#/components/schemas/TenantSchema" } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Append schemas authored elsewhere
+      description: |
+        Requires `claims:write`. The whole batch (max 1000) is validated
+        before anything is written; every evidence id must name a stored
+        action. Same operation as gRPC AppendSchemas.
+      tags: [cognitive]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schemas: { type: array, items: { $ref: "#/components/schemas/TenantSchema" } }
+      responses:
+        "201": { $ref: "#/components/responses/Accepted" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/reflexes:
+    get:
+      summary: List this tenant's reflexes
+      description: Same records as gRPC ListReflexes and the query_reflex MCP tool.
+      tags: [cognitive]
+      parameters:
+        - { name: trigger, in: query, schema: { type: string } }
+        - { name: service, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: One page of reflexes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reflexes: { type: array, items: { $ref: "#/components/schemas/Reflex" } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Append reflexes authored elsewhere
+      description: |
+        Requires `claims:write`. The whole batch (max 1000) is validated
+        before anything is written; every derived_from_schemas id must name a
+        stored schema. Same operation as gRPC AppendReflexes.
+      tags: [cognitive]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reflexes: { type: array, items: { $ref: "#/components/schemas/Reflex" } }
+      responses:
+        "201": { $ref: "#/components/responses/Accepted" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/incidents:
+    get:
+      summary: List incidents
+      description: Same records as gRPC ListIncidents and the list_incidents MCP tool. `501` on a backend without incident storage.
+      parameters:
+        - { name: severity, in: query, schema: { type: string, enum: [critical, high, medium, low] } }
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved, postmortem] } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200":
+          description: One page of incidents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidents: { type: array, items: { $ref: "#/components/schemas/Incident" } }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Open an incident
+      description: Requires `claims:write`. The author is the token's subject; a body `created_by` is ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                id: { type: string }
+                title: { type: string }
+                summary: { type: string }
+                severity: { type: string, enum: [critical, high, medium, low] }
+                root_cause_claim_id: { type: string }
+                decision_ids: { type: array, items: { type: string } }
+                outcome_ids: { type: array, items: { type: string } }
+                timeline_event_ids: { type: array, items: { type: string } }
+      responses:
+        "201":
+          description: The incident as stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/incidents/{id}:
+    get:
+      summary: Get one incident
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The incident
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/incidents/{id}/resolve:
+    post:
+      summary: Resolve an incident
+      description: Requires `claims:write`. An unknown id is `404` and nothing is written.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/incidents/{id}/why-wrong:
+    get:
+      summary: Post-incident analysis
+      description: The incident, the provenance of the belief that turned out to be wrong, and the decisions linked to it.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incident: { $ref: "#/components/schemas/Incident" }
+                  root_belief:
+                    type: object
+                    properties:
+                      belief_id: { type: string }
+                      statement: { type: string }
+                      score: { type: number, format: double }
+                      signals: { type: array, items: { type: object } }
+                      rationale: { type: string }
+                      prose_rationale: { type: string }
+                      source_document: { type: string }
+                      liveness: { type: string }
+                  affected_decisions: { type: array, items: { $ref: "#/components/schemas/Decision" } }
+                  explanation: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /v1/synthesize:
     post:
       summary: Run a synthesis pass (skill loop)
@@ -1091,6 +1449,124 @@ paths:
                   signals:
                     type: array
                     items: { $ref: "#/components/schemas/Signal" }
+  /v1/beliefs/{id}/{edit}:
+    post:
+      summary: Governance edit on a belief (deprecate, update, resolve, escalate, verify)
+      description: |
+        The REST face of the governance operations the MCP tools
+        `memory_deprecate`/`forget`, `update`, `memory_resolve_dissonance`,
+        `memory_escalate` and `memory_promote` perform; all run the same
+        implementation (internal/beliefops).
+
+        - `deprecate`: status → deprecated, `reason` recorded on the transition.
+        - `update`: replaces the text (`text`, required) and, when `confidence` > 0, the confidence.
+        - `resolve`: the belief in the path wins (→ resolved); `loser_id` (required) → deprecated.
+        - `escalate`: returns an escalation verdict carrying `reason`; writes nothing.
+        - `verify`: re-verifies the belief (last_verified, verify_count, last_confirmed).
+
+        `verify` requires `promote:global` (as `memory_promote` does); the
+        others require `claims:write`. The body is optional except where noted.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: edit, in: path, required: true, schema: { type: string, enum: [deprecate, update, resolve, escalate, verify] } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+                text: { type: string }
+                confidence: { type: number, minimum: 0, maximum: 1 }
+                loser_id: { type: string }
+      responses:
+        "200": { description: The edit's receipt }
+        "400": { description: Malformed request, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Belief not found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/facts:
+    post:
+      summary: Store one fact as a belief with its evidence
+      description: |
+        Each non-blank `evidence` string becomes an observation episode the
+        new belief links to (Memory.RememberClaimWithEvidence). Requires
+        `claims:write`; a run-scoped token is refused because the episodes
+        carry no run.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text, evidence]
+              properties:
+                text: { type: string }
+                evidence: { type: array, items: { type: string } }
+                valid_from: { type: string, description: "RFC 3339 or YYYY-MM-DD; default now" }
+      responses:
+        "201": { description: "Created: { belief_id }" }
+        "400": { description: Missing text or evidence, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/scan:
+    get:
+      summary: Beliefs valid within a time window
+      description: |
+        Beliefs whose valid-time interval overlaps [valid_from, valid_until),
+        ordered by valid_from, capped at 1000 (Memory.Scan). A run-scoped
+        token is refused: a scan spans every run.
+      parameters:
+        - { name: valid_from, in: query, schema: { type: string } }
+        - { name: valid_until, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: "{ beliefs: [...] }" }
+        "400": { description: Unparseable instant, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /v1/entity-associations:
+    get:
+      summary: List entity-to-entity associations
+      parameters:
+        - { name: entity_id, in: query, schema: { type: string }, description: "With entity_type: edges touching this entity" }
+        - { name: entity_type, in: query, schema: { type: string } }
+        - { name: kind, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200": { description: "{ edges, total, limit, offset }" }
+        "400": { description: entity_id without entity_type, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Append entity-to-entity associations (idempotent by id)
+      description: Requires `relationships:write`, like gRPC AppendEntityAssociations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                edges:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, kind, from_id, from_type, to_id, to_type]
+                    properties:
+                      id: { type: string }
+                      kind: { type: string }
+                      from_id: { type: string }
+                      from_type: { type: string }
+                      to_id: { type: string }
+                      to_type: { type: string }
+                      created_at: { type: string }
+                      created_by: { type: string }
+      responses:
+        "200": { description: "{ accepted }" }
+        "400": { description: Invalid edge, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 components:
   securitySchemes:
     bearerAuth:
@@ -1132,7 +1608,127 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: Invalid filter or record; the message names the offending element
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such record
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Accepted:
+      description: Records written
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              accepted: { type: integer }
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Page size (default 50, max 200)
+      schema: { type: integer, minimum: 1, maximum: 200 }
+    Offset:
+      name: offset
+      in: query
+      description: Records to skip
+      schema: { type: integer, minimum: 0 }
   schemas:
+    Action:
+      type: object
+      properties:
+        id: { type: string }
+        run_id: { type: string }
+        kind: { type: string }
+        subject: { type: string }
+        actor: { type: string }
+        at: { type: string, format: date-time }
+        metadata: { type: object, additionalProperties: { type: string } }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+    Outcome:
+      type: object
+      properties:
+        id: { type: string }
+        action_id: { type: string }
+        result: { type: string }
+        metrics: { type: object, additionalProperties: { type: number, format: double } }
+        notes: { type: string }
+        observed_at: { type: string, format: date-time }
+        source: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+    TenantSchema:
+      type: object
+      description: A schema (lesson) learned from this tenant's action→outcome chains.
+      required: [id, statement, evidence, confidence]
+      properties:
+        id: { type: string }
+        statement: { type: string }
+        context:
+          type: object
+          properties:
+            service: { type: string }
+            env: { type: string }
+            team: { type: string }
+        trigger: { type: string }
+        kind: { type: string }
+        evidence: { type: array, items: { type: string }, description: "Action ids; each must exist." }
+        confidence: { type: number, format: double }
+        polarity: { type: string }
+        derived_at: { type: string, format: date-time }
+        last_verified: { type: string, format: date-time }
+        source: { type: string }
+        created_by: { type: string }
+    Reflex:
+      type: object
+      description: A trigger → steps response derived from schemas.
+      required: [id, trigger, statement, confidence]
+      properties:
+        id: { type: string }
+        trigger: { type: string }
+        statement: { type: string }
+        context:
+          type: object
+          properties:
+            service: { type: string }
+            env: { type: string }
+            team: { type: string }
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              order: { type: integer }
+              action: { type: string }
+              description: { type: string }
+              condition: { type: string }
+        derived_from_schemas: { type: array, items: { type: string } }
+        confidence: { type: number, format: double }
+        derived_at: { type: string, format: date-time }
+        last_verified: { type: string, format: date-time }
+        source: { type: string }
+        created_by: { type: string }
+    Incident:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        severity: { type: string, enum: [critical, high, medium, low] }
+        status: { type: string, enum: [open, resolved, postmortem] }
+        timeline_event_ids: { type: array, items: { type: string } }
+        root_cause_claim_id: { type: string }
+        decision_ids: { type: array, items: { type: string } }
+        outcome_ids: { type: array, items: { type: string } }
+        playbook_id: { type: string }
+        opened_at: { type: string, format: date-time }
+        resolved_at: { type: string, format: date-time }
+        created_by: { type: string }
     Health:
       type: object
       description: Bare liveness body — `{"status":"ok"}` and nothing else.

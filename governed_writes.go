@@ -20,6 +20,9 @@ import (
 //	actionSetClaimLifecycle -> mnemos-set-claim-lifecycle  (write-local, idempotent)
 //	actionRetractEvent      -> mnemos-retract-event        (write-local, idempotent; see retract.go)
 //	actionUnretractEvent    -> mnemos-unretract-event      (write-local, idempotent; see unretract.go)
+//	actionOpenIncident      -> mnemos-open-incident        (write-local, idempotent on incident id; see incidents.go)
+//	actionResolveIncident   -> mnemos-resolve-incident     (write-local, idempotent; see incidents.go)
+//	set_expectation, observe_expectation, reconcile_expectations (write-local, idempotent; see expectations.go)
 const (
 	actionRemember          = "remember"
 	actionRememberClaim     = "remember_claim"
@@ -34,10 +37,11 @@ const evidenceSourceLibrary = "mnemos.library"
 
 // writeActions returns the descriptors for every governed library write
 // (remember, remember_claim, remember_event, record_decision,
-// set_claim_lifecycle, retract_event, unretract_event). One source of truth so the kernel plugin and the
+// set_claim_lifecycle, retract_event, unretract_event, open_incident,
+// resolve_incident). One source of truth so the kernel plugin and the
 // executor bindings can't drift.
 func writeActions() []kernel.Action {
-	return []kernel.Action{
+	actions := []kernel.Action{
 		{Name: actionRemember, Effect: axidomain.EffectWriteLocal, Idempotent: false,
 			Description: "Ingest text, extract claims, detect relationships, and persist them."},
 		{Name: actionRememberClaim, Effect: axidomain.EffectWriteLocal, Idempotent: false,
@@ -52,7 +56,18 @@ func writeActions() []kernel.Action {
 			Description: "Withdraw an event as evidence, retract or rescore its dependent claims, and report the impact (ADR 0037)."},
 		{Name: actionUnretractEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Clear an event's retraction: restore the claims it deprecated that nothing changed since, relink the ones it rescored (ADR 0037 §8)."},
+		{Name: actionOpenIncident, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Open (upsert) an incident record; see incidents.go."},
+		{Name: actionResolveIncident, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Mark an incident resolved; see incidents.go."},
+		{Name: actionSetExpectation, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Attach or replace a forward prediction on a claim."},
+		{Name: actionObserveExpectation, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Record the observed value for a claim's prediction."},
+		{Name: actionReconcileExpectations, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Close observed predictions into validates/refutes verdicts."},
 	}
+	return append(actions, governanceActions()...)
 }
 
 // buildWriteKernel assembles the axi kernel that governs every public
@@ -60,13 +75,21 @@ func writeActions() []kernel.Action {
 // write path can bypass the evidence chain + budget.
 func buildWriteKernel(m *memory, budget axi.Budget, evidenceLogPath string) (*kernel.Governed, error) {
 	executors := map[string]axidomain.ActionExecutor{
-		kernel.ExecutorRef(actionRemember):          rememberExecutor{m: m},
-		kernel.ExecutorRef(actionRememberClaim):     rememberClaimExecutor{m: m},
-		kernel.ExecutorRef(actionRememberEvent):     rememberEventExecutor{m: m},
-		kernel.ExecutorRef(actionRecordDecision):    recordDecisionExecutor{m: m},
-		kernel.ExecutorRef(actionSetClaimLifecycle): setClaimLifecycleExecutor{m: m},
-		kernel.ExecutorRef(actionRetractEvent):      retractEventExecutor{m: m},
-		kernel.ExecutorRef(actionUnretractEvent):    unretractEventExecutor{m: m},
+		kernel.ExecutorRef(actionRemember):              rememberExecutor{m: m},
+		kernel.ExecutorRef(actionRememberClaim):         rememberClaimExecutor{m: m},
+		kernel.ExecutorRef(actionRememberEvent):         rememberEventExecutor{m: m},
+		kernel.ExecutorRef(actionRecordDecision):        recordDecisionExecutor{m: m},
+		kernel.ExecutorRef(actionSetClaimLifecycle):     setClaimLifecycleExecutor{m: m},
+		kernel.ExecutorRef(actionRetractEvent):          retractEventExecutor{m: m},
+		kernel.ExecutorRef(actionUnretractEvent):        unretractEventExecutor{m: m},
+		kernel.ExecutorRef(actionOpenIncident):          openIncidentExecutor{m: m},
+		kernel.ExecutorRef(actionResolveIncident):       resolveIncidentExecutor{m: m},
+		kernel.ExecutorRef(actionSetExpectation):        setExpectationExecutor{m: m},
+		kernel.ExecutorRef(actionObserveExpectation):    observeExpectationExecutor{m: m},
+		kernel.ExecutorRef(actionReconcileExpectations): reconcileExpectationsExecutor{m: m},
+	}
+	for ref, exec := range governanceExecutors(m) {
+		executors[ref] = exec
 	}
 	return kernel.Build(m.logger, writeActions(), executors, budget, evidenceLogPath)
 }

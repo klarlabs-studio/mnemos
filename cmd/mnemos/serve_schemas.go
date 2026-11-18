@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/skills"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -40,13 +41,9 @@ type globalSchemaDTO struct {
 	CreatedBy       string     `json:"created_by,omitempty"`
 }
 
-type schemasResponse struct {
-	Schemas []globalSchemaDTO `json:"schemas"`
-	Total   int               `json:"total"`
-}
-
 // makeSchemasHandler serves GET /v1/schemas — the neocortex read surface.
-// Optional ?status=pending|active filter. The promoted-schema store is
+// Optional ?status=pending|active filter and ?limit=/?offset= paging. Reads go
+// through internal/skills, as gRPC ListGlobalSchemas does. The promoted-schema store is
 // deliberately cross-tenant shared (the inverse of ADR-0007 isolation), so it is
 // read from the base conn, not a tenant-scoped one. Returns 503 when the backend
 // has not implemented the store (nil repo), matching the cognitive endpoints'
@@ -57,34 +54,13 @@ func makeSchemasHandler(conn *store.Conn) http.HandlerFunc {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		if conn.GlobalSchemas == nil {
-			writeError(w, http.StatusServiceUnavailable, "promoted-schema store not available on this backend")
-			return
-		}
-		ctx := r.Context()
-		statusRaw := r.URL.Query().Get("status")
-		var (
-			schemas []domain.GlobalSchema
-			err     error
-		)
-		switch statusRaw {
-		case "":
-			schemas, err = conn.GlobalSchemas.ListAll(ctx)
-		case string(domain.GlobalSchemaStatusPending), string(domain.GlobalSchemaStatusActive):
-			schemas, err = conn.GlobalSchemas.ListByStatus(ctx, domain.GlobalSchemaStatus(statusRaw))
-		default:
-			writeError(w, http.StatusBadRequest, "status must be pending or active")
-			return
-		}
+		limit, offset := pageQuery(r)
+		schemas, err := skills.GlobalSchemas(r.Context(), conn.GlobalSchemas, r.URL.Query().Get("status"))
 		if err != nil {
-			writeInternalError(w, "list global schemas", err)
+			writeSkillsError(w, "list global schemas", err)
 			return
 		}
-		out := schemasResponse{Schemas: make([]globalSchemaDTO, len(schemas)), Total: len(schemas)}
-		for i, s := range schemas {
-			out.Schemas[i] = globalSchemaToDTO(s)
-		}
-		writeJSON(w, http.StatusOK, out)
+		writeList(w, "schemas", schemas, limit, offset, globalSchemaToDTO)
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/browse"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/kbmetrics"
 	"go.klarlabs.de/mnemos/internal/page"
 	"go.klarlabs.de/mnemos/internal/runscope"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -64,6 +65,11 @@ type Server struct {
 	closeTenantConn func(*store.Conn)
 	tenantMemMu     sync.Mutex
 	tenantMems      map[string]mnemos.Memory
+
+	// processText and search are the daemon-owned implementations behind
+	// ProcessText and Search (see WithTextProcessor / WithSearcher).
+	processText TextProcessor
+	search      Searcher
 }
 
 // NewServer returns a gRPC server backed by the given store Conn.
@@ -1162,100 +1168,18 @@ func (s *Server) AppendEmbeddings(ctx context.Context, req *mnemosv1.AppendEmbed
 // are excluded: a run-scoped token was granted named runs, and "unassigned" is
 // not one of them.
 func (s *Server) Metrics(ctx context.Context, _ *mnemosv1.MetricsRequest) (*mnemosv1.MetricsResponse, error) {
-	events, _ := s.connFor(ctx).Events.ListAll(ctx)
-	claims, _ := s.connFor(ctx).Claims.ListAll(ctx)
-	eventEmbs, _ := s.connFor(ctx).Embeddings.ListByEntityType(ctx, "event")
-	claimEmbs, _ := s.connFor(ctx).Embeddings.ListByEntityType(ctx, "claim")
-
-	if allowed := allowedRunsFromContext(ctx); len(allowed) > 0 {
-		keptEvents := events[:0]
-		allowedEventIDs := map[string]struct{}{}
-		for _, e := range events {
-			if runAllowed(allowed, e.RunID) {
-				keptEvents = append(keptEvents, e)
-				allowedEventIDs[e.ID] = struct{}{}
-			}
-		}
-		events = keptEvents
-
-		// A belief's run is only reachable through its evidence links — the same
-		// route ListBeliefs takes for its run_id filter.
-		claimIDs := make([]string, 0, len(claims))
-		for _, c := range claims {
-			claimIDs = append(claimIDs, c.ID)
-		}
-		visibleClaims := map[string]struct{}{}
-		if len(claimIDs) > 0 && len(allowedEventIDs) > 0 {
-			links, err := s.connFor(ctx).Claims.ListEvidenceByClaimIDs(ctx, claimIDs)
-			if err != nil {
-				return nil, status.Errorf(codes.Internal, "load evidence for run scope: %v", err)
-			}
-			for _, l := range links {
-				if _, ok := allowedEventIDs[l.EventID]; ok {
-					visibleClaims[l.ClaimID] = struct{}{}
-				}
-			}
-		}
-		keptClaims := claims[:0]
-		for _, c := range claims {
-			if _, ok := visibleClaims[c.ID]; ok {
-				keptClaims = append(keptClaims, c)
-			}
-		}
-		claims = keptClaims
-
-		// An embedding is an index entry for its entity, so it is legible
-		// exactly when its entity is.
-		keptEventEmbs := eventEmbs[:0]
-		for _, e := range eventEmbs {
-			if _, ok := allowedEventIDs[e.EntityID]; ok {
-				keptEventEmbs = append(keptEventEmbs, e)
-			}
-		}
-		eventEmbs = keptEventEmbs
-		keptClaimEmbs := claimEmbs[:0]
-		for _, e := range claimEmbs {
-			if _, ok := visibleClaims[e.EntityID]; ok {
-				keptClaimEmbs = append(keptClaimEmbs, e)
-			}
-		}
-		claimEmbs = keptClaimEmbs
+	c, err := kbmetrics.Compute(ctx, s.connFor(ctx), allowedRunsFromContext(ctx))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "metrics: %v", err)
 	}
-
-	runs := map[string]struct{}{}
-	for _, e := range events {
-		if e.RunID != "" {
-			runs[e.RunID] = struct{}{}
-		}
-	}
-	var contestedClaims int64
-	for _, c := range claims {
-		if c.Status == domain.ClaimStatusContested {
-			contestedClaims++
-		}
-	}
-	// Associations and dissonances are counted from the surviving beliefs, so
-	// the run narrowing above carries into them without a second filter.
-	ids := make([]string, 0, len(claims))
-	for _, c := range claims {
-		ids = append(ids, c.ID)
-	}
-	rels, _ := s.connFor(ctx).Relationships.ListByClaimIDs(ctx, ids)
-	var contradictions int64
-	for _, rel := range rels {
-		if rel.Type == domain.RelationshipTypeContradicts {
-			contradictions++
-		}
-	}
-
 	return &mnemosv1.MetricsResponse{
-		Runs:             int64(len(runs)),
-		Episodes:         int64(len(events)),
-		Beliefs:          int64(len(claims)),
-		ContestedBeliefs: contestedClaims,
-		Associations:     int64(len(rels)),
-		Dissonances:      contradictions,
-		Embeddings:       int64(len(eventEmbs) + len(claimEmbs)),
+		Runs:             c.Runs,
+		Episodes:         c.Events,
+		Beliefs:          c.Claims,
+		ContestedBeliefs: c.ContestedClaims,
+		Associations:     c.Relationships,
+		Dissonances:      c.Contradictions,
+		Embeddings:       c.Embeddings,
 	}, nil
 }
 

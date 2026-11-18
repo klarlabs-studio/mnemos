@@ -76,6 +76,27 @@ service MnemosService {
   // AppendReflexes writes reflexes idempotently.
   rpc AppendReflexes(AppendReflexesRequest) returns (AppendResponse);
 
+  // ListGlobalSchemas returns the schemas promoted to the shared global tier
+  // (ADR 0011/0012) — a different entity from ListSchemas, which returns this
+  // tenant's schemas. The same records as REST GET /v1/schemas. status is
+  // optional (pending | active); anything else is INVALID_ARGUMENT.
+  rpc ListGlobalSchemas(ListGlobalSchemasRequest) returns (ListGlobalSchemasResponse);
+
+  // --- Incidents (parity with REST /v1/incidents) ---
+  // OpenIncident records an incident. Requires claims:write; a blank title or
+  // unknown severity is INVALID_ARGUMENT.
+  rpc OpenIncident(OpenIncidentRequest) returns (Incident);
+  // ListIncidents returns incidents, optionally by severity and/or status.
+  rpc ListIncidents(ListIncidentsRequest) returns (ListIncidentsResponse);
+  // GetIncident returns one incident; an unknown id is NOT_FOUND.
+  rpc GetIncident(GetIncidentRequest) returns (Incident);
+  // ResolveIncident marks an incident resolved. Requires claims:write; an
+  // unknown id is NOT_FOUND and writes nothing.
+  rpc ResolveIncident(ResolveIncidentRequest) returns (Incident);
+  // WhyWereWeWrong is the post-incident analysis: the incident, its
+  // root-cause belief's provenance and the decisions linked to it.
+  rpc WhyWereWeWrong(WhyWereWeWrongRequest) returns (WhyWereWeWrongResponse);
+
   // ListEntityAssociations returns polymorphic cross-entity edges.
   rpc ListEntityAssociations(ListEntityAssociationsRequest) returns (ListEntityAssociationsResponse);
   // AppendEntityAssociations writes polymorphic edges idempotently.
@@ -139,6 +160,74 @@ service MnemosService {
   rpc Timeline(TimelineRequest) returns (TimelineResponse);
   // Signals returns detected temporal patterns.
   rpc Signals(SignalsRequest) returns (SignalsResponse);
+
+  // --- Ingest, search, passages, context, prediction and brain reads
+  // (capability-registry parity with REST / MCP / the Go library) ---
+  // ProcessText runs raw text through ingest -> extract -> relate -> persist,
+  // the same pipeline as REST POST /v1/process and the process_text MCP tool.
+  rpc ProcessText(ProcessTextRequest) returns (ProcessTextResponse);
+  // Search is hybrid belief search with filters (REST /v1/search, MCP
+  // query_knowledge): the same recall path through query.Engine.Recall.
+  rpc Search(SearchRequest) returns (SearchResponse);
+  // Passages returns the stored episode passages that best match a query (BM25).
+  rpc Passages(PassagesRequest) returns (PassagesResponse);
+  // ContextBlock renders a run's agent-ready context block (REST /v1/context).
+  rpc ContextBlock(ContextBlockRequest) returns (ContextBlockResponse);
+  // PredictiveError reports hierarchical prediction error (ADR 0017).
+  rpc PredictiveError(PredictiveErrorRequest) returns (PredictiveErrorResponse);
+  // BrainHealth reports the unified brain-health verdict (ADR 0019).
+  rpc BrainHealth(BrainHealthRequest) returns (BrainHealthResponse);
+  // SetExpectation attaches (or replaces) a forward prediction on a belief.
+  rpc SetExpectation(SetExpectationRequest) returns (Expectation);
+  // GetExpectation reads a belief's expectation; NotFound when it has none.
+  rpc GetExpectation(GetExpectationRequest) returns (Expectation);
+  // RecordObservation records the observed value for a belief's expectation.
+  rpc RecordObservation(RecordObservationRequest) returns (Expectation);
+  // ReconcileExpectations closes every observed prediction into a
+  // validates/refutes verdict.
+  rpc ReconcileExpectations(ReconcileExpectationsRequest) returns (ReconcileExpectationsResponse);
+
+  // --- Belief writes, governance and per-belief reads (one implementation
+  // with REST, MCP and the Go library: internal/beliefops and the Memory
+  // facade). An unknown belief is NOT_FOUND, a malformed request
+  // INVALID_ARGUMENT. ---
+  // RememberFact stores one fact as a belief, recording each evidence string
+  // as an observation episode it links to (REST POST /v1/facts, MCP
+  // remember's library twin). Requires claims:write; a run-scoped token is
+  // PERMISSION_DENIED because the episodes carry no run.
+  rpc RememberFact(RememberFactRequest) returns (RememberFactResponse);
+  // ScanBeliefs returns beliefs valid within a time window, ordered by
+  // valid_from (REST GET /v1/scan). A run-scoped token is PERMISSION_DENIED:
+  // a scan spans every run.
+  rpc ScanBeliefs(ScanBeliefsRequest) returns (ScanBeliefsResponse);
+  // DeprecateBelief marks a belief deprecated (MCP memory_deprecate / forget,
+  // REST POST /v1/beliefs/{id}/deprecate). Requires claims:write.
+  rpc DeprecateBelief(DeprecateBeliefRequest) returns (BeliefStatusChange);
+  // UpdateBelief rewrites a belief's text and optionally its confidence
+  // (MCP update, REST POST /v1/beliefs/{id}/update). Requires claims:write.
+  rpc UpdateBelief(UpdateBeliefRequest) returns (BeliefRevision);
+  // ResolveDissonance settles two contradicting beliefs: winner resolved,
+  // loser deprecated (MCP memory_resolve_dissonance, REST POST
+  // /v1/beliefs/{id}/resolve). Requires claims:write.
+  rpc ResolveDissonance(ResolveDissonanceRequest) returns (ResolveDissonanceResponse);
+  // EscalateBelief asks for a human decision on a belief and returns the
+  // escalation; it writes nothing (MCP memory_escalate, REST POST
+  // /v1/beliefs/{id}/escalate). Requires claims:write.
+  rpc EscalateBelief(EscalateBeliefRequest) returns (BeliefEscalation);
+  // VerifyBelief re-verifies a belief against fresh evidence (MCP
+  // memory_promote, REST POST /v1/beliefs/{id}/verify). Requires
+  // promote:global.
+  rpc VerifyBelief(VerifyBeliefRequest) returns (VerifyBeliefResponse);
+  // RecordBeliefFeedback records a helpful/unhelpful vote (MCP
+  // record_feedback, REST POST /v1/beliefs/{id}/feedback). Requires
+  // claims:write.
+  rpc RecordBeliefFeedback(RecordBeliefFeedbackRequest) returns (BeliefFeedback);
+  // BeliefProvenance explains how a belief's trust was computed (REST GET
+  // /v1/beliefs/{id}/provenance).
+  rpc BeliefProvenance(BeliefProvenanceRequest) returns (.mnemos.v1.BeliefProvenance);
+  // BeliefHistory returns a belief's version chain newest first (REST GET
+  // /v1/beliefs/{id}/history).
+  rpc BeliefHistory(BeliefHistoryRequest) returns (BeliefHistoryResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -513,6 +602,114 @@ message ListReflexesResponse {
 message AppendReflexesRequest { repeated Reflex reflexes = 1; }
 
 // ---------------------------------------------------------------------------
+// Global (promoted) schemas
+// ---------------------------------------------------------------------------
+
+// GlobalSchema is a de-identified generalisation promoted to the shared
+// global tier. Its provenance is corroboration counts, never tenant ids.
+message GlobalSchema {
+  string                    id               = 1;
+  string                    statement        = 2;
+  Context                   context          = 3;
+  string                    polarity         = 4;
+  int32                     distinct_tenants = 5;
+  int32                     evidence_count   = 6;
+  double                    confidence       = 7;
+  double                    surprise         = 8;
+  bool                      has_surprise     = 9;
+  string                    status           = 10;
+  google.protobuf.Timestamp promoted_at      = 11;
+  string                    created_by       = 12;
+}
+
+message ListGlobalSchemasRequest {
+  Pagination pagination = 1;
+  string     status     = 2; // optional: pending | active
+}
+
+message ListGlobalSchemasResponse {
+  repeated GlobalSchema global_schemas = 1;
+  int32                 total          = 2;
+  int32                 limit          = 3;
+  int32                 offset         = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Incidents
+// ---------------------------------------------------------------------------
+
+message Incident {
+  string                    id                   = 1;
+  string                    title                = 2;
+  string                    summary              = 3;
+  string                    severity             = 4; // critical | high | medium | low
+  string                    status               = 5; // open | resolved | postmortem
+  string                    root_cause_belief_id = 6;
+  repeated string           decision_ids         = 7;
+  repeated string           outcome_ids          = 8;
+  repeated string           timeline_episode_ids = 9;
+  string                    reflex_id            = 10;
+  google.protobuf.Timestamp opened_at            = 11;
+  google.protobuf.Timestamp resolved_at          = 12;
+  string                    created_by           = 13;
+}
+
+message OpenIncidentRequest {
+  string          id                   = 1; // optional; generated when empty
+  string          title                = 2;
+  string          summary              = 3;
+  string          severity             = 4; // default medium
+  string          root_cause_belief_id = 5;
+  repeated string decision_ids         = 6;
+  repeated string outcome_ids          = 7;
+  repeated string timeline_episode_ids = 8;
+}
+
+message ListIncidentsRequest {
+  Pagination pagination = 1;
+  string     severity   = 2; // optional
+  string     status     = 3; // optional
+}
+
+message ListIncidentsResponse {
+  repeated Incident incidents = 1;
+  int32             total     = 2;
+  int32             limit     = 3;
+  int32             offset    = 4;
+}
+
+message GetIncidentRequest { string id = 1; }
+message ResolveIncidentRequest { string id = 1; }
+message WhyWereWeWrongRequest { string incident_id = 1; }
+
+message ProvenanceSignal {
+  string name         = 1;
+  double value        = 2;
+  double weight       = 3;
+  double contribution = 4;
+  string detail       = 5;
+}
+
+// BeliefProvenance is a belief's credibility breakdown.
+message BeliefProvenance {
+  string                    belief_id       = 1;
+  string                    text            = 2;
+  double                    score           = 3;
+  repeated ProvenanceSignal signals         = 4;
+  string                    rationale       = 5;
+  string                    prose_rationale = 6;
+  string                    source_document = 7;
+  string                    liveness        = 8;
+}
+
+message WhyWereWeWrongResponse {
+  Incident          incident           = 1;
+  BeliefProvenance  root_belief        = 2; // unset when the incident names none or it is not stored
+  repeated Decision affected_decisions = 3;
+  string            explanation        = 4;
+}
+
+// ---------------------------------------------------------------------------
 // EntityAssociations
 // ---------------------------------------------------------------------------
 
@@ -855,3 +1052,263 @@ message SignalsRequest {
   int32  limit          = 3;
 }
 message SignalsResponse { repeated MemorySignal signals = 1; }
+
+// ---------------------------------------------------------------------------
+// Ingest, search, passages, context, prediction and brain reads
+// ---------------------------------------------------------------------------
+
+message ProcessTextRequest {
+  string text = 1;
+  // use_llm / use_embeddings are tri-state: unset lets the server decide
+  // (LLM extraction iff it has a provider configured), as on REST.
+  optional bool use_llm        = 2;
+  optional bool use_embeddings = 3;
+}
+message ProcessTextResponse {
+  string run_id          = 1;
+  int32  episodes        = 2;
+  int32  beliefs         = 3;
+  int32  associations    = 4;
+  int32  embeddings      = 5;
+  bool   used_llm        = 6;
+  bool   used_embeddings = 7;
+}
+
+message SearchRequest {
+  string                    query          = 1;
+  string                    run_id         = 2;
+  int32                     top_k          = 3;
+  double                    min_trust      = 4;
+  google.protobuf.Timestamp as_of          = 5; // validity time
+  google.protobuf.Timestamp recorded_as_of = 6; // ingestion time (ADR 0036)
+  Context                   scope          = 7;
+  string                    type_filter    = 8;
+  string                    status_filter  = 9;
+  string                    consumer       = 10; // user (default) | agent
+  string                    visibility     = 11; // personal | team | org
+}
+message SearchBelief {
+  string id          = 1;
+  string text        = 2;
+  string type        = 3;
+  string status      = 4;
+  double confidence  = 5;
+  double trust_score = 6;
+}
+message SearchVerdict {
+  string winner_belief_id  = 1;
+  string loser_belief_id   = 2;
+  double confidence        = 3;
+  string rationale         = 4;
+  string action            = 5;
+  string escalation_reason = 6;
+}
+message SearchResponse {
+  string                 query                     = 1;
+  repeated SearchBelief  beliefs                   = 2;
+  repeated Association   dissonances               = 3;
+  int32                  total                     = 4;
+  int32                  top_k                     = 5;
+  bool                   auto_resolved             = 6;
+  string                 dissonance_explanation    = 7;
+  repeated SearchVerdict verdicts                  = 8;
+}
+
+message PassagesRequest {
+  string query  = 1;
+  int32  limit  = 2;
+  string run_id = 3;
+}
+message Passage {
+  string                    episode_id = 1;
+  string                    text       = 2;
+  google.protobuf.Timestamp at         = 3;
+  map<string, string>       metadata   = 4;
+  double                    score      = 5;
+}
+message PassagesResponse { repeated Passage passages = 1; }
+
+message ContextBlockRequest {
+  string run_id     = 1;
+  string query      = 2;
+  int32  max_tokens = 3;
+}
+message ContextBlockResponse {
+  string run_id  = 1;
+  string context = 2;
+}
+
+message PredictiveErrorRequest {}
+message PredictiveErrorLevel {
+  string level   = 1;
+  double error   = 2;
+  int32  samples = 3;
+  string basis   = 4;
+}
+message PredictiveErrorResponse {
+  repeated PredictiveErrorLevel levels          = 1;
+  double                        total           = 2;
+  string                        hotspot         = 3;
+  int32                         levels_measured = 4;
+}
+
+message BrainHealthRequest {
+  // full forces the exact scan; the default samples large brains.
+  bool full = 1;
+}
+message Vital {
+  string name   = 1;
+  double value  = 2;
+  string status = 3;
+  string detail = 4;
+}
+message Pathology {
+  string kind   = 1;
+  int32  count  = 2;
+  string status = 3;
+  string detail = 4;
+}
+message VitalEstimate {
+  int32  sample_size = 1;
+  int32  population  = 2;
+  double margin_95   = 3;
+}
+message BrainHealthResponse {
+  string                     status      = 1;
+  repeated Vital             vitals      = 2;
+  repeated Pathology         pathologies = 3;
+  string                     mode        = 4;
+  map<string, VitalEstimate> estimates   = 5;
+  google.protobuf.Timestamp  at          = 6;
+}
+
+message Expectation {
+  string                    belief_id       = 1;
+  double                    predicted       = 2;
+  double                    tolerance       = 3;
+  google.protobuf.Timestamp horizon         = 4;
+  double                    observed        = 5;
+  bool                      has_observation = 6;
+  bool                      resolved        = 7;
+  google.protobuf.Timestamp created_at      = 8;
+}
+message SetExpectationRequest {
+  string                    belief_id = 1;
+  double                    predicted = 2;
+  double                    tolerance = 3;
+  google.protobuf.Timestamp horizon   = 4;
+}
+message GetExpectationRequest { string belief_id = 1; }
+message RecordObservationRequest {
+  string belief_id = 1;
+  double observed  = 2;
+}
+message ReconcileExpectationsRequest {}
+message Reconciliation {
+  string belief_id = 1;
+  double predicted = 2;
+  double observed  = 3;
+  double surprise  = 4;
+  bool   confirmed = 5;
+}
+message ReconcileExpectationsResponse { repeated Reconciliation reconciliations = 1; }
+
+// ---------------------------------------------------------------------------
+// Belief writes, governance and per-belief reads
+// ---------------------------------------------------------------------------
+
+message RememberFactRequest {
+  string                    text       = 1;
+  repeated string           evidence   = 2;
+  google.protobuf.Timestamp valid_from = 3; // unset = now
+}
+message RememberFactResponse { string belief_id = 1; }
+
+message ScanBeliefsRequest {
+  google.protobuf.Timestamp valid_from  = 1; // unset = open
+  google.protobuf.Timestamp valid_until = 2; // unset = open
+  int32                     limit       = 3; // 0 = the server cap
+}
+message ScanBeliefsResponse { repeated BeliefDetail beliefs = 1; }
+
+message DeprecateBeliefRequest {
+  string belief_id = 1;
+  string reason    = 2;
+}
+message EscalateBeliefRequest {
+  string belief_id = 1;
+  string reason    = 2;
+}
+message BeliefStatusChange {
+  string belief_id  = 1;
+  string old_status = 2;
+  string new_status = 3;
+}
+
+message UpdateBeliefRequest {
+  string belief_id  = 1;
+  string text       = 2;
+  double confidence = 3; // 0 keeps the current confidence
+  string reason     = 4;
+}
+message BeliefRevision {
+  string belief_id  = 1;
+  string old_text   = 2;
+  string new_text   = 3;
+  double confidence = 4;
+}
+
+message ResolveDissonanceRequest {
+  string winner_id = 1;
+  string loser_id  = 2;
+  string reason    = 3;
+}
+message ResolveDissonanceResponse {
+  string winner_id = 1;
+  string loser_id  = 2;
+}
+
+message BeliefEscalation {
+  string belief_id         = 1;
+  string action            = 2;
+  string escalation_reason = 3;
+  string rationale         = 4;
+}
+
+message VerifyBeliefRequest { string belief_id = 1; }
+message VerifyBeliefResponse {
+  string                    belief_id   = 1;
+  google.protobuf.Timestamp verified_at = 2;
+}
+
+message RecordBeliefFeedbackRequest {
+  string belief_id = 1;
+  bool   helpful   = 2;
+  string note      = 3;
+}
+message BeliefFeedback {
+  string belief_id                = 1;
+  bool   helpful                  = 2;
+  string new_status               = 3;
+  double new_confidence           = 4;
+  int32  negative_feedback_streak = 5;
+  int32  helpful_count            = 6;
+  bool   auto_contested           = 7;
+}
+
+message BeliefProvenanceRequest { string belief_id = 1; }
+
+message BeliefHistoryRequest { string belief_id = 1; }
+message BeliefVersion {
+  string                    belief_id  = 1;
+  int32                     version    = 2;
+  string                    text       = 3;
+  double                    confidence = 4;
+  string                    status     = 5;
+  google.protobuf.Timestamp written_at = 6;
+  string                    written_by = 7;
+}
+message BeliefHistoryResponse {
+  string                 belief_id = 1;
+  repeated BeliefVersion versions  = 2;
+}
