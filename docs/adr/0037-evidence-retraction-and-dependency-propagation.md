@@ -257,7 +257,10 @@ nothing else has changed them since. A belief is restored when all hold:
   `to_status = deprecated`, `changed_by` = the retraction's `retracted_by`, and
   the exact reason the retraction wrote. Any later transition (a human
   re-deprecating it with a reason of their own, a reactivation, another
-  retraction) means someone else owns its status now;
+  retraction) means someone else owns its status now. A write that leaves a
+  deprecated belief deprecated records no transition (`claim_status_history`
+  logs changes only), so it is not seen; a person who wants the belief to stay
+  retired after an un-retraction deprecates it again afterwards;
 - it has live evidence once the event is restored (normally the kept link to
   the event itself, §5).
 

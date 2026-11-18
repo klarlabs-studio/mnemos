@@ -172,6 +172,8 @@ func actions() []kernel.Action {
 			Description: "Purge all memory state (claims, relationships, embeddings, and optionally events)."},
 		{Name: actionRetractEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Withdraw an event as evidence: retract beliefs left without live evidence, rescore the rest, record the retraction and its impact (ADR 0036)."},
+		{Name: actionUnretractEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Clear an event's retraction: restore the beliefs it deprecated that nothing changed since, relink the ones it rescored, record the un-retraction (ADR 0037 §8)."},
 	}
 }
 
@@ -205,6 +207,7 @@ func executors(conn *store.Conn) map[string]axidomain.ActionExecutor {
 		kernel.ExecutorRef(actionDeleteEvent):        deleteEventExecutor{conn: conn},
 		kernel.ExecutorRef(actionReset):              resetExecutor{conn: conn},
 		kernel.ExecutorRef(actionRetractEvent):       retractEventExecutor{conn: conn},
+		kernel.ExecutorRef(actionUnretractEvent):     unretractEventExecutor{conn: conn},
 	}
 }
 
