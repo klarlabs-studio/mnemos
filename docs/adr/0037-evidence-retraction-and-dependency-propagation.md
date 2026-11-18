@@ -86,7 +86,7 @@ leaves one evidence record on the kernel session, like `delete_event_cascade`.
 - Retracting an already retracted event writes nothing and returns the stored
   record with `already_retracted: true`. The journal row is written **last**, so
   a failure part-way leaves no record and a re-run converges: deprecating a
-  deprecated belief and unlinking an absent link are both no-ops.
+  deprecated belief and closing a link that is no longer live are both no-ops.
 
 ### 2. What happens to each dependent
 
@@ -98,7 +98,7 @@ themselves retracted. For every belief linked to the retracted event
 |---|---|---|
 | belief with no other live evidence | **retracted** | status → `deprecated` via `UpsertWithReasonAs`, which appends a `claim_status_history` row; reason `retracted: evidence event <id> was retracted: <why>`, changed_by the caller. The evidence link is **kept** (see §5). |
 | belief already deprecated | left alone | listed as `already_deprecated` |
-| belief with other live evidence | **rescored** | the link to the retracted event is removed (`UnlinkEvidence`), then `RecomputeTrustForClaims` with canonical trust (`rescoreKept`, shared with `DeleteEventCascade`); before and after trust are reported |
+| belief with other live evidence | **rescored** | the link to the retracted event is closed (`CloseEvidence`: it leaves `claim_evidence` and is kept in `closed_claim_evidence` with the retraction's time, actor and reason, ADR 0036 §8), then `RecomputeTrustForClaims` with canonical trust (`rescoreKept`, shared with `DeleteEventCascade`); before and after trust are reported |
 | association touching a retracted belief | kept, listed | recall's admission already excludes deprecated beliefs |
 | decision citing a retracted belief | kept, listed for review | never edited, never marked refuted |
 | outcome verdict edge onto a retracted belief | kept, listed | |
@@ -168,16 +168,13 @@ T (`recordedEvents`, `recordedClaims.ListByEventIDs` in
   because it is deprecated. This is asserted on SQLite and memory, and on
   Postgres and MySQL when their DSNs are set
   (`TestRetractEvent_AgreesAcrossBackends`).
-- A **rescored** belief loses its link to the retracted event. A read before
-  the retraction then reaches it only through its other evidence. When that
-  other evidence was ingested after T, the read misses a belief the brain held
-  at T. `claim_evidence` has no timestamps (ADR 0036 §3), so this is the same
-  limitation ADR 0036 already lists for trust; the retraction record keeps the
-  event id, which is enough to restore the link when evidence becomes
-  versioned (ADR 0036 step 3).
-
-Trust is not rewound (ADR 0036 §3): a read before the retraction shows a
-rescored belief's current, lower trust.
+- A **rescored** belief's link to the retracted event is closed, not deleted
+  (ADR 0036 §8). Live reads lose it; a read before the retraction still has
+  it, reaches the belief through the retracted event even when its other
+  evidence came after T, and reconstructs its trust at T on both (ADR 0036
+  §7), the trust it had before the retraction
+  (`TestRecall_ReadBeforeRetractionKeepsTheClosedLink`). Links deleted before
+  closing existed stay unrecoverable (ADR 0036 §8).
 
 ### 6. Interaction with merges (ADR 0033)
 
@@ -268,9 +265,9 @@ A restored belief returns to the transition's `from_status` (its status before
 the retraction, `active` if none was recorded), through `UpsertWithReasonAs`
 with reason `unretracted: evidence event <id> was restored[: <why>]` and the
 caller as `changed_by`. Every other candidate is listed in `skipped_beliefs`
-with the reason it was skipped. Beliefs the retraction **rescored** get back
-the evidence link it removed (`UpsertEvidence`) and are rescored with the other
-restored beliefs (`rescoreKept`); their status is not touched, because the
+with the reason it was skipped. Beliefs the retraction **rescored** get the
+evidence link it closed back as a new link (`UpsertEvidence`) and are rescored
+with the other restored beliefs (`rescoreKept`); their status is not touched, because the
 retraction never changed it. A relinked belief that is deprecated (by a later
 retraction of another source, say) stays deprecated: un-retracting this event
 does not undo another retraction, and the report says so. Associations,
@@ -278,15 +275,16 @@ decisions and outcome edges were never rewritten, so nothing is restored for
 them. Trust is recomputed, never restored from the report: it reflects the
 evidence the belief has now.
 
-**Recorded trust (ADR 0036 step 3).** A relinked evidence link is a new link:
-it carries the un-retraction's time as its `created_at`, not the time of the
-link the retraction removed. A recorded-as-of read inside the retracted window
-therefore reconstructs a relinked belief's trust on its remaining evidence, and
-a read after the restoration on both (`TestRecall_RelinkedBeliefTrustFollowsTheWindow`).
-A read from before the retraction still misses the removed link, the
-limitation §5 already states, because the retraction deleted it rather than
-closing it. A restored belief kept its link (§5), so its original `created_at`
-stands. Un-retraction writes no credit, so the credit history is untouched.
+**Recorded trust (ADR 0036 §7, §8).** Un-retraction reopens a closed link by
+appending, never by rewriting: the relinked link is a new live row recorded at
+the un-retraction, and the closed row keeps its interval `[created_at,
+closed_at)`. A recorded-as-of read before the retraction therefore counts the
+original link, a read inside the retracted window counts neither, and a read
+after the restoration counts the new one
+(`TestRecall_RelinkedBeliefTrustFollowsTheWindow`,
+`TestRetractEvent_AgreesAcrossBackends`). A restored belief kept its link
+(§5), so its original `created_at` stands. Un-retraction writes no credit, so
+the credit history is untouched.
 
 **Idempotency and errors.**
 
@@ -341,8 +339,8 @@ MCP and REST return the same `retraction.UnretractionReport`.
   synthesiser and `decision show` read. Today the flag lives only in the
   retraction record.
 - ~~**Un-retraction.**~~ Done: §8.
-- **Evidence-link timestamps**, which would let a recorded-as-of read restore a
-  rescored belief's link to the retracted event (ADR 0036 step 3).
+- ~~**Evidence-link timestamps**~~ Done: links carry `created_at` (ADR 0036
+  §7) and retraction closes rather than deletes them (ADR 0036 §8).
 - **Watch-file path aliasing.** Matching is on the resolved absolute path the
   watcher stores. A file first ingested under a different spelling of its path
   (a symlink, a relative path resolved elsewhere) is not found.
@@ -359,4 +357,5 @@ MCP and REST return the same `retraction.UnretractionReport`.
    synthesis and decision review; REST, gRPC, Go library and client bindings
    (**bindings implemented**).
 3. Un-retraction as a recorded transition (**implemented**, §8);
-   evidence-link timestamps so as-of reads restore rescored links.
+   evidence-link timestamps and closed links so as-of reads restore rescored
+   links (**implemented**, ADR 0036 §7 and §8).
