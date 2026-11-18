@@ -174,6 +174,10 @@ func writeRPCs() []writeRPC {
 			_, err := c.Synthesize(ctx, &mnemosv1.SynthesizeRequest{})
 			return err
 		}},
+		{"RetractEpisode", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.RetractEpisode(ctx, &mnemosv1.RetractEpisodeRequest{EpisodeId: "ev-scope", Reason: "r"})
+			return err
+		}},
 	}
 }
 

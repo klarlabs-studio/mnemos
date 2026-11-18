@@ -1190,6 +1190,19 @@ type Memory interface {
 	// no transition ordering — it records the state the caller asserts.
 	SetClaimLifecycle(ctx context.Context, claimID string, lifecycle ClaimLifecycle) error
 
+	// RetractEvent withdraws a stored event as evidence (ADR 0037) and
+	// returns the impact report. The event row is immutable and stays; the
+	// retraction is recorded once, append-only, with reason and the
+	// Memory's actor. A claim with no other live evidence is deprecated; a
+	// claim with other evidence loses the link and is rescored; relationships,
+	// decisions and outcome edges touching a retracted claim are listed, never
+	// rewritten. Retracting an already retracted event writes nothing and
+	// returns the stored record with AlreadyRetracted set. Returns an error
+	// wrapping [ErrEventNotFound] when eventID does not exist. It is the same
+	// operation as `mnemos retract-event`, the retract_episode MCP tool, REST
+	// POST /v1/episodes/{id}/retract and the gRPC RetractEpisode RPC.
+	RetractEvent(ctx context.Context, eventID, reason string) (EventRetraction, error)
+
 	// RecordDecision persists an agent decision (belief -> plan -> outcome
 	// audit record) through the governed write path and returns its id.
 	// Statement is required; RiskLevel defaults to "medium" when empty.

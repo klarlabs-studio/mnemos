@@ -18,6 +18,7 @@ import (
 //	actionRememberEvent     -> mnemos-remember-event       (write-local, idempotent on event id)
 //	actionRecordDecision    -> mnemos-record-decision      (write-local, non-idempotent)
 //	actionSetClaimLifecycle -> mnemos-set-claim-lifecycle  (write-local, idempotent)
+//	actionRetractEvent      -> mnemos-retract-event        (write-local, idempotent; see retract.go)
 const (
 	actionRemember          = "remember"
 	actionRememberClaim     = "remember_claim"
@@ -32,7 +33,7 @@ const evidenceSourceLibrary = "mnemos.library"
 
 // writeActions returns the descriptors for every governed library write
 // (remember, remember_claim, remember_event, record_decision,
-// set_claim_lifecycle). One source of truth so the kernel plugin and the
+// set_claim_lifecycle, retract_event). One source of truth so the kernel plugin and the
 // executor bindings can't drift.
 func writeActions() []kernel.Action {
 	return []kernel.Action{
@@ -46,6 +47,8 @@ func writeActions() []kernel.Action {
 			Description: "Record an agent decision (belief -> plan -> outcome audit record)."},
 		{Name: actionSetClaimLifecycle, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Transition a claim's promotion lifecycle (candidate/promoted/superseded)."},
+		{Name: actionRetractEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Withdraw an event as evidence, retract or rescore its dependent claims, and report the impact (ADR 0037)."},
 	}
 }
 
@@ -59,6 +62,7 @@ func buildWriteKernel(m *memory, budget axi.Budget, evidenceLogPath string) (*ke
 		kernel.ExecutorRef(actionRememberEvent):     rememberEventExecutor{m: m},
 		kernel.ExecutorRef(actionRecordDecision):    recordDecisionExecutor{m: m},
 		kernel.ExecutorRef(actionSetClaimLifecycle): setClaimLifecycleExecutor{m: m},
+		kernel.ExecutorRef(actionRetractEvent):      retractEventExecutor{m: m},
 	}
 	return kernel.Build(m.logger, writeActions(), executors, budget, evidenceLogPath)
 }

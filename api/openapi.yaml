@@ -191,6 +191,50 @@ paths:
               schema: { $ref: "#/components/schemas/AppendSummary" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /v1/episodes/{id}/retract:
+    post:
+      summary: Retract an episode as evidence (ADR 0037)
+      description: |
+        Withdraws the episode as evidence. The episode row is immutable and
+        stays; the retraction is recorded once, append-only. Beliefs the
+        episode alone supported are retracted (deprecated); beliefs with other
+        live evidence lose the link and are rescored. Associations, decisions
+        and outcome edges touching a retracted belief are listed, never
+        rewritten. Retracting an already retracted episode writes nothing and
+        returns the stored report with `already_retracted: true`.
+
+        Requires the `claims:write` scope (the same scope as the
+        `retract_episode` MCP tool). A run-scoped token may retract only
+        episodes of its runs; any other episode is a `404`, like one that does
+        not exist. The body is optional.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: "The episode id to retract." }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, description: "Why the episode is retracted; recorded with the retraction and on every belief it retracts." }
+      responses:
+        "200":
+          description: Retraction report (the same document as `mnemos retract-event --json` and `retract_episode`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Retraction" }
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Episode not found (or outside the token's runs)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /v1/beliefs:
     get:
       summary: List beliefs
@@ -1078,6 +1122,38 @@ components:
           type: object
           additionalProperties: { type: string }
       required: [id, content, source_input_id, timestamp]
+    Retraction:
+      type: object
+      properties:
+        episode_id: { type: string }
+        retracted_at: { type: string, format: date-time }
+        retracted_by: { type: string }
+        reason: { type: string }
+        already_retracted: { type: boolean }
+        impact:
+          type: object
+          properties:
+            retracted_beliefs: { type: array, items: { type: string } }
+            already_deprecated: { type: array, items: { type: string } }
+            rescored_beliefs:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  trust_before: { type: number, format: double }
+                  trust_after: { type: number, format: double }
+                  remaining_evidence: { type: integer }
+            associations: { type: array, items: { type: string } }
+            decisions:
+              type: array
+              items:
+                type: object
+                properties:
+                  decision_id: { type: string }
+                  beliefs: { type: array, items: { type: string } }
+            outcome_edges: { type: array, items: { type: string } }
+            uncertainty: { type: array, items: { type: string } }
     BeliefEvidence:
       type: object
       description: One belief→episode evidence link.

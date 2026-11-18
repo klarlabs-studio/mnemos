@@ -84,6 +84,19 @@ func (w *Writer) RetractEvent(ctx context.Context, eventID string, note domain.C
 	return dispatch[domain.EventRetraction](ctx, w, actionRetractEvent, retractEventInput{EventID: eventID, Note: note})
 }
 
+// ApplyRetraction performs the retraction directly against conn, outside this
+// package's kernel. It exists for the root library, whose public writes are
+// governed by the library's own kernel: its executor calls this so the library
+// and the daemon share one implementation. Every other caller goes through
+// [Writer.RetractEvent].
+func ApplyRetraction(ctx context.Context, conn *store.Conn, eventID string, note domain.ChangeNote) (domain.EventRetraction, error) {
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		return domain.EventRetraction{}, errors.New("retract event: event id is required")
+	}
+	return retractEvent(ctx, conn, eventID, note, time.Now().UTC())
+}
+
 // LookupRetraction returns eventID's recorded retraction, and false when the
 // event has not been retracted.
 func LookupRetraction(ctx context.Context, conn *store.Conn, eventID string) (domain.EventRetraction, bool, error) {
