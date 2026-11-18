@@ -58,7 +58,7 @@ var Registry = []Capability{
 		ID: "episode.retract", Effect: Write,
 		Summary: "Withdraw an episode as evidence: retract beliefs it alone supported, rescore the rest, report the impact (ADR 0037)",
 		On: map[Transport]Binding{
-			Go: Has("RetractEvent"), REST: Has("POST /v1/episodes/{id}/retract"), GRPC: Gap("no retraction RPC"),
+			Go: Has("RetractEvent"), REST: Has("POST /v1/episodes/{id}/retract"), GRPC: Has("RetractEpisode"),
 			MCP: Has("retract_episode"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no retraction call"),
 		},
 		Notes: "The MCP tool and `mnemos retract-event` both call govwrite.Writer.RetractEvent; watch_file calls it for text a revised or deleted file no longer contains.",
