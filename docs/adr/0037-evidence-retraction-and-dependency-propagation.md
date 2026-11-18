@@ -352,14 +352,16 @@ MCP and REST return the same `retraction.UnretractionReport`.
 - ~~**Un-retraction.**~~ Done: §8.
 - ~~**Evidence-link timestamps**~~ Done: links carry `created_at` (ADR 0036
   §7) and retraction closes rather than deletes them (ADR 0036 §8).
-- **Copies are not told from corroboration.** Dependents are found through
-  evidence links only. A verbatim restatement of a retracted claim in another
-  episode was folded onto the same belief at ingest, so the retraction keeps
-  and rescores the belief. A paraphrase, or a conclusion drawn in another
-  episode, is a separate belief the retraction does not reach. Measured by the
-  brainbench `evidence_retraction` scenario: 3 of 5 dependents survive, tying
-  raw retrieval that deletes the document's chunks. Closing the gap needs
-  provenance between episodes.
+- **Copies are told from corroboration only when they say so.** ADR 0038
+  records source dependence between episodes at ingest and makes live
+  evidence mean *independent* live evidence. A copy that cites the retracted
+  episode (by naming its source, by link, or by metadata) no longer keeps its
+  belief alive. The retraction reaches beliefs that rest on dependent
+  episodes, and the report lists the dependents and the path to each belief.
+  An uncited paraphrase, or an uncited conclusion drawn in another episode, is
+  still a separate belief the retraction does not reach. The brainbench
+  `evidence_retraction` scenario now keeps 2 of 5 dependents (0.4 against raw
+  retrieval's 0.6), and the two it keeps are exactly those.
 - **Watch-file path aliasing.** Matching is on the resolved absolute path the
   watcher stores. A file first ingested under a different spelling of its path
   (a symlink, a relative path resolved elsewhere) is not found.

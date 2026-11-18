@@ -18,13 +18,16 @@
 #
 # Then the advisory is retracted. Gold says which beliefs rest on it
 # (original / copy / derived) and which must survive (corroborated /
-# independent). Neither Mnemos nor the baseline reads the gold roles; the
-# blog's citation sentence is plain text to both.
+# independent). Neither Mnemos nor the baseline reads the gold roles. The
+# blog's "Source:" line is ordinary text: Mnemos's ingest reads citations in
+# every document it stores (ADR 0038), not in this scenario specifically.
 #
-# What evidence-link propagation can and cannot see here is stated in the
-# README ("Evidence retraction") and in every report's `recognition` field. In
-# short: the verbatim copy is folded onto the advisory's belief at ingest and
-# looks exactly like the release notes' real corroboration.
+# What propagation can and cannot see here is stated in the README ("Evidence
+# retraction") and in every report's `recognition` field. In short: the blog's
+# verbatim copy is folded onto the advisory's belief at ingest, and its citation
+# is what tells it apart from the release notes' real corroboration. The
+# newsletter's paraphrase ("according to the vendor") names no stored source,
+# and the checkout review cites nothing, so neither is reached.
 id: evidence_retraction
 description: A retracted advisory with verbatim copies, paraphrased copies and derived conclusions; are exactly its dependents withdrawn?
 
