@@ -1229,6 +1229,58 @@ type Memory interface {
 	// the read side of the decision audit trail.
 	ListDecisions(ctx context.Context, limit int) ([]Decision, error)
 
+	// ListActions returns recorded actions, optionally by subject and/or run.
+	// Wraps [ErrSkillsUnsupported] on a backend without the action layer.
+	// Same records as REST GET /v1/actions, gRPC ListActions and the
+	// list_actions MCP tool (internal/skills).
+	ListActions(ctx context.Context, q ActionQuery) ([]Action, error)
+
+	// ListOutcomes returns recorded outcomes, optionally for one action.
+	// Same records as REST GET /v1/outcomes, gRPC ListOutcomes and the
+	// list_outcomes MCP tool.
+	ListOutcomes(ctx context.Context, q OutcomeQuery) ([]Outcome, error)
+
+	// ListLessons returns this store's lessons ("schemas" on the wire),
+	// optionally by service and/or trigger. Same records as REST GET
+	// /v1/tenant-schemas, gRPC ListSchemas and the query_schemas MCP tool.
+	ListLessons(ctx context.Context, q LessonQuery) ([]Lesson, error)
+
+	// ListPlaybooks returns this store's playbooks ("reflexes" on the wire),
+	// optionally by trigger and/or service. Same records as REST GET
+	// /v1/reflexes, gRPC ListReflexes and the query_reflex MCP tool.
+	ListPlaybooks(ctx context.Context, q PlaybookQuery) ([]Playbook, error)
+
+	// ListGlobalSchemas returns the schemas promoted to the shared global
+	// tier (ADR 0011/0012), optionally by status. Wraps
+	// [ErrSkillsUnsupported] on a backend without the promoted-schema store.
+	// Same records as REST GET /v1/schemas, gRPC ListGlobalSchemas and the
+	// list_global_schemas MCP tool.
+	ListGlobalSchemas(ctx context.Context, q GlobalSchemaQuery) ([]GlobalSchema, error)
+
+	// OpenIncident records an incident through the governed write path and
+	// returns it as stored. Wraps [ErrInvalidIncident] for a blank title or
+	// unknown severity and [ErrIncidentsUnsupported] on a backend without
+	// incident storage. Same operation as REST POST /v1/incidents, gRPC
+	// OpenIncident and the open_incident MCP tool (internal/incident).
+	OpenIncident(ctx context.Context, item IncidentItem) (Incident, error)
+
+	// ListIncidents returns incidents, optionally by severity and/or status.
+	ListIncidents(ctx context.Context, q IncidentQuery) ([]Incident, error)
+
+	// GetIncident returns one incident; wraps [ErrIncidentNotFound] for an
+	// unknown id.
+	GetIncident(ctx context.Context, id string) (Incident, error)
+
+	// ResolveIncident marks an incident resolved through the governed write
+	// path and returns it as stored; wraps [ErrIncidentNotFound] (writing
+	// nothing) for an unknown id.
+	ResolveIncident(ctx context.Context, id string) (Incident, error)
+
+	// WhyWereWeWrong is the post-incident analysis: the incident, its
+	// root-cause claim's provenance, and the decisions linked to it. Wraps
+	// [ErrIncidentNotFound] for an unknown id.
+	WhyWereWeWrong(ctx context.Context, incidentID string) (IncidentAnalysis, error)
+
 	// Recall answers a query against the stored knowledge. The result
 	// is ranked by trust score (or token overlap in passive mode when
 	// no embeddings are configured) and may include claims reached by
