@@ -127,6 +127,12 @@ func (r EventRepository) DeleteByID(ctx context.Context, id string) error {
 	), id); err != nil {
 		return fmt.Errorf("delete closed evidence of event %s: %w", id, err)
 	}
+	// ... and its source dependencies, in both directions (ADR 0038).
+	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
+		`DELETE FROM %s WHERE event_id = $1 OR depends_on = $1`, qualify(r.ns, "event_dependencies"),
+	), id); err != nil {
+		return fmt.Errorf("delete dependencies of event %s: %w", id, err)
+	}
 	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
 		`DELETE FROM %s WHERE id = $1`, qualify(r.ns, "events"),
 	), id); err != nil {
@@ -141,6 +147,11 @@ func (r EventRepository) DeleteAll(ctx context.Context) error {
 		`DELETE FROM %s`, qualify(r.ns, "closed_claim_evidence"),
 	)); err != nil {
 		return fmt.Errorf("delete closed evidence: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
+		`DELETE FROM %s`, qualify(r.ns, "event_dependencies"),
+	)); err != nil {
+		return fmt.Errorf("delete event dependencies: %w", err)
 	}
 	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
 		`DELETE FROM %s`, qualify(r.ns, "events"),

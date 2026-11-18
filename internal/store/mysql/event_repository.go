@@ -119,6 +119,10 @@ func (r EventRepository) DeleteByID(ctx context.Context, id string) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM closed_claim_evidence WHERE event_id = ?`, id); err != nil {
 		return fmt.Errorf("delete closed evidence of event %s: %w", id, err)
 	}
+	// ... and its source dependencies, in both directions (ADR 0038).
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM event_dependencies WHERE event_id = ? OR depends_on = ?`, id, id); err != nil {
+		return fmt.Errorf("delete dependencies of event %s: %w", id, err)
+	}
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM events WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("delete event %s: %w", id, err)
 	}
@@ -129,6 +133,9 @@ func (r EventRepository) DeleteByID(ctx context.Context, id string) error {
 func (r EventRepository) DeleteAll(ctx context.Context) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM closed_claim_evidence`); err != nil {
 		return fmt.Errorf("delete closed evidence: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM event_dependencies`); err != nil {
+		return fmt.Errorf("delete event dependencies: %w", err)
 	}
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM events`); err != nil {
 		return fmt.Errorf("delete all events: %w", err)

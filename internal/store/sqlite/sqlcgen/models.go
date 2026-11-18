@@ -232,6 +232,16 @@ type Event struct {
 	CreatedBy     string `json:"created_by"`
 }
 
+type EventDependency struct {
+	EventID       string `json:"event_id"`
+	DependsOn     string `json:"depends_on"`
+	Kind          string `json:"kind"`
+	SignalType    string `json:"signal_type"`
+	ReferenceText string `json:"reference_text"`
+	CreatedAt     string `json:"created_at"`
+	CreatedBy     string `json:"created_by"`
+}
+
 type Lesson struct {
 	ID           string  `json:"id"`
 	Statement    string  `json:"statement"`

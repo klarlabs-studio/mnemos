@@ -1,0 +1,111 @@
+package domain
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// Source dependence between episodes (ADR 0038).
+//
+// An episode depends on another when it says so: a citation, a link, or
+// provenance metadata naming a stored source. A dependent episode is not
+// independent evidence for what it repeats, so retraction (ADR 0037) follows
+// dependencies as well as evidence links, and trust does not count a copy as
+// a second voice.
+
+// DependencyKind says how an episode depends on its source.
+type DependencyKind string
+
+const (
+	// DependencyCites means the episode cites the source.
+	DependencyCites DependencyKind = "cites"
+	// DependencyCopies means the episode says it quotes, copies or reposts the source.
+	DependencyCopies DependencyKind = "copies"
+	// DependencyDerivedFrom means the episode says it is derived from, or based
+	// on, the source.
+	DependencyDerivedFrom DependencyKind = "derived_from"
+)
+
+// DependencySignal names the deterministic signal that recorded a dependency.
+type DependencySignal string
+
+const (
+	// SignalMetadata means an explicit provenance metadata key (cites,
+	// copied_from, derived_from) named the source.
+	SignalMetadata DependencySignal = "metadata"
+	// SignalLink means a URL in the text equals the source's identifier.
+	SignalLink DependencySignal = "link"
+	// SignalNamedSource means the phrase after a citation marker names the
+	// source's source_input_id.
+	SignalNamedSource DependencySignal = "named_source"
+)
+
+// EventDependency records that EventID depends on DependsOn (ADR 0038).
+// Rows are append-only and keyed by (EventID, DependsOn); the first recorded
+// justification stands.
+type EventDependency struct {
+	EventID   string           `json:"episode_id"`
+	DependsOn string           `json:"depends_on"`
+	Kind      DependencyKind   `json:"kind"`
+	Signal    DependencySignal `json:"signal"`
+	// Reference is the exact text or value that justified the dependency, so
+	// a reader can check it.
+	Reference string    `json:"reference"`
+	CreatedAt time.Time `json:"created_at"`
+	CreatedBy string    `json:"created_by"`
+}
+
+// Validate checks that the dependency names two different episodes and a
+// known kind and signal.
+func (d EventDependency) Validate() error {
+	if strings.TrimSpace(d.EventID) == "" || strings.TrimSpace(d.DependsOn) == "" {
+		return errors.New("event dependency needs an episode id and the id it depends on")
+	}
+	if d.EventID == d.DependsOn {
+		return fmt.Errorf("event %s cannot depend on itself", d.EventID)
+	}
+	switch d.Kind {
+	case DependencyCites, DependencyCopies, DependencyDerivedFrom:
+	default:
+		return fmt.Errorf("event dependency kind %q is not one of cites, copies, derived_from", d.Kind)
+	}
+	switch d.Signal {
+	case SignalMetadata, SignalLink, SignalNamedSource:
+	default:
+		return fmt.Errorf("event dependency signal %q is not one of metadata, link, named_source", d.Signal)
+	}
+	return nil
+}
+
+// DependencyHop is one dependency on the path from a retracted episode to a
+// dependent one, as the retraction report lists it.
+type DependencyHop struct {
+	EventID   string           `json:"episode_id"`
+	DependsOn string           `json:"depends_on"`
+	Kind      DependencyKind   `json:"kind"`
+	Signal    DependencySignal `json:"signal"`
+	Reference string           `json:"reference"`
+}
+
+// Hop is d as a report hop.
+func (d EventDependency) Hop() DependencyHop {
+	return DependencyHop{EventID: d.EventID, DependsOn: d.DependsOn, Kind: d.Kind, Signal: d.Signal, Reference: d.Reference}
+}
+
+// Belief outcomes a retraction reports a path for (ADR 0038 §5).
+const (
+	BeliefOutcomeRetracted = "retracted"
+	BeliefOutcomeRescored  = "rescored"
+	BeliefOutcomeKept      = "kept"
+)
+
+// BeliefPath is how a retraction reached a belief: Via is the episode chain
+// from the retracted episode to the evidence that reached it ([S] for a
+// belief linked to S directly).
+type BeliefPath struct {
+	BeliefID string   `json:"belief_id"`
+	Outcome  string   `json:"outcome"`
+	Via      []string `json:"via"`
+}

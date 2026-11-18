@@ -305,6 +305,24 @@ CREATE TABLE IF NOT EXISTS closed_relationships (
 CREATE INDEX IF NOT EXISTS idx_closed_relationships_from ON closed_relationships(from_claim_id);
 CREATE INDEX IF NOT EXISTS idx_closed_relationships_to ON closed_relationships(to_claim_id);
 
+-- event_dependencies (ADR 0038): source dependence between episodes. A row
+-- says episode event_id cites, copies or derives from depends_on, which
+-- deterministic signal found it (signal_type) and the exact text that
+-- justified it (reference_text). Append-only; the first justification for a
+-- pair stands. No foreign keys: deleting an event clears its rows in both
+-- directions explicitly.
+CREATE TABLE IF NOT EXISTS event_dependencies (
+	event_id TEXT NOT NULL,
+	depends_on TEXT NOT NULL,
+	kind TEXT NOT NULL,
+	signal_type TEXT NOT NULL,
+	reference_text TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL,
+	created_by TEXT NOT NULL DEFAULT '<system>',
+	PRIMARY KEY (event_id, depends_on)
+);
+CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
+
 -- claim_versions (Refs #38) — append-only audit trail of every text /
 -- confidence / status snapshot a claim has held. Side table so the
 -- claim row itself stays slim; consumers asking for the timeline JOIN
@@ -761,7 +779,9 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // v35 (ADR 0036 §8) adds closed_claim_evidence and closed_relationships
 // (CREATE TABLE IF NOT EXISTS): retraction, merges and prunes close links
 // and edges instead of deleting them.
-const currentSchemaVersion = 35
+// v36 (ADR 0038) adds event_dependencies (CREATE TABLE IF NOT EXISTS): source
+// dependence between episodes, read by retraction and trust.
+const currentSchemaVersion = 36
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,

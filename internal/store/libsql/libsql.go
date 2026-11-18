@@ -102,6 +102,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 		ClaimVersions: sqlite.NewClaimVersionRepository(db),
 		GlobalSchemas: sqlite.NewGlobalSchemaRepository(db),
 		Incidents:     sqlite.NewIncidentRepository(db),
+		Dependencies:  sqlite.NewEventDependencyRepository(db),
 		Raw:           db,
 		Closer:        db.Close,
 	}, nil
