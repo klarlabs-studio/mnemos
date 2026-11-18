@@ -8,6 +8,7 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
+	"go.klarlabs.de/mnemos/internal/trust"
 )
 
 // Events hides events ingested after At. Only the list reads are bounded.
@@ -103,7 +104,59 @@ func (r Claims) rewind(ctx context.Context, claims []domain.Claim) ([]domain.Cla
 			out = append(out, rc)
 		}
 	}
-	return out, nil
+	return r.scoreAt(ctx, out)
+}
+
+// scoreAt replaces each claim's stored trust_score, today's, with its trust at
+// At (TrustAt). It reads the claims' evidence through the view, so merges and
+// the event bound apply, the episodes those links name, and the credit
+// history. Without Events the view cannot date evidence and the stored score
+// stands; both callers (recall, browse) set it.
+func (r Claims) scoreAt(ctx context.Context, claims []domain.Claim) ([]domain.Claim, error) {
+	if r.Events == nil || len(claims) == 0 {
+		return claims, nil
+	}
+	ids := make([]string, len(claims))
+	for i, c := range claims {
+		ids[i] = c.ID
+	}
+	links, err := r.ListEvidenceByClaimIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("evidence for trust at %s: %w", r.At.Format(time.RFC3339), err)
+	}
+	eventIDs := make([]string, 0, len(links))
+	byClaim := make(map[string][]domain.ClaimEvidence, len(claims))
+	for _, l := range links {
+		eventIDs = append(eventIDs, l.EventID)
+		byClaim[l.ClaimID] = append(byClaim[l.ClaimID], l)
+	}
+	events := map[string]domain.Event{}
+	if len(eventIDs) > 0 {
+		evs, err := r.Events.ListByIDs(ctx, eventIDs)
+		if err != nil {
+			return nil, fmt.Errorf("evidence events for trust: %w", err)
+		}
+		for _, ev := range evs {
+			events[ev.ID] = ev
+		}
+	}
+	var credit []domain.CreditChange
+	if lister, ok := r.ClaimRepository.(ports.CreditHistoryLister); ok {
+		if credit, err = lister.ListCreditHistory(ctx, ids); err != nil {
+			return nil, fmt.Errorf("credit history: %w", err)
+		}
+	}
+	creditOf := make(map[string][]domain.CreditChange)
+	for _, ch := range credit {
+		creditOf[ch.ClaimID] = append(creditOf[ch.ClaimID], ch)
+	}
+	for i := range claims {
+		c := &claims[i]
+		c.TrustScore = TrustAt(*c, byClaim[c.ID], events, creditOf[c.ID], r.At)
+		c.TrustComputedAt = r.At
+		c.TrustModelVersion = trust.ModelVersion
+	}
+	return claims, nil
 }
 
 // mergedAway returns every claim merged into one of claims, transitively,
@@ -172,7 +225,7 @@ func (r Claims) ListAll(ctx context.Context) ([]domain.Claim, error) {
 			out = append(out, rc)
 		}
 	}
-	return out, nil
+	return r.scoreAt(ctx, out)
 }
 
 // ListByIDs returns those of ids recorded by At, as they were then.
@@ -281,11 +334,11 @@ func (r Claims) ListEvidenceByClaimIDs(ctx context.Context, ids []string) ([]dom
 	for _, id := range ids {
 		asked[id] = true
 	}
-	seen := map[domain.ClaimEvidence]bool{}
+	seen := map[[2]string]bool{}
 	var out []domain.ClaimEvidence
 	add := func(l domain.ClaimEvidence) {
-		if !seen[l] {
-			seen[l] = true
+		if !seen[l.Key()] {
+			seen[l.Key()] = true
 			out = append(out, l)
 		}
 	}
@@ -294,7 +347,7 @@ func (r Claims) ListEvidenceByClaimIDs(ctx context.Context, ids []string) ([]dom
 			add(l)
 		}
 		for _, merged := range heldBy[l.ClaimID] {
-			add(domain.ClaimEvidence{ClaimID: merged, EventID: l.EventID})
+			add(domain.ClaimEvidence{ClaimID: merged, EventID: l.EventID, CreatedAt: l.CreatedAt})
 		}
 	}
 	return r.recordedEvidence(ctx, out)
