@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/relate"
@@ -98,18 +99,21 @@ func pruneSupports(args []string, f Flags) {
 	}
 }
 
+// pruneSupportsReason is recorded on every supports edge the pass closes.
+const pruneSupportsReason = "pruned: supports edge over the per-belief budget (relate --prune-supports)"
+
 // runPruneSupports is the command's core, separated from the job wrapper so
 // it can be tested against a real store.
 func runPruneSupports(ctx context.Context, claimsRepo ports.ClaimRepository, rels ports.RelationshipRepository,
 	o pruneSupportsOpts, progress func(pruneSupportsReport)) (pruneSupportsReport, error) {
 	var rep pruneSupportsReport
-	var deleter ports.RelationshipDeleter
+	var closer ports.RelationshipCloser
 	if o.apply {
-		d, ok := rels.(ports.RelationshipDeleter)
+		c, ok := rels.(ports.RelationshipCloser)
 		if !ok {
-			return rep, NewUserError("this storage backend cannot delete relationships by id")
+			return rep, NewUserError("this storage backend cannot close relationships by id")
 		}
-		deleter = d
+		closer = c
 	}
 	claims, err := claimsRepo.ListAll(ctx)
 	if err != nil {
@@ -123,7 +127,9 @@ func runPruneSupports(ctx context.Context, claimsRepo ports.ClaimRepository, rel
 			pending = pending[:0]
 			return nil
 		}
-		n, err := deleter.DeleteByIDs(ctx, pending)
+		// Closed, not deleted (ADR 0036 §8): the brain held these edges until
+		// now, so a recorded-as-of read of the past still sees them.
+		n, err := closer.CloseByIDs(ctx, pending, time.Now().UTC(), domain.ChangeNote{Reason: pruneSupportsReason})
 		if err != nil {
 			return NewSystemError(err, "delete supports edges")
 		}

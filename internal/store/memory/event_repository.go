@@ -92,6 +92,8 @@ func (r EventRepository) DeleteByID(_ context.Context, id string) error {
 	}
 	delete(r.state.events, id)
 	r.state.eventOrder = removeStringFromSlice(r.state.eventOrder, id)
+	// Deleting an event destroys it: its closed evidence links go with it.
+	r.state.dropClosedEvidenceLocked(func(l domain.ClosedEvidence) bool { return l.EventID == id })
 	return nil
 }
 
@@ -101,6 +103,7 @@ func (r EventRepository) DeleteAll(_ context.Context) error {
 	defer r.state.mu.Unlock()
 	r.state.events = map[string]storedEvent{}
 	r.state.eventOrder = nil
+	r.state.closedEvidence = nil
 	return nil
 }
 

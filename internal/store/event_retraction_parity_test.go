@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
+	"go.klarlabs.de/mnemos/internal/recorded"
 	"go.klarlabs.de/mnemos/internal/trust"
 )
 
@@ -52,6 +54,27 @@ func TestRetractEvent_AgreesAcrossBackends(t *testing.T) {
 		beforeRetraction := time.Now().UTC()
 		time.Sleep(5 * time.Millisecond)
 
+		// ADR 0036 §8: what a read before the retraction sees, taken before it.
+		view := recorded.Claims{ClaimRepository: b.conn.Claims, Events: b.conn.Events, At: beforeRetraction}
+		sharedThen := func() (float64, []string) {
+			t.Helper()
+			got, err := view.ListByIDs(ctx, []string{"cl-rx-shared"})
+			if err != nil || len(got) != 1 {
+				t.Fatalf("%s: recorded read: %+v (%v)", b.name, got, err)
+			}
+			links, err := view.ListEvidenceByClaimIDs(ctx, []string{"cl-rx-shared"})
+			if err != nil {
+				t.Fatalf("%s: recorded evidence: %v", b.name, err)
+			}
+			events := make([]string, 0, len(links))
+			for _, l := range links {
+				events = append(events, l.EventID)
+			}
+			sort.Strings(events)
+			return got[0].TrustScore, events
+		}
+		trustBefore, evidenceBefore := sharedThen()
+
 		rep, err := w.RetractEvent(ctx, "ev-rx-gone", domain.ChangeNote{Reason: "source corrected", ChangedBy: "tester"})
 		if err != nil {
 			t.Fatalf("%s: retract: %v", b.name, err)
@@ -84,6 +107,20 @@ func TestRetractEvent_AgreesAcrossBackends(t *testing.T) {
 		links, err := b.conn.Claims.ListEvidenceByClaimIDs(ctx, []string{"cl-rx-shared"})
 		if err != nil || len(links) != 1 || links[0].EventID != "ev-rx-keep" {
 			t.Errorf("%s: cl-rx-shared evidence = %+v (%v), want only ev-rx-keep", b.name, links, err)
+		}
+		// The link was closed, not deleted: live reads lose it, the read from
+		// before the retraction keeps it and the trust it supported.
+		closed, err := b.conn.Claims.ListClosedEvidenceByClaimIDs(ctx, []string{"cl-rx-shared"})
+		if err != nil || len(closed) != 1 || closed[0].EventID != "ev-rx-gone" || closed[0].ClosedBy != "tester" ||
+			!strings.HasPrefix(closed[0].Reason, domain.RetractionReasonPrefix) || closed[0].CreatedAt.IsZero() || closed[0].CreatedAt.After(beforeRetraction) {
+			t.Errorf("%s: closed links of cl-rx-shared = %+v (%v), want ev-rx-gone closed by tester with its original time", b.name, closed, err)
+		}
+		if trustAfter, evidenceAfter := sharedThen(); trustAfter != trustBefore || strings.Join(evidenceAfter, ",") != strings.Join(evidenceBefore, ",") {
+			t.Errorf("%s: read before the retraction changed: trust %.4f -> %.4f, evidence %v -> %v",
+				b.name, trustBefore, trustAfter, evidenceBefore, evidenceAfter)
+		}
+		if strings.Join(evidenceBefore, ",") != "ev-rx-gone,ev-rx-keep" {
+			t.Errorf("%s: evidence before the retraction = %v, want both episodes", b.name, evidenceBefore)
 		}
 		if len(rep.Impact.Rescored) != 1 || rep.Impact.Rescored[0].TrustAfter != byID["cl-rx-shared"].TrustScore {
 			t.Errorf("%s: rescored = %+v, stored trust %.3f", b.name, rep.Impact.Rescored, byID["cl-rx-shared"].TrustScore)
@@ -135,6 +172,14 @@ func TestRetractEvent_AgreesAcrossBackends(t *testing.T) {
 		}
 		if links, err := b.conn.Claims.ListEvidenceByClaimIDs(ctx, []string{"cl-rx-shared"}); err != nil || len(links) != 2 {
 			t.Errorf("%s: cl-rx-shared evidence after un-retraction = %+v (%v), want both episodes", b.name, links, err)
+		}
+		// Reopening is a new link: the closed interval stays (append-only).
+		if closed, err := b.conn.Claims.ListClosedEvidenceByClaimIDs(ctx, []string{"cl-rx-shared"}); err != nil || len(closed) != 1 {
+			t.Errorf("%s: closed links after un-retraction = %+v (%v), want the retraction's interval kept", b.name, closed, err)
+		}
+		if trustAgain, evidenceAgain := sharedThen(); trustAgain != trustBefore || strings.Join(evidenceAgain, ",") != strings.Join(evidenceBefore, ",") {
+			t.Errorf("%s: read before the retraction changed after un-retraction: trust %.4f -> %.4f, evidence %v -> %v",
+				b.name, trustBefore, trustAgain, evidenceBefore, evidenceAgain)
 		}
 		if _, ok, err := govwrite.LookupRetraction(ctx, b.conn, "ev-rx-gone"); err != nil || ok {
 			t.Errorf("%s: still retracted after un-retraction: ok=%v err=%v", b.name, ok, err)

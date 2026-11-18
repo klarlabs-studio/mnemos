@@ -771,23 +771,27 @@ func (r ClaimRepository) CountClaimsBelowTrust(ctx context.Context, threshold fl
 	return r.q.CountClaimsBelowTrust(ctx, threshold)
 }
 
-// RepointEvidence rewrites every claim_evidence row pointing at
-// fromClaimID to point at toClaimID, then deletes the original
-// rows. Idempotent on the (claim_id, event_id) primary key —
-// duplicate evidence collapses silently. Single-tx so partial
-// failures don't leave dangling pointers.
+// RepointEvidence implements [ports.ClaimRepository.RepointEvidence]: the
+// loser's links are closed and the winner gains each episode as a link
+// recorded now. Single-tx so partial failures don't leave dangling pointers.
 func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toClaimID string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin repoint evidence tx: %w", err)
 	}
 	defer rollbackTx(tx)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx,
-		// A moved link keeps its created_at: the episode was recorded as
-		// evidence then, by the loser (ADR 0036 §5 states the approximation).
+		`INSERT OR IGNORE INTO closed_claim_evidence (claim_id, event_id, created_at, closed_at, closed_by, reason)
+		 SELECT claim_id, event_id, created_at, ?, ?, ? FROM claim_evidence WHERE claim_id = ?`,
+		now, domain.SystemUser, domain.MergeClosedReason(fromClaimID, toClaimID), fromClaimID,
+	); err != nil {
+		return fmt.Errorf("close evidence of %s: %w", fromClaimID, err)
+	}
+	if _, err := tx.ExecContext(ctx,
 		`INSERT OR IGNORE INTO claim_evidence (claim_id, event_id, created_at)
-		 SELECT ?, event_id, created_at FROM claim_evidence WHERE claim_id = ?`,
-		toClaimID, fromClaimID,
+		 SELECT ?, event_id, ? FROM claim_evidence WHERE claim_id = ?`,
+		toClaimID, now, fromClaimID,
 	); err != nil {
 		return fmt.Errorf("copy evidence %s -> %s: %w", fromClaimID, toClaimID, err)
 	}
@@ -827,6 +831,9 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	defer rollbackTx(tx)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_evidence WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_evidence: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM closed_claim_evidence WHERE claim_id = ?`, claimID); err != nil {
+		return fmt.Errorf("delete closed_claim_evidence: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)
@@ -890,6 +897,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	defer rollbackTx(tx)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_evidence`); err != nil {
 		return fmt.Errorf("delete claim_evidence: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM closed_claim_evidence`); err != nil {
+		return fmt.Errorf("delete closed_claim_evidence: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history`); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)

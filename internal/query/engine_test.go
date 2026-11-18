@@ -106,8 +106,17 @@ func (f fakeClaimRepo) MarkVerified(_ context.Context, claimID string, _ time.Ti
 	}
 	return nil
 }
-func (f fakeClaimRepo) RepointEvidence(_ context.Context, _, _ string) error         { return nil }
-func (f fakeClaimRepo) UnlinkEvidence(_ context.Context, _, _ string) error          { return nil }
+func (f fakeClaimRepo) RepointEvidence(_ context.Context, _, _ string) error { return nil }
+func (f fakeClaimRepo) UnlinkEvidence(_ context.Context, _, _ string) error  { return nil }
+func (f fakeClaimRepo) CloseEvidence(context.Context, string, string, time.Time, domain.ChangeNote) error {
+	return nil
+}
+func (f fakeClaimRepo) ListClosedEvidenceByClaimIDs(context.Context, []string) ([]domain.ClosedEvidence, error) {
+	return nil, nil
+}
+func (f fakeClaimRepo) ListClosedEvidenceByEventIDs(context.Context, []string) ([]domain.ClosedEvidence, error) {
+	return nil, nil
+}
 func (f fakeClaimRepo) DeleteCascade(_ context.Context, _ string) error              { return nil }
 func (f fakeClaimRepo) MarkConfirmed(_ context.Context, _ string, _ time.Time) error { return nil }
 func (f fakeClaimRepo) ListByEventIDs(_ context.Context, _ []string) ([]domain.Claim, error) {
@@ -236,7 +245,13 @@ func (f fakeRelationshipRepo) DecayAssociations(_ context.Context, retain float6
 	return n, nil
 }
 func (f fakeRelationshipRepo) RepointEndpoint(_ context.Context, _, _ string) error { return nil }
-func (f fakeRelationshipRepo) DeleteByClaim(_ context.Context, _ string) error      { return nil }
+func (f fakeRelationshipRepo) ListClosedByClaimIDs(context.Context, []string) ([]domain.ClosedRelationship, error) {
+	return nil, nil
+}
+func (f fakeRelationshipRepo) ListAllClosed(context.Context) ([]domain.ClosedRelationship, error) {
+	return nil, nil
+}
+func (f fakeRelationshipRepo) DeleteByClaim(_ context.Context, _ string) error { return nil }
 func (f fakeRelationshipRepo) ListByClaim(_ context.Context, claimID string) ([]domain.Relationship, error) {
 	return f.rels[claimID], nil
 }

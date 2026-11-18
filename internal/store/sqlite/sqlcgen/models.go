@@ -125,6 +125,29 @@ type ClaimValidityHistory struct {
 	ChangedBy string `json:"changed_by"`
 }
 
+type ClosedClaimEvidence struct {
+	ClaimID   string `json:"claim_id"`
+	EventID   string `json:"event_id"`
+	CreatedAt string `json:"created_at"`
+	ClosedAt  string `json:"closed_at"`
+	ClosedBy  string `json:"closed_by"`
+	Reason    string `json:"reason"`
+}
+
+type ClosedRelationship struct {
+	ID          string  `json:"id"`
+	Type        string  `json:"type"`
+	FromClaimID string  `json:"from_claim_id"`
+	ToClaimID   string  `json:"to_claim_id"`
+	CreatedAt   string  `json:"created_at"`
+	CreatedBy   string  `json:"created_by"`
+	Strength    float64 `json:"strength"`
+	DerivedBy   string  `json:"derived_by"`
+	ClosedAt    string  `json:"closed_at"`
+	ClosedBy    string  `json:"closed_by"`
+	Reason      string  `json:"reason"`
+}
+
 type CognitiveJournal struct {
 	ID        string `json:"id"`
 	At        string `json:"at"`

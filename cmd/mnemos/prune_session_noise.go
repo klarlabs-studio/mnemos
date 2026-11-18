@@ -243,23 +243,15 @@ func runSessionNoisePass(
 			stats.Marked = len(marked)
 			say("marked %d belief(s) with a durability verdict.\n", len(marked))
 		}
-		// Through the governed writer, like `relate --prune-stale`: the
-		// writer takes the surviving set, so build it by difference.
+		// Through the governed writer, like `relate --prune-stale`, and by
+		// enumeration: the writer closes exactly these edges (ADR 0036 §8), so
+		// a recorded-as-of read of the past still sees them and an edge a
+		// concurrent writer adds is never touched.
 		if len(drop) == 0 {
 			sayln("\nno edges to prune.")
 			return nil
 		}
-		dropIDs := make(map[string]struct{}, len(drop))
-		for _, r := range drop {
-			dropIDs[r.ID] = struct{}{}
-		}
-		keep := make([]domain.Relationship, 0, len(rels)-len(drop))
-		for _, r := range rels {
-			if _, gone := dropIDs[r.ID]; !gone {
-				keep = append(keep, r)
-			}
-		}
-		if _, err := w.PruneRelationships(ctx, keep, len(drop)); err != nil {
+		if _, err := w.DropRelationships(ctx, drop, domain.ChangeNote{Reason: pruneSessionNoiseReason, ChangedBy: actor}); err != nil {
 			return NewSystemError(err, "prune relationships")
 		}
 		stats.Pruned = len(drop)
@@ -271,6 +263,9 @@ func runSessionNoisePass(
 	}()
 	return stats, err
 }
+
+// pruneSessionNoiseReason is recorded on every edge the session-noise pass closes.
+const pruneSessionNoiseReason = "pruned: both sides session-local (prune --session-noise)"
 
 // liveContradictions returns the contradiction edges whose endpoints both still
 // exist and are not deprecated — the same population the dissonance vital

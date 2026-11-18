@@ -42,7 +42,9 @@ func TestBrowseBeliefs_CursorPagesPartitionTheFilterAcrossBackends(t *testing.T)
 			ev := fmt.Sprintf("bev%03d", i)
 			events = append(events, domain.Event{ID: ev, RunID: fmt.Sprintf("run-%d", i%2), Content: c.Text, SchemaVersion: "v1",
 				SourceInputID: "src-" + ev, Timestamp: at, IngestedAt: at})
-			links = append(links, domain.ClaimEvidence{ClaimID: c.ID, EventID: ev})
+			// The link is recorded with its belief: a recorded-as-of read counts
+			// only links recorded by T (ADR 0036 §8).
+			links = append(links, domain.ClaimEvidence{ClaimID: c.ID, EventID: ev, CreatedAt: at})
 		}
 		for _, e := range events {
 			if err := b.conn.Events.Append(ctx, e); err != nil {

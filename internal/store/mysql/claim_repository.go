@@ -311,10 +311,20 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 		return fmt.Errorf("begin repoint evidence tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// The loser's links are closed (ADR 0036 §8); the winner gains each
+	// episode as a link recorded now.
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if _, err := tx.ExecContext(ctx, `
+INSERT IGNORE INTO closed_claim_evidence (claim_id, event_id, created_at, closed_at, closed_by, reason)
+SELECT claim_id, event_id, created_at, ?, ?, ? FROM claim_evidence WHERE claim_id = ?`,
+		now, domain.SystemUser, domain.MergeClosedReason(fromClaimID, toClaimID), fromClaimID,
+	); err != nil {
+		return fmt.Errorf("close evidence of %s: %w", fromClaimID, err)
+	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT IGNORE INTO claim_evidence (claim_id, event_id, created_at)
-SELECT ?, event_id, created_at FROM claim_evidence WHERE claim_id = ?`,
-		toClaimID, fromClaimID,
+SELECT ?, event_id, ? FROM claim_evidence WHERE claim_id = ?`,
+		toClaimID, now, fromClaimID,
 	); err != nil {
 		return fmt.Errorf("copy evidence %s -> %s: %w", fromClaimID, toClaimID, err)
 	}
@@ -341,7 +351,7 @@ func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID st
 // one tx.
 //
 // The set is the canonical one from [ports.ClaimRepository], narrowed to
-// the tables this backend declares: claim_evidence,
+// the tables this backend declares: claim_evidence, closed_claim_evidence,
 // claim_status_history, claim_validity_history, claim_credit_history, then the
 // claim row. MySQL has no
 // claim_versions, claim_feedback or claim_expectations table, so there
@@ -356,6 +366,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	defer func() { _ = tx.Rollback() }()
 	for _, q := range []string{
 		`DELETE FROM claim_evidence WHERE claim_id = ?`,
+		`DELETE FROM closed_claim_evidence WHERE claim_id = ?`,
 		`DELETE FROM claim_status_history WHERE claim_id = ?`,
 		`DELETE FROM claim_validity_history WHERE claim_id = ?`,
 		`DELETE FROM claim_credit_history WHERE claim_id = ?`,
@@ -436,6 +447,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_evidence`); err != nil {
 		return fmt.Errorf("delete claim_evidence: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM closed_claim_evidence`); err != nil {
+		return fmt.Errorf("delete closed_claim_evidence: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_status_history`); err != nil {
 		return fmt.Errorf("delete claim_status_history: %w", err)

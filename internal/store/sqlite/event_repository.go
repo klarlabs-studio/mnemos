@@ -150,11 +150,18 @@ func (r EventRepository) CountAll(ctx context.Context) (int64, error) {
 
 // DeleteByID removes the event with the given id. Idempotent.
 func (r EventRepository) DeleteByID(ctx context.Context, id string) error {
+	// Deleting an event destroys it: its closed evidence links go with it.
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM closed_claim_evidence WHERE event_id = ?`, id); err != nil {
+		return fmt.Errorf("delete closed evidence of event %s: %w", id, err)
+	}
 	return r.q.DeleteEventByID(ctx, id)
 }
 
 // DeleteAll wipes the events table. Used by `mnemos reset`.
 func (r EventRepository) DeleteAll(ctx context.Context) error {
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM closed_claim_evidence`); err != nil {
+		return fmt.Errorf("delete closed evidence: %w", err)
+	}
 	return r.q.DeleteAllEvents(ctx)
 }
 

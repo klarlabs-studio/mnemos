@@ -242,6 +242,41 @@ CREATE TABLE IF NOT EXISTS claim_trust_input_history (
   FOREIGN KEY (claim_id) REFERENCES claims(id)
 );
 CREATE INDEX IF NOT EXISTS idx_claim_trust_input_history_claim_id ON claim_trust_input_history(claim_id);
+
+-- closed_claim_evidence and closed_relationships (ADR 0036 §8): evidence links
+-- and associations that were ended instead of deleted, by retraction (ADR 0037)
+-- and by semantic-dedupe merges. The row leaves the live table, so no live read
+-- sees it, and is kept here with when, by whom and why it was closed. Only
+-- recorded-as-of reads consult them: a row was in force over
+-- [created_at, closed_at). No foreign keys: the deletes that destroy a claim or
+-- an event clear these explicitly.
+CREATE TABLE IF NOT EXISTS closed_claim_evidence (
+  claim_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT '',
+  closed_at TEXT NOT NULL,
+  closed_by TEXT NOT NULL DEFAULT '<system>',
+  reason TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (claim_id, event_id, closed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_closed_claim_evidence_event_id ON closed_claim_evidence(event_id);
+
+CREATE TABLE IF NOT EXISTS closed_relationships (
+  id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  from_claim_id TEXT NOT NULL,
+  to_claim_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  created_by TEXT NOT NULL DEFAULT '<system>',
+  strength REAL NOT NULL DEFAULT 1,
+  derived_by TEXT NOT NULL DEFAULT '',
+  closed_at TEXT NOT NULL,
+  closed_by TEXT NOT NULL DEFAULT '<system>',
+  reason TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (id, closed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_closed_relationships_from ON closed_relationships(from_claim_id);
+CREATE INDEX IF NOT EXISTS idx_closed_relationships_to ON closed_relationships(to_claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_changed_at ON claim_status_history(changed_at);
 
 CREATE TABLE IF NOT EXISTS embeddings (

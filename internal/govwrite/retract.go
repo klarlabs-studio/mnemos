@@ -30,13 +30,15 @@ import (
 //     retraction (ADR 0036) still reaches the belief through the event and
 //     rewinds it to its earlier status;
 //   - a belief with other live evidence loses the link to the event and is
-//     rescored on what remains (RecomputeTrustForClaims);
+//     rescored on what remains (RecomputeTrustForClaims). The link is closed,
+//     not deleted (ClaimRepository.CloseEvidence, ADR 0036 §8), so a
+//     recorded-as-of read before the retraction still counts it;
 //   - associations, decisions and outcome edges that touch a retracted belief
 //     are listed in the report, never rewritten.
 //
 // The journal row is written LAST. A failure part-way leaves no record, so a
 // re-run finds the event unretracted and converges: deprecating an already
-// deprecated belief and unlinking an absent link are both no-ops.
+// deprecated belief and closing a link that is no longer live are both no-ops.
 
 const actionRetractEvent = "retract_event"
 
@@ -166,11 +168,15 @@ func retractEvent(ctx context.Context, conn *store.Conn, eventID string, note do
 		}
 	}
 
+	// A rescored belief's link to the retracted event is closed, not deleted
+	// (ADR 0036 §8): live reads lose it, and a recorded-as-of read from before
+	// the retraction still sees it.
+	closeNote := domain.ChangeNote{Reason: domain.RetractionReason(eventID, note.Reason), ChangedBy: rec.RetractedBy}
 	keptIDs := make([]string, len(kept))
 	for i, c := range kept {
 		keptIDs[i] = c.ID
-		if err := conn.Claims.UnlinkEvidence(ctx, c.ID, eventID); err != nil {
-			return domain.EventRetraction{}, fmt.Errorf("unlink %s: %w", c.ID, err)
+		if err := conn.Claims.CloseEvidence(ctx, c.ID, eventID, now, closeNote); err != nil {
+			return domain.EventRetraction{}, fmt.Errorf("close link %s -> %s: %w", c.ID, eventID, err)
 		}
 	}
 	if err := rescoreKept(ctx, conn, keptIDs); err != nil {

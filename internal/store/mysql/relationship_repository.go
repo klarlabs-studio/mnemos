@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -73,6 +74,11 @@ func (r RelationshipRepository) RepointEndpoint(ctx context.Context, oldID, newI
 		return fmt.Errorf("begin repoint endpoint tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Edges the rewrite drops are closed, not deleted (ADR 0036 §8).
+	closedAt := time.Now().UTC().Truncate(time.Microsecond)
+	if err := stageClosedEdges(ctx, tx, oldID, newID, closedAt); err != nil {
+		return err
+	}
 	conflictFrom := `
 DELETE a FROM relationships a
 JOIN relationships b
@@ -111,6 +117,9 @@ WHERE a.to_claim_id = ?`
 	); err != nil {
 		return fmt.Errorf("drop self-loops on %s: %w", newID, err)
 	}
+	if err := keepClosedEdges(ctx, tx, closedAt); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit repoint endpoint tx: %w", err)
 	}
@@ -124,6 +133,12 @@ func (r RelationshipRepository) DeleteByClaim(ctx context.Context, claimID strin
 		claimID, claimID,
 	); err != nil {
 		return fmt.Errorf("delete relationships for %s: %w", claimID, err)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`DELETE FROM closed_relationships WHERE from_claim_id = ? OR to_claim_id = ?`,
+		claimID, claimID,
+	); err != nil {
+		return fmt.Errorf("delete closed relationships for %s: %w", claimID, err)
 	}
 	return nil
 }
@@ -152,6 +167,9 @@ func (r RelationshipRepository) CountByType(ctx context.Context, relType string)
 func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM relationships`); err != nil {
 		return fmt.Errorf("delete all relationships: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM closed_relationships`); err != nil {
+		return fmt.Errorf("delete all closed relationships: %w", err)
 	}
 	return nil
 }
@@ -249,14 +267,16 @@ func (r RelationshipRepository) DecayAssociations(ctx context.Context, retain fl
 // backend's bound-parameter limit.
 const deleteByIDsChunk = 500
 
-// DeleteByIDs implements ports.RelationshipDeleter.
-func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (int64, error) {
+// CloseByIDs implements ports.RelationshipCloser: the named edges leave the
+// live table and are kept in closed_relationships (ADR 0036 §8), in one
+// transaction.
+func (r RelationshipRepository) CloseByIDs(ctx context.Context, ids []string, closedAt time.Time, note domain.ChangeNote) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin relationship delete tx: %w", err)
+		return 0, fmt.Errorf("begin relationship close tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	var n int64
@@ -268,18 +288,23 @@ func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (
 			args[i] = id
 			marks[i] = "?"
 		}
+		closeArgs := append([]any{closedAt.UTC().Truncate(time.Microsecond), actorOr(note.ChangedBy), note.Reason}, args...)
+		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO closed_relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by, closed_at, closed_by, reason)
+			SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by, ?, ?, ? FROM relationships WHERE id IN (`+strings.Join(marks, ",")+`)`, closeArgs...); err != nil { //nolint:gosec // G202: marks are literal "?" placeholders
+			return n, fmt.Errorf("record closed relationships: %w", err)
+		}
 		res, err := tx.ExecContext(ctx, `DELETE FROM relationships WHERE id IN (`+strings.Join(marks, ",")+`)`, args...)
 		if err != nil {
-			return n, fmt.Errorf("delete relationships by id: %w", err)
+			return n, fmt.Errorf("close relationships by id: %w", err)
 		}
 		k, err := res.RowsAffected()
 		if err != nil {
-			return n, fmt.Errorf("delete relationships by id: %w", err)
+			return n, fmt.Errorf("close relationships by id: %w", err)
 		}
 		n += k
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit relationship delete tx: %w", err)
+		return 0, fmt.Errorf("commit relationship close tx: %w", err)
 	}
 	return n, nil
 }

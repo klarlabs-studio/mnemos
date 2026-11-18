@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -77,6 +79,12 @@ func (r RelationshipRepository) RepointEndpoint(ctx context.Context, oldID, newI
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Edges the rewrite drops are closed, not deleted (ADR 0036 §8).
+	closedAt := time.Now().UTC().Truncate(time.Microsecond)
+	if err := r.stageClosedEdges(ctx, tx, oldID, newID, closedAt); err != nil {
+		return err
+	}
+
 	// Postgres has no UPDATE OR IGNORE, so conflicting edges must be removed
 	// before the rewrite. This used to be two pre-deletes, one per endpoint,
 	// BOTH evaluated before EITHER update ran — and that is unsound: rewriting
@@ -136,6 +144,9 @@ DELETE FROM %s WHERE id IN (
 	// No separate self-loop sweep: the prune above already drops any row whose
 	// post-rewrite endpoints are equal (nf = nt), which covers both loops the
 	// rewrite would create and any that already existed on newID.
+	if err := r.keepClosedEdges(ctx, tx, closedAt); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit repoint endpoint tx: %w", err)
 	}
@@ -149,6 +160,12 @@ func (r RelationshipRepository) DeleteByClaim(ctx context.Context, claimID strin
 		claimID,
 	); err != nil {
 		return fmt.Errorf("delete relationships for %s: %w", claimID, err)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		fmt.Sprintf(`DELETE FROM %s WHERE from_claim_id = $1 OR to_claim_id = $1`, qualify(r.ns, "closed_relationships")),
+		claimID,
+	); err != nil {
+		return fmt.Errorf("delete closed relationships for %s: %w", claimID, err)
 	}
 	return nil
 }
@@ -181,6 +198,11 @@ func (r RelationshipRepository) DeleteAll(ctx context.Context) error {
 		`DELETE FROM %s`, qualify(r.ns, "relationships"),
 	)); err != nil {
 		return fmt.Errorf("delete all relationships: %w", err)
+	}
+	if _, err := r.db.ExecContext(ctx, fmt.Sprintf(
+		`DELETE FROM %s`, qualify(r.ns, "closed_relationships"),
+	)); err != nil {
+		return fmt.Errorf("delete all closed relationships: %w", err)
 	}
 	return nil
 }
@@ -267,14 +289,16 @@ func (r RelationshipRepository) DecayAssociations(ctx context.Context, retain fl
 // backend's bound-parameter limit.
 const deleteByIDsChunk = 500
 
-// DeleteByIDs implements ports.RelationshipDeleter.
-func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (int64, error) {
+// CloseByIDs implements ports.RelationshipCloser: the named edges leave the
+// live table and are kept in closed_relationships (ADR 0036 §8), in one
+// transaction.
+func (r RelationshipRepository) CloseByIDs(ctx context.Context, ids []string, closedAt time.Time, note domain.ChangeNote) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin relationship delete tx: %w", err)
+		return 0, fmt.Errorf("begin relationship close tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	var n int64
@@ -286,18 +310,27 @@ func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (
 			args[i] = id
 			marks[i] = fmt.Sprintf("$%d", i+1)
 		}
+		closeArgs := append(slices.Clone(args), closedAt.UTC().Truncate(time.Microsecond), actorOr(note.ChangedBy), note.Reason)
+		nk := len(chunk)
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s (%s)
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by, $%d, $%d, $%d
+  FROM %s WHERE id IN (%s) ON CONFLICT DO NOTHING`,
+			qualify(r.ns, "closed_relationships"), closedRelationshipColumns, nk+1, nk+2, nk+3,
+			qualify(r.ns, "relationships"), strings.Join(marks, ",")), closeArgs...); err != nil {
+			return n, fmt.Errorf("record closed relationships: %w", err)
+		}
 		res, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id IN (%s)`, qualify(r.ns, "relationships"), strings.Join(marks, ",")), args...)
 		if err != nil {
-			return n, fmt.Errorf("delete relationships by id: %w", err)
+			return n, fmt.Errorf("close relationships by id: %w", err)
 		}
 		k, err := res.RowsAffected()
 		if err != nil {
-			return n, fmt.Errorf("delete relationships by id: %w", err)
+			return n, fmt.Errorf("close relationships by id: %w", err)
 		}
 		n += k
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit relationship delete tx: %w", err)
+		return 0, fmt.Errorf("commit relationship close tx: %w", err)
 	}
 	return n, nil
 }

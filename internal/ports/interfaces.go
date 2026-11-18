@@ -148,10 +148,12 @@ type ClaimRepository interface {
 	// means now.
 	MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error
 
-	// RepointEvidence rewrites every claim_evidence row pointing at
-	// fromClaimID to point at toClaimID instead, then deletes the
-	// original rows. Idempotent on the (claim_id, event_id) dedup
-	// key — duplicate evidence collapses silently. Used by
+	// RepointEvidence moves every evidence link of fromClaimID onto
+	// toClaimID (ADR 0036 §8): each of fromClaimID's links is closed (kept in
+	// closed_claim_evidence with its created_at, closed now with reason
+	// domain.MergeClosedReason) and toClaimID gains the episode as a link
+	// recorded now, unless it already holds one, which keeps its own time.
+	// Idempotent on the (claim_id, event_id) dedup key. Used by
 	// pipeline.ApplySemanticDedupe.
 	RepointEvidence(ctx context.Context, fromClaimID, toClaimID string) error
 
@@ -161,12 +163,28 @@ type ClaimRepository interface {
 	// still has other evidence — the claim keeps standing on what is left.
 	UnlinkEvidence(ctx context.Context, claimID, eventID string) error
 
+	// CloseEvidence ends the (claimID, eventID) link at closedAt instead of
+	// deleting it (ADR 0036 §8): the row leaves claim_evidence, so no live
+	// read sees it, and is kept with its created_at, closedAt and note in
+	// closed_claim_evidence, which only recorded-as-of reads consult.
+	// Idempotent: closing a link that is not live records nothing. Used by
+	// retraction (ADR 0037); UnlinkEvidence stays for destruction
+	// (delete-event), which keeps no history by design.
+	CloseEvidence(ctx context.Context, claimID, eventID string, closedAt time.Time, note domain.ChangeNote) error
+
+	// ListClosedEvidenceByClaimIDs returns the closed links of claimIDs, and
+	// ListClosedEvidenceByEventIDs those naming eventIDs, oldest closure
+	// first. Read only by internal/recorded.
+	ListClosedEvidenceByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.ClosedEvidence, error)
+	ListClosedEvidenceByEventIDs(ctx context.Context, eventIDs []string) ([]domain.ClosedEvidence, error)
+
 	// DeleteCascade removes a claim and every row keyed on claim_id
 	// that the claim alone owns. The canonical cascade set, which
 	// every backend must clear in full for the tables it actually
 	// has, is:
 	//
 	//	claim_evidence
+	//	closed_claim_evidence (every backend)
 	//	claim_status_history
 	//	claim_validity_history (every backend)
 	//	claim_credit_history (every backend)
@@ -313,11 +331,21 @@ type RelationshipRepository interface {
 	// and unique-edge conflicts collapse silently — Mnemos doesn't
 	// distinguish duplicate edges. Used by ApplySemanticDedupe to
 	// fold a duplicate claim's edges onto its winner.
+	//
+	// An edge the rewrite drops is closed, not deleted (ADR 0036 §8): it is
+	// kept, with the endpoints it had, in closed_relationships with reason
+	// domain.MergeClosedReason, so a recorded-as-of read before the merge
+	// still sees it.
 	RepointEndpoint(ctx context.Context, oldID, newID string) error
+
+	// ListClosedByClaimIDs returns the closed edges touching claimIDs, and
+	// ListAllClosed every closed edge. Read only by internal/recorded.
+	ListClosedByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.ClosedRelationship, error)
+	ListAllClosed(ctx context.Context) ([]domain.ClosedRelationship, error)
 
 	// DeleteByClaim removes every relationship that touches the
 	// given claim (as source OR target). Used to clean up a claim's
-	// edges before the claim itself is deleted.
+	// edges before the claim itself is deleted, closed edges included.
 	DeleteByClaim(ctx context.Context, claimID string) error
 
 	// CountAll returns the total number of relationships stored.
@@ -451,13 +479,17 @@ type HealthSampler interface {
 	CountHypercorrections(ctx context.Context, floor float64) (int, error)
 }
 
-// RelationshipDeleter is the optional capability to delete relationships by
-// ID. Pruning (`mnemos relate --prune-supports`) needs it: rewriting a 30M-row
-// edge table through DeleteAll + Upsert is not an option. Implementations
-// delete in one transaction and report how many rows went; unknown IDs are
-// not an error.
-type RelationshipDeleter interface {
-	DeleteByIDs(ctx context.Context, ids []string) (int64, error)
+// RelationshipCloser is the optional capability to close relationships by ID
+// (ADR 0036 §8): each named edge leaves the live table and is kept in
+// closed_relationships with closedAt and note, so a recorded-as-of read before
+// the prune still sees it. Pruning (`mnemos relate --prune-supports`,
+// `--prune-stale`, `prune --session-noise`) needs it: an edge judged spurious
+// later was still held until then, and rewriting a 30M-row edge table through
+// DeleteAll + Upsert is not an option. Implementations close in one
+// transaction and report how many rows went; unknown IDs are not an error.
+// Every backend implements it.
+type RelationshipCloser interface {
+	CloseByIDs(ctx context.Context, ids []string, closedAt time.Time, note domain.ChangeNote) (int64, error)
 }
 
 // RelationshipStrengthener is an optional capability (ADR 0015 §4, Hebbian

@@ -286,6 +286,41 @@ CREATE TABLE IF NOT EXISTS claim_trust_input_history (
 );
 CREATE INDEX IF NOT EXISTS idx_claim_trust_input_history_claim_id ON claim_trust_input_history(claim_id);
 
+-- closed_claim_evidence and closed_relationships (ADR 0036 §8): evidence links
+-- and associations ended instead of deleted, by retraction (ADR 0037), by
+-- semantic-dedupe merges and by pruning. The row leaves the live table, so no
+-- live read sees it, and is kept here with when, by whom and why it was closed;
+-- only recorded-as-of reads consult them. A row was in force over
+-- [created_at, closed_at). No foreign keys: the deletes that destroy a claim or
+-- an event clear these explicitly. Both are in the RLS scoped array below.
+CREATE TABLE IF NOT EXISTS closed_claim_evidence (
+  claim_id   text        NOT NULL,
+  event_id   text        NOT NULL,
+  created_at timestamptz,
+  closed_at  timestamptz NOT NULL,
+  closed_by  text        NOT NULL DEFAULT '<system>',
+  reason     text        NOT NULL DEFAULT '',
+  PRIMARY KEY (claim_id, event_id, closed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_closed_claim_evidence_event_id ON closed_claim_evidence(event_id);
+
+CREATE TABLE IF NOT EXISTS closed_relationships (
+  id            text             NOT NULL,
+  type          text             NOT NULL,
+  from_claim_id text             NOT NULL,
+  to_claim_id   text             NOT NULL,
+  created_at    timestamptz      NOT NULL,
+  created_by    text             NOT NULL DEFAULT '<system>',
+  strength      double precision NOT NULL DEFAULT 1,
+  derived_by    text             NOT NULL DEFAULT '',
+  closed_at     timestamptz      NOT NULL,
+  closed_by     text             NOT NULL DEFAULT '<system>',
+  reason        text             NOT NULL DEFAULT '',
+  PRIMARY KEY (id, closed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_closed_relationships_from ON closed_relationships(from_claim_id);
+CREATE INDEX IF NOT EXISTS idx_closed_relationships_to   ON closed_relationships(to_claim_id);
+
 -- Embeddings: bytea matches the SQLite BLOB shape and stays the portable
 -- source of truth. When pgvector is installed, a nullable `embedding
 -- public.vector` accelerator column is added below (see the $mnemos_pgvector$
@@ -585,7 +620,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'events','claims','entities','claim_entities','claim_evidence','relationships',
-    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','embeddings','agents','actions',
+    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','closed_claim_evidence','closed_relationships','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
     'entity_relationships','working_memory_blocks','claim_expectations',

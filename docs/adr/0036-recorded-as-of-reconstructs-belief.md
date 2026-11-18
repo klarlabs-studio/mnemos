@@ -1,6 +1,6 @@
 # ADR 0036: A recorded-as-of read reconstructs what the brain believed
 
-- **Status:** Accepted; steps 1, 2 and 3 implemented.
+- **Status:** Accepted; steps 1, 2 and 3 and closing instead of deleting (§8) implemented.
 - **Date:** 2026-11-17
 - **Deciders:** Felix Geelhaar
 - **Builds on:** ADR 0034 (time axes; `claim_validity_history`)
@@ -12,7 +12,12 @@
   `domain.ClaimEvidence` (`CreatedAt`), the `claim_evidence` table on every
   backend, and adds `claim_credit_history` and `ports.CreditHistoryLister`.
   §7 adds `claim_trust_input_history` and `ports.TrustInputHistoryLister` on
-  every backend
+  every backend. §8 adds `closed_claim_evidence` and `closed_relationships` on
+  every backend, `ClaimRepository.CloseEvidence`,
+  `ListClosedEvidenceByClaimIDs`, `ListClosedEvidenceByEventIDs`,
+  `RelationshipRepository.ListClosedByClaimIDs`, `ListAllClosed` and
+  `ports.RelationshipCloser` (replacing `RelationshipDeleter`); amends
+  `RepointEvidence`, `RepointEndpoint` and `Writer.DropRelationships`
 
 ## Context
 
@@ -64,7 +69,8 @@ applied once per call in every exported entry point:
 | `valid_to`, `archived_at` | the same rule over `claim_validity_history` |
 | status history (narratives) | transitions after T are dropped |
 | `merged_into` | cleared when the merge transition (`domain.MergeRedirectReason`) is after T |
-| relationships | only edges with `created_at ≤ T` exist (contradictions, hops, priming); endpoints a later merge moved are moved back (§5) |
+| relationships | only edges with `created_at ≤ T` exist (contradictions, hops, priming); endpoints a later merge moved are moved back (§5); edges a later merge dropped are back (§8) |
+| evidence links | live links, plus closed links with `created_at ≤ T < closed_at` (§8) |
 
 Admission then runs unchanged on the rewound claims, so the deprecated, validity
 and archive filters ask their questions of the state the brain held at T.
@@ -124,9 +130,9 @@ Two designs were considered:
   new history table on four backends, with RLS registration, migrations and
   cascade handling) so the view can put each one back exactly. Precise, but a
   large schema change, and it reconstructs nothing for merges that happened
-  before it shipped. Edges a merge *deleted* (a loser–winner self-loop, a
-  duplicate of an edge the winner already had) would also need their full row
-  recorded.
+  before it shipped. Edges a merge *dropped* (a loser–winner self-loop, a
+  duplicate of an edge the winner already had) need their full row recorded,
+  which §8 does.
 - **Walk the redirect backwards (chosen).** Everything needed is already
   stored: `merged_into` says who absorbed whom, and the redirect's status
   transition dates the merge. One read port method is added,
@@ -136,16 +142,21 @@ Two designs were considered:
 
 The rules, in `internal/recorded`:
 
-- **Claims reached through events.** `ListByEventIDs` returns, besides the
-  claims holding the events' evidence now, every claim merged into them
-  (transitively) that was still held separately at T: recorded by T, merge
-  transition after T. A claim already a redirect at T is not added; its
+- **Claims reached through events.** `ListByEventIDs` returns the claims whose
+  link to one of the events was recorded by T and was in force at T, live or
+  closed (§8): a merged loser is reached through its own closed links, and a
+  winner is not reached through an episode it gained only in a merge after T.
+  For a merge recorded before §8 it also returns every claim merged into the
+  holders (transitively) that was still held separately at T: recorded by T,
+  merge transition after T. A claim already a redirect at T is not added; its
   evidence was on its target then too.
 - **A rewound claim** has its `merged_into` cleared when the merge is after T,
   and its status rewinds from the same history, so the loser reads as the
   active belief it was.
-- **Evidence.** A claim merged after T is attributed the evidence of the claim
-  at the end of its redirect chain, and links to events ingested after T are
+- **Evidence.** A claim merged after T reads its own evidence links, which the
+  merge closed (§8). Only for a merge recorded before §8, which left no closed
+  links, is it attributed the evidence of the claim at the end of its redirect
+  chain. Links to events ingested after T, and links recorded after T, are
   dropped.
 - **Edges.** An endpoint recorded *after* the edge was created cannot be the
   edge's original endpoint, so the edge arrived by a merge. The view moves it to
@@ -156,15 +167,16 @@ Stated approximations, all confined to claims a merge judged near-duplicates
 (cosine above threshold, same type, scope and polarity, no recorded
 contradiction):
 
-- Evidence links were moved, not versioned, so a claim held separately at T is
-  reached through all of its absorber's evidence, not only its own, and is
-  attributed all of it.
+- For a merge recorded before §8 only: its evidence links were moved, not
+  closed, so a claim it absorbed after T is reached through all of its
+  absorber's evidence, not only its own, and is attributed all of it. A merge
+  recorded since closes the loser's links, and the view reads them exactly.
 - An edge whose current endpoint already existed when the edge was created
   stays on that endpoint: it may have been the loser's, and nothing recorded
   says so. Both claims are in a read at T that reaches either, so the edge still
   surfaces, attached to the wrong one of two near-duplicates. When several
   losers could have held a moved edge, the oldest is chosen.
-- Edges a merge deleted are not reconstructed.
+- Edges a merge dropped are closed, not deleted (§8), and are reconstructed.
 - A redirect with no merge transition in its history (none is known to exist)
   keeps its stored pointer, like any field without history.
 
@@ -213,7 +225,8 @@ What made it possible:
   `timestamptz` NULL, MySQL `DATETIME(6)` NULL, memory per link). Writes stamp
   the caller's `ClaimEvidence.CreatedAt` or the store's clock
   (`domain.EvidenceRecordedAt`); a re-upsert keeps the original; a merge
-  (`RepointEvidence`) moves a link with its time. The episode's `ingested_at`
+  (`RepointEvidence`) closes the loser's link with its time and gives the
+  winner the episode as a link recorded at the merge (§8). The episode's `ingested_at`
   is not enough: extraction can run after ingestion, and a restatement attaches
   an already-ingested episode to an older belief.
 - **Backfill rule for links, explicit and in one place.** Existing rows are not
@@ -298,6 +311,91 @@ history read per view call, on the recorded-as-of path only. On the write path,
 each upsert, verification and confirmation reads the three columns once more
 inside its transaction, and writes a history row only when one changed.
 
+### 8. Ended links and edges are closed, not deleted
+
+Four writes used to delete rows a recorded-as-of read needs:
+
+- retraction (ADR 0037) deleted the evidence link of every belief it rescored,
+  so a read from before the retraction missed the link, the trust it supported
+  and, when the belief's other evidence came later, the belief itself;
+- a merge deleted the loser's evidence links once it had copied them to the
+  winner (and the copy carried the loser's time, so the winner counted them
+  from before it held them), which is why §5 had to attribute a loser all of
+  its winner's evidence;
+- a merge deleted the edges it dropped (a loser–winner self-loop, a duplicate
+  of an edge the winner already had);
+- pruning (`relate --prune-supports`, `relate --prune-stale`,
+  `prune --session-noise`) deleted edges it judged spurious, though the brain
+  held them until then.
+
+All now **close** the row instead:
+
+- `closed_claim_evidence (claim_id, event_id, created_at, closed_at,
+  closed_by, reason)` and `closed_relationships` (every `relationships`
+  column, plus `closed_at`, `closed_by`, `reason`), on SQLite/libSQL, memory,
+  Postgres (both in the ADR-0007 RLS `scoped` array) and MySQL (namespace
+  database). A closed row was in force over `[created_at, closed_at)`.
+- `ClaimRepository.CloseEvidence(claim, event, at, note)` moves the link out
+  of `claim_evidence` into `closed_claim_evidence` in one transaction, keeping
+  its `created_at`; closing a link that is not live records nothing.
+  Retraction calls it with the retraction's time, actor and reason.
+  `UnlinkEvidence` stays for `delete-event`, which destroys by design.
+- `ClaimRepository.RepointEvidence` closes every link of the loser, with its
+  time, reason `merged <loser> into <winner>` (`domain.MergeClosedReason`), and
+  gives the winner each episode as a link recorded at the merge (one the
+  winner already held keeps its own time).
+- `RelationshipRepository.RepointEndpoint` stages every edge it may drop, as
+  it is, and keeps the staged copy only of those it actually dropped, closed
+  with the same merge reason. Each backend keeps its own collision rule; the
+  closure records whichever edge that rule dropped, with the endpoints it had.
+- `ports.RelationshipCloser.CloseByIDs(ids, at, note)` (formerly
+  `RelationshipDeleter.DeleteByIDs`, on every backend) closes edges by id with
+  a `pruned: <why>` reason. `relate --prune-supports` calls it directly;
+  `Writer.DropRelationships(drop, note)`, used by `relate --prune-stale` and
+  now also by `prune --session-noise`, matches the enumerated edges on content
+  per claim and closes them by id. That also retires its old per-claim
+  delete-and-restore, and with it the window in which a concurrent write to the
+  same claim could be lost.
+
+**Why separate tables, not a `removed_at` column.** The live tables are read
+by a few dozen hand-written queries across four backends: trust inputs,
+evidence counts, pagers, gap and health samplers, autoedge, dedupe, brainbench.
+A column would have needed a `removed_at IS NULL` in every one of them, and the
+first forgotten one would leak a retracted link into live trust. Moving the row
+out leaves every live reader correct by construction, and a reopened link
+(below) needs no change to `claim_evidence`'s `(claim_id, event_id)` key.
+`TestClosedRows_OnlyRecordedReadsSeeThem` reads the Go AST of every
+production file and fails if a closed table is named outside the stores, or a
+closed lister is called outside `internal/recorded`.
+
+**Reads at T.** `recorded.Claims.ListEvidenceByClaimIDs` adds the closed links
+in force at T (`ClosedEvidence.InForceAt`), so trust at T (§7) counts them;
+`ListByEventIDs` also reaches a claim through a closed link in force at T;
+`recorded.Relationships` adds the closed edges in force at T, which then go
+through the merge rewind of §5. When the same (claim, event) arrives both
+closed and live (a link closed by a retraction and reopened by its
+un-retraction), the one recorded by T is the one returned; a live link
+recorded after T is not evidence at T. A loser whose merge closed its links
+(`domain.IsMergeClosureOf`) reads exactly those, so the §5 attribution of its
+winner's evidence applies only to merges recorded before this section.
+
+**Reopening appends.** Un-retraction (ADR 0037 §8) writes a new live link
+recorded at the un-retraction; the closed interval stays. History is
+append-only, so a read inside the retracted window sees neither, and a read
+before the retraction sees the original.
+
+**Destruction still destroys.** Deleting a claim (`DeleteCascade`, `DeleteAll`)
+clears its closed links; deleting its edges (`DeleteByClaim`, `DeleteAll`)
+clears its closed edges; deleting an event (`DeleteByID`, `DeleteAll`) clears
+the closed links that name it; `reset` clears everything. The closed tables
+carry no foreign keys for that reason. `Writer.PruneRelationships` (replace
+the whole edge set) is deprecated, has no production caller, and still
+destroys, closed edges included.
+
+**What stays unrecoverable.** Links and edges deleted before this change are
+gone; a read of that period has only what was left, as before, and a merge
+recorded before it keeps the §5 attribution.
+
 ## Consequences
 
 - `query --recorded-at`, `/v1/search?recorded_as_of=` and gRPC answer the
@@ -336,3 +434,15 @@ inside its transaction, and writes a history row only when one changed.
    confidence, half-life and a belief confirmed before and after T on every
    backend; the link time round-trips on every backend
    (`TestClaimEvidence_RecordedAtRoundTripsOnEveryBackend`).
+4. Close instead of delete (§8). **Implemented.** Acceptance:
+   `TestClosedLinksAndEdges_AgreeAcrossBackends` (every backend: live reads
+   exclude closed rows, the closed listers return them with their times,
+   actor and reason, a merge closes exactly the edges it drops, destruction
+   clears them); `TestRetractEvent_AgreesAcrossBackends` (a read before the
+   retraction keeps the closed link and its trust, before and after
+   un-retraction); `TestMerge_ReadBeforeTheMergeSeesEachClaimsOwnEvidence`
+   (every backend: before a merge each claim reads exactly its own evidence
+   and is reached only through its own episodes);
+   `TestRelationships_CloseByIDsAcrossBackends` (pruned edges are closed and
+   visible before the prune); `TestRecall_ReadBeforeRetractionKeepsTheClosedLink`
+   and `TestRecordedAsOf_MergeKeepsTheEdgesItDropped` (SQLite, through recall).

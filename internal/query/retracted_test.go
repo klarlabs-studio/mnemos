@@ -225,3 +225,92 @@ func TestRecall_UnretractedEpisodeComesBack(t *testing.T) {
 		}
 	}
 }
+
+// ADR 0036 §8: retraction closes a rescored belief's link instead of deleting
+// it, so a read recorded before the retraction is the read the brain would
+// have given then. At T the belief rests on two independent episodes; a third
+// is linked after T, and then one of the first two is retracted. The read at T
+// must still count both of its sources, so its trust is unchanged.
+func TestRecall_ReadBeforeRetractionKeepsTheClosedLink(t *testing.T) {
+	ctx := context.Background()
+	w, err := govwrite.New(ctx, "sqlite://"+filepath.Join(t.TempDir(), "closed.db"), nil)
+	if err != nil {
+		t.Fatalf("writer: %v", err)
+	}
+	t.Cleanup(func() { _ = w.Close() })
+	conn := w.Conn()
+	const text = "the invoice export runs at midnight"
+	event := func(id, author string) domain.Event {
+		now := time.Now().UTC()
+		return domain.Event{ID: id, RunID: "r", SchemaVersion: "v1", SourceInputID: id, CreatedBy: author,
+			Content: text + " (" + id + ")", Timestamp: now, IngestedAt: now}
+	}
+	if _, err := w.Events(ctx, []domain.Event{event("ev-first", "alice"), event("ev-also", "carol")}); err != nil {
+		t.Fatalf("event: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := w.Claims(ctx, []domain.Claim{{
+		ID: "cl-export", Text: text, Type: domain.ClaimTypeFact, Status: domain.ClaimStatusActive,
+		Confidence: 0.8, CreatedAt: now, ValidFrom: now.Add(-time.Hour),
+	}}, govwrite.ClaimReason{Reason: "seed"}); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if _, err := w.EvidenceLinks(ctx, []domain.ClaimEvidence{
+		{ClaimID: "cl-export", EventID: "ev-first"}, {ClaimID: "cl-export", EventID: "ev-also"},
+	}); err != nil {
+		t.Fatalf("link: %v", err)
+	}
+	pause := func() time.Time {
+		time.Sleep(5 * time.Millisecond)
+		at := time.Now().UTC()
+		time.Sleep(5 * time.Millisecond)
+		return at
+	}
+	before := pause()
+	if _, err := w.Events(ctx, []domain.Event{event("ev-second", "bob")}); err != nil {
+		t.Fatalf("second event: %v", err)
+	}
+	if _, err := w.EvidenceLinks(ctx, []domain.ClaimEvidence{{ClaimID: "cl-export", EventID: "ev-second"}}); err != nil {
+		t.Fatalf("second link: %v", err)
+	}
+	pause()
+
+	engine := query.NewEngineWith(conn.Events, conn.Claims, conn.Relationships, query.EngineDeps{Journal: conn.Journal})
+	readAt := func(at time.Time) (float64, bool) {
+		t.Helper()
+		ans, err := engine.Recall(ctx, query.RecallRequest{Question: "invoice export runs at midnight", Options: query.AnswerOptions{RecordedAsOf: at}})
+		if err != nil {
+			t.Fatalf("recall: %v", err)
+		}
+		for _, c := range ans.Claims {
+			if c.ID == "cl-export" {
+				return c.TrustScore, true
+			}
+		}
+		return 0, false
+	}
+	trustThen, ok := readAt(before)
+	if !ok {
+		t.Fatalf("cl-export missing from the read at T before anything was retracted")
+	}
+
+	rep, err := w.RetractEvent(ctx, "ev-first", domain.ChangeNote{Reason: "wrong export log"})
+	if err != nil {
+		t.Fatalf("retract: %v", err)
+	}
+	if len(rep.Impact.Rescored) != 1 {
+		t.Fatalf("rescored = %+v, want cl-export kept on ev-second", rep.Impact.Rescored)
+	}
+	live, err := conn.Claims.ListEvidenceByClaimIDs(ctx, []string{"cl-export"})
+	if err != nil || len(live) != 2 || slices.ContainsFunc(live, func(l domain.ClaimEvidence) bool { return l.EventID == "ev-first" }) {
+		t.Fatalf("live evidence after retraction = %+v (%v), want ev-also and ev-second", live, err)
+	}
+
+	trustAgain, ok := readAt(before)
+	if !ok {
+		t.Fatalf("the read at T lost cl-export after the retraction")
+	}
+	if trustAgain != trustThen {
+		t.Errorf("trust at T changed after the retraction: %.9f -> %.9f, want the pre-retraction trust", trustThen, trustAgain)
+	}
+}
