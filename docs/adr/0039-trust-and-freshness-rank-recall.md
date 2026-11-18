@@ -170,6 +170,7 @@ exposes them.
   detected between "one hundred" and "one thousand requests per minute", or
   between "manually by an engineer" and "automatically by the release
   pipeline". That is a relationship-detection gap and is out of scope here.
+  ADR 0040 closes it for these two pairs.
 - **The evidence date is `ValidFrom`, not the latest corroborating episode.**
   The ranker has the claim row, not its evidence links. Canonical trust reads
   the latest episode, so later corroboration refreshes trust but not this

@@ -50,6 +50,7 @@ const (
 	DetectorEntity       = "entity"
 	DetectorTemporal     = "temporal"
 	DetectorTestConflict = "test-conflict"
+	DetectorFrame        = "frame"
 )
 
 // ContradictionDerivedBy is the DerivedBy stamp of a contradiction edge the
@@ -88,6 +89,7 @@ const (
 	priorEntity       = 0.8
 	priorTemporal     = 0.6
 	priorTestConflict = 1.0
+	priorFrame        = 0.7
 )
 
 // IsContradictionEndpoint reports whether text can be one side of a
@@ -277,6 +279,7 @@ var antonymPairs = [][2]string{
 	{"running", "stopped"}, {"internal", "external"}, {"local", "remote"},
 	{"minimum", "maximum"}, {"always", "never"}, {"green", "red"}, {"up", "down"},
 	{"before", "after"}, {"first", "last"}, {"read-only", "writable"},
+	{"manual", "automatic"}, {"manually", "automatically"},
 }
 
 // antonymPrefixes negate a word morphologically: "supported"/"unsupported".
@@ -359,6 +362,7 @@ type contradictionView struct {
 	strict   bool
 	concepts map[string]struct{}
 	values   map[string]struct{}
+	sequence []string // concept tokens in sentence order, for the frame detector
 }
 
 func newContradictionView(text string) *contradictionView {
@@ -367,7 +371,119 @@ func newContradictionView(text string) *contradictionView {
 		strict:   strictlyNegated(text),
 		concepts: conceptTokens(text),
 		values:   valueTokens(text),
+		sequence: conceptSequence(text),
 	}
+}
+
+// conceptSequence is conceptTokens in sentence order, duplicates kept.
+func conceptSequence(text string) []string {
+	var out []string
+	for _, w := range strings.Fields(strings.ToLower(text)) {
+		w = strings.ReplaceAll(strings.Trim(w, ",.;:!?()[]{}\"'"), "’", "'")
+		if w == "" {
+			continue
+		}
+		if _, ok := stopWords[w]; ok {
+			continue
+		}
+		if _, ok := strictNegators[w]; ok {
+			continue
+		}
+		out = append(out, conceptOf(w))
+	}
+	return out
+}
+
+// The frame detector (relate/v5) reads a restatement that replaces how
+// something is done: "Deployments are performed manually by an engineer
+// running the release script" and "Deployments are performed automatically by
+// the release pipeline on merge to main". The value detector cannot see it:
+// the manner word drags a different agent and mechanism with it, so the two
+// claims differ in eight concept tokens and align at 0.27. What they share is
+// the frame — the same subject and predicate, in the same order, up to the
+// word that differs — and that word is an exclusive manner.
+//
+// Only manner pairs qualify. Ordering and comparison antonyms
+// ("before"/"after", "higher"/"lower") routinely coexist about one subject
+// ("tests run before the merge" and "tests run after the deploy"), and state
+// pairs ("enabled"/"disabled") usually come with a scope in the tail that the
+// frame cannot compare. A tail naming a different environment is rejected for
+// the same reason: "backups run automatically in production" and "backups run
+// manually in staging" are both true.
+var frameAntonymPairs = [][2]string{
+	{"manual", "automatic"}, {"manually", "automatically"},
+	{"synchronous", "asynchronous"}, {"synchronously", "asynchronously"}, {"sync", "async"},
+}
+
+var frameAntonymIndex = func() map[[2]string]struct{} {
+	idx := map[[2]string]struct{}{}
+	for _, p := range frameAntonymPairs {
+		a, b := conceptOf(p[0]), conceptOf(p[1])
+		idx[[2]string{a, b}] = struct{}{}
+		idx[[2]string{b, a}] = struct{}{}
+	}
+	return idx
+}()
+
+// scopeConcepts name an environment. A tail that names one the other claim
+// does not is a different scope, not a replacement.
+var scopeConcepts = func() map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, w := range []string{"prod", "production", "staging", "stage", "dev", "development",
+		"test", "testing", "qa", "sandbox", "preview", "local", "ci"} {
+		out[conceptOf(w)] = struct{}{}
+	}
+	return out
+}()
+
+// minFramePrefix is the shortest shared frame: a subject and a predicate.
+const minFramePrefix = 2
+
+// frameConflict is the frame detector: identical leading concept sequences of
+// at least minFramePrefix tokens, then an exclusive manner swap, with the same
+// polarity on both sides and no differing environment in the tails.
+func frameConflict(a, b *contradictionView) (float64, bool) {
+	if a.strict != b.strict {
+		return 0, false
+	}
+	k := 0
+	for k < len(a.sequence) && k < len(b.sequence) && a.sequence[k] == b.sequence[k] {
+		k++
+	}
+	if k < minFramePrefix || k >= len(a.sequence) || k >= len(b.sequence) {
+		return 0, false
+	}
+	if _, ok := frameAntonymIndex[[2]string{a.sequence[k], b.sequence[k]}]; !ok {
+		return 0, false
+	}
+	if tailScopesDiffer(a.sequence[k+1:], b.sequence[k+1:]) {
+		return 0, false
+	}
+	// The frame is the alignment: how much of the shorter claim it covers.
+	shorter := min(len(a.sequence), len(b.sequence))
+	return strengthOf(priorFrame, float64(k+1)/float64(shorter)), true
+}
+
+func tailScopesDiffer(a, b []string) bool {
+	scopes := func(seq []string) map[string]struct{} {
+		out := map[string]struct{}{}
+		for _, w := range seq {
+			if _, ok := scopeConcepts[w]; ok {
+				out[w] = struct{}{}
+			}
+		}
+		return out
+	}
+	sa, sb := scopes(a), scopes(b)
+	if len(sa) != len(sb) {
+		return true
+	}
+	for w := range sa {
+		if _, ok := sb[w]; !ok {
+			return true
+		}
+	}
+	return false
 }
 
 // pairVerdict is the classification of one claim pair.
@@ -499,6 +615,9 @@ func classifyPair(a, b *claimDerived, overlap int, bothEnumerated bool) (pairVer
 	if !bothEnumerated {
 		if det, s, ok := valueConflict(av, bv, overlap); ok {
 			return contra(det, s)
+		}
+		if s, ok := frameConflict(av, bv); ok {
+			return contra(DetectorFrame, s)
 		}
 		if av.strict == bv.strict && numericDivergesPre(a.nums, a.words, b.nums, b.words) {
 			if _, _, j := setDiff(a.words, b.words); j >= minNumericAlignment {

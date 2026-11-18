@@ -14,6 +14,9 @@ type numericValue struct {
 	raw   string  // exactly as it appeared, for debugging
 	value float64 // the parsed magnitude, normalized to a base unit
 	unit  string  // canonical unit name, "" when unitless
+	// counted marks a spelled count whose unit is the noun it counts ("seven
+	// services"), not a guessed trailing word.
+	counted bool
 }
 
 // numericTokenRE matches one numeric literal with optional currency
@@ -71,6 +74,11 @@ var unitFamily = map[string]struct {
 // of numerics are usually data dumps where contradiction detection isn't
 // useful anyway.
 func extractNumerics(text string) []numericValue {
+	return append(digitNumerics(text), spelledNumerics(text)...)
+}
+
+// digitNumerics is extractNumerics for literals written in digits.
+func digitNumerics(text string) []numericValue {
 	matches := numericTokenRE.FindAllStringSubmatchIndex(text, -1)
 	out := make([]numericValue, 0, len(matches))
 	for _, loc := range matches {
@@ -132,6 +140,12 @@ func extractNumerics(text string) []numericValue {
 	return out
 }
 
+// countsNoun reports whether v is a spelled count of a noun rather than a
+// measurement in a known unit ("ten minutes").
+func countsNoun(v numericValue) bool {
+	return v.counted && !isKnownUnit(v.unit)
+}
+
 // numericValuesAgree reports whether the two claims are free of numeric
 // disagreement.
 //
@@ -156,6 +170,12 @@ func numericValuesAgree(a, b []numericValue) bool {
 	// cannot tell "b says nothing about time" from "b says the limit is in GB
 	// instead" — with only one value each, there is nothing else it could be.
 	if len(a) == 1 && len(b) == 1 {
+		// A spelled count names what it counts, so any other unit is a
+		// different quantity, not a disagreement: "five commits" says nothing
+		// about "693 tests", nor "nine mutants" about "100% coverage".
+		if a[0].unit != b[0].unit && (countsNoun(a[0]) || countsNoun(b[0])) && a[0].unit != "" && b[0].unit != "" {
+			return true
+		}
 		if a[0].unit != b[0].unit && (isKnownUnit(a[0].unit) || isKnownUnit(b[0].unit)) {
 			return false
 		}
