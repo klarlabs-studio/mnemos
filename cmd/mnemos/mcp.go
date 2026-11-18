@@ -2154,6 +2154,10 @@ type mcpRememberOutput struct {
 	EventID string `json:"episode_id"`
 	RunID   string `json:"run_id"`
 	Status  string `json:"status"`
+	// Known is true when the brain already held the belief: belief_id is the
+	// held belief, the episode was linked to it (unless it already had
+	// evidence from the same origin), and no belief was written.
+	Known bool `json:"known"`
 }
 
 type mcpForgetInput struct {
@@ -2270,6 +2274,9 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 		ValidFrom:  now,
 		ValidTo:    validTo,
 	}
+	if out, known, err := mcpRememberKnown(ctx, w, event, claim); err != nil || known {
+		return out, err
+	}
 	if _, err := w.Claims(ctx, []domain.Claim{claim}, govwrite.ClaimReason{Reason: "agent-remember", ChangedBy: actor}); err != nil {
 		return mcpRememberOutput{}, fmt.Errorf("append claim: %w", err)
 	}
@@ -2293,6 +2300,42 @@ func mcpRunRemember(ctx context.Context, actor string, input mcpRememberInput) (
 		RunID:   runID,
 		Status:  string(domain.ClaimStatusActive),
 	}, nil
+}
+
+// mcpRememberKnown folds a remembered fact onto the belief the brain already
+// holds, exactly as ingest does (pipeline.CollapseKnownClaims): the episode is
+// linked to the held belief through the governed artifacts write, and the
+// held belief's id is returned with Known set. It reports false, having
+// written nothing, when the fact is new. A fact with valid_until set is never
+// folded: a claim with closed valid time is not a live belief, so it is
+// neither a holder nor a restatement of one.
+func mcpRememberKnown(ctx context.Context, w *govwrite.Writer, event domain.Event, claim domain.Claim) (mcpRememberOutput, bool, error) {
+	if !claim.ValidTo.IsZero() {
+		return mcpRememberOutput{}, false, nil
+	}
+	links := []domain.ClaimEvidence{{ClaimID: claim.ID, EventID: event.ID}}
+	known, err := pipeline.CollapseKnownClaims(ctx, w.Conn(), []domain.Event{event}, []domain.Claim{claim}, links)
+	if err != nil {
+		return mcpRememberOutput{}, false, fmt.Errorf("collapse known claims: %w", err)
+	}
+	held, folded := known.Remap[claim.ID]
+	if !folded {
+		return mcpRememberOutput{}, false, nil
+	}
+	if len(known.Links) > 0 {
+		if _, err := w.Artifacts(ctx, nil, nil, known.Links, nil); err != nil {
+			return mcpRememberOutput{}, false, fmt.Errorf("link evidence to held belief: %w", err)
+		}
+	}
+	status := string(domain.ClaimStatusActive)
+	got, err := w.Conn().Claims.ListByIDs(ctx, []string{held})
+	if err != nil {
+		return mcpRememberOutput{}, false, fmt.Errorf("read held belief: %w", err)
+	}
+	if len(got) == 1 {
+		status = string(got[0].Status)
+	}
+	return mcpRememberOutput{ClaimID: held, EventID: event.ID, RunID: event.RunID, Status: status, Known: true}, true, nil
 }
 
 func mcpRunForget(ctx context.Context, actor string, input mcpForgetInput) (mcpForgetOutput, error) {

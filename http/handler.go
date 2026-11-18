@@ -146,7 +146,7 @@ func (h *handler) rememberClaim(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	id, err := h.store.RememberClaim(r.Context(), mnemos.ClaimItem{
+	got, err := h.store.RememberClaimDetailed(r.Context(), mnemos.ClaimItem{
 		Text:       in.Text,
 		Type:       in.Type,
 		Confidence: in.Confidence,
@@ -159,7 +159,13 @@ func (h *handler) rememberClaim(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"claim_id": id})
+	// A restatement of a held belief returns that belief's id, with known set
+	// and 200 rather than 201: nothing was created.
+	code := http.StatusCreated
+	if got.Known {
+		code = http.StatusOK
+	}
+	writeJSON(w, code, map[string]any{"claim_id": got.ID, "known": got.Known})
 }
 
 func (h *handler) rememberEvent(w http.ResponseWriter, r *http.Request) {

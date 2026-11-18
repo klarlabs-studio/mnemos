@@ -8,6 +8,7 @@
 //	go run ./tools/scalebench -beliefs 10000                       # small dev brain
 //	go run ./tools/scalebench -beliefs 100000 -json base-100k.json
 //	go run ./tools/scalebench -beliefs 1000000 -shape hub -timeout 30m
+//	go run ./tools/scalebench -beliefs 100000 -churn -json churn-100k.json  # storage growth + maintenance cost
 //
 // The corpus comes from internal/scalebench and is a pure function of
 // -beliefs, -seed and -shape, so a run at another commit regenerates the same
@@ -46,14 +47,17 @@ import (
 
 // Report is the machine-readable result. Durations are milliseconds.
 type Report struct {
-	SchemaVersion string            `json:"schema_version"`
-	Params        reportParams      `json:"params"`
-	Environment   environment       `json:"environment"`
-	Corpus        scalebench.Stats  `json:"corpus"`
-	Operations    []operation       `json:"operations"`
-	Memory        memory            `json:"memory"`
-	Notes         []string          `json:"notes"`
-	Extra         map[string]string `json:"extra,omitempty"`
+	SchemaVersion string           `json:"schema_version"`
+	Params        reportParams     `json:"params"`
+	Environment   environment      `json:"environment"`
+	Corpus        scalebench.Stats `json:"corpus"`
+	Operations    []operation      `json:"operations"`
+	Memory        memory           `json:"memory"`
+	Notes         []string         `json:"notes"`
+	// Storage is the storage-growth and maintenance-cost section (-churn). It
+	// is absent from reports written without it, which stay valid input.
+	Storage *storageReport    `json:"storage,omitempty"`
+	Extra   map[string]string `json:"extra,omitempty"`
 }
 
 type reportParams struct {
@@ -86,7 +90,11 @@ type operation struct {
 	TotalMS float64 `json:"total_ms"`
 	P50MS   float64 `json:"p50_ms"`
 	P95MS   float64 `json:"p95_ms"`
-	MaxMS   float64 `json:"max_ms"`
+	// P99MS is the 99th percentile by nearest rank. With fewer than 100
+	// samples it is the slowest-but-one or the max, so read it together with
+	// Samples. Reports written before it existed decode it as 0.
+	P99MS float64 `json:"p99_ms"`
+	MaxMS float64 `json:"max_ms"`
 	// PerSecond is throughput where it is meaningful (items per second).
 	PerSecond float64 `json:"per_second,omitempty"`
 	Outcome   string  `json:"outcome"` // ok | timeout | error | unsupported
@@ -121,6 +129,7 @@ func main() {
 	flag.IntVar(&repeat, "repeat", 1, "measure the warm operations this many times and report the median")
 	flag.StringVar(&checkFile, "check", "", "fail when an operation exceeds the ceilings in this JSON file (see bench/scale-gate.json)")
 	flag.StringVar(&profileOp, "profile-op", "", "CPU-profile this one operation (e.g. ingest_remember, brain_health)")
+	flag.BoolVar(&churn, "churn", false, "after the warm operations, census storage, simulate churn and time the maintenance operations")
 	flag.StringVar(&profileOut, "cpuprofile", "scalebench.cpu.pprof", "where -profile-op writes its profile")
 	flag.Parse()
 	p.Shape = scalebench.Shape(shape)
@@ -203,27 +212,27 @@ func run(p scalebench.Params, batch, queries, ingests int, timeout time.Duration
 	}
 	rep.Corpus = lr.Stats
 	rep.Operations = append(rep.Operations, operation{
-		Name: "bulk_load", Samples: 1, TotalMS: ms(lr.Elapsed), P50MS: ms(lr.Elapsed), P95MS: ms(lr.Elapsed), MaxMS: ms(lr.Elapsed),
+		Name: "bulk_load", Samples: 1, TotalMS: ms(lr.Elapsed), P50MS: ms(lr.Elapsed), P95MS: ms(lr.Elapsed), P99MS: ms(lr.Elapsed), MaxMS: ms(lr.Elapsed),
 		PerSecond: round2(float64(lr.Stats.Claims) / lr.Elapsed.Seconds()), Outcome: "ok", Detail: "beliefs/s",
 	})
 
 	// 3. The full trust recompute (`mnemos recompute-trust --all`), with the
 	// canonical scorer that command uses.
-	rep.Operations = append(rep.Operations, timeOnce("recompute_trust_full", timeout, func(ctx context.Context) (string, error) {
-		conn, err := store.Open(ctx, dsn)
+	rep.Operations = append(rep.Operations, recomputeTrustOp("recompute_trust_full", dsn, p, timeout))
+
+	// The seeded brain's footprint, before any measured operation writes to it.
+	var afterSeed storageCensus
+	if churn {
+		c, err := openCensus(dbPath)
 		if err != nil {
-			return "", err
+			return fmt.Errorf("census: %w", err)
 		}
-		defer func() { _ = conn.Close() }()
-		scorer, ok := conn.Claims.(ports.TrustScorer)
-		if !ok {
-			return "", errUnsupported
+		afterSeed, err = c.census()
+		c.close()
+		if err != nil {
+			return fmt.Errorf("census: %w", err)
 		}
-		// The canonical model every writer uses (ADR 0026), scored at the
-		// corpus anchor so the pass is reproducible.
-		n, err := scorer.RecomputeTrust(ctx, trust.Scorer(p.Anchor))
-		return fmt.Sprintf("%d beliefs rescored", n), err
-	}))
+	}
 
 	// 4. Reopening a populated store (migration check on existing data).
 	rep.Operations = append(rep.Operations, timeOnce("open_populated_store", timeout, func(ctx context.Context) (string, error) {
@@ -263,10 +272,42 @@ func run(p scalebench.Params, batch, queries, ingests int, timeout time.Duration
 		rep.Notes = append(rep.Notes, fmt.Sprintf("warm operations: median of %d rounds on the same loaded brain", repeat))
 	}
 
+	if churn {
+		ops, st, err := runChurn(mem, dsn, dbPath, p, qs, ingestTexts[:ingests], timeout, afterSeed)
+		if err != nil {
+			return fmt.Errorf("churn: %w", err)
+		}
+		rep.Operations = append(rep.Operations, ops...)
+		rep.Storage = st
+		rep.Notes = append(rep.Notes,
+			"storage.after_seed is censused after bulk load and the first trust recompute; after_churn at the end of the run.",
+			"Churn phases perform the same number of operations at every size, so per-operation growth compares across sizes.",
+			"Merges come from 100 seeded pairs of identical stub embeddings; the corpus has no other embeddings.")
+	}
+
 	return finish(rep, peak, stopMem, dbPath, jsonOut)
 }
 
 var errUnsupported = errors.New("unsupported by backend")
+
+// recomputeTrustOp times the full trust recompute (`mnemos recompute-trust
+// --all`) with the canonical scorer that command uses (ADR 0026), scored at
+// the corpus anchor so the pass is reproducible.
+func recomputeTrustOp(name, dsn string, p scalebench.Params, timeout time.Duration) operation {
+	return timeOnce(name, timeout, func(ctx context.Context) (string, error) {
+		conn, err := store.Open(ctx, dsn)
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = conn.Close() }()
+		scorer, ok := conn.Claims.(ports.TrustScorer)
+		if !ok {
+			return "", errUnsupported
+		}
+		n, err := scorer.RecomputeTrust(ctx, trust.Scorer(p.Anchor))
+		return fmt.Sprintf("%d beliefs rescored", n), err
+	})
+}
 
 func finish(rep Report, peak *atomic.Uint64, stop func(), dbPath, jsonOut string) error {
 	stop()
@@ -279,6 +320,7 @@ func finish(rep Report, peak *atomic.Uint64, stop func(), dbPath, jsonOut string
 		}
 	}
 	printHuman(rep)
+	printStorage(rep.Storage)
 	if err := writeReport(rep, jsonOut); err != nil {
 		return err
 	}
@@ -305,7 +347,8 @@ func writeReport(rep Report, jsonOut string) error {
 }
 
 // gateFile is the -check file: per corpus size, per shape, per operation,
-// the slowest p50 and p95 that still pass. A ceiling is a regression alarm,
+// the slowest p50, p95 and p99 that still pass (each optional, so a gate
+// written before p99 existed keeps its meaning). A ceiling is a regression alarm,
 // not a target: it sits well above the measured value so a noisy run does not
 // trip it and an order-of-magnitude regression always does.
 type gateFile struct {
@@ -319,6 +362,7 @@ type gateFile struct {
 type opCeiling struct {
 	P50MS float64 `json:"p50_ms,omitempty"`
 	P95MS float64 `json:"p95_ms,omitempty"`
+	P99MS float64 `json:"p99_ms,omitempty"`
 }
 
 // checkLimits compares rep against the ceilings for its shape and returns an
@@ -353,6 +397,8 @@ func checkLimits(rep Report, path string) error {
 			failures = append(failures, fmt.Sprintf("%s: p50 %.0f ms > ceiling %.0f ms", op.Name, op.P50MS, c.P50MS))
 		case c.P95MS > 0 && op.P95MS > c.P95MS:
 			failures = append(failures, fmt.Sprintf("%s: p95 %.0f ms > ceiling %.0f ms", op.Name, op.P95MS, c.P95MS))
+		case c.P99MS > 0 && op.P99MS > c.P99MS:
+			failures = append(failures, fmt.Sprintf("%s: p99 %.0f ms > ceiling %.0f ms", op.Name, op.P99MS, c.P99MS))
 		}
 	}
 	for name := range limits {
@@ -376,6 +422,8 @@ var profileOp, profileOut string
 var (
 	repeat    int
 	checkFile string
+	// churn enables the storage-growth and maintenance section (churn.go).
+	churn bool
 )
 
 // profiling starts the CPU profile when name is the selected operation and
@@ -408,7 +456,7 @@ func timeOnce(name string, timeout time.Duration, fn func(context.Context) (stri
 	start := time.Now()
 	detail, err := fn(ctx)
 	d := time.Since(start)
-	op := operation{Name: name, Samples: 1, TotalMS: ms(d), P50MS: ms(d), P95MS: ms(d), MaxMS: ms(d), Outcome: "ok", Detail: detail}
+	op := operation{Name: name, Samples: 1, TotalMS: ms(d), P50MS: ms(d), P95MS: ms(d), P99MS: ms(d), MaxMS: ms(d), Outcome: "ok", Detail: detail}
 	classify(&op, err)
 	return op
 }
@@ -437,6 +485,7 @@ func timeEach[T any](name string, timeout time.Duration, inputs []T, fn func(con
 		slices.Sort(ds)
 		op.P50MS = ms(ds[len(ds)/2])
 		op.P95MS = ms(ds[min(len(ds)-1, len(ds)*95/100)])
+		op.P99MS = ms(ds[min(len(ds)-1, len(ds)*99/100)])
 		op.MaxMS = ms(ds[len(ds)-1])
 		op.PerSecond = round2(float64(len(ds)) / total.Seconds())
 		op.Detail = "ops/s"
@@ -525,9 +574,9 @@ func printHuman(r Report) {
 		r.Environment.GOOS, r.Environment.GOARCH, r.Environment.CPU)
 	fmt.Printf("corpus: %d episodes, %d beliefs, %d evidence, %d associations (%d contradicts), %d topics\n",
 		r.Corpus.Events, r.Corpus.Claims, r.Corpus.Evidence, r.Corpus.Relationships, r.Corpus.Contradicts, r.Corpus.Topics)
-	fmt.Printf("%-22s %8s %11s %11s %11s %12s  %s\n", "operation", "samples", "p50 ms", "p95 ms", "max ms", "per_second", "outcome")
+	fmt.Printf("%-30s %8s %11s %11s %11s %11s %12s  %s\n", "operation", "samples", "p50 ms", "p95 ms", "p99 ms", "max ms", "per_second", "outcome")
 	for _, o := range r.Operations {
-		fmt.Printf("%-22s %8d %11.2f %11.2f %11.2f %12.1f  %s %s\n", o.Name, o.Samples, o.P50MS, o.P95MS, o.MaxMS, o.PerSecond, o.Outcome, o.Error)
+		fmt.Printf("%-30s %8d %11.2f %11.2f %11.2f %11.2f %12.1f  %s %s\n", o.Name, o.Samples, o.P50MS, o.P95MS, o.P99MS, o.MaxMS, o.PerSecond, o.Outcome, o.Error)
 	}
 	fmt.Printf("peak heap in-use %.1f MiB, max RSS %.1f MiB, db %.1f MiB\n",
 		float64(r.Memory.PeakHeapInuseBytes)/(1<<20), float64(r.Memory.MaxRSSBytes)/(1<<20), float64(r.Memory.DBBytes)/(1<<20))
@@ -565,7 +614,7 @@ func warmOperations(mem mnemos.Memory, qs, texts []string, timeout time.Duration
 }
 
 // medianRounds folds repeated rounds into one operation per name: the median
-// p50 and p95 across rounds, the worst max, and the first failure if any round
+// p50, p95 and p99 across rounds, the worst max, and the first failure if any round
 // did not complete.
 func medianRounds(rounds [][]operation) []operation {
 	if len(rounds) == 1 {
@@ -574,16 +623,16 @@ func medianRounds(rounds [][]operation) []operation {
 	var out []operation
 	for i, first := range rounds[0] {
 		op := first
-		var p50s, p95s []float64
+		var p50s, p95s, p99s []float64
 		for _, r := range rounds {
 			o := r[i]
-			p50s, p95s = append(p50s, o.P50MS), append(p95s, o.P95MS)
+			p50s, p95s, p99s = append(p50s, o.P50MS), append(p95s, o.P95MS), append(p99s, o.P99MS)
 			op.MaxMS = math.Max(op.MaxMS, o.MaxMS)
 			if o.Outcome != "ok" && op.Outcome == "ok" {
 				op.Outcome, op.Error = o.Outcome, o.Error
 			}
 		}
-		op.P50MS, op.P95MS = median(p50s), median(p95s)
+		op.P50MS, op.P95MS, op.P99MS = median(p50s), median(p95s), median(p99s)
 		op.Detail = fmt.Sprintf("%s (median of %d rounds)", first.Detail, len(rounds))
 		out = append(out, op)
 	}

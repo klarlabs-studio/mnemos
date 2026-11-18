@@ -160,22 +160,30 @@ func (m *memory) Remember(ctx context.Context, item Item) error {
 // (and any evidence links) and records the claim id in the evidence
 // chain. The generated claim id is returned to the caller.
 func (m *memory) RememberClaim(ctx context.Context, item ClaimItem) (string, error) {
+	got, err := m.RememberClaimDetailed(ctx, item)
+	return got.ID, err
+}
+
+// RememberClaimDetailed implements [Memory.RememberClaimDetailed].
+func (m *memory) RememberClaimDetailed(ctx context.Context, item ClaimItem) (RememberedClaim, error) {
 	if strings.TrimSpace(item.Text) == "" {
-		return "", errors.New("mnemos: RememberClaim: Text is required")
+		return RememberedClaim{}, errors.New("mnemos: RememberClaim: Text is required")
 	}
 	// Spec non-negotiable: "Claims require evidence. An assertion without
 	// evidence is rejected." Fail-closed here, before the governed write
 	// runs, so no evidence-less claim is ever persisted. Blank ids do not
 	// count as evidence.
 	if !hasEvidence(item.EventIDs) {
-		return "", errors.New("mnemos: RememberClaim: at least one evidence EventID is required (claims require evidence)")
+		return RememberedClaim{}, errors.New("mnemos: RememberClaim: at least one evidence EventID is required (claims require evidence)")
 	}
 	out, err := dispatchWrite[rememberClaimOutput](ctx, m, actionRememberClaim, rememberClaimInput{Claim: item})
 	if err != nil {
-		return "", err
+		return RememberedClaim{}, err
 	}
-	m.embedAsync(out.ClaimID, "claim", item.Text)
-	return out.ClaimID, nil
+	if !out.Known { // a held belief is already embedded
+		m.embedAsync(out.ClaimID, "claim", item.Text)
+	}
+	return RememberedClaim{ID: out.ClaimID, Known: out.Known}, nil
 }
 
 // RecordDecision persists an agent decision (belief -> plan -> outcome audit

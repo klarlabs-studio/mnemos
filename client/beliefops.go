@@ -20,20 +20,35 @@ type rawBody []byte
 
 // RememberClaimWithEvidence stores one fact as a claim, recording each
 // non-blank evidence string as an observation event the claim links to, and
-// returns the claim id. A zero validFrom means now. POST /v1/facts; needs
-// claims:write and a token that is not run-scoped.
+// returns the id of the claim holding it: a new claim, or the one the brain
+// already held when the fact restated it. A zero validFrom means now.
+// POST /v1/facts; needs claims:write and a token that is not run-scoped.
 func (c *Client) RememberClaimWithEvidence(ctx context.Context, text string, evidence []string, validFrom time.Time) (string, error) {
+	got, err := c.RememberClaimWithEvidenceDetailed(ctx, text, evidence, validFrom)
+	return got.ID, err
+}
+
+// RememberedClaim reports where a remembered claim landed.
+type RememberedClaim struct {
+	// ID is the claim holding the belief.
+	ID string `json:"belief_id"`
+	// Known is true when the brain already held the belief, so the write
+	// linked its evidence to the existing claim instead of adding one.
+	Known bool `json:"known"`
+}
+
+// RememberClaimWithEvidenceDetailed is [Client.RememberClaimWithEvidence]
+// reporting whether the brain already held the belief.
+func (c *Client) RememberClaimWithEvidenceDetailed(ctx context.Context, text string, evidence []string, validFrom time.Time) (RememberedClaim, error) {
 	body := map[string]any{"text": text, "evidence": evidence}
 	if !validFrom.IsZero() {
 		body["valid_from"] = validFrom.UTC().Format(time.RFC3339Nano)
 	}
-	var out struct {
-		BeliefID string `json:"belief_id"`
-	}
+	var out RememberedClaim
 	if err := c.do(ctx, http.MethodPost, "/v1/facts", body, &out); err != nil {
-		return "", err
+		return RememberedClaim{}, err
 	}
-	return out.BeliefID, nil
+	return out, nil
 }
 
 // ScanRequest is a valid-time window for [Client.Scan]. Zero bounds are open;

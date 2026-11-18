@@ -54,8 +54,16 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 	m := e.m
 	item := in.Item
 
+	// The session is not input metadata: it is stamped on each episode under
+	// pipeline.SessionMetadataKey, the key the known-claim fold and the
+	// session filters read. Left in the input metadata it would be stored as
+	// "input_session_id" and the session would be invisible to both.
+	session := strings.TrimSpace(item.Metadata[pipeline.SessionMetadataKey])
+	inputMeta := mergeMetadata(item)
+	delete(inputMeta, pipeline.SessionMetadataKey)
+
 	svc := ingest.NewService()
-	ingestIn, content, err := svc.IngestText(item.Content, mergeMetadata(item))
+	ingestIn, content, err := svc.IngestText(item.Content, inputMeta)
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("ingest: %w", err)
 	}
@@ -69,6 +77,15 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 			events[i].RunID = item.RunID
 		}
 		events[i].CreatedBy = m.actorID
+		if session != "" {
+			if events[i].Metadata == nil {
+				events[i].Metadata = map[string]string{}
+			}
+			events[i].Metadata[pipeline.SessionMetadataKey] = session
+			// As process_text does: the same chunk from the same session
+			// names the episode already stored, so a replay appends nothing.
+			events[i].ID = pipeline.SessionEventID(session, events[i].Content)
+		}
 	}
 
 	claims, links, entities, err := m.extractor.ExtractFn(ctx, events)
@@ -105,6 +122,17 @@ func (e rememberExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 	// the skip is logged, counted and recorded in the evidence (#428).
 	incremental, skipErr := pipeline.RelateToExisting(ctx, m.conn, m.relator, claims, "remember")
 	rels = append(rels, incremental...)
+	if session != "" {
+		// A conversation moving on is not a contradiction (see
+		// pipeline.DropIntraSessionContradictions), exactly as process_text.
+		newIDs := make(map[string]struct{}, len(claims))
+		for i := range claims {
+			newIDs[claims[i].ID] = struct{}{}
+		}
+		if rels, _, err = pipeline.DropIntraSessionContradictions(ctx, m.conn.Events, m.conn.Claims, rels, session, newIDs); err != nil {
+			return axidomain.ExecutionResult{}, nil, fmt.Errorf("drop intra-session contradictions: %w", err)
+		}
+	}
 	for i := range rels {
 		rels[i].CreatedBy = m.actorID
 	}
@@ -168,10 +196,11 @@ type rememberClaimInput struct {
 	Claim ClaimItem
 }
 
-// rememberClaimOutput carries the generated claim id back to the public
-// RememberClaim method.
+// rememberClaimOutput carries the id of the claim holding the belief back to
+// the public RememberClaim method, and whether that claim already existed.
 type rememberClaimOutput struct {
 	ClaimID string
+	Known   bool
 }
 
 type rememberClaimExecutor struct{ m *memory }
@@ -259,6 +288,20 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		claim.ConfidenceComponents[domain.SalienceComponentKey] = s
 	}
 
+	links := make([]domain.ClaimEvidence, len(evidenceIDs))
+	for i, eid := range evidenceIDs {
+		links[i] = domain.ClaimEvidence{ClaimID: id, EventID: eid}
+	}
+
+	// A belief the brain already holds is not a new claim: fold the
+	// restatement onto it exactly as ingest does, so its evidence lands on the
+	// held belief and the caller gets that belief's id back.
+	if held, linked, folded, err := foldKnownClaim(ctx, m, claim, links); err != nil {
+		return axidomain.ExecutionResult{}, nil, err
+	} else if folded {
+		return rememberedKnownClaim(held, linked, claimType, item.RunID)
+	}
+
 	// Relate against the corpus BEFORE upserting, so the new claim is compared
 	// with prior claims only, never itself. Best-effort: the write is kept
 	// without its edges when this fails, and the skip is logged, counted and
@@ -269,10 +312,6 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert claim: %w", err)
 	}
 
-	links := make([]domain.ClaimEvidence, len(evidenceIDs))
-	for i, eid := range evidenceIDs {
-		links[i] = domain.ClaimEvidence{ClaimID: id, EventID: eid}
-	}
 	if err := m.conn.Claims.UpsertEvidence(ctx, links); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("link evidence: %w", err)
 	}
@@ -299,6 +338,7 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 
 	value := map[string]any{
 		"claim_id":       id,
+		"known":          false,
 		"type":           string(claimType),
 		"confidence":     confidence,
 		"evidence_links": linkCount,
@@ -315,6 +355,69 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		Data:    rememberClaimOutput{ClaimID: id},
 		Summary: fmt.Sprintf("remembered claim %s (links=%d, edges=%d)", id, linkCount, relCount),
 	}, records, nil
+}
+
+// foldKnownClaim runs the ingest-time known-claim fold
+// (pipeline.CollapseKnownClaims) over one pre-built claim. When the brain
+// already holds its belief, the evidence links that survive the fold — less
+// any from an origin the held belief already has — are persisted on the held
+// claim through PersistArtifacts, the write every ingest path shares, so the
+// held claim is rescored (and unarchived) as ingest would. It reports the held
+// claim's id, how many links it gained, and true; or false when the claim is
+// new and nothing was written.
+//
+// A claim stated as already ended (ValidTo set) is history, not a restatement
+// of the live belief, and is never folded.
+func foldKnownClaim(ctx context.Context, m *memory, claim domain.Claim, links []domain.ClaimEvidence) (string, int, bool, error) {
+	if !claim.ValidTo.IsZero() {
+		return "", 0, false, nil
+	}
+	// The evidence events are already stored; reading them lets the fold
+	// judge each link's origin (session or content) rather than treating
+	// every event as independent.
+	events, err := m.conn.Events.ListByIDs(ctx, evidenceEventIDs(links))
+	if err != nil {
+		return "", 0, false, fmt.Errorf("remember_claim: load evidence events: %w", err)
+	}
+	known, err := pipeline.CollapseKnownClaims(ctx, m.conn, events, []domain.Claim{claim}, links)
+	if err != nil {
+		return "", 0, false, fmt.Errorf("remember_claim: collapse known claims: %w", err)
+	}
+	held, folded := known.Remap[claim.ID]
+	if !folded {
+		return "", 0, false, nil
+	}
+	if err := pipeline.PersistArtifacts(ctx, m.conn, nil, nil, known.Links, nil); err != nil {
+		return "", 0, false, fmt.Errorf("remember_claim: link evidence to held belief: %w", err)
+	}
+	return held, len(known.Links), true, nil
+}
+
+func evidenceEventIDs(links []domain.ClaimEvidence) []string {
+	ids := make([]string, len(links))
+	for i, l := range links {
+		ids[i] = l.EventID
+	}
+	return ids
+}
+
+// rememberedKnownClaim is the result of a remember_claim write that folded
+// onto a held belief.
+func rememberedKnownClaim(heldID string, linked int, claimType domain.ClaimType, runID string) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
+	value := map[string]any{
+		"claim_id":       heldID,
+		"known":          true,
+		"type":           string(claimType),
+		"evidence_links": linked,
+		"relationships":  0,
+		"run_id":         runID,
+	}
+	return axidomain.ExecutionResult{
+		Data:    rememberClaimOutput{ClaimID: heldID, Known: true},
+		Summary: fmt.Sprintf("restated held claim %s (links=%d)", heldID, linked),
+	}, []axidomain.EvidenceRecord{
+		{Kind: "mnemos.remember_claim", Source: evidenceSourceLibrary, Value: value},
+	}, nil
 }
 
 // rememberEventInput is the typed input the remember-event executor

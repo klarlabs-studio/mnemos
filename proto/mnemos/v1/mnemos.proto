@@ -1222,7 +1222,13 @@ message RememberFactRequest {
   repeated string           evidence   = 2;
   google.protobuf.Timestamp valid_from = 3; // unset = now
 }
-message RememberFactResponse { string belief_id = 1; }
+// belief_id is the belief that holds the fact: the new one, or the one the
+// brain already held when the fact restated it (known = true; the fact's
+// evidence was linked to it and no belief was written).
+message RememberFactResponse {
+  string belief_id = 1;
+  bool   known     = 2;
+}
 
 message ScanBeliefsRequest {
   google.protobuf.Timestamp valid_from  = 1; // unset = open

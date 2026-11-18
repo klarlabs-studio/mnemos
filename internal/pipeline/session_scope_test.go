@@ -157,3 +157,37 @@ func TestDropIntraSessionContradictions_BothPreExisting(t *testing.T) {
 		t.Fatalf("two claims from earlier chunks of the same session must drop, got %d edges dropped=%d", len(got), dropped)
 	}
 }
+
+// Episodes Memory.Remember stored before the session was promoted to its own
+// key carry it as "input_session_id". They are still read as carrying it, by
+// the session filters and by the known-claim fold's origin rule, and the
+// current key wins when both are present.
+func TestEventSession_ReadsLegacyKey(t *testing.T) {
+	cases := []struct {
+		name string
+		meta map[string]string
+		want string
+	}{
+		{"current key", map[string]string{SessionMetadataKey: "s1"}, "s1"},
+		{"legacy key", map[string]string{legacySessionMetadataKey: "s0"}, "s0"},
+		{"current wins", map[string]string{SessionMetadataKey: "s1", legacySessionMetadataKey: "s0"}, "s1"},
+		{"none", map[string]string{"input_source": "raw_text"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := EventSession(tc.meta); got != tc.want {
+				t.Fatalf("EventSession = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	legacy := domain.Event{ID: "ev1", Content: "a", Metadata: map[string]string{legacySessionMetadataKey: "s0"}}
+	links := []domain.ClaimEvidence{{ClaimID: "c1", EventID: "ev1"}}
+	if got := SessionOfClaims(links, []domain.Event{legacy}); got["c1"] != "s0" {
+		t.Fatalf("SessionOfClaims = %v, want c1 -> s0", got)
+	}
+	replay := domain.Event{ID: "ev2", Content: "b", Metadata: map[string]string{SessionMetadataKey: "s0"}}
+	if evidenceOrigin(legacy) != evidenceOrigin(replay) {
+		t.Fatalf("a legacy episode and a current one from the same session are different origins: %q vs %q", evidenceOrigin(legacy), evidenceOrigin(replay))
+	}
+}

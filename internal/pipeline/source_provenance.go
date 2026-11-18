@@ -64,7 +64,7 @@ func StampSourceProvenance(events []domain.Event, claims []domain.Claim, links [
 			// A capture carries a session id; that is a transcript whatever the
 			// input format says. It has no stable document path — the transcript
 			// is ephemeral — so only the type is recorded.
-			if e.Metadata[SessionMetadataKey] != "" {
+			if EventSession(e.Metadata) != "" {
 				if _, seen := typeOf[l.ClaimID]; !seen {
 					typeOf[l.ClaimID] = domain.SourceTypeTranscript
 				}

@@ -109,12 +109,16 @@ func handleClaimRecord(args []string) {
 	}
 	defer func() { _ = mem.Close() }()
 
-	id, err := mem.RememberClaim(ctx, item)
+	got, err := mem.RememberClaimDetailed(ctx, item)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "record claim"))
 		return
 	}
-	fmt.Printf("recorded claim %s\n", id)
+	if got.Known {
+		fmt.Printf("claim already known as %s; evidence linked\n", got.ID)
+		return
+	}
+	fmt.Printf("recorded claim %s\n", got.ID)
 }
 
 // handleClaimSalience routes `mnemos claim salience set <claim-id> <0..1>` — the

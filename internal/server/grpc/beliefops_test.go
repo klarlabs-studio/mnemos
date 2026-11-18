@@ -189,3 +189,35 @@ func TestGRPC_RememberFactAndScan(t *testing.T) {
 		t.Errorf("scan with run-scoped token: %v, want PermissionDenied", err)
 	}
 }
+
+// A restated fact folds onto the belief the brain already holds: RememberFact
+// returns the held belief's id with known set, the store gains the evidence
+// and no claim row.
+func TestGRPC_RememberFact_RestatementReturnsHeldBelief(t *testing.T) {
+	client, conn, issuer := startBeliefOpsServer(t)
+	ctx := bearerCtx(t, mintToken(t, issuer, []string{domain.ScopeClaimsWrite}, nil))
+
+	first, err := client.RememberFact(ctx, &mnemosv1.RememberFactRequest{Text: "The billing service runs in eu-west-1.", Evidence: []string{"runbook p.4"}})
+	if err != nil || first.GetKnown() {
+		t.Fatalf("first RememberFact = %v, %v; want a new belief", first, err)
+	}
+	again, err := client.RememberFact(ctx, &mnemosv1.RememberFactRequest{Text: "the billing service runs in eu-west-1", Evidence: []string{"incident 812"}})
+	if err != nil {
+		t.Fatalf("restatement: %v", err)
+	}
+	if again.GetBeliefId() != first.GetBeliefId() || !again.GetKnown() {
+		t.Fatalf("restatement = %v, want belief %s known", again, first.GetBeliefId())
+	}
+	all, err := conn.Claims.ListAll(context.Background())
+	if err != nil || len(all) != 1 {
+		t.Fatalf("store holds %d claims (%v), want 1", len(all), err)
+	}
+	links, err := conn.Claims.ListEvidenceByClaimIDs(context.Background(), []string{first.GetBeliefId()})
+	if err != nil || len(links) != 2 {
+		t.Fatalf("held belief has %d evidence links (%v), want 2", len(links), err)
+	}
+	fresh, err := client.RememberFact(ctx, &mnemosv1.RememberFactRequest{Text: "Payments owns the billing service.", Evidence: []string{"org chart"}})
+	if err != nil || fresh.GetKnown() || fresh.GetBeliefId() == first.GetBeliefId() {
+		t.Fatalf("new fact = %v, %v; want a new belief", fresh, err)
+	}
+}

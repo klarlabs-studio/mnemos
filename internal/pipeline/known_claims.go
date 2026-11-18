@@ -334,7 +334,7 @@ func loadOrigins(ctx context.Context, conn *store.Conn, links []domain.ClaimEvid
 // it is chunked or replayed; sessionless input is identified by its content,
 // so the same document ingested again is the same origin.
 func evidenceOrigin(ev domain.Event) string {
-	if s := ev.Metadata[SessionMetadataKey]; s != "" {
+	if s := EventSession(ev.Metadata); s != "" {
 		return "session:" + s
 	}
 	sum := sha256.Sum256([]byte(ev.Content))
