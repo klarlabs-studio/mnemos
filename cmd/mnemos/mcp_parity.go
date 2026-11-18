@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/beliefops"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -187,23 +188,29 @@ type mcpRecordFeedbackInput struct {
 	Note    string `json:"note,omitempty" jsonschema:"description=Why it was or was not helpful; kept verbatim for the audit trail"`
 }
 
+// mcpRecordFeedbackOutput is the vote's effect on the belief. The first
+// three fields are the original receipt; the rest are the fields REST's
+// POST /v1/beliefs/<id>/feedback has always returned, now that both run
+// beliefops.RecordFeedback.
 type mcpRecordFeedbackOutput struct {
-	ClaimID                string `json:"claim_id"`
-	HelpfulCount           int    `json:"helpful_count"`
-	NegativeFeedbackStreak int    `json:"negative_feedback_streak"`
+	ClaimID                string  `json:"claim_id"`
+	HelpfulCount           int     `json:"helpful_count"`
+	NegativeFeedbackStreak int     `json:"negative_feedback_streak"`
+	Helpful                bool    `json:"helpful"`
+	NewStatus              string  `json:"new_status"`
+	NewConfidence          float64 `json:"new_confidence"`
+	AutoContested          bool    `json:"auto_contested"`
 }
 
 // mcpRunRecordFeedback records whether a recalled belief was actually useful.
 //
-// Mirrors POST /v1/beliefs/<id>/feedback. The consumer of recall is the only
-// party that can judge this, and until now the only consumer that could SAY so
-// was an HTTP client — not the MCP client that does the recalling.
-//
-// A helpful vote resets the negative streak; an unhelpful one extends it. That
-// asymmetry is the REST handler's, kept deliberately: HelpfulCount is a lifetime
-// corroboration tally, while the streak measures CONSECUTIVE misses, so one good
-// recall should clear a run of bad ones rather than merely offset it.
-func mcpRunRecordFeedback(ctx context.Context, input mcpRecordFeedbackInput) (mcpRecordFeedbackOutput, error) {
+// It runs beliefops.RecordFeedback, the one implementation REST, gRPC and the
+// library share: a helpful vote resets the negative streak, an unhelpful one
+// extends it, decays confidence, and contests the belief once the streak
+// reaches MNEMOS_FEEDBACK_CONTEST_THRESHOLD. This tool used to keep the tally
+// without the decay or the contest, so the same vote moved a belief over REST
+// and not over MCP.
+func mcpRunRecordFeedback(ctx context.Context, actor string, input mcpRecordFeedbackInput) (mcpRecordFeedbackOutput, error) {
 	claimID := strings.TrimSpace(input.ClaimID)
 	// The recall that produced this feedback federates both tiers (#341), so the
 	// belief being judged is as likely to be a workspace one as a global one.
@@ -216,41 +223,14 @@ func mcpRunRecordFeedback(ctx context.Context, input mcpRecordFeedbackInput) (mc
 		return mcpRecordFeedbackOutput{}, err
 	}
 	defer closeWriter(w)
-	conn := w.Conn()
-	if conn.Feedback == nil {
-		return mcpRecordFeedbackOutput{}, fmt.Errorf("feedback is not supported by this store")
-	}
-	found, err := conn.Claims.ListByIDs(ctx, []string{claimID})
+	res, err := beliefops.RecordFeedback(ctx, w.Conn(), w, beliefops.FeedbackRequest{
+		ClaimID: claimID, Helpful: input.Helpful, Note: input.Note, Actor: actor,
+	}, beliefops.FeedbackPolicyFromEnv(), time.Now())
 	if err != nil {
-		return mcpRecordFeedbackOutput{}, fmt.Errorf("look up claim: %w", err)
-	}
-	if len(found) == 0 {
-		return mcpRecordFeedbackOutput{}, fmt.Errorf("no such belief %s", claimID)
-	}
-
-	state, _, err := conn.Feedback.Get(ctx, claimID)
-	if err != nil {
-		return mcpRecordFeedbackOutput{}, fmt.Errorf("get feedback: %w", err)
-	}
-	state.ClaimID = claimID
-	state.LastFeedbackAt = time.Now().UTC()
-	state.LastFeedbackNote = strings.TrimSpace(input.Note)
-	if input.Helpful {
-		state.HelpfulCount++
-		state.NegativeFeedbackStreak = 0
-	} else {
-		state.NegativeFeedbackStreak++
-	}
-	// Through the governed writer, never conn.Feedback.Upsert directly: the
-	// no-bypass fitness function enforces that every delivery adapter writes via
-	// the kernel, so each change lands an evidence row and is attributable. The
-	// REST handler does the same.
-	if _, err := w.Feedback(ctx, state); err != nil {
-		return mcpRecordFeedbackOutput{}, fmt.Errorf("record feedback: %w", err)
+		return mcpRecordFeedbackOutput{}, mcpBeliefOpError(err)
 	}
 	return mcpRecordFeedbackOutput{
-		ClaimID:                claimID,
-		HelpfulCount:           state.HelpfulCount,
-		NegativeFeedbackStreak: state.NegativeFeedbackStreak,
+		ClaimID: res.ClaimID, HelpfulCount: res.HelpfulCount, NegativeFeedbackStreak: res.NegativeFeedbackStreak,
+		Helpful: res.Helpful, NewStatus: res.NewStatus, NewConfidence: res.NewConfidence, AutoContested: res.AutoContested,
 	}, nil
 }

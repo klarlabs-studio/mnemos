@@ -24,6 +24,7 @@ import (
 	"go.klarlabs.de/bolt"
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/beliefops"
 	"go.klarlabs.de/mnemos/internal/browse"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
@@ -2622,29 +2623,31 @@ func makeClaimHistoryHandler(conn *store.Conn, claimID string) http.HandlerFunc 
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		if conn.ClaimVersions == nil {
-			writeError(w, http.StatusNotImplemented, "version history not available on this backend")
-			return
-		}
-		versions, err := conn.ClaimVersions.ListByClaim(r.Context(), claimID)
+		versions, err := beliefops.History(r.Context(), conn, claimID)
 		if err != nil {
-			writeInternalError(w, "list claim versions", err)
+			writeBeliefOpError(w, "list claim versions", err)
 			return
 		}
-		out := claimHistoryResponse{ClaimID: claimID, Versions: make([]claimVersionDTO, 0, len(versions))}
-		for _, v := range versions {
-			out.Versions = append(out.Versions, claimVersionDTO{
-				ClaimID:    v.ClaimID,
-				Version:    v.Version,
-				Text:       v.Text,
-				Confidence: v.Confidence,
-				Status:     string(v.Status),
-				WrittenAt:  v.WrittenAt.UTC().Format(time.RFC3339Nano),
-				WrittenBy:  v.WrittenBy,
-			})
-		}
-		writeJSON(w, http.StatusOK, out)
+		writeJSON(w, http.StatusOK, claimHistoryToDTO(claimID, versions))
 	}
+}
+
+// claimHistoryToDTO renders a version chain as the history wire document
+// REST and MCP return.
+func claimHistoryToDTO(claimID string, versions []domain.ClaimVersion) claimHistoryResponse {
+	out := claimHistoryResponse{ClaimID: claimID, Versions: make([]claimVersionDTO, 0, len(versions))}
+	for _, v := range versions {
+		out.Versions = append(out.Versions, claimVersionDTO{
+			ClaimID:    v.ClaimID,
+			Version:    v.Version,
+			Text:       v.Text,
+			Confidence: v.Confidence,
+			Status:     string(v.Status),
+			WrittenAt:  v.WrittenAt.UTC().Format(time.RFC3339Nano),
+			WrittenBy:  v.WrittenBy,
+		})
+	}
+	return out
 }
 
 // feedbackRequest is the inbound wire shape for
@@ -2657,37 +2660,6 @@ type feedbackRequest struct {
 	// feedback row. Useful for the human-review path; omit for
 	// programmatic signals.
 	Note string `json:"note,omitempty"`
-}
-
-// feedbackResponse echoes the post-application state of the claim
-// plus the feedback counters, so a caller can react to the streak
-// transition without a second GET.
-type feedbackResponse struct {
-	ClaimID                string  `json:"claim_id"`
-	Helpful                bool    `json:"helpful"`
-	NewStatus              string  `json:"new_status"`
-	NewConfidence          float64 `json:"new_confidence"`
-	NegativeFeedbackStreak int     `json:"negative_feedback_streak"`
-	HelpfulCount           int     `json:"helpful_count"`
-	AutoContested          bool    `json:"auto_contested"`
-}
-
-// feedbackDecayFactor is the per-negative-vote multiplier applied to
-// the scalar Confidence. 0.9 ≈ "each push-back trims 10% of
-// confidence" — keeps the decay shallow enough that a single bad
-// vote can't tank a well-corroborated claim while still being
-// observable. Env-tunable in case operators want a sharper or
-// softer slope.
-func feedbackDecayFactor() float64 {
-	return envFloat("MNEMOS_FEEDBACK_DECAY", 0.9)
-}
-
-// feedbackAutoContestThreshold is the consecutive-negative count
-// above which the claim's status auto-transitions to "contested".
-// 3 by default — enough to suppress noise from a single reviewer
-// having a bad day, low enough to surface real drift.
-func feedbackAutoContestThreshold() int {
-	return envInt("MNEMOS_FEEDBACK_CONTEST_THRESHOLD", 3)
 }
 
 // makeFeedbackHandler returns the POST /v1/beliefs/<id>/feedback
@@ -2706,112 +2678,26 @@ func makeFeedbackHandler(conn *store.Conn, gw *govwrite.Writer, claimID string) 
 		if !requireScope(w, r, domain.ScopeClaimsWrite) {
 			return
 		}
-		if conn.Feedback == nil {
-			writeError(w, http.StatusNotImplemented, "feedback storage not available on this backend")
-			return
-		}
 		var req feedbackRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
 			return
 		}
 		ctx := r.Context()
-		claims, err := conn.Claims.ListByIDs(ctx, []string{claimID})
-		if err != nil || len(claims) == 0 {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("claim %q not found", claimID))
-			return
-		}
-		claim := claims[0]
-
-		state, _, err := conn.Feedback.Get(ctx, claimID)
+		res, err := beliefops.RecordFeedback(ctx, conn, gw, beliefops.FeedbackRequest{
+			ClaimID: claimID, Helpful: req.Helpful, Note: req.Note, Actor: actorFromContext(ctx),
+		}, beliefops.FeedbackPolicyFromEnv(), time.Now())
 		if err != nil {
-			writeInternalError(w, "load feedback state", err)
+			writeBeliefOpError(w, "record feedback", err)
 			return
 		}
-		state.ClaimID = claimID
-		now := time.Now().UTC()
-		state.LastFeedbackAt = now
-		state.LastFeedbackNote = req.Note
-
-		autoContested := false
-		if req.Helpful {
-			state.NegativeFeedbackStreak = 0
-			state.HelpfulCount++
-		} else {
-			state.NegativeFeedbackStreak++
-			// Decay the scalar confidence. The "corroboration"
-			// component (if surfaced) shrinks in lockstep so the
-			// decomposition stays internally consistent.
-			claim.Confidence *= feedbackDecayFactor()
-			if claim.Confidence < 0 {
-				claim.Confidence = 0
-			}
-			if claim.ConfidenceComponents != nil {
-				if v, ok := claim.ConfidenceComponents["corroboration"]; ok {
-					claim.ConfidenceComponents["corroboration"] = v * feedbackDecayFactor()
-				}
-			}
-			if state.NegativeFeedbackStreak >= feedbackAutoContestThreshold() && claim.Status == domain.ClaimStatusActive {
-				claim.Status = domain.ClaimStatusContested
-				autoContested = true
-			}
-		}
-
-		actor := actorFromContext(ctx)
-		reason := "agent-feedback"
-		if !req.Helpful {
-			reason = "agent-feedback-negative"
-		}
-		if _, err := gw.Claims(ctx, []domain.Claim{claim}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
-			writeInternalError(w, "update claim", err)
-			return
-		}
-		if _, err := gw.Feedback(ctx, state); err != nil {
-			writeInternalError(w, "store feedback", err)
-			return
-		}
-		writeJSON(w, http.StatusOK, feedbackResponse{
-			ClaimID:                claimID,
-			Helpful:                req.Helpful,
-			NewStatus:              string(claim.Status),
-			NewConfidence:          claim.Confidence,
-			NegativeFeedbackStreak: state.NegativeFeedbackStreak,
-			HelpfulCount:           state.HelpfulCount,
-			AutoContested:          autoContested,
-		})
+		writeJSON(w, http.StatusOK, res)
 	}
 }
 
-// envFloat reads a float64 env var with a default.
-func envFloat(key string, fallback float64) float64 {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	f, err := strconv.ParseFloat(v, 64)
-	if err != nil {
-		return fallback
-	}
-	return f
-}
-
-// envInt reads an int env var with a default.
-func envInt(key string, fallback int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback
-	}
-	return n
-}
-
-// makeProvenanceHandler handles GET /v1/beliefs/<id>/provenance.
-// It builds a query.Engine and delegates to WhyTrustClaim to produce a
-// structured domain.ProvenanceReport explaining how the claim's trust
-// score was computed from its provenance signals.
+// makeProvenanceHandler handles GET /v1/beliefs/<id>/provenance: the
+// structured domain.ProvenanceReport (beliefops.Provenance) explaining how
+// the belief's trust score was computed. An unknown belief is a 404.
 func makeProvenanceHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
@@ -2819,11 +2705,9 @@ func makeProvenanceHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		ctx := r.Context()
-		eng := query.NewEngine(conn.Events, conn.Claims, conn.Relationships)
-		report, err := eng.WhyTrustClaim(ctx, claimID)
+		report, err := beliefops.Provenance(r.Context(), conn, claimID)
 		if err != nil {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("provenance query failed: %v", err))
+			writeBeliefOpError(w, "provenance", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, report)
