@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func writeGate(t *testing.T, body string) string {
@@ -62,16 +64,40 @@ func TestCheckLimits(t *testing.T) {
 	}
 }
 
-// Repeated rounds fold to the median p50/p95, the worst max, and the first
+// A p99 ceiling is enforced when set and ignored when absent.
+func TestCheckLimits_P99(t *testing.T) {
+	gate := writeGate(t, `{"beliefs":1000,"limits":{"uniform":{"recall_hops1":{"p95_ms":50,"p99_ms":80}}}}`)
+	if err := checkLimits(gateReport(operation{Name: "recall_hops1", P95MS: 40, P99MS: 79, Outcome: "ok"}), gate); err != nil {
+		t.Fatalf("within ceilings: %v", err)
+	}
+	err := checkLimits(gateReport(operation{Name: "recall_hops1", P95MS: 40, P99MS: 81, Outcome: "ok"}), gate)
+	if err == nil || !strings.Contains(err.Error(), "recall_hops1: p99") {
+		t.Fatalf("p99 over: err = %v", err)
+	}
+}
+
+// timeEach reports p99 by nearest rank alongside p50 and p95.
+func TestTimeEach_P99(t *testing.T) {
+	in := make([]int, 200)
+	for i := range in {
+		in[i] = i
+	}
+	op := timeEach("x", time.Minute, in, func(context.Context, int) error { return nil })
+	if op.Samples != 200 || op.P99MS < op.P95MS || op.MaxMS < op.P99MS {
+		t.Fatalf("percentiles out of order: %+v", op)
+	}
+}
+
+// Repeated rounds fold to the median p50/p95/p99, the worst max, and the first
 // failure.
 func TestMedianRounds(t *testing.T) {
 	rounds := [][]operation{
-		{{Name: "a", P50MS: 30, P95MS: 300, MaxMS: 310, Outcome: "ok"}},
-		{{Name: "a", P50MS: 10, P95MS: 100, MaxMS: 900, Outcome: "ok"}},
-		{{Name: "a", P50MS: 20, P95MS: 200, MaxMS: 210, Outcome: "timeout", Error: "slow"}},
+		{{Name: "a", P50MS: 30, P95MS: 300, P99MS: 305, MaxMS: 310, Outcome: "ok"}},
+		{{Name: "a", P50MS: 10, P95MS: 100, P99MS: 105, MaxMS: 900, Outcome: "ok"}},
+		{{Name: "a", P50MS: 20, P95MS: 200, P99MS: 205, MaxMS: 210, Outcome: "timeout", Error: "slow"}},
 	}
 	got := medianRounds(rounds)
-	if len(got) != 1 || got[0].P50MS != 20 || got[0].P95MS != 200 || got[0].MaxMS != 900 || got[0].Outcome != "timeout" {
+	if len(got) != 1 || got[0].P50MS != 20 || got[0].P95MS != 200 || got[0].P99MS != 205 || got[0].MaxMS != 900 || got[0].Outcome != "timeout" {
 		t.Fatalf("medianRounds = %+v", got)
 	}
 }
