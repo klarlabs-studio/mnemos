@@ -286,6 +286,29 @@ copy remains. Mnemos keeps the one belief and rescores it. Closing that gap
 needs provenance between episodes (a copy is not independent evidence). That
 is product work, and the harness does not fake it.
 
+
+## Retrieval ablation (`make retrieval-ablation`)
+
+A third mode, separate from the A/B verdict, asks whether Mnemos's ranking puts
+more *useful* beliefs into a fixed token budget than similarity alone
+(`go run ./tools/brainbench -mode ablation [-budgets 64,256]`). Every scenario
+question is answered under each policy on its own copy of the warmed seed, then
+the ranked list is packed into each budget (32 to 2048 tokens) with the
+Context Block's chars/4 estimate and stop rule. A question succeeds when the
+packed context holds its `expect` text and none of its `must_not` texts.
+
+The policies are the shipped agent recall (`mnemos_default`), similarity only
+(dense+BM25 with every other component off, plus dense-only and lexical-only
+variants), one leave-one-out row per ranking component, the opt-in priming and
+hop expansion, and the two raw BM25 baselines. Every Mnemos policy is a
+`query.AnswerOptions` passed to `query.Engine.Recall`; components are switched
+off through `query.Ablation`, which no surface exposes. A test fails if an
+`Ablation` field gains no leave-one-out row.
+
+Read the per-question grid, not only the totals: the suite has 23 questions,
+and in the current run the whole gap between the default and similarity only is
+four of them, in two scenarios.
+
 ## What it does **not** measure
 
 The full list ships inside every report, because a JSON file gets pasted into an

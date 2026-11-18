@@ -17,7 +17,7 @@ PROTO_GEN := proto/gen
 # never used. The same version is recorded as a `tool` dependency in go.mod.
 SQLC_VERSION := v1.30.0
 
-.PHONY: security-gate nox-scan scale-gate fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query brain-eval brain-eval-strict
+.PHONY: security-gate nox-scan scale-gate fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query brain-eval brain-eval-strict retrieval-ablation
 
 fmt:
 	$(GO) fmt ./...
@@ -136,3 +136,11 @@ brain-eval:
 
 brain-eval-strict:
 	@MNEMOS_DB_URL=memory://brain-eval $(GO) run ./tools/brainbench -json brainbench.json -fail-on-regression
+
+# retrieval-ablation asks whether Mnemos's ranking puts more USEFUL beliefs into
+# a fixed token budget than similarity alone: every brainbench question under
+# the default policy, similarity-only, a leave-one-out row per ranking
+# component and the raw BM25 baselines, at budgets 32..2048. Like brain-eval it
+# reports and does not gate. See internal/brainbench/ablation.go.
+retrieval-ablation:
+	@MNEMOS_DB_URL=memory://retrieval-ablation $(GO) run ./tools/brainbench -mode ablation -json retrieval-ablation.json
