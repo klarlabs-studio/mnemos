@@ -96,6 +96,10 @@ type churnPhase struct {
 	PerOp  map[string]float64 `json:"per_op,omitempty"`
 	Detail string             `json:"detail,omitempty"`
 	Error  string             `json:"error,omitempty"`
+	// mustNotGrow names tables the phase, by the contract of what it does,
+	// must not add rows to (a restatement of a held belief adds evidence,
+	// never a second belief).
+	mustNotGrow []string
 }
 
 // censusDB is the census's own connection to the brain's SQLite file. One
@@ -238,6 +242,11 @@ type phaseRunner struct {
 }
 
 func (pr *phaseRunner) run(name, kind string, fn func(ctx context.Context) (ops int, detail string, err error)) {
+	pr.runGuarded(name, kind, nil, fn)
+}
+
+// runGuarded is run with tables the phase must not add rows to.
+func (pr *phaseRunner) runGuarded(name, kind string, mustNotGrow []string, fn func(ctx context.Context) (ops int, detail string, err error)) {
 	before, err := pr.c.rowCounts()
 	if err != nil {
 		pr.phases = append(pr.phases, churnPhase{Name: name, Kind: kind, Error: err.Error()})
@@ -249,7 +258,7 @@ func (pr *phaseRunner) run(name, kind string, fn func(ctx context.Context) (ops 
 	ops, detail, ferr := fn(ctx)
 	elapsed := time.Since(start)
 	cancel()
-	ph := churnPhase{Name: name, Kind: kind, Ops: ops, ElapsedMS: ms(elapsed), Detail: detail, Committed: pr.c.dataVersion() != v0}
+	ph := churnPhase{Name: name, Kind: kind, Ops: ops, ElapsedMS: ms(elapsed), Detail: detail, Committed: pr.c.dataVersion() != v0, mustNotGrow: mustNotGrow}
 	if ferr != nil {
 		ph.Error = ferr.Error()
 	}
@@ -292,7 +301,7 @@ const perOpBudget = 25
 
 // findings turns the phases into the defect list.
 func findings(phases []churnPhase) []string {
-	var out []string
+	out := []string{} // [] not null in the report: "none observed"
 	for _, ph := range phases {
 		if ph.Error != "" {
 			out = append(out, fmt.Sprintf("%s: phase failed: %s", ph.Name, ph.Error))
@@ -304,6 +313,11 @@ func findings(phases []churnPhase) []string {
 				out = append(out, fmt.Sprintf("DEFECT %s (read, %d ops) committed writes (data_version moved) without adding rows", ph.Name, ph.Ops))
 			}
 			continue
+		}
+		for _, t := range ph.mustNotGrow {
+			if d := ph.Growth[t]; d > 0 {
+				out = append(out, fmt.Sprintf("DEFECT %s (%d ops) added %d %s rows; it must add none", ph.Name, ph.Ops, d, t))
+			}
 		}
 		if ph.Kind != "write" {
 			continue
@@ -438,7 +452,7 @@ func runChurn(mem mnemos.Memory, dsn, dbPath string, p scalebench.Params, qs, re
 	restates := restateTexts[:min(sz.Restates, len(restateTexts))]
 	// The same documents again, sessionless: the same origin, so by design
 	// (#443) only the episode is stored and no belief gains evidence.
-	pr.run("reingest_same_document", "write", func(ctx context.Context) (int, string, error) {
+	pr.runGuarded("reingest_same_document", "write", []string{"claims", "claim_evidence"}, func(ctx context.Context) (int, string, error) {
 		for i, t := range restates {
 			if err := mem.Remember(ctx, mnemos.Item{Type: "fact", Content: t}); err != nil {
 				return i, "", err
@@ -451,7 +465,7 @@ func runChurn(mem mnemos.Memory, dsn, dbPath string, p scalebench.Params, qs, re
 	// express a session (Item.Metadata lands on the episode as
 	// input_session_id, not the session_id the fold reads), so the
 	// restatement is an episode plus a claim citing it.
-	pr.run("restate_new_session", "write", func(ctx context.Context) (int, string, error) {
+	pr.runGuarded("restate_new_session", "write", []string{"claims"}, func(ctx context.Context) (int, string, error) {
 		ids := pick(in.active, sz.Restates, 29)
 		for i, id := range ids {
 			held, err := mem.Get(ctx, id)

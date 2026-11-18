@@ -41,14 +41,16 @@ func TestFindings(t *testing.T) {
 		{Name: "lean_write", Kind: "write", Ops: 2, PerOp: map[string]float64{"claim_status_history": 1}},
 		{Name: "consolidate", Kind: "maintenance", Ops: 1, PerOp: map[string]float64{"claim_status_history": 5000}},
 		{Name: "broken", Kind: "write", Error: "boom"},
+		{Name: "restate_dup", Kind: "write", Ops: 3, Growth: map[string]int64{"claims": 3}, mustNotGrow: []string{"claims"}},
+		{Name: "restate_ok", Kind: "write", Ops: 3, Growth: map[string]int64{"claim_evidence": 3}, mustNotGrow: []string{"claims"}},
 	}
 	got := strings.Join(findings(phases), "\n")
-	for _, want := range []string{"DEFECT get", "DEFECT health", "DEFECT recall_bad", "fat_write grows claim_status_history", "broken: phase failed: boom"} {
+	for _, want := range []string{"DEFECT get", "DEFECT health", "DEFECT recall_bad", "fat_write grows claim_status_history", "broken: phase failed: boom", "DEFECT restate_dup (3 ops) added 3 claims rows"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("findings missing %q:\n%s", want, got)
 		}
 	}
-	for _, not := range []string{"recall_ok", "lean_write", "consolidate"} {
+	for _, not := range []string{"recall_ok", "lean_write", "consolidate", "restate_ok"} {
 		if strings.Contains(got, not) {
 			t.Errorf("findings flagged %q:\n%s", not, got)
 		}
