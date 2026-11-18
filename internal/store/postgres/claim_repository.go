@@ -153,7 +153,10 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 			claim.ID, claim.Text, string(claim.Type), claim.Confidence,
 			string(claim.Status), claim.CreatedAt.UTC(), actorOr(claim.CreatedBy),
 			validFrom.UTC(), claim.HalfLifeDays, string(claim.Lifecycle), string(claim.SubjectClass),
-			string(claim.Durability.Normalized()), encodeConfidenceComponents(claim.ConfidenceComponents),
+			string(claim.Durability.Normalized()),
+			// The conflict rule for the column, applied against the row read
+			// FOR UPDATE in this transaction (domain.UpsertComponents).
+			encodeConfidenceComponents(domain.UpsertComponents(claim.ConfidenceComponents, priorInputs.components)),
 			claim.TestID, claim.TestRequirementRef, claim.TestAuthor,
 			nullTime(claim.TestLastModified), nullTime(claim.TestLastRunAt),
 			claim.TestPassCount, claim.TestFailCount,

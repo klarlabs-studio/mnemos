@@ -135,8 +135,10 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 			// "team" — which would silently reset a claim curated as `personal` on
 			// any partial re-write. Reads still normalise, so an empty stored value
 			// presents as domain.DefaultVisibility exactly as before.
-			Visibility:           string(claim.Visibility),
-			ConfidenceComponents: encodeConfidenceComponents(claim.ConfidenceComponents),
+			Visibility: string(claim.Visibility),
+			// The conflict rule for the column, applied here against the row
+			// read in this transaction (domain.UpsertComponents).
+			ConfidenceComponents: encodeConfidenceComponents(domain.UpsertComponents(claim.ConfidenceComponents, priorInputs.components)),
 			Lifecycle:            string(claim.Lifecycle),
 			SubjectClass:         string(claim.SubjectClass),
 			Durability:           string(claim.Durability.Normalized()),

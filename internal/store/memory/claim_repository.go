@@ -69,6 +69,11 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 				stored.TrustScore = existing.TrustScore
 			}
 		}
+		// confidence_components: the conflict rule every backend applies
+		// (domain.UpsertComponents) — a write carrying no credit keeps it.
+		if existing, ok := r.state.claims[claim.ID]; ok {
+			stored.ConfidenceComponents = domain.UpsertComponents(stored.ConfidenceComponents, existing.ConfidenceComponents)
+		}
 		// Same rule for the per-claim freshness half-life, matching the
 		// SQL backends' `CASE WHEN excluded.half_life_days > 0` upsert.
 		// A re-extracted claim carries no half-life (the volatility

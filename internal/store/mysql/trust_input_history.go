@@ -18,6 +18,9 @@ type trustInputs struct {
 	halfLifeDays  float64
 	lastConfirmed sql.NullTime
 	credit        float64
+	// components is the stored confidence_components map, the "stored" side of
+	// the upsert's conflict rule (domain.UpsertComponents).
+	components map[string]float64
 }
 
 // sameInputs reports whether the claims-row trust inputs are unchanged.
@@ -42,7 +45,8 @@ func readTrustInputs(ctx context.Context, tx *sql.Tx, claimID string) (trustInpu
 	if err != nil {
 		return trustInputs{}, fmt.Errorf("read trust inputs of %s: %w", claimID, err)
 	}
-	in.credit = domain.AppliedCredit(decodeConfidenceComponents(components.String))
+	in.components = decodeConfidenceComponents(components.String)
+	in.credit = domain.AppliedCredit(in.components)
 	return in, nil
 }
 

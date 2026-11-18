@@ -230,13 +230,21 @@ What made it possible:
   at all, `cognitive_journal` has no link kind, `claim_versions` dates claim
   writes, not links (a restatement links without rewriting the claim), and the
   kernel audit log is a process-local file outside the store.
-- **Credit is versioned.** Two writers set `confidence_components`:
-  `ApplyBeliefCredit` and the upsert, whose conflict rule writes the incoming
-  map as given. Both record a row in `claim_credit_history` (claim, from, to,
-  changed_at) in the same transaction whenever the stored applied net credit
-  changed, through the same before/after comparison as the trust inputs below;
-  a write that leaves it unchanged (inhibition decay, an idempotent re-run, a
-  restatement carrying the same map) records nothing. Read through the
+- **Credit is versioned, and only an explicit write changes it.** Two writers
+  set `confidence_components`. `ApplyBeliefCredit` owns the column and writes
+  the map exactly as given; it is the only way to clear credit (credit
+  assignment, salience tagging and inhibition decay use it). The upsert
+  applies `domain.UpsertComponents` against the row it read in its
+  transaction, identically on every backend: an incoming empty map keeps the
+  stored one, incoming credit (any `credit:*` key) wins as given, and any
+  other incoming map keeps the stored `credit:*` keys. A re-ingest therefore
+  no longer erases applied credit, salience or inhibition, the hazard #334
+  fixed for `half_life_days`; `TestUpsert_ACreditlessRewriteKeepsAppliedCredit`
+  pins it per backend. Both writers record a row in `claim_credit_history`
+  (claim, from, to, changed_at) in the same transaction whenever the stored
+  applied net credit changed, through the same before/after comparison as the
+  trust inputs below; a write that leaves it unchanged (inhibition decay, an
+  idempotent re-run, a credit-less restatement) records nothing. Read through the
   optional `ports.CreditHistoryLister`. Every backend that implements
   `ports.BeliefCreditWriter` carries the table: SQLite (and libSQL), memory,
   Postgres (registered in the ADR-0007 RLS `scoped` array, so it gets a tenant
