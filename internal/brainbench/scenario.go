@@ -48,7 +48,7 @@
 //     verdict: a run with high activity and no metric movement is labelled
 //     ran-no-measurable-effect, not success.
 //
-// # Two further tracks, outside the A/B verdict
+// # Further tracks, outside the A/B verdict
 //
 //   - Temporal reconstruction (timeline.go): a scenario may build its brain
 //     phase by phase on the real write clock and ask as-of questions on both
@@ -57,6 +57,11 @@
 //   - Raw-retrieval baselines (baseline.go): BM25 over the seed's raw event
 //     texts, asked the identical questions, compared with the untreated arm.
 //     Reported beside the A/B result and never folded into its verdict.
+//   - Evidence retraction (retraction.go): a scenario may retract one of its
+//     documents (ADR 0037) on arms of its own and is scored on which
+//     dependent beliefs stop surviving, which supported ones keep surviving,
+//     and how well the impact report matches the gold, against raw retrieval
+//     that deletes the document's chunks only.
 package brainbench
 
 import (
@@ -113,6 +118,12 @@ type Scenario struct {
 
 	// Process is the treatment: the exact consolidation option set under test.
 	Process Process `yaml:"process"`
+
+	// Retraction, when set, adds the evidence-retraction track
+	// (retraction.go): one of the scenario's documents is withdrawn as a
+	// source (ADR 0037) and the brain is scored on which beliefs it stops
+	// holding. It is a separate experiment from Process, with its own arms.
+	Retraction *Retraction `yaml:"retraction"`
 }
 
 // Doc is one ingested document.
@@ -370,6 +381,9 @@ func (s Scenario) Validate() error {
 		}
 	}
 	if err := s.validateAsOfProbes(seenProbe); err != nil {
+		return err
+	}
+	if err := s.validateRetraction(); err != nil {
 		return err
 	}
 	if s.Process.DedupeThreshold < 0 || s.Process.DedupeThreshold > 1 {

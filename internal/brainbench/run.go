@@ -142,6 +142,10 @@ type ScenarioResult struct {
 	// varies run to run and feeds no verdict.
 	Cost CostReport `json:"cost"`
 
+	// Retraction is the evidence-retraction track, for a scenario that
+	// declares one. Its own arms, verdict and baselines (retraction.go).
+	Retraction *RetractionResult `json:"retraction,omitempty"`
+
 	DurationMS int64 `json:"duration_ms"`
 }
 
@@ -151,6 +155,12 @@ type ScenarioResult struct {
 // before the treatment and cannot differ for any reason except it. Each arm is
 // measured exactly once and then discarded, because measurement writes.
 func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, error) {
+	return run(ctx, sc, workDir, libraryRetract)
+}
+
+// run is Run with the retraction under test injectable, so a test can prove
+// the retraction track reports a retraction that destroys knowledge.
+func run(ctx context.Context, sc Scenario, workDir string, retract retractFunc) (ScenarioResult, error) {
 	started := time.Now()
 	res := ScenarioResult{
 		ID:          sc.ID,
@@ -263,6 +273,12 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 		CorpusBytes: corpusBytes(events),
 		Systems:     append([]SystemCost{mnemosCost(seedStats, control)}, baseCosts...),
 	}
+	if sc.Retraction != nil {
+		res.Retraction, err = runRetractionTrack(ctx, sc, dir, seedPath, events, retract)
+		if err != nil {
+			return res, err
+		}
+	}
 	res.DurationMS = time.Since(started).Milliseconds()
 	return res, nil
 }
@@ -360,18 +376,24 @@ func driftingMetrics(a, b MetricSet) []string {
 // checked before effect, so "the process did nothing" is never dressed up as
 // "the process was neutral".
 func verdictFor(r ScenarioResult) RunVerdict {
-	if !r.Validity.Deterministic {
+	return trackVerdict(r.Validity.Deterministic, r.Activity.Total, r.Summary)
+}
+
+// trackVerdict is verdictFor for any treated-vs-untreated comparison: the A/B
+// process track and the retraction track share one rule.
+func trackVerdict(deterministic bool, activity int, s Summary) RunVerdict {
+	if !deterministic {
 		return VerdictInvalid
 	}
-	if r.Activity.Total == 0 {
+	if activity == 0 {
 		return VerdictInert
 	}
 	switch {
-	case r.Summary.Better > 0 && r.Summary.Worse > 0:
+	case s.Better > 0 && s.Worse > 0:
 		return VerdictMixed
-	case r.Summary.Better > 0:
+	case s.Better > 0:
 		return VerdictImproved
-	case r.Summary.Worse > 0:
+	case s.Worse > 0:
 		return VerdictRegressed
 	default:
 		return VerdictNoEffect

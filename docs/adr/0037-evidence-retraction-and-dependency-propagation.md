@@ -352,6 +352,14 @@ MCP and REST return the same `retraction.UnretractionReport`.
 - ~~**Un-retraction.**~~ Done: §8.
 - ~~**Evidence-link timestamps**~~ Done: links carry `created_at` (ADR 0036
   §7) and retraction closes rather than deletes them (ADR 0036 §8).
+- **Copies are not told from corroboration.** Dependents are found through
+  evidence links only. A verbatim restatement of a retracted claim in another
+  episode was folded onto the same belief at ingest, so the retraction keeps
+  and rescores the belief. A paraphrase, or a conclusion drawn in another
+  episode, is a separate belief the retraction does not reach. Measured by the
+  brainbench `evidence_retraction` scenario: 3 of 5 dependents survive, tying
+  raw retrieval that deletes the document's chunks. Closing the gap needs
+  provenance between episodes.
 - **Watch-file path aliasing.** Matching is on the resolved absolute path the
   watcher stores. A file first ingested under a different spelling of its path
   (a symlink, a relative path resolved elsewhere) is not found.
