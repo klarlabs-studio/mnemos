@@ -21,7 +21,10 @@ import (
 //	relate/v4  precise contradictions: contentful endpoints, subject alignment,
 //	           incompatible values or polarity, a per-claim cap; contradiction
 //	           edges record their detector ("relate/v4:polarity") and strength
-const ModelVersion = "relate/v4"
+//	relate/v5  supersession readings: spelled-out cardinals reach the numeric
+//	           detector, and the frame detector reads an exclusive manner swap
+//	           after an identical subject and predicate
+const ModelVersion = "relate/v5"
 
 // CausalLLMVersion is stamped on causal edges the LLM detector infers.
 const CausalLLMVersion = "relate-llm-causal/v1"
