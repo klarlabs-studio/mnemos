@@ -15,11 +15,11 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-77 capabilities, 80 acknowledged gaps.
+77 capabilities, 62 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| [`ingest.text`](#ingesttext) | write | ✓ | ✓ | GAP | ✓ | ✓ | ✓ | ✓ |
+| [`ingest.text`](#ingesttext) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | [`ingest.git`](#ingestgit) | write | — | — | — | ✓ | — | — | — |
 | [`ingest.watch`](#ingestwatch) | write | — | — | — | ✓ | — | — | — |
 | [`episode.append`](#episodeappend) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -52,23 +52,23 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`embedding.list`](#embeddinglist) | read | — | ✓ | ✓ | — | — | — | ✓ |
 | [`embedding.append`](#embeddingappend) | write | — | ✓ | ✓ | — | — | — | ✓ |
 | [`recall.basic`](#recallbasic) | read | ✓ | — | — | — | ✓ | ✓ | — |
-| [`recall.search`](#recallsearch) | read | — | ✓ | GAP | ✓ | — | — | ✓ |
+| [`recall.search`](#recallsearch) | read | — | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`recall.at_time`](#recallat_time) | read | — | — | — | ✓ | — | — | — |
 | [`recall.advanced`](#recalladvanced) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`recall.passages`](#recallpassages) | read | ✓ | ✓ | GAP | ✓ | — | — | ✓ |
-| [`recall.context_block`](#recallcontext_block) | read | GAP | ✓ | GAP | ✓ | — | — | ✓ |
+| [`recall.passages`](#recallpassages) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`recall.context_block`](#recallcontext_block) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.who_knows`](#brainwho_knows) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.knowledge_gaps`](#brainknowledge_gaps) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.calibration`](#braincalibration) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.hypercorrections`](#brainhypercorrections) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.recombinations`](#brainrecombinations) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
-| [`brain.predictive_error`](#brainpredictive_error) | read | ✓ | GAP | GAP | ✓ | — | — | GAP |
-| [`brain.health`](#brainhealth) | read | ✓ | ✓ | GAP | ✓ | — | — | ✓ |
-| [`brain.metrics`](#brainmetrics) | read | GAP | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`brain.predictive_error`](#brainpredictive_error) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`brain.health`](#brainhealth) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`brain.metrics`](#brainmetrics) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`brain.consolidate`](#brainconsolidate) | write | ✓ | — | — | — | — | — | — |
-| [`expectation.set`](#expectationset) | write | ✓ | ✓ | GAP | ✓ | — | — | ✓ |
-| [`expectation.observe`](#expectationobserve) | write | ✓ | ✓ | GAP | ✓ | — | — | ✓ |
-| [`expectation.reconcile`](#expectationreconcile) | write | ✓ | GAP | GAP | GAP | — | — | GAP |
+| [`expectation.set`](#expectationset) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`expectation.observe`](#expectationobserve) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`expectation.reconcile`](#expectationreconcile) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`action.record`](#actionrecord) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`action.list`](#actionlist) | read | GAP | GAP | ✓ | GAP | — | — | GAP |
 | [`outcome.record`](#outcomerecord) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -79,7 +79,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`schema.global_list`](#schemaglobal_list) | read | GAP | ✓ | GAP | GAP | — | — | GAP |
 | [`reflex.list`](#reflexlist) | read | GAP | GAP | ✓ | ✓ | — | — | GAP |
 | [`reflex.append`](#reflexappend) | write | — | GAP | ✓ | — | — | — | GAP |
-| [`decision.record`](#decisionrecord) | write | ✓ | GAP | ✓ | ✓ | — | — | GAP |
+| [`decision.record`](#decisionrecord) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`decision.get`](#decisionget) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`decision.list`](#decisionlist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`blocks.read`](#blocksread) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -107,13 +107,13 @@ Extract beliefs from free text (ingest → extract → relate → persist) (writ
 |---|---|
 | go | `Remember` |
 | rest | `POST /v1/process` |
-| grpc | **GAP** — no ingest RPC; gRPC clients append pre-extracted beliefs |
+| grpc | `ProcessText` |
 | mcp | `process_text` |
 | mcp-lite | `remember` |
 | http-lite | `POST /v1/remember` |
 | client | `Process` |
 
-> REST and MCP run the pipeline directly; Go and the lite adapters go through Memory.Remember.
+> REST, gRPC and MCP run the same pipeline (REST and gRPC through runProcessRequest, which calls process_text's mcpRunProcessText); Go and the lite adapters go through Memory.Remember.
 
 ### ingest.git
 
@@ -583,13 +583,13 @@ Hybrid search over beliefs (query engine ranking, filters) (read).
 |---|---|
 | go | _the library's search is Recall_ |
 | rest | `GET /v1/search`, `POST /v1/search` |
-| grpc | **GAP** — no search RPC |
+| grpc | `Search` |
 | mcp | `query_knowledge`, `search_memory` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `Search` |
 
-> query_knowledge and /v1/search build their query engines separately; ranking parity is guarded in internal/query, not here.
+> REST /v1/search and gRPC Search share runSearch; every binding recalls through query.Engine.Recall, pinned by TestRecallParity_EverySurfaceAgrees.
 
 ### recall.at_time
 
@@ -627,7 +627,7 @@ Return the stored episode passages that best match a query (BM25) (read).
 |---|---|
 | go | `Passages` |
 | rest | `GET /v1/passages` |
-| grpc | **GAP** — no passages RPC |
+| grpc | `Passages` |
 | mcp | `search_passages` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
@@ -641,9 +641,9 @@ Render the context block for a run (read).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no context-block render on Memory |
+| go | `ContextBlock` |
 | rest | `GET /v1/context`, `POST /v1/context` |
-| grpc | **GAP** — no context-block RPC |
+| grpc | `ContextBlock` |
 | mcp | `memory_context` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
@@ -726,12 +726,12 @@ Hierarchical prediction error (outcome, schema, dissonance, calibration) (read).
 | Transport | Binding |
 |---|---|
 | go | `PredictiveError` |
-| rest | **GAP** — no predictive-error route |
-| grpc | **GAP** — no predictive-error RPC |
+| rest | `GET /v1/predictive-error` |
+| grpc | `PredictiveError` |
 | mcp | `predictive_error` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no predictive-error read |
+| client | `PredictiveError` |
 
 ### brain.health
 
@@ -741,7 +741,7 @@ Brain health: vitals, integrity checks and one verdict (ADR 0019) (read).
 |---|---|
 | go | `BrainHealth`, `BrainHealthFull`, `SnapshotHealth` |
 | rest | `GET /v1/brain/health` |
-| grpc | **GAP** — no brain-health RPC |
+| grpc | `BrainHealth` |
 | mcp | `brain_health` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
@@ -753,13 +753,15 @@ Knowledge-base counts and averages (read).
 
 | Transport | Binding |
 |---|---|
-| go | **GAP** — no metrics read on Memory |
+| go | `Metrics` |
 | rest | `GET /v1/metrics` |
 | grpc | `Metrics` |
 | mcp | `knowledge_metrics` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `Metrics` |
+
+> Every binding counts through internal/kbmetrics.Compute; a run-scoped token sees counts over its runs only.
 
 ### brain.consolidate
 
@@ -783,11 +785,13 @@ Attach a forward prediction to a belief (and read it back) (write).
 |---|---|
 | go | `Expect` |
 | rest | `POST /v1/beliefs/{id}/expectation`, `GET /v1/beliefs/{id}/expectation` |
-| grpc | **GAP** — no expectation RPC |
+| grpc | `SetExpectation`, `GetExpectation` |
 | mcp | `record_expectation` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `SetExpectation`, `Expectation` |
+
+> Go and gRPC write through Memory.Expect (gRPC reads the stored row back); REST and MCP upsert the expectation repository directly with the same normalisation. MCP alone checks that the belief exists.
 
 ### expectation.observe
 
@@ -797,11 +801,13 @@ Record the observed value for a belief's prediction (write).
 |---|---|
 | go | `RecordObservation` |
 | rest | `POST /v1/beliefs/{id}/observation` |
-| grpc | **GAP** — no observation RPC |
+| grpc | `RecordObservation` |
 | mcp | `record_observation` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `RecordObservation` |
+
+> Go and gRPC write through Memory.RecordObservation (mnemos.ErrExpectationNotFound → gRPC NotFound); REST and MCP upsert the repository directly.
 
 ### expectation.reconcile
 
@@ -810,12 +816,14 @@ Close observed predictions into validates/refutes verdicts (write).
 | Transport | Binding |
 |---|---|
 | go | `ReconcileExpectations` |
-| rest | **GAP** — no reconcile route |
-| grpc | **GAP** — no reconcile RPC |
-| mcp | **GAP** — no reconcile tool |
+| rest | `POST /v1/expectations/reconcile` |
+| grpc | `ReconcileExpectations` |
+| mcp | `reconcile_expectations` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no reconcile call |
+| client | `ReconcileExpectations` |
+
+> Every binding calls Memory.ReconcileExpectations.
 
 ### action.record
 
@@ -968,12 +976,14 @@ Record an agent decision with its beliefs and alternatives (write).
 | Transport | Binding |
 |---|---|
 | go | `RecordDecision` |
-| rest | **GAP** — no decision write route |
+| rest | `POST /v1/decisions` |
 | grpc | `AppendDecisions` |
 | mcp | `record_decision` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | **GAP** — no decision write |
+| client | `RecordDecision` |
+
+> REST POST /v1/decisions and MCP record_decision share mcpRunRecordDecision (server-assigned id, validation, govwrite); gRPC AppendDecisions writes caller-supplied ids through govwrite; Go records through the library's governed kernel.
 
 ### decision.get
 

@@ -773,6 +773,64 @@ paths:
                   recombinations:
                     type: array
                     items: { $ref: "#/components/schemas/Recombination" }
+  /v1/predictive-error:
+    get:
+      summary: Hierarchical prediction error (ADR 0017)
+      description: |
+        Prediction error per level of the memory hierarchy (outcome, schema,
+        dissonance, calibration), the aggregate over the levels with data, and
+        the hotspot level. `levels_measured: 0` means `total` is unmeasured,
+        not perfect. Read-only; the same report as the `predictive_error` MCP
+        tool and `Memory.PredictiveError`.
+      tags: [cognitive]
+      responses:
+        "200":
+          description: Prediction-error report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  levels:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        level: { type: string }
+                        error: { type: number }
+                        samples: { type: integer }
+                        basis: { type: string }
+                  total: { type: number }
+                  hotspot: { type: string }
+                  levels_measured: { type: integer }
+  /v1/expectations/reconcile:
+    post:
+      summary: Reconcile observed expectations
+      description: |
+        Closes every observed-but-open expectation into a validates/refutes
+        verdict and returns each one's surprise. The consolidate pass does the
+        same on its schedule. Requires the `claims:write` scope.
+      tags: [cognitive]
+      responses:
+        "200":
+          description: The reconciliations performed (empty when nothing was open and observed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reconciliations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        belief_id: { type: string }
+                        predicted: { type: number }
+                        observed: { type: number }
+                        surprise: { type: number }
+                        confirmed: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/classify:
     get:
       summary: Classify a candidate statement against the store
@@ -816,6 +874,43 @@ paths:
                   decisions:
                     type: array
                     items: { $ref: "#/components/schemas/Decision" }
+    post:
+      summary: Record a decision
+      description: |
+        Records an agent decision with the beliefs that justified it and the
+        alternatives considered. The server assigns the id. The same
+        implementation as the `record_decision` MCP tool; the response is the
+        decision as stored. Requires the `claims:write` scope.
+      tags: [cognitive]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [statement, risk_level]
+              properties:
+                statement: { type: string }
+                plan: { type: string }
+                reasoning: { type: string }
+                risk_level: { type: string, enum: [low, medium, high, critical] }
+                beliefs: { type: array, items: { type: string } }
+                alternatives: { type: array, items: { type: string } }
+                outcome_id: { type: string }
+                chosen_at: { type: string, description: "RFC 3339 or YYYY-MM-DD; defaults to now." }
+      responses:
+        "201":
+          description: The recorded decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Decision" }
+        "400":
+          description: Invalid body, risk level or chosen_at
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /v1/decisions/{id}:
     get:
       summary: Get one decision

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,13 +13,20 @@ import (
 	"testing"
 	"time"
 
+	"go.klarlabs.de/bolt"
 	"go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
+	mnemosgrpc "go.klarlabs.de/mnemos/internal/server/grpc"
 	"go.klarlabs.de/mnemos/internal/store"
+	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
+
+	grpclib "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // TestRecallParity_EverySurfaceAgrees asks the same questions through the CLI,
-// both MCP recall tools, REST /v1/search and the Go library against one brain,
+// both MCP recall tools, REST /v1/search, gRPC Search and the Go library against one brain,
 // and requires the same beliefs in the same order from each. They share one
 // path (recall.go → query.Engine.Recall); this pins the behaviour, and
 // TestRecallSurfacesGoThroughEngineRecall pins the structure.
@@ -81,6 +90,7 @@ func TestRecallParity_EverySurfaceAgrees(t *testing.T) {
 
 	srv := httptest.NewServer(newServerMux(conn))
 	defer srv.Close()
+	grpcClient := startParityGRPC(t, conn)
 	mem, err := mnemos.New(mnemos.WithStorage(dsn), mnemos.WithPassiveMode())
 	if err != nil {
 		t.Fatalf("library: %v", err)
@@ -146,6 +156,23 @@ func TestRecallParity_EverySurfaceAgrees(t *testing.T) {
 			}
 			return ids
 		},
+		"grpc Search": func(t *testing.T, recordedAsOf string) []string {
+			at, _ := parseInstant(asOf)
+			req := &mnemosv1.SearchRequest{Query: question, AsOf: timestamppb.New(at)}
+			if recordedAsOf != "" {
+				rec, _ := parseInstant(recordedAsOf)
+				req.RecordedAsOf = timestamppb.New(rec)
+			}
+			resp, err := grpcClient.Search(ctx, req)
+			if err != nil {
+				t.Fatalf("grpc: %v", err)
+			}
+			ids := make([]string, 0, len(resp.GetBeliefs()))
+			for _, b := range resp.GetBeliefs() {
+				ids = append(ids, b.GetId())
+			}
+			return ids
+		},
 		"library": func(t *testing.T, recordedAsOf string) []string {
 			q := mnemos.Query{Text: question}
 			q.AsOf, _ = parseInstant(asOf)
@@ -173,7 +200,7 @@ func TestRecallParity_EverySurfaceAgrees(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var reference []string
 			var referenceName string
-			for _, name := range []string{"cli", "mcp query_knowledge", "mcp recall_at_time", "rest /v1/search", "library"} {
+			for _, name := range []string{"cli", "mcp query_knowledge", "mcp recall_at_time", "rest /v1/search", "grpc Search", "library"} {
 				got := surfaces[name](t, tc.recordedAsOf)
 				for _, id := range tc.want {
 					if !slices.Contains(got, id) {
@@ -196,4 +223,25 @@ func TestRecallParity_EverySurfaceAgrees(t *testing.T) {
 			}
 		})
 	}
+}
+
+// startParityGRPC serves conn over gRPC with the daemon surfaces attached, as
+// `mnemos serve` wires them, and auth off (no verifier).
+func startParityGRPC(t *testing.T, conn *store.Conn) mnemosv1.MnemosServiceClient {
+	t.Helper()
+	impl := withDaemonSurfaces(mnemosgrpc.NewServer(conn, nil, bolt.New(bolt.NewJSONHandler(io.Discard)), "test"))
+	gs := grpclib.NewServer(grpclib.UnaryInterceptor(impl.UnaryInterceptor()))
+	impl.Register(gs)
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() { _ = gs.Serve(lis) }()
+	t.Cleanup(gs.GracefulStop)
+	cc, err := grpclib.NewClient(lis.Addr().String(), grpclib.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { _ = cc.Close() })
+	return mnemosv1.NewMnemosServiceClient(cc)
 }

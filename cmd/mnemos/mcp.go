@@ -22,6 +22,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ingest"
+	"go.klarlabs.de/mnemos/internal/kbmetrics"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/parser"
 	"go.klarlabs.de/mnemos/internal/pipeline"
@@ -564,6 +565,17 @@ func handleMCP(args []string) {
 		OutputSchema(mcpRecordObservationOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordObservationInput) (mcpRecordObservationOutput, error) {
 			return mcpRunRecordObservation(ctx, input)
+		})
+
+	srv.Tool("reconcile_expectations").
+		Description("Close every observed-but-open prediction into a validates/refutes verdict and report each one's surprise. The consolidate pass does this on its own schedule; call it to close the loop now. Mirrors POST /v1/expectations/reconcile.").
+		OutputSchema(mcpReconcileExpectationsOutput{}).
+		Handler(func(ctx context.Context, _ struct{}) (mcpReconcileExpectationsOutput, error) {
+			mem, err := getMem(ctx)
+			if err != nil {
+				return mcpReconcileExpectationsOutput{}, err
+			}
+			return mcpReconcileExpectations(ctx, mem)
 		})
 
 	srv.Tool("record_feedback").
@@ -1605,50 +1617,31 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 	return result, nil
 }
 
+// mcpRunMetrics reports the knowledge-base counts through kbmetrics, the one
+// implementation REST, gRPC and the library share. A run-scoped token sees
+// counts over its runs only.
 func mcpRunMetrics(ctx context.Context) (mcpMetricsOutput, error) {
 	conn, err := openConn(ctx)
 	if err != nil {
 		return mcpMetricsOutput{}, err
 	}
 	defer closeConn(conn)
-
-	// Each port-typed CountAll/CountByType replaces a hand-written
-	// COUNT query. Distinct-run-id is computed in-memory from
-	// ListAll because adding a CountDistinctRunID port method just
-	// for the metrics surface isn't worth the surface bloat.
-	allEvents, _ := conn.Events.ListAll(ctx)
-	runIDs := map[string]struct{}{}
-	for _, e := range allEvents {
-		if e.RunID != "" {
-			runIDs[e.RunID] = struct{}{}
-		}
+	var runs []string
+	if c, ok := claimsFromContext(ctx); ok {
+		runs = c.Runs
 	}
-
-	eventsCount, _ := conn.Events.CountAll(ctx)
-	claimsCount, _ := conn.Claims.CountAll(ctx)
-	relsCount, _ := conn.Relationships.CountAll(ctx)
-	contradictionsCount, _ := conn.Relationships.CountByType(ctx, "contradicts")
-	embeddingsCount, _ := conn.Embeddings.CountAll(ctx)
-
-	// Contested claims: count from the in-memory listing — same
-	// reasoning as runs, the surface payoff doesn't justify a
-	// CountByStatus port method.
-	allClaims, _ := conn.Claims.ListAll(ctx)
-	var contested int64
-	for _, c := range allClaims {
-		if string(c.Status) == "contested" {
-			contested++
-		}
+	c, err := kbmetrics.Compute(ctx, conn, runs)
+	if err != nil {
+		return mcpMetricsOutput{}, err
 	}
-
 	return mcpMetricsOutput{
-		Runs:            int64(len(runIDs)),
-		Events:          eventsCount,
-		Claims:          claimsCount,
-		ContestedClaims: contested,
-		Relationships:   relsCount,
-		Contradictions:  contradictionsCount,
-		Embeddings:      embeddingsCount,
+		Runs:            c.Runs,
+		Events:          c.Events,
+		Claims:          c.Claims,
+		ContestedClaims: c.ContestedClaims,
+		Relationships:   c.Relationships,
+		Contradictions:  c.Contradictions,
+		Embeddings:      c.Embeddings,
 	}, nil
 }
 
@@ -1702,7 +1695,7 @@ func mcpRunRecordDecision(ctx context.Context, actor string, input mcpRecordDeci
 	if strings.TrimSpace(input.ChosenAt) != "" {
 		t, err := parseTimeArg(input.ChosenAt)
 		if err != nil {
-			return mcpRecordDecisionOutput{}, fmt.Errorf("chosenAt: %w", err)
+			return mcpRecordDecisionOutput{}, userInputError(fmt.Errorf("chosenAt: %w", err))
 		}
 		chosenAt = t
 	}

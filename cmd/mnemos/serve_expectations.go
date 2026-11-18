@@ -11,10 +11,10 @@ import (
 // expectationDTO is the wire form of a structured forward expectation attached
 // to a claim (mnemos T1.1 over HTTP). The library has had Expect /
 // RecordObservation / ReconcileExpectations; these endpoints expose the
-// predict + observe half to HTTP-service consumers. Reconciliation into
-// validates/refutes verdicts (and the trust feedback) still runs in the nightly
-// consolidate pass — these endpoints only record the prediction and its
-// observed value, and read them back so a consumer can surface the surprise.
+// predict + observe half to HTTP-service consumers and read them back so a
+// consumer can surface the surprise. Reconciliation into validates/refutes
+// verdicts runs in the consolidate pass or on demand through
+// POST /v1/expectations/reconcile (serve_prediction.go).
 type expectationDTO struct {
 	ClaimID        string  `json:"claim_id"`
 	Predicted      float64 `json:"predicted"`

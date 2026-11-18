@@ -160,10 +160,17 @@ func decisionToDTO(d mnemos.Decision) decisionDTO {
 	return dto
 }
 
-// makeDecisionsHandler serves GET /v1/decisions?limit= (the decision browse list).
+// makeDecisionsHandler serves /v1/decisions:
+//
+//	GET  ?limit=  → the decision browse list
+//	POST          → record a decision (requires claims:write)
 func makeDecisionsHandler(mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mem := scopedMem(r.Context(), mem)
+		if r.Method == http.MethodPost {
+			recordDecisionHandler(mem, w, r)
+			return
+		}
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return
 		}
@@ -178,6 +185,55 @@ func makeDecisionsHandler(mem mnemos.Memory) http.HandlerFunc {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"decisions": out})
 	}
+}
+
+// recordDecisionRequest is the POST /v1/decisions body. The id is assigned by
+// the server, as record_decision does.
+type recordDecisionRequest struct {
+	Statement    string   `json:"statement"`
+	Plan         string   `json:"plan,omitempty"`
+	Reasoning    string   `json:"reasoning,omitempty"`
+	RiskLevel    string   `json:"risk_level"`
+	Beliefs      []string `json:"beliefs,omitempty"`
+	Alternatives []string `json:"alternatives,omitempty"`
+	OutcomeID    string   `json:"outcome_id,omitempty"`
+	ChosenAt     string   `json:"chosen_at,omitempty"`
+}
+
+// recordDecisionHandler records a decision through mcpRunRecordDecision, the
+// record_decision MCP tool's implementation (validation, then the governed
+// writer opened for the request's tenant), and answers 201 with the decision
+// as the store returns it.
+func recordDecisionHandler(mem mnemos.Memory, w http.ResponseWriter, r *http.Request) {
+	if !requireScope(w, r, domain.ScopeClaimsWrite) || memUnavailable(w, mem) {
+		return
+	}
+	var req recordDecisionRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Statement) == "" {
+		writeError(w, http.StatusBadRequest, "statement is required")
+		return
+	}
+	// The REST body and the MCP input carry the same fields under each
+	// transport's own JSON spelling, so the compiler keeps them in step.
+	out, err := mcpRunRecordDecision(r.Context(), actorFromContext(r.Context()), mcpRecordDecisionInput(req))
+	if err != nil {
+		if msg, ok := userInputMessage(err.Error()); ok {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+		writeInternalError(w, "record decision", err)
+		return
+	}
+	stored, err := mem.GetDecision(r.Context(), out.ID)
+	if err != nil {
+		writeInternalError(w, "read recorded decision", err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, decisionToDTO(stored))
 }
 
 // makeDecisionSubresourceHandler serves GET /v1/decisions/{id}.

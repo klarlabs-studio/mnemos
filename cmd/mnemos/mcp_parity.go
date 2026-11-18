@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -253,4 +254,19 @@ func mcpRunRecordFeedback(ctx context.Context, input mcpRecordFeedbackInput) (mc
 		HelpfulCount:           state.HelpfulCount,
 		NegativeFeedbackStreak: state.NegativeFeedbackStreak,
 	}, nil
+}
+
+type mcpReconcileExpectationsOutput struct {
+	Reconciliations []reconciliationDTO `json:"reconciliations"`
+}
+
+// mcpReconcileExpectations closes observed predictions through
+// Memory.ReconcileExpectations, the implementation the Go library, REST and
+// gRPC share, and reports each verdict in the REST wire form.
+func mcpReconcileExpectations(ctx context.Context, mem mnemos.Memory) (mcpReconcileExpectationsOutput, error) {
+	recs, err := mem.ReconcileExpectations(ctx)
+	if err != nil {
+		return mcpReconcileExpectationsOutput{}, err
+	}
+	return mcpReconcileExpectationsOutput{Reconciliations: reconciliationsToDTO(recs)}, nil
 }
