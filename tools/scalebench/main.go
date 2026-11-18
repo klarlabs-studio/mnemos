@@ -8,6 +8,7 @@
 //	go run ./tools/scalebench -beliefs 10000                       # small dev brain
 //	go run ./tools/scalebench -beliefs 100000 -json base-100k.json
 //	go run ./tools/scalebench -beliefs 1000000 -shape hub -timeout 30m
+//	go run ./tools/scalebench -beliefs 100000 -churn -json churn-100k.json  # storage growth + maintenance cost
 //
 // The corpus comes from internal/scalebench and is a pure function of
 // -beliefs, -seed and -shape, so a run at another commit regenerates the same
