@@ -17,8 +17,10 @@ import (
 	"go.klarlabs.de/bolt"
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/browse"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/page"
 	"go.klarlabs.de/mnemos/internal/runscope"
 	"go.klarlabs.de/mnemos/internal/store"
 	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
@@ -698,6 +700,19 @@ func (s *Server) ListBeliefs(ctx context.Context, req *mnemosv1.ListBeliefsReque
 		runFilters = allowedRuns
 	}
 
+	filter := page.ClaimFilter{Type: typeFilter, Status: statusFilter}
+	if req.AsOf != nil {
+		filter.AsOf = req.AsOf.AsTime()
+	}
+	if req.RecordedAsOf != nil {
+		filter.RecordedAsOf = req.RecordedAsOf.AsTime()
+	}
+	// A recorded-as-of read sees the store as it was at that instant, through
+	// the same views as recall and the REST browse (ADR 0036): status, valid
+	// time, the archive axis and merges are rewound from their history, and
+	// episodes ingested later do not exist.
+	eventsAt, claimsAt := browse.Recorded(s.connFor(ctx), filter.RecordedAsOf)
+
 	// Build the allowed-event set from the effective runs. Empty set →
 	// no claims belong to them; return early to avoid leaking
 	// unfiltered claims (ADR-002 / Thor's safety audit).
@@ -705,7 +720,7 @@ func (s *Server) ListBeliefs(ctx context.Context, req *mnemosv1.ListBeliefsReque
 	if len(runFilters) > 0 {
 		allowedEventIDs = map[string]struct{}{}
 		for _, run := range runFilters {
-			events, err := s.connFor(ctx).Events.ListByRunID(ctx, run)
+			events, err := eventsAt.ListByRunID(ctx, run)
 			if err != nil {
 				return nil, status.Errorf(codes.Internal, "list episodes by run id: %v", err)
 			}
@@ -718,37 +733,17 @@ func (s *Server) ListBeliefs(ctx context.Context, req *mnemosv1.ListBeliefsReque
 		}
 	}
 
-	all, err := s.connFor(ctx).Claims.ListAll(ctx)
+	all, err := claimsAt.ListAll(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list beliefs: %v", err)
 	}
-	var asOf, recordedAsOf time.Time
-	if req.AsOf != nil {
-		asOf = req.AsOf.AsTime()
-	}
-	if req.RecordedAsOf != nil {
-		recordedAsOf = req.RecordedAsOf.AsTime()
-	}
+	// Type, status, validity at as_of and recording at recorded_as_of: the
+	// browse filter, so gRPC and REST cannot disagree on what matches.
 	filtered := all[:0]
 	for _, c := range all {
-		if typeFilter != "" && string(c.Type) != typeFilter {
-			continue
+		if filter.Matches(c) {
+			filtered = append(filtered, c)
 		}
-		if statusFilter != "" && string(c.Status) != statusFilter {
-			continue
-		}
-		// Validity-time filter: claim must have been valid at as_of.
-		// IsValidAt treats zero ValidFrom as "valid since forever".
-		if !asOf.IsZero() && !c.IsValidAt(asOf) {
-			continue
-		}
-		// Ingestion-time filter: drop rows recorded after the query
-		// timestamp so the response is reproducible from the snapshot
-		// of the store as it stood then.
-		if !recordedAsOf.IsZero() && c.CreatedAt.After(recordedAsOf) {
-			continue
-		}
-		filtered = append(filtered, c)
 	}
 
 	// run_id post-filter: drop claims whose evidence does not link to
@@ -759,7 +754,7 @@ func (s *Server) ListBeliefs(ctx context.Context, req *mnemosv1.ListBeliefsReque
 		for _, c := range filtered {
 			candidateIDs = append(candidateIDs, c.ID)
 		}
-		evLinks, err := s.connFor(ctx).Claims.ListEvidenceByClaimIDs(ctx, candidateIDs)
+		evLinks, err := claimsAt.ListEvidenceByClaimIDs(ctx, candidateIDs)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "load evidence for run_id filter: %v", err)
 		}
@@ -787,18 +782,18 @@ func (s *Server) ListBeliefs(ctx context.Context, req *mnemosv1.ListBeliefsReque
 		reversed[len(filtered)-1-i] = c
 	}
 	total := len(reversed)
-	page := paginate(reversed, limit, offset)
+	rows := paginate(reversed, limit, offset)
 
-	beliefs := make([]*mnemosv1.Belief, 0, len(page))
-	ids := make([]string, 0, len(page))
-	for _, c := range page {
+	beliefs := make([]*mnemosv1.Belief, 0, len(rows))
+	ids := make([]string, 0, len(rows))
+	for _, c := range rows {
 		beliefs = append(beliefs, beliefToProto(c))
 		ids = append(ids, c.ID)
 	}
 
 	var evidence []*mnemosv1.BeliefEvidence
 	if req.IncludeEvidence && len(ids) > 0 {
-		links, err := s.connFor(ctx).Claims.ListEvidenceByClaimIDs(ctx, ids)
+		links, err := claimsAt.ListEvidenceByClaimIDs(ctx, ids)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "load evidence: %v", err)
 		}

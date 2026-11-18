@@ -1,0 +1,138 @@
+# Can the brain answer both questions an incident review asks about Tuesday?
+#
+#   - What did it BELIEVE on Tuesday?          (transaction time, RecordedAsOf)
+#   - What is KNOWN NOW about Tuesday?         (valid time, AsOf)
+#
+# Monday a deploy changes the payments connection pool. Tuesday the outage is
+# diagnosed as disk saturation. Thursday the root cause is found (the pool
+# change, true since Monday), the Tuesday diagnosis is retracted, a
+# contradiction is recorded, the runbook belief is archived by a sweep and the
+# pool-size fact is superseded by the new size.
+#
+# The phases run on the real write clock, milliseconds apart, because the
+# store stamps transaction time itself (see internal/brainbench/timeline.go).
+# Phase names are labels; "tuesday" means "the end of the second phase".
+#
+# Gold follows the documented semantics, not observed output:
+#   - believed on Tuesday: the disk diagnosis, pool size 50 and the runbook
+#     step; nothing recorded on Thursday.
+#   - known now about Tuesday: the root cause (valid since Monday, learned
+#     Thursday), not the retracted diagnosis; pool size 50 (in force until
+#     Thursday); the runbook step (archiving stops a belief surfacing now, it
+#     does not make it untrue then — ADR 0034).
+#
+# The raw-retrieval baseline sees the six documents only. The four Thursday
+# changes are curation operations with no textual trace in its corpus; a real
+# incident log would carry a retraction note it could retrieve. That is a
+# limitation of this comparison, stated in the README.
+id: incident_timeline
+description: Deploy Monday, wrong diagnosis Tuesday, root cause Thursday; reconstruct Tuesday on both time axes.
+
+timeline:
+  - phase: monday
+    docs:
+      - id: deploy
+        source: deploy-log
+        text: |
+          The v2 deploy changed the payments connection pool settings.
+      - id: pool-50
+        source: config-review
+        text: |
+          The payments connection pool size is 50.
+      - id: runbook
+        source: runbook
+        text: |
+          The payments runbook says to restart the payments database first during an outage.
+
+  - phase: tuesday
+    docs:
+      - id: diagnosis
+        source: incident-channel
+        text: |
+          The payments outage was caused by database disk saturation.
+
+  - phase: thursday
+    docs:
+      - id: root-cause
+        source: postmortem
+        valid_from: monday
+        text: |
+          The payments outage was caused by the v2 connection pool change starving the payments database.
+      - id: pool-200
+        source: config-review
+        text: |
+          The payments connection pool size is 200.
+    changes:
+      - contradict:
+          from: connection pool change starving
+          to: database disk saturation
+        reason: root cause analysis contradicts the Tuesday diagnosis
+      - retract: database disk saturation
+        reason: retracted by root cause analysis
+      - archive: restart the payments database first
+        reason: runbook sweep
+      - supersede: pool size is 50
+        reason: pool resized to 200
+
+warmup:
+  - what caused the payments outage
+  - what is the payments connection pool size
+
+probes:
+  - id: now-cause
+    query: what caused the payments outage
+    expect: starving the payments database
+    must_not:
+      - disk saturation
+  - id: now-pool
+    query: what is the payments connection pool size
+    expect: pool size is 200
+    must_not:
+      - pool size is 50
+  - id: now-deploy
+    query: what did the v2 deploy change
+    expect: v2 deploy changed
+
+as_of_probes:
+  # What did the brain believe at the end of Tuesday?
+  - id: believed-tue-cause
+    recorded_as_of: tuesday
+    query: what caused the payments outage
+    expect: disk saturation
+    must_not:
+      - starving
+  - id: believed-tue-pool
+    recorded_as_of: tuesday
+    query: what is the payments connection pool size
+    expect: pool size is 50
+    must_not:
+      - pool size is 200
+  - id: believed-tue-runbook
+    recorded_as_of: tuesday
+    query: what does the payments runbook say to do first
+    expect: restart the payments database first
+
+  # What is known now about the end of Tuesday?
+  - id: known-tue-cause
+    valid_as_of: tuesday
+    query: what caused the payments outage
+    expect: starving the payments database
+    must_not:
+      - disk saturation
+  - id: known-tue-pool
+    valid_as_of: tuesday
+    query: what is the payments connection pool size
+    expect: pool size is 50
+    must_not:
+      - pool size is 200
+  - id: known-tue-runbook
+    valid_as_of: tuesday
+    query: what does the payments runbook say to do first
+    expect: restart the payments database first
+
+process:
+  dedupe_threshold: 0.92
+  forget_below_trust: 0.45
+  forget_refuted: true
+  decay_associations: true
+  decay_inhibition: true
