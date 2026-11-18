@@ -1,0 +1,116 @@
+# Does withdrawing a source withdraw what rests on it, and only that?
+#
+# Hypothesis (ADR 0037): dependency maintenance reduces unsupported beliefs.
+# Pass condition: fewer unsupported beliefs survive than on raw retrieval whose
+# retraction deletes the document's chunks, with no fewer supported beliefs.
+#
+# The adversarial shape:
+#   - A vendor advisory (the source that will be retracted) asserts a false fix
+#     for CVE-2026-1234, a conclusion drawn from it, a true platform change, and
+#     a true release date.
+#   - A security blog copies the false claim VERBATIM and cites the advisory.
+#     Copied misinformation is not independent evidence.
+#   - A newsletter copies it in OTHER WORDS.
+#   - A checkout review derives a conclusion from it in a separate document.
+#   - Release notes independently state the release date (same words as the
+#     advisory: real corroboration) and the platform change (different words).
+#   - An inventory record is unrelated and must be untouched.
+#
+# Then the advisory is retracted. Gold says which beliefs rest on it
+# (original / copy / derived) and which must survive (corroborated /
+# independent). Neither Mnemos nor the baseline reads the gold roles; the
+# blog's citation sentence is plain text to both.
+#
+# What evidence-link propagation can and cannot see here is stated in the
+# README ("Evidence retraction") and in every report's `recognition` field. In
+# short: the verbatim copy is folded onto the advisory's belief at ingest and
+# looks exactly like the release notes' real corroboration.
+id: evidence_retraction
+description: A retracted advisory with verbatim copies, paraphrased copies and derived conclusions; are exactly its dependents withdrawn?
+
+corpus:
+  - id: advisory
+    source: vendor-advisory
+    text: |
+      The libfoo 2.3 release fixed the heap overflow CVE-2026-1234.
+      Services running libfoo 2.3 no longer need the WAF rule for CVE-2026-1234.
+      libfoo 2.3 drops support for OpenSSL 1.1.
+      libfoo 2.3 was released on 3 March 2026.
+  - id: blog
+    source: security-blog
+    text: |
+      The libfoo 2.3 release fixed the heap overflow CVE-2026-1234.
+      Source: the libfoo vendor advisory.
+  - id: newsletter
+    source: newsletter
+    text: |
+      According to the vendor, CVE-2026-1234 is patched in libfoo 2.3.
+  - id: checkout-review
+    source: checkout-review
+    text: |
+      The checkout service is no longer exposed to CVE-2026-1234 after its upgrade to libfoo 2.3.
+  - id: release-notes
+    source: release-notes
+    text: |
+      libfoo 2.3 was released on 3 March 2026.
+      Support for OpenSSL 1.1 was removed in libfoo 2.3.
+      libfoo 2.3 adds TLS 1.3 session resumption.
+  - id: inventory
+    source: inventory
+    text: |
+      The payments service pins libfoo 2.2.
+
+retraction:
+  episode: advisory
+  reason: vendor withdrew the advisory; CVE-2026-1234 is not fixed in libfoo 2.3
+  # Small top-k on purpose: every document mentions libfoo, so at k=10 every
+  # answerer returns the whole corpus and "surfaced" collapses into "survives".
+  limit: 3
+  queries:
+    - is CVE-2026-1234 fixed in libfoo 2.3
+    - do services on libfoo 2.3 still need the WAF rule for CVE-2026-1234
+    - is the checkout service exposed to CVE-2026-1234
+    - does libfoo 2.3 support OpenSSL 1.1
+    - when was libfoo 2.3 released
+    - which libfoo version does the payments service pin
+  gold:
+    - text: release fixed the heap overflow
+      role: original
+      note: the false claim; the blog repeats it word for word, which is copying, not corroboration
+    - text: no longer need the WAF rule
+      role: original
+      note: a conclusion the advisory itself drew from the false claim
+    - text: drops support for OpenSSL 1.1
+      role: original
+      note: true, but this statement's only source is the advisory; the fact survives through the release notes' own wording
+    - text: is patched in libfoo 2.3
+      role: copy
+      note: the newsletter restates the advisory in other words
+    - text: no longer exposed to CVE-2026-1234
+      role: derived
+      note: the checkout review's conclusion rests on the false fix
+    - text: released on 3 March 2026
+      role: corroborated
+      note: stated by the advisory and independently by the release notes
+    - text: Support for OpenSSL 1.1 was removed
+      role: independent
+    - text: TLS 1.3 session resumption
+      role: independent
+    - text: pins libfoo 2.2
+      role: independent
+
+probes:
+  - id: release-date
+    query: when was libfoo 2.3 released
+    expect: released on 3 March 2026
+  - id: openssl
+    query: does libfoo 2.3 support OpenSSL 1.1
+    expect: OpenSSL 1.1
+  - id: payments-pin
+    query: which libfoo version does the payments service pin
+    expect: pins libfoo 2.2
+
+process:
+  dedupe_threshold: 0.92
+  forget_below_trust: 0.45
+  decay_associations: true

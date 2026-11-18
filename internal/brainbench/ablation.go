@@ -143,23 +143,24 @@ type AblationQuestion struct {
 	question question
 }
 
-// Outcome is why a question succeeded or failed under one policy and budget.
-type Outcome string
+// AblationOutcome is why a question succeeded or failed under one policy and
+// budget.
+type AblationOutcome string
 
 const (
 	// OutcomeSuccess — gold in the context, nothing gold-invalid in it.
-	OutcomeSuccess Outcome = "success"
+	OutcomeSuccess AblationOutcome = "success"
 	// OutcomeGoldNotRetrieved — the policy never ranked the gold belief.
-	OutcomeGoldNotRetrieved Outcome = "gold-not-retrieved"
+	OutcomeGoldNotRetrieved AblationOutcome = "gold-not-retrieved"
 	// OutcomeGoldOverBudget — the gold belief was ranked too low to fit.
-	OutcomeGoldOverBudget Outcome = "gold-over-budget"
+	OutcomeGoldOverBudget AblationOutcome = "gold-over-budget"
 	// OutcomeForbidden — gold in the context beside a gold-invalid belief.
-	OutcomeForbidden Outcome = "forbidden-in-context"
+	OutcomeForbidden AblationOutcome = "forbidden-in-context"
 )
 
 // Assessment scores one packed context against a question's gold.
 type Assessment struct {
-	Outcome Outcome `json:"outcome"`
+	Outcome AblationOutcome `json:"outcome"`
 	// GoldRank is the 1-based rank of the first item containing the gold in
 	// the full ranked list, 0 when absent.
 	GoldRank int `json:"gold_rank"`
@@ -246,9 +247,9 @@ type PolicyResult struct {
 
 // Flip is one question whose outcome changed between two policies.
 type Flip struct {
-	Question string  `json:"question"`
-	From     Outcome `json:"from"`
-	To       Outcome `json:"to"`
+	Question string          `json:"question"`
+	From     AblationOutcome `json:"from"`
+	To       AblationOutcome `json:"to"`
 }
 
 // ComponentEffect is a policy against the default at one budget. Lost are the

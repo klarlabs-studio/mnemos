@@ -9,7 +9,7 @@ import (
 )
 
 // outcomeMark is the one-character form of an outcome in the per-question grid.
-func outcomeMark(o Outcome) string {
+func outcomeMark(o AblationOutcome) string {
 	switch o {
 	case OutcomeSuccess:
 		return "+"

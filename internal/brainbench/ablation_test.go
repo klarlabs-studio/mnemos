@@ -65,7 +65,7 @@ func TestAssess_SuccessDefinition(t *testing.T) {
 		name   string
 		ranked []string
 		budget int
-		want   Outcome
+		want   AblationOutcome
 		rank   int
 	}{
 		{"gold alone", []string{gold, other}, huge, OutcomeSuccess, 1},
