@@ -84,7 +84,7 @@ func TestTrustInputAt(t *testing.T) {
 	// On Thursday confidence moved 0.6 -> 0.8 and half-life 0 -> 30.
 	inputs := []domain.TrustInputChange{{ClaimID: "c", Confidence: 0.6, ChangedAt: thu}}
 
-	got := TrustInputAt(claim, links, events, credit, inputs, tue)
+	got := TrustInputAt(claim, links, events, nil, credit, inputs, tue)
 	want := domain.TrustInput{
 		Confidence:     0.6,
 		EvidenceCount:  domain.EffectiveEvidenceCount(2, 2),
@@ -94,13 +94,13 @@ func TestTrustInputAt(t *testing.T) {
 		t.Errorf("TrustInputAt(Tuesday) = %+v, want %+v", got, want)
 	}
 
-	now := TrustInputAt(claim, links, events, credit, inputs, thu.Add(time.Hour))
+	now := TrustInputAt(claim, links, events, nil, credit, inputs, thu.Add(time.Hour))
 	if now.EvidenceCount != domain.EffectiveEvidenceCount(4, 4) || !now.LatestEvidence.Equal(thu) ||
 		!now.LastConfirmed.Equal(thu) || now.Credit != 0.1 || now.Confidence != 0.8 || now.HalfLifeDays != 30 {
 		t.Errorf("TrustInputAt(after Thursday) = %+v, want all four sources, Thursday's evidence, confirmation and credit", now)
 	}
 
-	if a, b := TrustAt(claim, links, events, credit, inputs, tue), trust.At(want, tue); a != b {
+	if a, b := TrustAt(claim, links, events, nil, credit, inputs, tue), trust.At(want, tue); a != b {
 		t.Errorf("TrustAt = %v, want trust.At over the inputs at T = %v", a, b)
 	}
 }

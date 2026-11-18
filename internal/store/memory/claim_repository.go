@@ -813,11 +813,23 @@ func (r ClaimRepository) trustInputLocked(id string, c storedClaim) domain.Trust
 	// Corroboration is graded by INDEPENDENCE, not raw volume: count distinct
 	// evidence-event authors, with same-source repeats discounted (echo-chamber
 	// guard) — many events from one voice don't corroborate like many voices.
+	//
+	// An evidence episode that depends on another evidence episode of this
+	// claim adds no author (ADR 0038 §3); it still counts toward the total.
+	evidence := r.state.evidence[id]
+	dependent := map[string]bool{}
+	for _, d := range r.state.dependencies {
+		if _, cites := evidence[d.DependsOn]; cites {
+			dependent[d.EventID] = true
+		}
+	}
 	distinct := make(map[string]struct{})
 	total := 0
-	for evID := range r.state.evidence[id] {
+	for evID := range evidence {
 		if ev, ok := r.state.events[evID]; ok {
-			distinct[ev.CreatedBy] = struct{}{}
+			if !dependent[evID] {
+				distinct[ev.CreatedBy] = struct{}{}
+			}
 			total++
 		}
 	}

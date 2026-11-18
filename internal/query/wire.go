@@ -17,6 +17,10 @@ type EngineDeps struct {
 	// Journal records event retractions (ADR 0037); recall skips retracted
 	// episodes when it is set.
 	Journal ports.JournalRepository
+	// Dependencies is source dependence between episodes (ADR 0038). A
+	// recorded-as-of read needs it to reconstruct trust exactly as the store
+	// computes it.
+	Dependencies ports.EventDependencyRepository
 }
 
 // NewEngineWith builds an Engine with every capability the caller can supply,
@@ -77,6 +81,8 @@ func NewEngineWith(events eventLister, claims ports.ClaimRepository, relationshi
 	if d.Journal != nil {
 		e = e.WithRetractions(d.Journal)
 	}
+
+	e.dependencies = d.Dependencies
 
 	return e
 }

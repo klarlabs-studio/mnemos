@@ -46,6 +46,9 @@ type Engine struct {
 	// re-ranker asks the store to score ONLY the admitted candidates instead of
 	// pulling the entire claim-embedding table into Go. See cosineClaimScores.
 	claimVectorSearch ports.ClaimSimilaritySearcher
+	// dependencies is source dependence between episodes (ADR 0038), read by
+	// recorded-as-of trust; see EngineDeps.Dependencies.
+	dependencies ports.EventDependencyRepository
 	// journal records event retractions (ADR 0037); see WithRetractions.
 	journal ports.JournalRepository
 }

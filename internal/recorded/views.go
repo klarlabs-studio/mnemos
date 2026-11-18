@@ -71,7 +71,13 @@ type Claims struct {
 	ports.ClaimRepository
 	// Events, when set, bounds evidence links to events ingested by At.
 	Events ports.EventRepository
-	At     time.Time
+	// Dependencies, when set, is source dependence between episodes (ADR
+	// 0038): trust at At does not count a dependent evidence episode as a
+	// distinct source when its dependency was recorded by At. Leave it unset
+	// only on a store that has none, or reconstructed trust overstates
+	// corroboration that the live score does not.
+	Dependencies ports.EventDependencyRepository
+	At           time.Time
 }
 
 // maxMergeDepth bounds a redirect walk. Chains are short (a merge needs a
@@ -175,6 +181,12 @@ func (r Claims) trustAt(ctx context.Context, claims []domain.Claim, ids []string
 			events[ev.ID] = ev
 		}
 	}
+	var deps []domain.EventDependency
+	if r.Dependencies != nil && len(eventIDs) > 0 {
+		if deps, err = r.Dependencies.ListByEventIDs(ctx, eventIDs); err != nil {
+			return fmt.Errorf("episode dependencies for trust: %w", err)
+		}
+	}
 	var credit []domain.CreditChange
 	if lister, ok := r.ClaimRepository.(ports.CreditHistoryLister); ok {
 		if credit, err = lister.ListCreditHistory(ctx, ids); err != nil {
@@ -187,7 +199,7 @@ func (r Claims) trustAt(ctx context.Context, claims []domain.Claim, ids []string
 	}
 	for i := range claims {
 		c := &claims[i]
-		c.TrustScore = TrustAt(*c, byClaim[c.ID], events, creditOf[c.ID], inputsOf[c.ID], r.At)
+		c.TrustScore = TrustAt(*c, byClaim[c.ID], events, deps, creditOf[c.ID], inputsOf[c.ID], r.At)
 		c.TrustComputedAt = r.At
 		c.TrustModelVersion = trust.ModelVersion
 	}

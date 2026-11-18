@@ -18,7 +18,9 @@ import (
 //	input           at T
 //	evidence count  links recorded by T (LinkRecordedAt) to episodes ingested by
 //	                T, graded by independence exactly as the stores grade them
-//	                (domain.EffectiveEvidenceCount over distinct authors)
+//	                (domain.EffectiveEvidenceCount over distinct authors; an
+//	                episode whose dependency on another of the claim's evidence
+//	                episodes was recorded by T adds no author, ADR 0038 §3)
 //	latest evidence the freshest such episode's timestamp
 //	credit          the claim's credit history (CreditAt)
 //	confidence,     the claim's trust-input history (StoredInputsAt): the
@@ -102,8 +104,10 @@ func StoredInputsAt(c domain.Claim, history []domain.TrustInputChange, t time.Ti
 // episode missing from events, or ingested after t, is not evidence at t),
 // credit c's credit history, oldest first, and inputs its trust-input history
 // (StoredInputsAt). It is pure.
-func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, credit []domain.CreditChange, inputs []domain.TrustInputChange, t time.Time) domain.TrustInput {
-	authors := map[string]bool{}
+//
+// deps are source dependencies between episodes (ADR 0038); only those
+// recorded at or before t, between two of c's evidence episodes at t, count.
+func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, deps []domain.EventDependency, credit []domain.CreditChange, inputs []domain.TrustInputChange, t time.Time) domain.TrustInput {
 	counted := map[string]bool{}
 	var latest time.Time
 	for _, l := range links {
@@ -115,9 +119,20 @@ func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[strin
 			continue
 		}
 		counted[l.EventID] = true
-		authors[ev.CreatedBy] = true
 		if ev.Timestamp.After(latest) {
 			latest = ev.Timestamp
+		}
+	}
+	dependent := map[string]bool{}
+	for _, d := range deps {
+		if counted[d.EventID] && counted[d.DependsOn] && !d.CreatedAt.After(t) {
+			dependent[d.EventID] = true
+		}
+	}
+	authors := map[string]bool{}
+	for id := range counted {
+		if !dependent[id] {
+			authors[events[id].CreatedBy] = true
 		}
 	}
 	confidence, halfLife, confirmed := StoredInputsAt(c, inputs, t)
@@ -139,6 +154,6 @@ func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[strin
 
 // TrustAt returns c's trust at t from its inputs at t: trust.At, the one trust
 // function, over TrustInputAt.
-func TrustAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, credit []domain.CreditChange, inputs []domain.TrustInputChange, t time.Time) float64 {
-	return trust.At(TrustInputAt(c, links, events, credit, inputs, t), t)
+func TrustAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, deps []domain.EventDependency, credit []domain.CreditChange, inputs []domain.TrustInputChange, t time.Time) float64 {
+	return trust.At(TrustInputAt(c, links, events, deps, credit, inputs, t), t)
 }

@@ -127,5 +127,5 @@ func Recorded(conn *store.Conn, t time.Time) (ports.EventRepository, ports.Claim
 	}
 	t = t.UTC()
 	return recorded.Events{EventRepository: conn.Events, At: t},
-		recorded.Claims{ClaimRepository: conn.Claims, Events: conn.Events, At: t}
+		recorded.Claims{ClaimRepository: conn.Claims, Events: conn.Events, Dependencies: conn.Dependencies, At: t}
 }
