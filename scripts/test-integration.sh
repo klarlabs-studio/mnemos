@@ -12,11 +12,21 @@
 # allocated" for reasons unrelated to the change under test. Set
 # MNEMOS_ITEST_PG_PORT / MNEMOS_ITEST_MY_PORT to pin them. Containers are
 # auto-removed on stop (--rm) and on script exit.
+#
+# Container names are per run for the same reason. Fixed names
+# (mnemos-pg-itest / mnemos-my-itest) meant a gate killed before its EXIT trap
+# ran left containers behind that failed every later gate with "name already
+# in use", and two gates in different worktrees could never run at once. Each
+# container is labelled with the PID of the run that owns it; a run removes
+# only labelled containers whose owner process no longer exists, so it never
+# touches a concurrent run's databases.
 
 set -euo pipefail
 
-PG_NAME="mnemos-pg-itest"
-MY_NAME="mnemos-my-itest"
+RUN_ID="$$-${RANDOM}"
+LABEL="mnemos.itest.owner"
+PG_NAME="mnemos-pg-itest-${RUN_ID}"
+MY_NAME="mnemos-my-itest-${RUN_ID}"
 PG_PORT="${MNEMOS_ITEST_PG_PORT:-}"
 MY_PORT="${MNEMOS_ITEST_MY_PORT:-}"
 
@@ -26,19 +36,33 @@ host_port() {
 }
 
 cleanup() {
-  docker stop "${PG_NAME}" >/dev/null 2>&1 || true
-  docker stop "${MY_NAME}" >/dev/null 2>&1 || true
+  docker rm -f "${PG_NAME}" "${MY_NAME}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
-docker run -d --rm --name "${PG_NAME}" \
+# reap_orphans removes containers left by runs whose process is gone.
+reap_orphans() {
+  local id owner
+  docker ps -aq --filter "label=${LABEL}" | while read -r id; do
+    owner="$(docker inspect -f "{{ index .Config.Labels \"${LABEL}\" }}" "${id}" 2>/dev/null || true)"
+    if [[ -n "${owner}" ]] && ! kill -0 "${owner}" 2>/dev/null; then
+      echo "removing orphaned integration container ${id} (owner ${owner} exited)"
+      docker rm -f "${id}" >/dev/null 2>&1 || true
+    fi
+  done
+}
+reap_orphans
+
+docker run -d --rm --name "${PG_NAME}" --label "${LABEL}=$$" \
   -e POSTGRES_USER=mnemos -e POSTGRES_PASSWORD=mnemos -e POSTGRES_DB=mnemos \
   -p "127.0.0.1:${PG_PORT}:5432" \
   postgres:16-alpine >/dev/null
 PG_PORT="$(host_port "${PG_NAME}" 5432)"
 echo "started postgres on :${PG_PORT}"
 
-docker run -d --rm --name "${MY_NAME}" \
+docker run -d --rm --name "${MY_NAME}" --label "${LABEL}=$$" \
   -e MYSQL_ROOT_PASSWORD=mnemos -e MYSQL_DATABASE=mnemos \
   -p "127.0.0.1:${MY_PORT}:3306" \
   mysql:8 >/dev/null

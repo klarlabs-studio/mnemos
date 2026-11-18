@@ -156,6 +156,28 @@ func TestSplitSentences(t *testing.T) {
 	}
 }
 
+// TestBM25_EqualChunksScoreBitIdentically pins the baseline's determinism.
+// Each chunk's score was summed over a map, so two chunks with the same terms
+// could differ in the last bit depending on iteration order, and the stable
+// sort then broke their tie differently from run to run: the raw_bm25 row of
+// stale_and_superseded flipped between 0.75 and 0.50 precision@1 across
+// identical runs. Restated sentences are exactly the chunks that tie, and
+// brainbench corpora are full of them.
+func TestBM25_EqualChunksScoreBitIdentically(t *testing.T) {
+	query := tokenize("which database does the billing service run on postgresql today")
+	chunks := []rawChunk{
+		{tokens: tokenize("the billing service runs on postgresql 16 today")},
+		{tokens: tokenize("today postgresql 16 on runs service billing the")},
+		{tokens: tokenize("redis is the cache layer in front of the billing service")},
+	}
+	for i := 0; i < 200; i++ {
+		s := bm25(chunks, query)
+		if s[0] != s[1] {
+			t.Fatalf("iteration %d: equal chunks scored %v and %v", i, s[0], s[1])
+		}
+	}
+}
+
 func TestCompareWithBaseline(t *testing.T) {
 	mn := MetricSet{Metrics: []Metric{
 		KnownMetric(MetricAnswerHitRate, HigherBetter, 1, 4, "ratio"),

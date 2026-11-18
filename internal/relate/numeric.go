@@ -149,12 +149,17 @@ func numericValuesAgree(a, b []numericValue) bool {
 	}
 	// Single-vs-single is the unambiguous case: each claim asserts exactly one
 	// number, so both are about the shared subject and a mismatch in either
-	// family or magnitude is a real disagreement ("the limit is 5 minutes" vs
-	// "the limit is 5 GB"). The silence rule below cannot see that, because it
+	// recognized family or magnitude is a real disagreement ("the limit is 5
+	// minutes" vs "the limit is 5 GB"). A family that is only a guessed word
+	// is not a recognized one (isKnownUnit): "16 today" and "16" agree, "16
+	// today" and "17" do not. The silence rule below cannot see that, because it
 	// cannot tell "b says nothing about time" from "b says the limit is in GB
 	// instead" — with only one value each, there is nothing else it could be.
 	if len(a) == 1 && len(b) == 1 {
-		return a[0].unit == b[0].unit && floatsClose(a[0].value, b[0].value)
+		if a[0].unit != b[0].unit && (isKnownUnit(a[0].unit) || isKnownUnit(b[0].unit)) {
+			return false
+		}
+		return floatsClose(a[0].value, b[0].value)
 	}
 	for _, av := range a {
 		matched, comparable := false, false
@@ -173,6 +178,21 @@ func numericValuesAgree(a, b []numericValue) bool {
 		}
 	}
 	return true
+}
+
+// isKnownUnit reports whether a numericValue's unit is a recognized family
+// from unitFamily, as opposed to unitless ("") or a guessed word ("raw:…").
+//
+// The guess is the regex reading whatever word follows the number, so it is
+// as often filler as a unit: "PostgreSQL 16 today" yields raw:today, "16 in
+// production" raw:in, and a sentence-final "PostgreSQL 16" nothing at all. A
+// difference between two guesses (or a guess and no unit) is therefore not
+// evidence that two values measure different quantities, and the single-value
+// rule lets the magnitudes decide. Treating it as evidence filed restatements
+// of one version number as contradicting each other, and the recorded
+// contradiction then vetoed semantic dedupe from merging them.
+func isKnownUnit(unit string) bool {
+	return unit != "" && !strings.HasPrefix(unit, "raw:")
 }
 
 // floatsClose returns true when two magnitudes are equal up to a small

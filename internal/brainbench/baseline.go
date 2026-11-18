@@ -191,9 +191,17 @@ func bm25(chunks []rawChunk, query []string) []float64 {
 	avgLen := float64(totalLen) / float64(len(chunks))
 	n := float64(len(chunks))
 
+	// Distinct query terms in query order. The per-chunk sum runs over this
+	// slice, never over a map: float addition is not associative, so summing
+	// in map-iteration order let two chunks with the same terms score a bit
+	// apart, and which one won the tie changed from run to run.
 	terms := make(map[string]bool, len(query))
+	var order []string
 	for _, t := range query {
-		terms[t] = true
+		if !terms[t] {
+			terms[t] = true
+			order = append(order, t)
+		}
 	}
 	for i, c := range chunks {
 		tf := make(map[string]int, len(c.tokens))
@@ -203,7 +211,11 @@ func bm25(chunks []rawChunk, query []string) []float64 {
 			}
 		}
 		var s float64
-		for t, f := range tf {
+		for _, t := range order {
+			f, ok := tf[t]
+			if !ok {
+				continue
+			}
 			idf := math.Log(1 + (n-float64(df[t])+0.5)/(float64(df[t])+0.5))
 			ff := float64(f)
 			s += idf * ff * (bm25K1 + 1) / (ff + bm25K1*(1-bm25B+bm25B*float64(len(c.tokens))/avgLen))
