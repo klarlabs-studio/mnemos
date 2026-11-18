@@ -120,7 +120,7 @@ func TestCapabilityRegistry_MCPToolNamesMeanOneThing(t *testing.T) {
 // change to this file rather than drift.
 func TestCapabilityRegistry_GapsAreCounted(t *testing.T) {
 	gaps := capability.Gaps(capability.Registry)
-	const want = 83
+	const want = 82
 	if len(gaps) != want {
 		t.Errorf("acknowledged gaps: %d, pinned at %d — update the pin with the change that opened or closed one:\n  %s",
 			len(gaps), want, strings.Join(gaps, "\n  "))
@@ -207,6 +207,17 @@ func restSurface() ([]string, error) {
 			var out []string
 			for _, s := range subs {
 				out = append(out, "/v1/actions/{id}/"+s)
+			}
+			return out, nil
+		},
+		"/v1/episodes/": func() ([]string, error) {
+			subs, err := comparedLiterals("serve_retract.go", "makeEpisodeSubresourceHandler", "parts[1]")
+			if err != nil {
+				return nil, err
+			}
+			var out []string
+			for _, s := range subs {
+				out = append(out, "/v1/episodes/{id}/"+s)
 			}
 			return out, nil
 		},
