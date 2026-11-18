@@ -425,8 +425,8 @@ func (e incidentExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("write_incident: unexpected input %T", input)
 	}
-	if err := e.conn.Incidents.Upsert(ctx, in.Incident); err != nil {
-		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert incident: %w", err)
+	if err := ApplyIncident(ctx, e.conn, in.Incident); err != nil {
+		return axidomain.ExecutionResult{}, nil, err
 	}
 	return axidomain.ExecutionResult{
 		Data:    in.Incident.ID,
@@ -435,6 +435,28 @@ func (e incidentExecutor) Execute(ctx context.Context, input any, _ axidomain.Ca
 		"incident_id": in.Incident.ID, "severity": string(in.Incident.Severity),
 		"status": string(in.Incident.Status),
 	}), nil
+}
+
+// ApplyIncident upserts the incident directly against conn, outside this
+// package's kernel. It exists for the root library, whose public writes are
+// governed by the library's own kernel: its executor calls this so the library
+// and the daemon share one implementation. Every other caller goes through
+// [Writer.Incident].
+func ApplyIncident(ctx context.Context, conn *store.Conn, incident domain.Incident) error {
+	if err := conn.Incidents.Upsert(ctx, incident); err != nil {
+		return fmt.Errorf("upsert incident: %w", err)
+	}
+	return nil
+}
+
+// ApplyResolveIncident marks the incident resolved directly against conn; the
+// library-kernel counterpart of [Writer.ResolveIncident], as [ApplyIncident]
+// is of [Writer.Incident].
+func ApplyResolveIncident(ctx context.Context, conn *store.Conn, incidentID string, resolvedAt time.Time) error {
+	if err := conn.Incidents.Resolve(ctx, incidentID, resolvedAt); err != nil {
+		return fmt.Errorf("resolve incident: %w", err)
+	}
+	return nil
 }
 
 // Incident upserts an incident record. Returns the incident id.
@@ -565,8 +587,8 @@ func (e resolveIncidentExecutor) Execute(ctx context.Context, input any, _ axido
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("resolve_incident: unexpected input %T", input)
 	}
-	if err := e.conn.Incidents.Resolve(ctx, in.IncidentID, in.ResolvedAt); err != nil {
-		return axidomain.ExecutionResult{}, nil, fmt.Errorf("resolve incident: %w", err)
+	if err := ApplyResolveIncident(ctx, e.conn, in.IncidentID, in.ResolvedAt); err != nil {
+		return axidomain.ExecutionResult{}, nil, err
 	}
 	return axidomain.ExecutionResult{
 		Data:    in.IncidentID,

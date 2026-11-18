@@ -17,17 +17,20 @@ import (
 	mcp "go.klarlabs.de/mcp"
 	"go.klarlabs.de/mcp/protocol"
 	mnemos "go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/beliefops"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/ingest"
+	"go.klarlabs.de/mnemos/internal/kbmetrics"
 	"go.klarlabs.de/mnemos/internal/llm"
 	"go.klarlabs.de/mnemos/internal/parser"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/relate"
+	"go.klarlabs.de/mnemos/internal/skills"
 	"go.klarlabs.de/mnemos/internal/store"
 	"go.klarlabs.de/mnemos/internal/synthesize"
 	"go.klarlabs.de/mnemos/internal/trust"
@@ -566,11 +569,18 @@ func handleMCP(args []string) {
 			return mcpRunRecordObservation(ctx, input)
 		})
 
+	srv.Tool("reconcile_expectations").
+		Description("Close every observed-but-open prediction into a validates/refutes verdict and report each one's surprise. The consolidate pass does this on its own schedule; call it to close the loop now. Mirrors POST /v1/expectations/reconcile.").
+		OutputSchema(mcpReconcileExpectationsOutput{}).
+		Handler(func(ctx context.Context, _ struct{}) (mcpReconcileExpectationsOutput, error) {
+			return mcpReconcileExpectations(ctx)
+		})
+
 	srv.Tool("record_feedback").
 		Description("Record whether a recalled belief was actually useful. A helpful vote resets the negative streak; an unhelpful one extends it. Mirrors POST /v1/beliefs/<id>/feedback.").
 		OutputSchema(mcpRecordFeedbackOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordFeedbackInput) (mcpRecordFeedbackOutput, error) {
-			return mcpRunRecordFeedback(ctx, input)
+			return mcpRunRecordFeedback(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
 	srv.Tool("record_outcome").
@@ -621,6 +631,8 @@ func handleMCP(args []string) {
 		Handler(func(ctx context.Context, input mcpQueryPlaybookInput) (mcpQueryPlaybookOutput, error) {
 			return mcpRunQueryPlaybook(ctx, input)
 		})
+
+	registerSkillTools(srv, mcpActor)
 
 	srv.Tool("synthesize_reflexes").
 		Description("Run one full playbook-synthesis pass over the lessons store and emit derived Playbooks. Idempotent: re-running on the same lessons refreshes confidence without churning ids.").
@@ -866,6 +878,9 @@ func handleMCP(args []string) {
 			}
 			return mcpAnalogousClaims(ctx, mem, input)
 		})
+
+	// --- Browses, belief writes and per-belief reads (mcp_beliefops.go) ---
+	registerBeliefOpsTools(srv, mcpActor, getMem, getMemForBrain)
 
 	// --- Claim reads + advanced recall (parity with HTTP/gRPC) ---
 	srv.Tool("get_belief").
@@ -1605,50 +1620,31 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 	return result, nil
 }
 
+// mcpRunMetrics reports the knowledge-base counts through kbmetrics, the one
+// implementation REST, gRPC and the library share. A run-scoped token sees
+// counts over its runs only.
 func mcpRunMetrics(ctx context.Context) (mcpMetricsOutput, error) {
 	conn, err := openConn(ctx)
 	if err != nil {
 		return mcpMetricsOutput{}, err
 	}
 	defer closeConn(conn)
-
-	// Each port-typed CountAll/CountByType replaces a hand-written
-	// COUNT query. Distinct-run-id is computed in-memory from
-	// ListAll because adding a CountDistinctRunID port method just
-	// for the metrics surface isn't worth the surface bloat.
-	allEvents, _ := conn.Events.ListAll(ctx)
-	runIDs := map[string]struct{}{}
-	for _, e := range allEvents {
-		if e.RunID != "" {
-			runIDs[e.RunID] = struct{}{}
-		}
+	var runs []string
+	if c, ok := claimsFromContext(ctx); ok {
+		runs = c.Runs
 	}
-
-	eventsCount, _ := conn.Events.CountAll(ctx)
-	claimsCount, _ := conn.Claims.CountAll(ctx)
-	relsCount, _ := conn.Relationships.CountAll(ctx)
-	contradictionsCount, _ := conn.Relationships.CountByType(ctx, "contradicts")
-	embeddingsCount, _ := conn.Embeddings.CountAll(ctx)
-
-	// Contested claims: count from the in-memory listing — same
-	// reasoning as runs, the surface payoff doesn't justify a
-	// CountByStatus port method.
-	allClaims, _ := conn.Claims.ListAll(ctx)
-	var contested int64
-	for _, c := range allClaims {
-		if string(c.Status) == "contested" {
-			contested++
-		}
+	c, err := kbmetrics.Compute(ctx, conn, runs)
+	if err != nil {
+		return mcpMetricsOutput{}, err
 	}
-
 	return mcpMetricsOutput{
-		Runs:            int64(len(runIDs)),
-		Events:          eventsCount,
-		Claims:          claimsCount,
-		ContestedClaims: contested,
-		Relationships:   relsCount,
-		Contradictions:  contradictionsCount,
-		Embeddings:      embeddingsCount,
+		Runs:            c.Runs,
+		Events:          c.Events,
+		Claims:          c.Claims,
+		ContestedClaims: c.ContestedClaims,
+		Relationships:   c.Relationships,
+		Contradictions:  c.Contradictions,
+		Embeddings:      c.Embeddings,
 	}, nil
 }
 
@@ -1702,7 +1698,7 @@ func mcpRunRecordDecision(ctx context.Context, actor string, input mcpRecordDeci
 	if strings.TrimSpace(input.ChosenAt) != "" {
 		t, err := parseTimeArg(input.ChosenAt)
 		if err != nil {
-			return mcpRecordDecisionOutput{}, fmt.Errorf("chosenAt: %w", err)
+			return mcpRecordDecisionOutput{}, userInputError(fmt.Errorf("chosenAt: %w", err))
 		}
 		chosenAt = t
 	}
@@ -1747,15 +1743,7 @@ func mcpRunQueryPlaybook(ctx context.Context, input mcpQueryPlaybookInput) (mcpQ
 		return mcpQueryPlaybookOutput{}, err
 	}
 	defer closeConn(conn)
-	var ps []domain.Playbook
-	switch {
-	case input.Trigger != "":
-		ps, err = conn.Playbooks.ListByTrigger(ctx, input.Trigger)
-	case input.Service != "":
-		ps, err = conn.Playbooks.ListByService(ctx, input.Service)
-	default:
-		ps, err = conn.Playbooks.ListAll(ctx)
-	}
+	ps, err := skills.Reflexes(ctx, conn.Playbooks, skills.ReflexFilter{Trigger: input.Trigger, Service: input.Service})
 	if err != nil {
 		return mcpQueryPlaybookOutput{}, err
 	}
@@ -1807,15 +1795,7 @@ func mcpRunQueryLessons(ctx context.Context, input mcpQueryLessonsInput) (mcpQue
 		return mcpQueryLessonsOutput{}, err
 	}
 	defer closeConn(conn)
-	var ls []domain.Lesson
-	switch {
-	case input.Service != "":
-		ls, err = conn.Lessons.ListByService(ctx, input.Service)
-	case input.Trigger != "":
-		ls, err = conn.Lessons.ListByTrigger(ctx, input.Trigger)
-	default:
-		ls, err = conn.Lessons.ListAll(ctx)
-	}
+	ls, err := skills.Schemas(ctx, conn.Lessons, skills.SchemaFilter{Service: input.Service, Trigger: input.Trigger})
 	if err != nil {
 		return mcpQueryLessonsOutput{}, err
 	}
@@ -2045,17 +2025,11 @@ func mcpRunMemoryEscalate(ctx context.Context, _ string, input mcpMemoryEscalate
 		return mcpMemoryEscalateOutput{}, err
 	}
 	defer closeConn(conn)
-	eng := query.NewEngine(conn.Events, conn.Claims, conn.Relationships)
-	verdict, err := eng.EscalateClaimForAgent(ctx, input.ClaimID, input.Reason)
+	esc, err := beliefops.Escalate(ctx, conn, input.ClaimID, input.Reason)
 	if err != nil {
-		return mcpMemoryEscalateOutput{}, err
+		return mcpMemoryEscalateOutput{}, mcpBeliefOpError(err)
 	}
-	return mcpMemoryEscalateOutput{
-		ClaimID:          input.ClaimID,
-		Action:           string(verdict.Action),
-		EscalationReason: verdict.EscalationReason,
-		Rationale:        verdict.Rationale,
-	}, nil
+	return mcpMemoryEscalateOutput(esc), nil
 }
 
 func mcpRunMemoryDeprecate(ctx context.Context, actor string, input mcpMemoryDeprecateInput) (mcpMemoryDeprecateOutput, error) {
@@ -2066,30 +2040,24 @@ func mcpRunMemoryDeprecate(ctx context.Context, actor string, input mcpMemoryDep
 	if err != nil {
 		return mcpMemoryDeprecateOutput{}, err
 	}
+	ch, err := mcpRunDeprecate(ctx, actor, input.ClaimID, input.Reason, beliefops.ReasonDeprecate)
+	return mcpMemoryDeprecateOutput(ch), err
+}
+
+// mcpRunDeprecate is memory_deprecate and forget: one operation
+// (beliefops.Deprecate) recording a different fallback reason. ctx must
+// already be scoped to the belief's brain (mcpScopeToClaimBrain).
+func mcpRunDeprecate(ctx context.Context, actor, claimID, reason, fallback string) (beliefops.StatusChange, error) {
 	gw, err := openWriter(ctx)
 	if err != nil {
-		return mcpMemoryDeprecateOutput{}, err
+		return beliefops.StatusChange{}, err
 	}
 	defer closeWriter(gw)
-	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.ClaimID})
-	if err != nil || len(existing) == 0 {
-		return mcpMemoryDeprecateOutput{}, fmt.Errorf("claim %s not found", input.ClaimID)
+	ch, err := beliefops.Deprecate(ctx, gw.Conn(), gw, beliefops.Edit{ClaimID: claimID, Reason: reason, Actor: actor}, fallback)
+	if err != nil {
+		return beliefops.StatusChange{}, mcpBeliefOpError(err)
 	}
-	old := existing[0].Status
-	updated := existing[0]
-	updated.Status = domain.ClaimStatusDeprecated
-	reason := input.Reason
-	if reason == "" {
-		reason = "agent-deprecated"
-	}
-	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
-		return mcpMemoryDeprecateOutput{}, err
-	}
-	return mcpMemoryDeprecateOutput{
-		ClaimID:   input.ClaimID,
-		OldStatus: string(old),
-		NewStatus: string(domain.ClaimStatusDeprecated),
-	}, nil
+	return ch, nil
 }
 
 func mcpRunMemoryResolve(ctx context.Context, actor string, input mcpMemoryResolveInput) (mcpMemoryResolveOutput, error) {
@@ -2112,28 +2080,13 @@ func mcpRunMemoryResolve(ctx context.Context, actor string, input mcpMemoryResol
 		return mcpMemoryResolveOutput{}, err
 	}
 	defer closeWriter(gw)
-	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.WinnerID, input.LoserID})
-	if err != nil || len(existing) < 2 {
-		return mcpMemoryResolveOutput{}, fmt.Errorf("both claims must exist")
+	res, err := beliefops.Resolve(ctx, gw.Conn(), gw, beliefops.ResolveRequest{
+		WinnerID: input.WinnerID, LoserID: input.LoserID, Reason: input.Reason, Actor: actor,
+	})
+	if err != nil {
+		return mcpMemoryResolveOutput{}, mcpBeliefOpError(err)
 	}
-	reason := input.Reason
-	if reason == "" {
-		reason = "agent-resolved-contradiction"
-	}
-	updates := make([]domain.Claim, 0, 2)
-	for _, c := range existing {
-		switch c.ID {
-		case input.WinnerID:
-			c.Status = domain.ClaimStatusResolved
-		case input.LoserID:
-			c.Status = domain.ClaimStatusDeprecated
-		}
-		updates = append(updates, c)
-	}
-	if _, err := gw.Claims(ctx, updates, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
-		return mcpMemoryResolveOutput{}, err
-	}
-	return mcpMemoryResolveOutput{WinnerID: input.WinnerID, LoserID: input.LoserID}, nil
+	return mcpMemoryResolveOutput(res), nil
 }
 
 func mcpRunMemoryPromote(ctx context.Context, actor string, input mcpMemoryPromoteInput) (mcpMemoryPromoteOutput, error) {
@@ -2150,14 +2103,11 @@ func mcpRunMemoryPromote(ctx context.Context, actor string, input mcpMemoryPromo
 		return mcpMemoryPromoteOutput{}, err
 	}
 	defer closeWriter(gw)
-	now := time.Now().UTC()
-	if err := gw.MarkVerified(ctx, input.ClaimID, now, 0); err != nil {
-		return mcpMemoryPromoteOutput{}, err
+	v, err := beliefops.Verify(ctx, gw.Conn(), gw, input.ClaimID, time.Now())
+	if err != nil {
+		return mcpMemoryPromoteOutput{}, mcpBeliefOpError(err)
 	}
-	return mcpMemoryPromoteOutput{
-		ClaimID:    input.ClaimID,
-		VerifiedAt: now.Format(time.RFC3339),
-	}, nil
+	return mcpMemoryPromoteOutput{ClaimID: v.ClaimID, VerifiedAt: v.VerifiedAt.Format(time.RFC3339)}, nil
 }
 
 func mcpRunMemoryContext(ctx context.Context, input mcpMemoryContextInput) (mcpMemoryContextOutput, error) {
@@ -2352,39 +2302,16 @@ func mcpRunForget(ctx context.Context, actor string, input mcpForgetInput) (mcpF
 	if err != nil {
 		return mcpForgetOutput{}, err
 	}
-	gw, err := openWriter(ctx)
-	if err != nil {
-		return mcpForgetOutput{}, err
-	}
-	defer closeWriter(gw)
-	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{input.ClaimID})
-	if err != nil || len(existing) == 0 {
-		return mcpForgetOutput{}, fmt.Errorf("claim %s not found", input.ClaimID)
-	}
-	old := existing[0].Status
-	updated := existing[0]
-	updated.Status = domain.ClaimStatusDeprecated
-	reason := input.Reason
-	if reason == "" {
-		reason = "agent-forget"
-	}
-	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
-		return mcpForgetOutput{}, err
-	}
-	return mcpForgetOutput{
-		ClaimID:   input.ClaimID,
-		OldStatus: string(old),
-		NewStatus: string(domain.ClaimStatusDeprecated),
-	}, nil
+	ch, err := mcpRunDeprecate(ctx, actor, input.ClaimID, input.Reason, beliefops.ReasonForget)
+	return mcpForgetOutput(ch), err
 }
 
 func mcpRunUpdate(ctx context.Context, actor string, input mcpUpdateInput) (mcpUpdateOutput, error) {
 	claimID := strings.TrimSpace(input.ClaimID)
-	newText := strings.TrimSpace(input.NewText)
 	if claimID == "" {
 		return mcpUpdateOutput{}, fmt.Errorf("claim_id is required")
 	}
-	if newText == "" {
+	if strings.TrimSpace(input.NewText) == "" {
 		return mcpUpdateOutput{}, fmt.Errorf("new_text is required")
 	}
 	if input.Confidence < 0 || input.Confidence > 1 {
@@ -2401,28 +2328,14 @@ func mcpRunUpdate(ctx context.Context, actor string, input mcpUpdateInput) (mcpU
 		return mcpUpdateOutput{}, err
 	}
 	defer closeWriter(gw)
-	existing, err := gw.Conn().Claims.ListByIDs(ctx, []string{claimID})
-	if err != nil || len(existing) == 0 {
-		return mcpUpdateOutput{}, fmt.Errorf("claim %s not found", claimID)
+	rev, err := beliefops.Update(ctx, gw.Conn(), gw, beliefops.UpdateRequest{
+		Edit: beliefops.Edit{ClaimID: claimID, Reason: input.Reason, Actor: actor},
+		Text: input.NewText, Confidence: input.Confidence,
+	})
+	if err != nil {
+		return mcpUpdateOutput{}, mcpBeliefOpError(err)
 	}
-	oldText := existing[0].Text
-	updated := existing[0]
-	updated.Text = newText
-	if input.Confidence > 0 {
-		updated.Confidence = input.Confidence
-	}
-	reason := input.Reason
-	if reason == "" {
-		reason = "agent-update"
-	}
-	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
-		return mcpUpdateOutput{}, err
-	}
-	return mcpUpdateOutput{
-		ClaimID: claimID,
-		OldText: oldText,
-		NewText: newText,
-	}, nil
+	return mcpUpdateOutput{ClaimID: rev.ClaimID, OldText: rev.OldText, NewText: rev.NewText}, nil
 }
 
 func mcpRunSearchMemory(ctx context.Context, input mcpSearchMemoryInput) (mcpSearchMemoryOutput, error) {

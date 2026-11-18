@@ -274,6 +274,9 @@ var byIDBeliefTools = []string{
 	"mcpRunRecordExpectation",
 	"mcpRunRecordObservation",
 	"mcpRunRecordFeedback",
+	"mcpRunSetBeliefLifecycle",
+	"mcpRunBeliefProvenance",
+	"mcpRunBeliefHistory",
 }
 
 // A static guard, because the failure mode is silent: a by-id tool that forgets

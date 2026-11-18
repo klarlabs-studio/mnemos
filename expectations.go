@@ -2,51 +2,58 @@ package mnemos
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	axidomain "go.klarlabs.de/axi/domain"
+
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 )
+
+// Structured expectations on the library surface. The request checks and the
+// writes are govwrite's (CheckExpectation / CheckObservation and the Apply*
+// functions), the one implementation REST, gRPC and MCP use through
+// govwrite.Writer; here they run inside the library's own governed kernel so
+// each write records a session on the evidence chain like every other public
+// write.
+
+// Write action names for the expectation loop (see writeActions).
+const (
+	actionSetExpectation        = "set_expectation"
+	actionObserveExpectation    = "observe_expectation"
+	actionReconcileExpectations = "reconcile_expectations"
+)
+
+type observeExpectationInput struct {
+	ClaimID  string
+	Observed float64
+}
 
 // Expect implements [Memory.Expect].
 func (m *memory) Expect(ctx context.Context, claimID string, predicted, tolerance float64, horizon time.Time) error {
-	if m.conn.Expectations == nil {
-		return ErrExpectationsUnsupported
+	exp, err := govwrite.CheckExpectation(ctx, m.conn, govwrite.ExpectationRequest{
+		ClaimID: claimID, Predicted: predicted, Tolerance: tolerance, Horizon: horizon,
+	}, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("mnemos: Expect: %w", err)
 	}
-	claimID = strings.TrimSpace(claimID)
-	if claimID == "" {
-		return errors.New("mnemos: Expect: claimID is required")
+	if _, err := dispatchWrite[domain.Expectation](ctx, m, actionSetExpectation, exp); err != nil {
+		return fmt.Errorf("mnemos: Expect: %w", err)
 	}
-	if tolerance < 0 {
-		tolerance = -tolerance
-	}
-	return m.conn.Expectations.Upsert(ctx, domain.Expectation{
-		ClaimID:   claimID,
-		Predicted: predicted,
-		Tolerance: tolerance,
-		Horizon:   horizon,
-		CreatedAt: time.Now().UTC(),
-	})
+	return nil
 }
 
 // RecordObservation implements [Memory.RecordObservation].
 func (m *memory) RecordObservation(ctx context.Context, claimID string, observed float64) error {
-	if m.conn.Expectations == nil {
-		return ErrExpectationsUnsupported
-	}
-	claimID = strings.TrimSpace(claimID)
-	exp, ok, err := m.conn.Expectations.Get(ctx, claimID)
-	if err != nil {
+	if err := govwrite.CheckObservation(ctx, m.conn, claimID); err != nil {
 		return fmt.Errorf("mnemos: RecordObservation: %w", err)
 	}
-	if !ok {
-		return fmt.Errorf("mnemos: RecordObservation: no expectation for claim %s", claimID)
+	in := observeExpectationInput{ClaimID: claimID, Observed: observed}
+	if _, err := dispatchWrite[domain.Expectation](ctx, m, actionObserveExpectation, in); err != nil {
+		return fmt.Errorf("mnemos: RecordObservation: %w", err)
 	}
-	exp.Observed = observed
-	exp.HasObservation = true
-	return m.conn.Expectations.Upsert(ctx, exp)
+	return nil
 }
 
 // ReconcileExpectations implements [Memory.ReconcileExpectations]: close every
@@ -56,49 +63,71 @@ func (m *memory) ReconcileExpectations(ctx context.Context) ([]Reconciliation, e
 	if m.conn.Expectations == nil {
 		return nil, nil
 	}
-	open, err := m.conn.Expectations.ListOpen(ctx)
+	recs, err := dispatchWrite[[]govwrite.Reconciliation](ctx, m, actionReconcileExpectations, struct{}{})
 	if err != nil {
-		return nil, fmt.Errorf("mnemos: ReconcileExpectations: list open: %w", err)
+		return nil, fmt.Errorf("mnemos: ReconcileExpectations: %w", err)
 	}
-	now := time.Now().UTC()
 	var out []Reconciliation
-	for _, exp := range open {
-		if !exp.HasObservation {
-			continue // unobserved (even past horizon) stays unconfirmed — never refuted
-		}
-		confirmed, _ := exp.Confirmed()
-		surprise, _ := exp.Surprise()
-		// Emit the verdict edge so the existing routing (ForgetRefuted /
-		// ReinforceValidated) acts on it — the prediction loop closing on itself.
-		kind := domain.RelationshipTypeRefutes
-		if confirmed {
-			kind = domain.RelationshipTypeValidates
-		}
-		if m.conn.EntityRels != nil {
-			edge := domain.EntityRelationship{
-				ID:        "expverdict_" + exp.ClaimID,
-				Kind:      kind,
-				FromID:    "exp_" + exp.ClaimID,
-				FromType:  domain.RelEntityOutcome,
-				ToID:      exp.ClaimID,
-				ToType:    domain.RelEntityClaim,
-				CreatedAt: now,
-			}
-			if err := m.conn.EntityRels.Upsert(ctx, []domain.EntityRelationship{edge}); err != nil {
-				return out, fmt.Errorf("mnemos: ReconcileExpectations: emit verdict for %s: %w", exp.ClaimID, err)
-			}
-		}
-		exp.Resolved = true
-		if err := m.conn.Expectations.Upsert(ctx, exp); err != nil {
-			return out, fmt.Errorf("mnemos: ReconcileExpectations: mark resolved %s: %w", exp.ClaimID, err)
-		}
+	for _, r := range recs {
 		out = append(out, Reconciliation{
-			ClaimID:   exp.ClaimID,
-			Predicted: exp.Predicted,
-			Observed:  exp.Observed,
-			Surprise:  surprise,
-			Confirmed: confirmed,
+			ClaimID: r.ClaimID, Predicted: r.Predicted, Observed: r.Observed, Surprise: r.Surprise, Confirmed: r.Confirmed,
 		})
 	}
 	return out, nil
+}
+
+type setExpectationExecutor struct{ m *memory }
+
+// Execute stores a checked expectation and records the write.
+func (e setExpectationExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
+	in, ok := writeInput[domain.Expectation](input)
+	if !ok {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("set_expectation: unexpected input type %T", input)
+	}
+	stored, err := govwrite.ApplySetExpectation(ctx, e.m.conn, in)
+	if err != nil {
+		return axidomain.ExecutionResult{}, nil, err
+	}
+	return axidomain.ExecutionResult{Data: stored, Summary: "set expectation on " + stored.ClaimID},
+		[]axidomain.EvidenceRecord{{Kind: "mnemos.set_expectation", Source: evidenceSourceLibrary, Value: map[string]any{
+			"claim_id": stored.ClaimID, "predicted": stored.Predicted, "tolerance": stored.Tolerance,
+		}}}, nil
+}
+
+type observeExpectationExecutor struct{ m *memory }
+
+// Execute records an observation and records the write.
+func (e observeExpectationExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
+	in, ok := writeInput[observeExpectationInput](input)
+	if !ok {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("observe_expectation: unexpected input type %T", input)
+	}
+	stored, err := govwrite.ApplyObserveExpectation(ctx, e.m.conn, in.ClaimID, in.Observed)
+	if err != nil {
+		return axidomain.ExecutionResult{}, nil, err
+	}
+	return axidomain.ExecutionResult{Data: stored, Summary: "observed expectation on " + stored.ClaimID},
+		[]axidomain.EvidenceRecord{{Kind: "mnemos.observe_expectation", Source: evidenceSourceLibrary, Value: map[string]any{
+			"claim_id": stored.ClaimID, "predicted": stored.Predicted, "observed": stored.Observed,
+		}}}, nil
+}
+
+type reconcileExpectationsExecutor struct{ m *memory }
+
+// Execute closes observed expectations and records the verdict counts.
+func (e reconcileExpectationsExecutor) Execute(ctx context.Context, _ any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
+	recs, err := govwrite.ApplyReconcileExpectations(ctx, e.m.conn, time.Now().UTC())
+	if err != nil {
+		return axidomain.ExecutionResult{}, nil, err
+	}
+	confirmed := 0
+	for _, r := range recs {
+		if r.Confirmed {
+			confirmed++
+		}
+	}
+	return axidomain.ExecutionResult{Data: recs, Summary: fmt.Sprintf("reconciled %d expectation(s), %d confirmed", len(recs), confirmed)},
+		[]axidomain.EvidenceRecord{{Kind: "mnemos.reconcile_expectations", Source: evidenceSourceLibrary, Value: map[string]any{
+			"reconciled": len(recs), "confirmed": confirmed, "refuted": len(recs) - confirmed,
+		}}}, nil
 }

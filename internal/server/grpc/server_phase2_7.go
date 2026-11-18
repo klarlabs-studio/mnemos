@@ -8,13 +8,16 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"go.klarlabs.de/mnemos/internal/beliefops"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/skills"
 	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
 )
 
@@ -36,38 +39,18 @@ func (s *Server) ListActions(ctx context.Context, req *mnemosv1.ListActionsReque
 	// Naming a run outside the whitelist is refused rather than silently
 	// answered with an empty page — a caller that cannot tell "no actions"
 	// from "not yours" will read the first as fact. Checked before the read.
-	allowed := allowedRunsFromContext(ctx)
-	if req.RunId != "" && !runAllowed(allowed, req.RunId) {
+	// Narrowing to the whitelist covers the subject branch (which spans runs)
+	// and the default branch (which lists the lot). Actions with no run at all
+	// are dropped too: a run-scoped token was granted named runs, and
+	// "unassigned" is not one of them — the same reading ListEpisodes takes.
+	actions, err := skills.Actions(ctx, s.connFor(ctx).Actions, skills.ActionFilter{
+		Subject: req.Subject, RunID: req.RunId, Runs: s.runScope(ctx),
+	})
+	if errors.Is(err, skills.ErrRunNotAllowed) {
 		return nil, status.Errorf(codes.PermissionDenied, "run_id %q not in token whitelist", req.RunId)
 	}
-
-	var actions []domain.Action
-	var err error
-	switch {
-	case req.Subject != "":
-		actions, err = s.connFor(ctx).Actions.ListBySubject(ctx, req.Subject)
-	case req.RunId != "":
-		actions, err = s.connFor(ctx).Actions.ListByRunID(ctx, req.RunId)
-	default:
-		actions, err = s.connFor(ctx).Actions.ListAll(ctx)
-	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list actions: %v", err)
-	}
-
-	// Narrow to the whitelist. Covers the subject branch (which spans runs) and
-	// the default branch (which listed the lot); the run_id branch is already
-	// inside the whitelist by the check above. Actions with no run at all are
-	// dropped too: a run-scoped token was granted named runs, and "unassigned"
-	// is not one of them — the same reading ListEpisodes takes.
-	if len(allowed) > 0 {
-		kept := actions[:0]
-		for _, a := range actions {
-			if runAllowed(allowed, a.RunID) {
-				kept = append(kept, a)
-			}
-		}
-		actions = kept
+		return nil, skillsStatus("list actions", err)
 	}
 
 	total := len(actions)
@@ -125,15 +108,14 @@ func (s *Server) AppendActions(ctx context.Context, req *mnemosv1.AppendActionsR
 // ListOutcomes returns observed action outcomes.
 func (s *Server) ListOutcomes(ctx context.Context, req *mnemosv1.ListOutcomesRequest) (*mnemosv1.ListOutcomesResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
-	var outcomes []domain.Outcome
-	var err error
-	if req.ActionId != "" {
-		outcomes, err = s.connFor(ctx).Outcomes.ListByActionID(ctx, req.ActionId)
-	} else {
-		outcomes, err = s.connFor(ctx).Outcomes.ListAll(ctx)
-	}
+	// An outcome belongs to its action's run, so a run-scoped token sees only
+	// the outcomes of actions inside its whitelist.
+	conn := s.connFor(ctx)
+	outcomes, err := skills.Outcomes(ctx, conn.Outcomes, conn.Actions, skills.OutcomeFilter{
+		ActionID: req.ActionId, Runs: s.runScope(ctx),
+	})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list outcomes: %v", err)
+		return nil, skillsStatus("list outcomes", err)
 	}
 	total := len(outcomes)
 	page := paginate(outcomes, limit, offset)
@@ -196,18 +178,9 @@ func (s *Server) AppendOutcomes(ctx context.Context, req *mnemosv1.AppendOutcome
 // trigger filter.
 func (s *Server) ListSchemas(ctx context.Context, req *mnemosv1.ListSchemasRequest) (*mnemosv1.ListSchemasResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
-	var lessons []domain.Lesson
-	var err error
-	switch {
-	case req.Service != "":
-		lessons, err = s.connFor(ctx).Lessons.ListByService(ctx, req.Service)
-	case req.Trigger != "":
-		lessons, err = s.connFor(ctx).Lessons.ListByTrigger(ctx, req.Trigger)
-	default:
-		lessons, err = s.connFor(ctx).Lessons.ListAll(ctx)
-	}
+	lessons, err := skills.Schemas(ctx, s.connFor(ctx).Lessons, skills.SchemaFilter{Service: req.Service, Trigger: req.Trigger})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list schemas: %v", err)
+		return nil, skillsStatus("list schemas", err)
 	}
 	total := len(lessons)
 	page := paginate(lessons, limit, offset)
@@ -223,23 +196,9 @@ func (s *Server) AppendSchemas(ctx context.Context, req *mnemosv1.AppendSchemasR
 	if err := s.requireScope(ctx, domain.ScopeClaimsWrite); err != nil {
 		return nil, err
 	}
-	if len(req.Schemas) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "schemas array is empty")
-	}
-	if len(req.Schemas) > maxBatchRecords {
-		return nil, status.Errorf(codes.InvalidArgument, "schemas batch size %d exceeds max %d", len(req.Schemas), maxBatchRecords)
-	}
-	actor := actorFromContext(ctx)
-	accepted := 0
-	for i, l := range req.Schemas {
-		if l.Id == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "schemas[%d].id is required", i)
-		}
-		derived := time.Now().UTC()
-		if l.DerivedAt != nil {
-			derived = l.DerivedAt.AsTime()
-		}
-		lesson := domain.Lesson{
+	lessons := make([]domain.Lesson, 0, len(req.Schemas))
+	for _, l := range req.Schemas {
+		lessons = append(lessons, domain.Lesson{
 			ID:           l.Id,
 			Statement:    l.Statement,
 			Scope:        contextFromProto(l.Context),
@@ -247,15 +206,15 @@ func (s *Server) AppendSchemas(ctx context.Context, req *mnemosv1.AppendSchemasR
 			Kind:         l.Kind,
 			Evidence:     l.Evidence,
 			Confidence:   l.Confidence,
-			DerivedAt:    derived,
+			DerivedAt:    timestampOrZero(l.DerivedAt),
 			LastVerified: timestampOrZero(l.LastVerified),
 			Source:       l.Source,
-			CreatedBy:    firstNonEmptyStr(l.CreatedBy, actor),
-		}
-		if _, err := s.writerFor(ctx).Lesson(ctx, lesson); err != nil {
-			return nil, status.Errorf(codes.Internal, "append schema %s: %v", lesson.ID, err)
-		}
-		accepted++
+			CreatedBy:    l.CreatedBy,
+		})
+	}
+	accepted, err := skills.AppendSchemas(ctx, s.writerFor(ctx).Conn().Actions, s.writerFor(ctx).Lesson, actorFromContext(ctx), lessons)
+	if err != nil {
+		return nil, skillsStatus("append schemas", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(accepted)}, nil
 }
@@ -335,18 +294,9 @@ func (s *Server) AppendDecisions(ctx context.Context, req *mnemosv1.AppendDecisi
 // ListReflexes returns synthesised or hand-authored reflexes.
 func (s *Server) ListReflexes(ctx context.Context, req *mnemosv1.ListReflexesRequest) (*mnemosv1.ListReflexesResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
-	var playbooks []domain.Playbook
-	var err error
-	switch {
-	case req.Trigger != "":
-		playbooks, err = s.connFor(ctx).Playbooks.ListByTrigger(ctx, req.Trigger)
-	case req.Service != "":
-		playbooks, err = s.connFor(ctx).Playbooks.ListByService(ctx, req.Service)
-	default:
-		playbooks, err = s.connFor(ctx).Playbooks.ListAll(ctx)
-	}
+	playbooks, err := skills.Reflexes(ctx, s.connFor(ctx).Playbooks, skills.ReflexFilter{Trigger: req.Trigger, Service: req.Service})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list reflexes: %v", err)
+		return nil, skillsStatus("list reflexes", err)
 	}
 	total := len(playbooks)
 	page := paginate(playbooks, limit, offset)
@@ -362,22 +312,8 @@ func (s *Server) AppendReflexes(ctx context.Context, req *mnemosv1.AppendReflexe
 	if err := s.requireScope(ctx, domain.ScopeClaimsWrite); err != nil {
 		return nil, err
 	}
-	if len(req.Reflexes) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "reflexes array is empty")
-	}
-	if len(req.Reflexes) > maxBatchRecords {
-		return nil, status.Errorf(codes.InvalidArgument, "reflexes batch size %d exceeds max %d", len(req.Reflexes), maxBatchRecords)
-	}
-	actor := actorFromContext(ctx)
-	accepted := 0
-	for i, p := range req.Reflexes {
-		if p.Id == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "reflexes[%d].id is required", i)
-		}
-		derived := time.Now().UTC()
-		if p.DerivedAt != nil {
-			derived = p.DerivedAt.AsTime()
-		}
+	playbooks := make([]domain.Playbook, 0, len(req.Reflexes))
+	for _, p := range req.Reflexes {
 		steps := make([]domain.PlaybookStep, 0, len(p.Steps))
 		for _, st := range p.Steps {
 			steps = append(steps, domain.PlaybookStep{
@@ -387,7 +323,7 @@ func (s *Server) AppendReflexes(ctx context.Context, req *mnemosv1.AppendReflexe
 				Condition:   st.Condition,
 			})
 		}
-		playbook := domain.Playbook{
+		playbooks = append(playbooks, domain.Playbook{
 			ID:                 p.Id,
 			Trigger:            p.Trigger,
 			Statement:          p.Statement,
@@ -395,15 +331,15 @@ func (s *Server) AppendReflexes(ctx context.Context, req *mnemosv1.AppendReflexe
 			Steps:              steps,
 			DerivedFromLessons: p.DerivedFromSchemas,
 			Confidence:         p.Confidence,
-			DerivedAt:          derived,
+			DerivedAt:          timestampOrZero(p.DerivedAt),
 			LastVerified:       timestampOrZero(p.LastVerified),
 			Source:             p.Source,
-			CreatedBy:          firstNonEmptyStr(p.CreatedBy, actor),
-		}
-		if _, err := s.writerFor(ctx).Playbook(ctx, playbook); err != nil {
-			return nil, status.Errorf(codes.Internal, "append reflex %s: %v", playbook.ID, err)
-		}
-		accepted++
+			CreatedBy:          p.CreatedBy,
+		})
+	}
+	accepted, err := skills.AppendReflexes(ctx, s.writerFor(ctx).Conn().Lessons, s.writerFor(ctx).Playbook, actorFromContext(ctx), playbooks)
+	if err != nil {
+		return nil, skillsStatus("append reflexes", err)
 	}
 	return &mnemosv1.AppendResponse{Accepted: int32(accepted)}, nil
 }
@@ -412,21 +348,16 @@ func (s *Server) AppendReflexes(ctx context.Context, req *mnemosv1.AppendReflexe
 // EntityAssociations (polymorphic edges)
 // ---------------------------------------------------------------------------
 
-// ListEntityAssociations returns polymorphic cross-entity edges.
+// ListEntityAssociations returns polymorphic cross-entity edges
+// (beliefops.ListEntityRelationships, shared with REST
+// GET /v1/entity-associations and the list_entity_associations MCP tool).
 func (s *Server) ListEntityAssociations(ctx context.Context, req *mnemosv1.ListEntityAssociationsRequest) (*mnemosv1.ListEntityAssociationsResponse, error) {
 	limit, offset := normalizePagination(req.Pagination)
-	var edges []domain.EntityRelationship
-	var err error
-	switch {
-	case req.EntityId != "" && req.EntityType != "":
-		edges, err = s.connFor(ctx).EntityRels.ListByEntity(ctx, req.EntityId, req.EntityType)
-	case req.Kind != "":
-		edges, err = s.connFor(ctx).EntityRels.ListByKind(ctx, req.Kind)
-	default:
-		edges, err = s.connFor(ctx).EntityRels.ListAll(ctx)
-	}
+	edges, err := beliefops.ListEntityRelationships(ctx, s.connFor(ctx), beliefops.EntityFilter{
+		EntityID: req.EntityId, EntityType: req.EntityType, Kind: req.Kind,
+	})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list entity_associations: %v", err)
+		return nil, beliefOpStatus("list entity_associations", err)
 	}
 	total := len(edges)
 	page := paginate(edges, limit, offset)
@@ -437,45 +368,34 @@ func (s *Server) ListEntityAssociations(ctx context.Context, req *mnemosv1.ListE
 	return &mnemosv1.ListEntityAssociationsResponse{Edges: out, Total: int32(total), Limit: int32(limit), Offset: int32(offset)}, nil
 }
 
-// AppendEntityAssociations writes polymorphic edges idempotently.
+// AppendEntityAssociations writes polymorphic edges idempotently
+// (beliefops.AppendEntityRelationships, shared with REST
+// POST /v1/entity-associations).
 func (s *Server) AppendEntityAssociations(ctx context.Context, req *mnemosv1.AppendEntityAssociationsRequest) (*mnemosv1.AppendResponse, error) {
 	// relationships:write, not claims:write: these are edges, the same resource
-	// family AppendAssociations already gates on. There is no REST twin to
-	// copy (this surface is gRPC-only), so the neighbouring RPC decides it.
+	// family AppendAssociations already gates on.
 	if err := s.requireScope(ctx, domain.ScopeRelationshipsWrite); err != nil {
 		return nil, err
-	}
-	if len(req.Edges) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "edges array is empty")
 	}
 	if len(req.Edges) > maxBatchRecords {
 		return nil, status.Errorf(codes.InvalidArgument, "edges batch size %d exceeds max %d", len(req.Edges), maxBatchRecords)
 	}
-	actor := actorFromContext(ctx)
 	edges := make([]domain.EntityRelationship, 0, len(req.Edges))
-	for i, e := range req.Edges {
-		if e.Id == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "edges[%d].id is required", i)
-		}
-		createdAt := time.Now().UTC()
+	for _, e := range req.Edges {
+		var createdAt time.Time
 		if e.CreatedAt != nil {
 			createdAt = e.CreatedAt.AsTime()
 		}
 		edges = append(edges, domain.EntityRelationship{
-			ID:        e.Id,
-			Kind:      domain.RelationshipType(e.Kind),
-			FromID:    e.FromId,
-			FromType:  e.FromType,
-			ToID:      e.ToId,
-			ToType:    e.ToType,
-			CreatedAt: createdAt,
-			CreatedBy: firstNonEmptyStr(e.CreatedBy, actor),
+			ID: e.Id, Kind: domain.RelationshipType(e.Kind), FromID: e.FromId, FromType: e.FromType,
+			ToID: e.ToId, ToType: e.ToType, CreatedAt: createdAt, CreatedBy: e.CreatedBy,
 		})
 	}
-	if _, err := s.writerFor(ctx).EntityRels(ctx, edges); err != nil {
-		return nil, status.Errorf(codes.Internal, "upsert entity_associations: %v", err)
+	n, err := beliefops.AppendEntityRelationships(ctx, s.writerFor(ctx), edges, actorFromContext(ctx), time.Now())
+	if err != nil {
+		return nil, beliefOpStatus("upsert entity_associations", err)
 	}
-	return &mnemosv1.AppendResponse{Accepted: int32(len(edges))}, nil
+	return &mnemosv1.AppendResponse{Accepted: int32(n)}, nil //nolint:gosec // bounded by maxBatchRecords
 }
 
 // ---------------------------------------------------------------------------

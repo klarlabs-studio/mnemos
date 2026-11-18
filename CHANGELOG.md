@@ -14,6 +14,26 @@ notable changes.
   (`?full=true` for the exact scan), the `brain_health` MCP tool, and
   `client.BrainHealth`. Read-only. Closes three acknowledged capability gaps (85 → 82).
 - `client.BeliefHistory` and `client.BeliefProvenance` mirror the existing REST routes (#408; 82 → 80).
+- The skill loop and incidents are reachable from every transport (30 capability gaps closed).
+  Actions and outcomes list on the Go library, REST (`GET /v1/actions`, `GET /v1/outcomes`),
+  MCP (`list_actions`, `list_outcomes`) and the client; this tenant's schemas and reflexes
+  list and append over REST (`/v1/tenant-schemas`, `/v1/reflexes`) and the client, and list
+  on the Go library; promoted global schemas list on the Go library, gRPC
+  (`ListGlobalSchemas`), MCP (`list_global_schemas`) and the client; incidents and the
+  why-were-we-wrong post-mortem are on the Go library, gRPC, MCP and the client. Every
+  binding calls one implementation (`internal/skills`, `internal/incident`).
+
+### Changed
+
+- `GET /v1/incidents` returns a paged envelope (`{"incidents","total","limit","offset"}`)
+  instead of a bare array, and `GET /v1/incidents/{id}/why-wrong` returns snake_case keys
+  (`incident`, `root_belief`, `affected_decisions`, `explanation`) instead of Go field names.
+  Resolving or analysing an unknown incident is `404` (resolve no longer writes first), and
+  an unknown severity/status filter is `400`.
+- Appending schemas or reflexes (gRPC, REST) validates the whole batch first and refuses
+  evidence or derived-from ids that name no stored record (`400` / `InvalidArgument`), where
+  SQL backends returned `500` on the foreign key and the memory backend stored the dangling
+  reference. A run-scoped token now lists only the outcomes of its runs' actions on gRPC.
 
 ### Fixed
 

@@ -92,13 +92,13 @@ func TestRecordFeedback_HelpfulResetsTheNegativeStreak(t *testing.T) {
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		if _, err := mcpRunRecordFeedback(ctx, mcpRecordFeedbackInput{
+		if _, err := mcpRunRecordFeedback(ctx, "tester", mcpRecordFeedbackInput{
 			ClaimID: id, Helpful: false, Note: "not relevant",
 		}); err != nil {
 			t.Fatalf("record_feedback: %v", err)
 		}
 	}
-	got, err := mcpRunRecordFeedback(ctx, mcpRecordFeedbackInput{ClaimID: id, Helpful: true})
+	got, err := mcpRunRecordFeedback(ctx, "tester", mcpRecordFeedbackInput{ClaimID: id, Helpful: true})
 	if err != nil {
 		t.Fatalf("record_feedback: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestParityTools_RejectUnknownBeliefs(t *testing.T) {
 	if _, err := mcpRunRecordExpectation(ctx, mcpRecordExpectationInput{ClaimID: "cl_nope", Predicted: 1}); err == nil {
 		t.Error("record_expectation accepted an unknown belief")
 	}
-	if _, err := mcpRunRecordFeedback(ctx, mcpRecordFeedbackInput{ClaimID: "cl_nope", Helpful: true}); err == nil {
+	if _, err := mcpRunRecordFeedback(ctx, "tester", mcpRecordFeedbackInput{ClaimID: "cl_nope", Helpful: true}); err == nil {
 		t.Error("record_feedback accepted an unknown belief")
 	}
 }

@@ -39,7 +39,9 @@ by default, reads included.
 | `GET` `POST` | `/v1/beliefs/{id}/…` | JWT | `lifecycle`, `provenance`, `export.md`, `feedback`, `history`, `expectation`, `observation`, `analogous` |
 | `GET` `POST` | `/v1/associations` | JWT | List / upsert belief-to-belief edges |
 | `GET` `POST` | `/v1/embeddings` | JWT | List / upsert embeddings |
-| `GET` | `/v1/schemas` | JWT | Promoted schemas (neocortex read) |
+| `GET` | `/v1/schemas` | JWT | Promoted global schemas (neocortex read) |
+| `GET` `POST` | `/v1/tenant-schemas` | JWT | List / append this tenant's schemas |
+| `GET` `POST` | `/v1/reflexes` | JWT | List / append reflexes |
 | `POST` | `/v1/process` | JWT | Run ingest→extract→relate on raw text |
 | `GET` `POST` | `/v1/search` | JWT | Hybrid retrieval over the belief store |
 | `GET` `POST` | `/v1/context` | JWT | Render the Context Block for a run |
@@ -47,7 +49,8 @@ by default, reads included.
 | `GET` | `/v1/classify` | JWT | Novelty verdict for a candidate statement |
 | `GET` | `/v1/decisions`, `/v1/decisions/{id}` | JWT | Browse recorded decisions |
 | `GET` `POST` | `/v1/blocks` | JWT | Working-memory blocks |
-| `POST` | `/v1/actions`, `/v1/actions/{id}/outcome` | JWT | Skill loop |
+| `GET` `POST` | `/v1/actions`, `/v1/actions/{id}/outcome` | JWT | Skill loop: list / record actions, record outcomes |
+| `GET` | `/v1/outcomes` | JWT | List recorded outcomes |
 | `POST` | `/v1/synthesize` | JWT | Derive schemas + reflexes |
 | `GET` | `/v1/timeline`, `/v1/signals` | JWT | Temporal timeline / detected patterns |
 | `GET` | `/v1/passages` | JWT | Stored episode lines matching a query |
