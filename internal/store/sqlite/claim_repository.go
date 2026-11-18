@@ -278,7 +278,7 @@ func (r ClaimRepository) ListStatusHistoryByClaimID(ctx context.Context, claimID
 	// correct too, but two upserts in the same millisecond can collide,
 	// and id always disambiguates.
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT claim_id, from_status, to_status, changed_at, reason
+		`SELECT claim_id, from_status, to_status, changed_at, reason, changed_by
 		 FROM claim_status_history
 		 WHERE claim_id = ?
 		 ORDER BY id ASC`, claimID)
@@ -290,9 +290,9 @@ func (r ClaimRepository) ListStatusHistoryByClaimID(ctx context.Context, claimID
 	out := make([]domain.ClaimStatusTransition, 0)
 	for rows.Next() {
 		var (
-			cid, from, to, changedAt, reason string
+			cid, from, to, changedAt, reason, changedBy string
 		)
-		if err := rows.Scan(&cid, &from, &to, &changedAt, &reason); err != nil {
+		if err := rows.Scan(&cid, &from, &to, &changedAt, &reason, &changedBy); err != nil {
 			return nil, fmt.Errorf("scan status history row: %w", err)
 		}
 		t, err := time.Parse(time.RFC3339Nano, changedAt)
@@ -305,6 +305,7 @@ func (r ClaimRepository) ListStatusHistoryByClaimID(ctx context.Context, claimID
 			ToStatus:   domain.ClaimStatus(to),
 			ChangedAt:  t,
 			Reason:     reason,
+			ChangedBy:  changedBy,
 		})
 	}
 	if err := rows.Err(); err != nil {

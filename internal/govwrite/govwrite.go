@@ -170,6 +170,8 @@ func actions() []kernel.Action {
 			Description: "Delete a single event row by id."},
 		{Name: actionReset, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Purge all memory state (claims, relationships, embeddings, and optionally events)."},
+		{Name: actionRetractEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Withdraw an event as evidence: retract beliefs left without live evidence, rescore the rest, record the retraction and its impact (ADR 0036)."},
 	}
 }
 
@@ -202,6 +204,7 @@ func executors(conn *store.Conn) map[string]axidomain.ActionExecutor {
 		kernel.ExecutorRef(actionDeleteEventCascade): deleteEventCascadeExecutor{conn: conn},
 		kernel.ExecutorRef(actionDeleteEvent):        deleteEventExecutor{conn: conn},
 		kernel.ExecutorRef(actionReset):              resetExecutor{conn: conn},
+		kernel.ExecutorRef(actionRetractEvent):       retractEventExecutor{conn: conn},
 	}
 }
 

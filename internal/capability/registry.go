@@ -55,6 +55,15 @@ var Registry = []Capability{
 		Notes: "Go and the lite adapters write to the bundled Chronos timeline; REST, gRPC and MCP append to the episode store.",
 	},
 	{
+		ID: "episode.retract", Effect: Write,
+		Summary: "Withdraw an episode as evidence: retract beliefs it alone supported, rescore the rest, report the impact (ADR 0037)",
+		On: map[Transport]Binding{
+			Go: Gap("no retraction on Memory"), REST: Gap("no retraction route"), GRPC: Gap("no retraction RPC"),
+			MCP: Has("retract_episode"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Gap("no retraction call"),
+		},
+		Notes: "The MCP tool and `mnemos retract-event` both call govwrite.Writer.RetractEvent; watch_file calls it for text a revised or deleted file no longer contains.",
+	},
+	{
 		ID: "episode.list", Effect: Read,
 		Summary: "List stored episodes",
 		On: map[Transport]Binding{

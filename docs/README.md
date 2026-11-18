@@ -64,6 +64,7 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [ADR 0034: Three ways a belief retires, and predictions that cannot be edited](adr/0034-time-axes-and-immutable-predictions.md)
 - [ADR 0036: A recorded-as-of read reconstructs what the brain believed](adr/0036-recorded-as-of-reconstructs-belief.md)
 - [ADR 0035: The dedupe scan has a time budget](adr/0035-dedupe-scan-has-a-time-budget.md)
+- [ADR 0037: Evidence retraction and dependency propagation](adr/0037-evidence-retraction-and-dependency-propagation.md)
 
 ## Working notes
 
