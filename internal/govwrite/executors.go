@@ -74,6 +74,13 @@ func (w *Writer) Events(ctx context.Context, events []domain.Event) (int, error)
 type ClaimReason struct {
 	Reason    string
 	ChangedBy string
+	// AssertStatus marks the write as a deliberate decision about each
+	// claim's status (memory_deprecate, forget, resolving a contradiction),
+	// not just a write that happens to carry one. The store then records a
+	// status-history row even when the status is unchanged, so a person
+	// re-deprecating a belief that is already deprecated takes ownership of
+	// its status (ADR 0037 §8). It requires a Reason.
+	AssertStatus bool
 }
 
 type claimsInput struct {
@@ -91,6 +98,11 @@ func (e claimsExecutor) Execute(ctx context.Context, input any, _ axidomain.Capa
 	}
 	var err error
 	switch {
+	case in.Reason.AssertStatus:
+		if in.Reason.Reason == "" {
+			return axidomain.ExecutionResult{}, nil, fmt.Errorf("write_claims: asserting a status requires a reason")
+		}
+		err = e.conn.Claims.UpsertAssertingStatusAs(ctx, in.Claims, in.Reason.Reason, in.Reason.ChangedBy)
 	case in.Reason.ChangedBy != "":
 		err = e.conn.Claims.UpsertWithReasonAs(ctx, in.Claims, in.Reason.Reason, in.Reason.ChangedBy)
 	case in.Reason.Reason != "":
@@ -110,7 +122,7 @@ func (e claimsExecutor) Execute(ctx context.Context, input any, _ axidomain.Capa
 		Summary: fmt.Sprintf("upserted %d claim(s)", len(in.Claims)),
 	}, ev("mnemos.write.claims", map[string]any{
 		"count": len(in.Claims), "claim_ids": ids,
-		"reason": in.Reason.Reason, "changed_by": in.Reason.ChangedBy,
+		"reason": in.Reason.Reason, "changed_by": in.Reason.ChangedBy, "assert_status": in.Reason.AssertStatus,
 	}), nil
 }
 

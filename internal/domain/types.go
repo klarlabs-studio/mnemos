@@ -604,6 +604,13 @@ const MergeRedirectReason = "semantic dedupe: merged into the canonical claim"
 // ordered series of these forms a claim's lifecycle history: when a claim
 // first appears as active, when it becomes contested, when it resolves or
 // is deprecated, and why.
+//
+// A row with FromStatus == ToStatus is a reassertion: a deliberate status
+// decision (memory_deprecate, forget, resolving a contradiction) on a claim
+// that already had that status. It changes no status, so anything that
+// derives a status from the history reads the same value through it, but it
+// records who decided the status last (ADR 0037 §8). Ordinary writes that
+// carry an unchanged status record nothing.
 type ClaimStatusTransition struct {
 	ClaimID    string
 	FromStatus ClaimStatus // empty string means "initial state, no prior"
@@ -611,6 +618,12 @@ type ClaimStatusTransition struct {
 	ChangedAt  time.Time
 	Reason     string // free-form human context: "auto: contradiction detected", "resolved via mnemos resolve", etc.
 	ChangedBy  string // user id of the actor that triggered the transition
+}
+
+// IsReassertion reports whether t records a deliberate status decision that
+// left the status unchanged, rather than a change of status.
+func (t ClaimStatusTransition) IsReassertion() bool {
+	return t.FromStatus != "" && t.FromStatus == t.ToStatus
 }
 
 // ValidityField names a claim column whose changes are versioned in the

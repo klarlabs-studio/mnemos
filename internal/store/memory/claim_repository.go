@@ -26,23 +26,29 @@ type ClaimRepository struct {
 // the status differs from the prior stored value (or when the claim
 // is new).
 func (r ClaimRepository) Upsert(ctx context.Context, claims []domain.Claim) error {
-	return r.upsertWithReason(ctx, claims, "", "")
+	return r.upsertWithReason(ctx, claims, "", "", false)
 }
 
 // UpsertWithReason captures a free-form reason on every transition
 // row. Empty reason still records the row — the timestamp is the
 // salvageable signal.
 func (r ClaimRepository) UpsertWithReason(ctx context.Context, claims []domain.Claim, reason string) error {
-	return r.upsertWithReason(ctx, claims, reason, "")
+	return r.upsertWithReason(ctx, claims, reason, "", false)
 }
 
 // UpsertWithReasonAs is the actor-aware variant — the changedBy id
 // is stamped on every recorded transition.
 func (r ClaimRepository) UpsertWithReasonAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
-	return r.upsertWithReason(ctx, claims, reason, changedBy)
+	return r.upsertWithReason(ctx, claims, reason, changedBy, false)
 }
 
-func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Claim, reason, changedBy string) error {
+// UpsertAssertingStatusAs records a status transition for every claim,
+// unchanged status included (see the ports method).
+func (r ClaimRepository) UpsertAssertingStatusAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
+	return r.upsertWithReason(ctx, claims, reason, changedBy, true)
+}
+
+func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Claim, reason, changedBy string, assert bool) error {
 	if len(claims) == 0 {
 		return nil
 	}
@@ -144,7 +150,7 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 			WrittenBy:  actorOr(changedBy),
 		})
 
-		if priorStatus == claim.Status {
+		if priorStatus == claim.Status && !assert {
 			continue
 		}
 		r.state.statusHistory[claim.ID] = append(r.state.statusHistory[claim.ID], storedTransition{

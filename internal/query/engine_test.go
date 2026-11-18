@@ -66,6 +66,9 @@ func (f fakeClaimRepo) UpsertWithReason(_ context.Context, _ []domain.Claim, _ s
 func (f fakeClaimRepo) UpsertWithReasonAs(_ context.Context, _ []domain.Claim, _, _ string) error {
 	return nil
 }
+func (f fakeClaimRepo) UpsertAssertingStatusAs(_ context.Context, _ []domain.Claim, _, _ string) error {
+	return nil
+}
 func (f fakeClaimRepo) UpsertEvidence(_ context.Context, _ []domain.ClaimEvidence) error {
 	return nil
 }

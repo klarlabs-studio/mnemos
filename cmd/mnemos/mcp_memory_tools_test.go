@@ -164,6 +164,55 @@ func TestMCP_Forget_UnknownClaim(t *testing.T) {
 	}
 }
 
+// TestMCP_DeliberateStatusToolsAssertStatus pins which MCP tools are
+// status decisions (ADR 0037 §8): memory_deprecate and forget on a belief
+// that is already deprecated each leave a reassertion row naming who decided
+// and why, while update (which rewrites text, not status) leaves none.
+func TestMCP_DeliberateStatusToolsAssertStatus(t *testing.T) {
+	setIsolatedDB(t)
+	ctx := context.Background()
+	remembered, err := mcpRunRemember(ctx, "a", mcpRememberInput{Text: "the cache is warmed at boot", RunID: "tenant:A"})
+	if err != nil {
+		t.Fatalf("Remember: %v", err)
+	}
+	id := remembered.ClaimID
+	if _, err := mcpRunForget(ctx, "a", mcpForgetInput{ClaimID: id, Reason: "stale"}); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+	if _, err := mcpRunMemoryDeprecate(ctx, "erin", mcpMemoryDeprecateInput{ClaimID: id, Reason: "reviewed: wrong"}); err != nil {
+		t.Fatalf("Deprecate: %v", err)
+	}
+	if _, err := mcpRunForget(ctx, "frank", mcpForgetInput{ClaimID: id, Reason: "reviewed: still wrong"}); err != nil {
+		t.Fatalf("Forget again: %v", err)
+	}
+	if _, err := mcpRunUpdate(ctx, "gina", mcpUpdateInput{ClaimID: id, NewText: "the cache is warmed lazily"}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	conn, err := openConn(ctx)
+	if err != nil {
+		t.Fatalf("openConn: %v", err)
+	}
+	defer closeConn(conn)
+	history, err := conn.Claims.ListStatusHistoryByClaimID(ctx, id)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	var reassertions []string
+	for _, h := range history {
+		if h.IsReassertion() {
+			reassertions = append(reassertions, h.ChangedBy+": "+h.Reason)
+		}
+		if h.ChangedBy == "gina" {
+			t.Errorf("update recorded a status row: %+v", h)
+		}
+	}
+	want := []string{"erin: reviewed: wrong", "frank: reviewed: still wrong"}
+	if len(reassertions) != len(want) || reassertions[0] != want[0] || reassertions[1] != want[1] {
+		t.Errorf("reassertions = %q, want %q (history %+v)", reassertions, want, history)
+	}
+}
+
 // TestMCP_Update_RewritesText keeps the claim ID stable and only
 // rewrites the text + (optionally) confidence; status remains active.
 func TestMCP_Update_RewritesText(t *testing.T) {

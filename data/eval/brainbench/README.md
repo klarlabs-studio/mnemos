@@ -28,8 +28,10 @@ A paired A/B experiment on byte-identical brains.
    inhibition — exists for the decay stages to act on.
 3. **Copy** the seed file three times. The arms are byte-identical, so they
    cannot differ for any reason except the treatment.
-4. **Control** — measured, untreated.
-5. **Treatment** — the process set runs, then it is measured.
+4. **Treatment** — the process set runs. The merge redirects it leaves
+   (`merged_into`) are read as the run's belief *identity*, before any arm is
+   measured, and every arm is scored by that same identity.
+5. **Control** — measured, untreated. The treatment arm is then measured.
 6. **Noise arm** — a second untreated copy, measured independently. It must
    reproduce the control's numbers exactly. When it does not, the run is
    reported `invalid-nondeterministic-measurement` and no delta is attributed.
@@ -48,7 +50,8 @@ exactly once, and why the census is read before the probes fire.
 | `as_of_recorded_accuracy`, `as_of_valid_accuracy` | higher better | Timeline scenarios only; see below. Unknown elsewhere. |
 | `contested_claims`, `contradiction_edges` | lower better | Unresolved dissonance. |
 | `noise_fraction` | lower better | Share of valid claims that `extract.IsJunk` — mnemos's own shipped narration filter — rejects. |
-| `vital_*` | lower better (`skill_coverage` higher) | The ADR 0019 vitals, mirrored in. `HealthUnknown` maps to unknown, never to 0. |
+| `trust_decay_by_identity` | lower better | The ADR 0032 trust-decay ratio counted per belief identity, not per claim row. Unknown when too few beliefs approach the floor. |
+| `vital_*` | lower better (`skill_coverage` higher; `trust_decay` descriptive) | The ADR 0019 vitals, mirrored in. `HealthUnknown` maps to unknown, never to 0. |
 | `pathology_*` | lower better | The ADR 0019 integrity checks. |
 | `valid_claims`, `invalidated_claims`, `status_*`, `events`, `relationships`, `evidence_links`, `mean_trust`, `db_bytes` | **descriptive** | Reported, never scored. |
 
@@ -56,6 +59,18 @@ exactly once, and why the census is read before the probes fire.
 raise precision, cut dissonance and shrink the brain simply by deleting claims.
 Only this metric notices, and `TestRun_ReportsRegressionWhenKnowledgeIsDestroyed`
 asserts that a brain-destroying configuration is reported as a regression.
+
+**Why `vital_trust_decay` is not scored.** The vital counts claim rows. The
+untreated arms hold a duplicate and its original as two beliefs, and the
+treatment holds one after a merge. Folding a not-yet-crossing duplicate away
+shrinks the expected crossings, so the ratio rises with no belief any staler.
+If the folded claim was the one crossing, the ratio falls with no belief any
+fresher. `trust_decay_by_identity` follows each `merged_into` chain to its
+survivor and measures every identity once, on its freshest live member: in the
+treatment that is the survivor, which carries the union of the group's
+evidence. A correct merge is therefore neutral, and a merge that keeps the stale
+claim and loses the fresh evidence still reads as decay
+(`TestIdentityTrustDecay_RealDecayStillRegisters`).
 
 **Why the descriptive category exists.** Forgetting mechanically shrinks the
 claim count and mechanically raises mean trust, because it deletes the low-trust

@@ -96,20 +96,26 @@ ON DUPLICATE KEY UPDATE
 // Upsert is the no-reason variant; status_history rows lose their
 // reason/changed_by attribution.
 func (r ClaimRepository) Upsert(ctx context.Context, claims []domain.Claim) error {
-	return r.upsertWithReason(ctx, claims, "", "")
+	return r.upsertWithReason(ctx, claims, "", "", false)
 }
 
 // UpsertWithReason captures a free-form reason on the transition row.
 func (r ClaimRepository) UpsertWithReason(ctx context.Context, claims []domain.Claim, reason string) error {
-	return r.upsertWithReason(ctx, claims, reason, "")
+	return r.upsertWithReason(ctx, claims, reason, "", false)
 }
 
 // UpsertWithReasonAs is the actor-aware variant.
 func (r ClaimRepository) UpsertWithReasonAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
-	return r.upsertWithReason(ctx, claims, reason, changedBy)
+	return r.upsertWithReason(ctx, claims, reason, changedBy, false)
 }
 
-func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
+// UpsertAssertingStatusAs records a status history row for every claim,
+// unchanged status included (see the ports method).
+func (r ClaimRepository) UpsertAssertingStatusAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
+	return r.upsertWithReason(ctx, claims, reason, changedBy, true)
+}
+
+func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.Claim, reason, changedBy string, assert bool) error {
 	if len(claims) == 0 {
 		return nil
 	}
@@ -168,7 +174,7 @@ VALUES (?, ?, ?, ?, ?, ?)`
 		}
 
 		newStatus := string(claim.Status)
-		if priorStatus == newStatus {
+		if priorStatus == newStatus && !assert {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, historyInsert,
