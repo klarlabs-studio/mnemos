@@ -508,7 +508,7 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux.HandleFunc("/v1/recombinations", makeRecombinationsHandler(mem))
 	mux.HandleFunc("/v1/brain/health", makeBrainHealthHandler(mem))
 	mux.HandleFunc("/v1/predictive-error", makePredictiveErrorHandler(mem))
-	mux.HandleFunc("/v1/expectations/reconcile", makeReconcileExpectationsHandler(mem))
+	mux.HandleFunc("/v1/expectations/reconcile", makeReconcileExpectationsHandler(gw))
 	// Claim CRUD parity (v0.67): novelty classification + decision browse surface.
 	mux.HandleFunc("/v1/classify", makeClassifyHandler(mem))
 	mux.HandleFunc("/v1/decisions", makeDecisionsHandler(mem))
@@ -2591,9 +2591,9 @@ func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnem
 		case "history":
 			makeClaimHistoryHandler(conn, claimID)(w, r)
 		case "expectation":
-			makeExpectationHandler(conn, claimID)(w, r)
+			makeExpectationHandler(conn, gw, claimID)(w, r)
 		case "observation":
-			makeObservationHandler(conn, claimID)(w, r)
+			makeObservationHandler(gw, claimID)(w, r)
 		case "analogous":
 			makeAnalogousHandler(mem, claimID)(w, r)
 		default:

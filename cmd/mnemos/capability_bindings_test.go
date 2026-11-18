@@ -248,7 +248,7 @@ func TestReconcileExpectations_ClientAndMCP(t *testing.T) {
 	if _, err := w.RecordObservation(ctx, "cl-err", 5); err != nil {
 		t.Fatalf("RecordObservation: %v", err)
 	}
-	out, err := mcpReconcileExpectations(ctx, f.mem)
+	out, err := mcpReconcileExpectations(ctx)
 	if err != nil {
 		t.Fatalf("reconcile_expectations: %v", err)
 	}
@@ -359,4 +359,108 @@ func stripGenerated(block string) string {
 		}
 	}
 	return strings.Join(kept, "\n")
+}
+
+// seedBeliefInRun stores one evidenced belief in the given run.
+func (f bindingFixture) seedBeliefInRun(t *testing.T, id, runID, text string) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := f.conn.Events.Append(ctx, domain.Event{
+		ID: "ev-" + id, RunID: runID, SchemaVersion: "v1", SourceInputID: "bind",
+		Content: text, Timestamp: now, IngestedAt: now,
+	}); err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+	if err := f.conn.Claims.Upsert(ctx, []domain.Claim{{
+		ID: id, Text: text, Type: domain.ClaimTypeFact, Status: domain.ClaimStatusActive,
+		Confidence: 0.8, TrustScore: 0.8, CreatedAt: now, ValidFrom: now.Add(-time.Hour),
+	}}); err != nil {
+		t.Fatalf("seed claim: %v", err)
+	}
+	if err := f.conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{{ClaimID: id, EventID: "ev-" + id}}); err != nil {
+		t.Fatalf("seed evidence: %v", err)
+	}
+}
+
+// A token scoped to run A cannot set, observe or read an expectation on a
+// run-B belief, on REST, gRPC or MCP (as an HTTP MCP request carries its
+// claims), and cannot reconcile, which spans every run. Inside its own run it
+// works. The run-B expectation is untouched in the store afterwards.
+func TestExpectations_RunScopedTokenConfinedToItsRuns(t *testing.T) {
+	f := newBindingFixture(t)
+	f.seedBeliefInRun(t, "cl-run-a", "run-a", "run a latency is 50ms")
+	f.seedBeliefInRun(t, "cl-run-b", "run-b", "run b latency is 80ms")
+	ctx := context.Background()
+
+	open := f.client(t, domain.ScopeClaimsWrite)
+	if _, err := open.SetExpectation(ctx, "cl-run-b", 80, 5, time.Time{}); err != nil {
+		t.Fatalf("unrestricted SetExpectation: %v", err)
+	}
+
+	tok, _, err := f.issuer.IssueAgentTokenWithScopesAndRuns("agt_run_a", []string{domain.ScopeClaimsWrite}, []string{"run-a"}, time.Hour)
+	if err != nil {
+		t.Fatalf("issue run-scoped token: %v", err)
+	}
+
+	// REST (through the Go client).
+	scoped := client.New(f.rest.URL, client.WithToken(tok))
+	var apiErr *client.APIError
+	if got, err := scoped.Expectation(ctx, "cl-run-b"); err != nil || got != nil {
+		t.Errorf("REST read of run-b expectation: %+v, %v; want 404 (nil)", got, err)
+	}
+	if _, err := scoped.SetExpectation(ctx, "cl-run-b", 1, 0, time.Time{}); !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
+		t.Errorf("REST set on run-b: %v, want 404", err)
+	}
+	if _, err := scoped.RecordObservation(ctx, "cl-run-b", 1); !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
+		t.Errorf("REST observe on run-b: %v, want 404", err)
+	}
+	if _, err := scoped.ReconcileExpectations(ctx); !errors.As(err, &apiErr) || apiErr.Status != http.StatusForbidden {
+		t.Errorf("REST reconcile with a run-scoped token: %v, want 403", err)
+	}
+	if _, err := scoped.SetExpectation(ctx, "cl-run-a", 50, 5, time.Time{}); err != nil {
+		t.Errorf("REST set on own run: %v", err)
+	}
+
+	// gRPC.
+	gctx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok)
+	if _, err := f.grpc.GetExpectation(gctx, &mnemosv1.GetExpectationRequest{BeliefId: "cl-run-b"}); status.Code(err) != codes.NotFound {
+		t.Errorf("gRPC read of run-b: %v, want NotFound", err)
+	}
+	if _, err := f.grpc.SetExpectation(gctx, &mnemosv1.SetExpectationRequest{BeliefId: "cl-run-b", Predicted: 1}); status.Code(err) != codes.NotFound {
+		t.Errorf("gRPC set on run-b: %v, want NotFound", err)
+	}
+	if _, err := f.grpc.RecordObservation(gctx, &mnemosv1.RecordObservationRequest{BeliefId: "cl-run-b", Observed: 1}); status.Code(err) != codes.NotFound {
+		t.Errorf("gRPC observe on run-b: %v, want NotFound", err)
+	}
+	if _, err := f.grpc.ReconcileExpectations(gctx, &mnemosv1.ReconcileExpectationsRequest{}); status.Code(err) != codes.PermissionDenied {
+		t.Errorf("gRPC reconcile with a run-scoped token: %v, want PermissionDenied", err)
+	}
+	if _, err := f.grpc.RecordObservation(gctx, &mnemosv1.RecordObservationRequest{BeliefId: "cl-run-a", Observed: 52}); err != nil {
+		t.Errorf("gRPC observe on own run: %v", err)
+	}
+
+	// MCP over HTTP: the validated token's claims ride on the request context.
+	mctx := withClaims(ctx, &auth.Claims{Runs: []string{"run-a"}, Scopes: []string{domain.ScopeClaimsWrite}})
+	if _, err := mcpRunRecordExpectation(mctx, mcpRecordExpectationInput{ClaimID: "cl-run-b", Predicted: 1}); err == nil {
+		t.Error("MCP record_expectation on run-b: want an error")
+	}
+	if _, err := mcpRunRecordObservation(mctx, mcpRecordObservationInput{ClaimID: "cl-run-b", Observed: 1}); err == nil {
+		t.Error("MCP record_observation on run-b: want an error")
+	}
+	if _, err := mcpReconcileExpectations(mctx); err == nil {
+		t.Error("MCP reconcile_expectations with a run-scoped token: want an error")
+	}
+	if _, err := mcpRunRecordObservation(mctx, mcpRecordObservationInput{ClaimID: "cl-run-a", Observed: 51}); err != nil {
+		t.Errorf("MCP record_observation on own run: %v", err)
+	}
+
+	stored, ok, err := f.conn.Expectations.Get(ctx, "cl-run-b")
+	if err != nil || !ok || stored.Predicted != 80 || stored.HasObservation {
+		t.Errorf("run-b expectation = %+v ok=%v err=%v; want untouched (80, unobserved)", stored, ok, err)
+	}
+	own, ok, err := f.conn.Expectations.Get(ctx, "cl-run-a")
+	if err != nil || !ok || own.Observed != 51 {
+		t.Errorf("run-a expectation = %+v ok=%v err=%v; want observed 51", own, ok, err)
+	}
 }

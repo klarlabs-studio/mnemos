@@ -571,11 +571,7 @@ func handleMCP(args []string) {
 		Description("Close every observed-but-open prediction into a validates/refutes verdict and report each one's surprise. The consolidate pass does this on its own schedule; call it to close the loop now. Mirrors POST /v1/expectations/reconcile.").
 		OutputSchema(mcpReconcileExpectationsOutput{}).
 		Handler(func(ctx context.Context, _ struct{}) (mcpReconcileExpectationsOutput, error) {
-			mem, err := getMem(ctx)
-			if err != nil {
-				return mcpReconcileExpectationsOutput{}, err
-			}
-			return mcpReconcileExpectations(ctx, mem)
+			return mcpReconcileExpectations(ctx)
 		})
 
 	srv.Tool("record_feedback").

@@ -425,7 +425,7 @@ var Registry = []Capability{
 			Go: Has("Expect"), REST: Has("POST /v1/beliefs/{id}/expectation", "GET /v1/beliefs/{id}/expectation"), GRPC: Has("SetExpectation", "GetExpectation"),
 			MCP: Has("record_expectation"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("SetExpectation", "Expectation"),
 		},
-		Notes: "Go and gRPC write through Memory.Expect (gRPC reads the stored row back); REST and MCP upsert the expectation repository directly with the same normalisation. MCP alone checks that the belief exists.",
+		Notes: "Every binding sets through govwrite (CheckExpectation, then the set_expectation governed write; the library runs ApplySetExpectation in its own kernel) and returns the row as stored. The belief must exist; a run-scoped token may touch only beliefs whose evidence lies in its runs (runscope.ClaimAllowed), others read as not found.",
 	},
 	{
 		ID: "expectation.observe", Effect: Write,
@@ -434,7 +434,7 @@ var Registry = []Capability{
 			Go: Has("RecordObservation"), REST: Has("POST /v1/beliefs/{id}/observation"), GRPC: Has("RecordObservation"),
 			MCP: Has("record_observation"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("RecordObservation"),
 		},
-		Notes: "Go and gRPC write through Memory.RecordObservation (mnemos.ErrExpectationNotFound → gRPC NotFound); REST and MCP upsert the repository directly.",
+		Notes: "Every binding observes through govwrite (CheckObservation, then the observe_expectation governed write); no expectation is REST 404 / gRPC NotFound / mnemos.ErrExpectationNotFound. Run-scoped tokens are confined as for expectation.set.",
 	},
 	{
 		ID: "expectation.reconcile", Effect: Write,
@@ -443,7 +443,7 @@ var Registry = []Capability{
 			Go: Has("ReconcileExpectations"), REST: Has("POST /v1/expectations/reconcile"), GRPC: Has("ReconcileExpectations"),
 			MCP: Has("reconcile_expectations"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("ReconcileExpectations"),
 		},
-		Notes: "Every binding calls Memory.ReconcileExpectations.",
+		Notes: "Every binding reconciles through govwrite (the reconcile_expectations governed write; the library runs ApplyReconcileExpectations in its own kernel). It spans every run, so a run-scoped token is refused.",
 	},
 
 	// --- Skill loop --------------------------------------------------------

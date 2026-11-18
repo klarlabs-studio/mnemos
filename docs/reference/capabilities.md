@@ -791,7 +791,7 @@ Attach a forward prediction to a belief (and read it back) (write).
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `SetExpectation`, `Expectation` |
 
-> Go and gRPC write through Memory.Expect (gRPC reads the stored row back); REST and MCP upsert the expectation repository directly with the same normalisation. MCP alone checks that the belief exists.
+> Every binding sets through govwrite (CheckExpectation, then the set_expectation governed write; the library runs ApplySetExpectation in its own kernel) and returns the row as stored. The belief must exist; a run-scoped token may touch only beliefs whose evidence lies in its runs (runscope.ClaimAllowed), others read as not found.
 
 ### expectation.observe
 
@@ -807,7 +807,7 @@ Record the observed value for a belief's prediction (write).
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `RecordObservation` |
 
-> Go and gRPC write through Memory.RecordObservation (mnemos.ErrExpectationNotFound → gRPC NotFound); REST and MCP upsert the repository directly.
+> Every binding observes through govwrite (CheckObservation, then the observe_expectation governed write); no expectation is REST 404 / gRPC NotFound / mnemos.ErrExpectationNotFound. Run-scoped tokens are confined as for expectation.set.
 
 ### expectation.reconcile
 
@@ -823,7 +823,7 @@ Close observed predictions into validates/refutes verdicts (write).
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `ReconcileExpectations` |
 
-> Every binding calls Memory.ReconcileExpectations.
+> Every binding reconciles through govwrite (the reconcile_expectations governed write; the library runs ApplyReconcileExpectations in its own kernel). It spans every run, so a run-scoped token is refused.
 
 ### action.record
 

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/runscope"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -48,15 +51,23 @@ func expectationToDTO(e domain.Expectation) expectationDTO {
 //
 //	GET  → the claim's expectation (404 when none)
 //	POST → attach/replace the expectation {predicted, tolerance, horizon}
-func makeExpectationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
+//
+// Writes go through the governed writer (govwrite.Writer.SetExpectation), the
+// implementation gRPC, MCP and the Go library share. A run-scoped token may
+// touch only beliefs whose evidence lies in its runs; any other is a 404.
+func makeExpectationHandler(conn *store.Conn, gw *govwrite.Writer, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		if conn.Expectations == nil {
 			writeError(w, http.StatusNotImplemented, "expectations not supported by this store")
 			return
 		}
 		switch r.Method {
 		case http.MethodGet:
+			if !requireBeliefInRuns(w, r, conn, claimID) {
+				return
+			}
 			exp, ok, err := conn.Expectations.Get(r.Context(), claimID)
 			if err != nil {
 				writeInternalError(w, "get expectation", err)
@@ -68,7 +79,7 @@ func makeExpectationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 			}
 			writeJSON(w, http.StatusOK, expectationToDTO(exp))
 		case http.MethodPost:
-			if !requireScope(w, r, domain.ScopeClaimsWrite) {
+			if !requireScope(w, r, domain.ScopeClaimsWrite) || !requireBeliefInRuns(w, r, conn, claimID) {
 				return
 			}
 			var req struct {
@@ -89,18 +100,11 @@ func makeExpectationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 				}
 				horizon = t
 			}
-			if req.Tolerance < 0 {
-				req.Tolerance = -req.Tolerance
-			}
-			exp := domain.Expectation{
-				ClaimID:   claimID,
-				Predicted: req.Predicted,
-				Tolerance: req.Tolerance,
-				Horizon:   horizon,
-				CreatedAt: time.Now().UTC(),
-			}
-			if err := conn.Expectations.Upsert(r.Context(), exp); err != nil {
-				writeInternalError(w, "upsert expectation", err)
+			exp, err := gw.SetExpectation(r.Context(), govwrite.ExpectationRequest{
+				ClaimID: claimID, Predicted: req.Predicted, Tolerance: req.Tolerance, Horizon: horizon,
+			})
+			if err != nil {
+				writeExpectationError(w, "set expectation", err)
 				return
 			}
 			writeJSON(w, http.StatusCreated, expectationToDTO(exp))
@@ -111,19 +115,15 @@ func makeExpectationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 }
 
 // makeObservationHandler serves POST /v1/beliefs/<id>/observation: record the
-// observed value against an existing expectation (mirrors RecordObservation).
-func makeObservationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
+// observed value against an existing expectation through the governed writer.
+func makeObservationHandler(gw *govwrite.Writer, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn := scopedConn(r.Context(), conn)
+		gw := scopedWriter(r.Context(), gw)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		if conn.Expectations == nil {
-			writeError(w, http.StatusNotImplemented, "expectations not supported by this store")
-			return
-		}
-		if !requireScope(w, r, domain.ScopeClaimsWrite) {
+		if !requireScope(w, r, domain.ScopeClaimsWrite) || !requireBeliefInRuns(w, r, gw.Conn(), claimID) {
 			return
 		}
 		var req struct {
@@ -133,21 +133,43 @@ func makeObservationHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "decode body: "+err.Error())
 			return
 		}
-		exp, ok, err := conn.Expectations.Get(r.Context(), claimID)
+		exp, err := gw.ObserveExpectation(r.Context(), claimID, req.Observed)
 		if err != nil {
-			writeInternalError(w, "get expectation", err)
-			return
-		}
-		if !ok {
-			writeError(w, http.StatusNotFound, "no expectation for claim")
-			return
-		}
-		exp.Observed = req.Observed
-		exp.HasObservation = true
-		if err := conn.Expectations.Upsert(r.Context(), exp); err != nil {
-			writeInternalError(w, "upsert observation", err)
+			writeExpectationError(w, "record observation", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, expectationToDTO(exp))
+	}
+}
+
+// requireBeliefInRuns writes a 404 and reports false when a run-scoped token
+// may not touch claimID (runscope.ClaimAllowed): out of scope reads exactly
+// like absent, so the answer never confirms another run's belief exists.
+func requireBeliefInRuns(w http.ResponseWriter, r *http.Request, conn *store.Conn, claimID string) bool {
+	ok, err := runscope.ClaimAllowed(r.Context(), conn, claimID, allowedRunsFromContext(r.Context()))
+	if err != nil {
+		writeInternalError(w, "check run scope", err)
+		return false
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "belief not found")
+		return false
+	}
+	return true
+}
+
+// writeExpectationError maps govwrite's expectation sentinels to statuses.
+func writeExpectationError(w http.ResponseWriter, label string, err error) {
+	switch {
+	case errors.Is(err, govwrite.ErrExpectationsUnsupported):
+		writeError(w, http.StatusNotImplemented, "expectations not supported by this store")
+	case errors.Is(err, govwrite.ErrExpectationNotFound):
+		writeError(w, http.StatusNotFound, "no expectation for claim")
+	case errors.Is(err, govwrite.ErrBeliefNotFound):
+		writeError(w, http.StatusNotFound, "belief not found")
+	case errors.Is(err, govwrite.ErrBeliefIDRequired):
+		writeError(w, http.StatusBadRequest, "belief id is required")
+	default:
+		writeInternalError(w, label, err)
 	}
 }

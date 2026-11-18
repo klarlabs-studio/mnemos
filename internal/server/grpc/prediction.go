@@ -8,15 +8,17 @@ import (
 
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/runscope"
 	mnemosv1 "go.klarlabs.de/mnemos/proto/gen/mnemos/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Prediction and brain-health RPCs. Each delegates to the library Memory
-// facade, the one implementation the Go API, REST and MCP use, so the
-// transports cannot disagree about what a prediction error or a verdict is.
+// Prediction-error and brain-health RPCs delegate to the library Memory facade,
+// the one implementation the Go API, REST and MCP use, so the transports cannot
+// disagree about what a prediction error or a verdict is.
 
 // PredictiveError reports hierarchical prediction error (ADR 0017).
 func (s *Server) PredictiveError(ctx context.Context, _ *mnemosv1.PredictiveErrorRequest) (*mnemosv1.PredictiveErrorResponse, error) {
@@ -77,70 +79,95 @@ func brainHealthToProto(rep mnemos.BrainHealth) *mnemosv1.BrainHealthResponse {
 	return out
 }
 
-// SetExpectation attaches (or replaces) a belief's forward prediction through
-// Memory.Expect and returns the expectation as stored.
+// The expectation RPCs write through the request's governed writer: govwrite
+// holds the one implementation of setting, observing and reconciling a
+// prediction, shared with REST, MCP and the Go library. A run-scoped token may
+// touch only beliefs whose evidence lies in its runs (runscope.ClaimAllowed);
+// any other belief answers NotFound, exactly like one that does not exist.
+
+// SetExpectation attaches (or replaces) a belief's forward prediction and
+// returns it as stored.
 func (s *Server) SetExpectation(ctx context.Context, req *mnemosv1.SetExpectationRequest) (*mnemosv1.Expectation, error) {
 	if err := s.requireScope(ctx, domain.ScopeClaimsWrite); err != nil {
 		return nil, err
 	}
-	mem := s.memFor(ctx)
-	if mem == nil {
-		return nil, s.brainUnavailable()
+	w := s.writerFor(ctx)
+	if w == nil {
+		return nil, status.Error(codes.Unavailable, "writer unavailable")
 	}
 	id := strings.TrimSpace(req.GetBeliefId())
-	if id == "" {
-		return nil, status.Error(codes.InvalidArgument, "belief_id is required")
+	if err := s.requireBeliefInRuns(ctx, id); err != nil {
+		return nil, err
 	}
 	var horizon time.Time // unset: no horizon
 	if req.GetHorizon() != nil {
 		horizon = req.GetHorizon().AsTime()
 	}
-	if err := mem.Expect(ctx, id, req.GetPredicted(), req.GetTolerance(), horizon); err != nil {
+	exp, err := w.SetExpectation(ctx, govwrite.ExpectationRequest{
+		ClaimID: id, Predicted: req.GetPredicted(), Tolerance: req.GetTolerance(), Horizon: horizon,
+	})
+	if err != nil {
 		return nil, expectationError("set expectation", err)
 	}
-	return s.storedExpectation(ctx, id)
+	return expectationToProto(exp), nil
 }
 
 // GetExpectation reads a belief's expectation; NotFound when it has none.
 func (s *Server) GetExpectation(ctx context.Context, req *mnemosv1.GetExpectationRequest) (*mnemosv1.Expectation, error) {
 	id := strings.TrimSpace(req.GetBeliefId())
-	if id == "" {
-		return nil, status.Error(codes.InvalidArgument, "belief_id is required")
+	if err := s.requireBeliefInRuns(ctx, id); err != nil {
+		return nil, err
 	}
-	return s.storedExpectation(ctx, id)
+	repo := s.connFor(ctx).Expectations
+	if repo == nil {
+		return nil, status.Error(codes.Unimplemented, "expectations are not supported by this store")
+	}
+	exp, ok, err := repo.Get(ctx, id)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "get expectation: %v", err)
+	}
+	if !ok {
+		return nil, status.Error(codes.NotFound, "no expectation for belief")
+	}
+	return expectationToProto(exp), nil
 }
 
-// RecordObservation records the observed value for a belief's expectation
-// through Memory.RecordObservation and returns the expectation as stored.
+// RecordObservation records the observed value for a belief's expectation and
+// returns the expectation as stored.
 func (s *Server) RecordObservation(ctx context.Context, req *mnemosv1.RecordObservationRequest) (*mnemosv1.Expectation, error) {
 	if err := s.requireScope(ctx, domain.ScopeClaimsWrite); err != nil {
 		return nil, err
 	}
-	mem := s.memFor(ctx)
-	if mem == nil {
-		return nil, s.brainUnavailable()
+	w := s.writerFor(ctx)
+	if w == nil {
+		return nil, status.Error(codes.Unavailable, "writer unavailable")
 	}
 	id := strings.TrimSpace(req.GetBeliefId())
-	if id == "" {
-		return nil, status.Error(codes.InvalidArgument, "belief_id is required")
+	if err := s.requireBeliefInRuns(ctx, id); err != nil {
+		return nil, err
 	}
-	if err := mem.RecordObservation(ctx, id, req.GetObserved()); err != nil {
+	exp, err := w.ObserveExpectation(ctx, id, req.GetObserved())
+	if err != nil {
 		return nil, expectationError("record observation", err)
 	}
-	return s.storedExpectation(ctx, id)
+	return expectationToProto(exp), nil
 }
 
 // ReconcileExpectations closes every observed prediction into a
-// validates/refutes verdict through Memory.ReconcileExpectations.
+// validates/refutes verdict. It spans every run, so a run-scoped token is
+// refused rather than allowed to resolve predictions outside its runs.
 func (s *Server) ReconcileExpectations(ctx context.Context, _ *mnemosv1.ReconcileExpectationsRequest) (*mnemosv1.ReconcileExpectationsResponse, error) {
 	if err := s.requireScope(ctx, domain.ScopeClaimsWrite); err != nil {
 		return nil, err
 	}
-	mem := s.memFor(ctx)
-	if mem == nil {
-		return nil, s.brainUnavailable()
+	if len(allowedRunsFromContext(ctx)) > 0 {
+		return nil, status.Error(codes.PermissionDenied, "token is run-scoped: reconciliation spans every run")
 	}
-	recs, err := mem.ReconcileExpectations(ctx)
+	w := s.writerFor(ctx)
+	if w == nil {
+		return nil, status.Error(codes.Unavailable, "writer unavailable")
+	}
+	recs, err := w.ReconcileExpectations(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "reconcile expectations: %v", err)
 	}
@@ -153,29 +180,32 @@ func (s *Server) ReconcileExpectations(ctx context.Context, _ *mnemosv1.Reconcil
 	return out, nil
 }
 
-// storedExpectation reads the expectation back from the request's store, so
-// the response is what persisted rather than what the request carried.
-func (s *Server) storedExpectation(ctx context.Context, claimID string) (*mnemosv1.Expectation, error) {
-	repo := s.connFor(ctx).Expectations
-	if repo == nil {
-		return nil, status.Error(codes.Unimplemented, "expectations are not supported by this store")
+// requireBeliefInRuns refuses a missing belief id, and a belief outside a
+// run-scoped token's runs as NotFound.
+func (s *Server) requireBeliefInRuns(ctx context.Context, claimID string) error {
+	if claimID == "" {
+		return status.Error(codes.InvalidArgument, "belief_id is required")
 	}
-	exp, ok, err := repo.Get(ctx, claimID)
+	ok, err := runscope.ClaimAllowed(ctx, s.connFor(ctx), claimID, allowedRunsFromContext(ctx))
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "get expectation: %v", err)
+		return status.Errorf(codes.Internal, "check run scope: %v", err)
 	}
 	if !ok {
-		return nil, status.Error(codes.NotFound, "no expectation for belief")
+		return status.Error(codes.NotFound, "belief not found")
 	}
-	return expectationToProto(exp), nil
+	return nil
 }
 
 func expectationError(op string, err error) error {
 	switch {
-	case errors.Is(err, mnemos.ErrExpectationsUnsupported):
+	case errors.Is(err, govwrite.ErrExpectationsUnsupported):
 		return status.Error(codes.Unimplemented, "expectations are not supported by this store")
-	case errors.Is(err, mnemos.ErrExpectationNotFound):
+	case errors.Is(err, govwrite.ErrExpectationNotFound):
 		return status.Error(codes.NotFound, "no expectation for belief")
+	case errors.Is(err, govwrite.ErrBeliefNotFound):
+		return status.Error(codes.NotFound, "belief not found")
+	case errors.Is(err, govwrite.ErrBeliefIDRequired):
+		return status.Error(codes.InvalidArgument, "belief_id is required")
 	}
 	return status.Errorf(codes.Internal, "%s: %v", op, err)
 }

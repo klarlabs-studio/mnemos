@@ -5,6 +5,7 @@ import (
 
 	"go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 )
 
 // makePredictiveErrorHandler serves GET /v1/predictive-error: the hierarchical
@@ -37,7 +38,7 @@ type reconciliationDTO struct {
 	Confirmed bool    `json:"confirmed"`
 }
 
-func reconciliationsToDTO(recs []mnemos.Reconciliation) []reconciliationDTO {
+func reconciliationsToDTO(recs []govwrite.Reconciliation) []reconciliationDTO {
 	out := make([]reconciliationDTO, 0, len(recs))
 	for _, r := range recs {
 		out = append(out, reconciliationDTO{r.ClaimID, r.Predicted, r.Observed, r.Surprise, r.Confirmed})
@@ -47,19 +48,25 @@ func reconciliationsToDTO(recs []mnemos.Reconciliation) []reconciliationDTO {
 
 // makeReconcileExpectationsHandler serves POST /v1/expectations/reconcile:
 // close every observed-but-open expectation into a validates/refutes verdict
-// through Memory.ReconcileExpectations, the one implementation the Go library,
-// gRPC and the reconcile_expectations MCP tool share. Requires claims:write.
-func makeReconcileExpectationsHandler(mem mnemos.Memory) http.HandlerFunc {
+// through the governed writer (govwrite.Writer.ReconcileExpectations), the one
+// implementation the Go library, gRPC and the reconcile_expectations MCP tool
+// share. Requires claims:write. Reconciliation spans every run, so a
+// run-scoped token is refused.
+func makeReconcileExpectationsHandler(gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		mem := scopedMem(r.Context(), mem)
+		gw := scopedWriter(r.Context(), gw)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		if !requireScope(w, r, domain.ScopeClaimsWrite) || memUnavailable(w, mem) {
+		if !requireScope(w, r, domain.ScopeClaimsWrite) {
 			return
 		}
-		recs, err := mem.ReconcileExpectations(r.Context())
+		if len(allowedRunsFromContext(r.Context())) > 0 {
+			writeError(w, http.StatusForbidden, "token is run-scoped: reconciliation spans every run")
+			return
+		}
+		recs, err := gw.ReconcileExpectations(r.Context())
 		if err != nil {
 			writeInternalError(w, "reconcile expectations", err)
 			return
