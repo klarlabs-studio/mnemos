@@ -31,7 +31,7 @@ func TestDSNOverride_ContextRoundTripAndPrecedence(t *testing.T) {
 }
 
 func TestMergeScopedQuery_RepoWinsAndTagsProvenance(t *testing.T) {
-	repo := mcpQueryOutput{
+	repo := recallOutput{
 		Answer: "repo answer",
 		Claims: []domain.Claim{
 			{ID: "r1", Text: "uses Kafka"},
@@ -40,7 +40,7 @@ func TestMergeScopedQuery_RepoWinsAndTagsProvenance(t *testing.T) {
 		Contradictions: []domain.Relationship{{FromClaimID: "r1", ToClaimID: "r2"}},
 		Timeline:       []string{"ev-repo"},
 	}
-	global := mcpQueryOutput{
+	global := recallOutput{
 		Answer: "global answer",
 		Claims: []domain.Claim{
 			{ID: "g1", Text: "shared fact"}, // duplicate text → repo wins
@@ -77,8 +77,8 @@ func TestMergeScopedQuery_RepoWinsAndTagsProvenance(t *testing.T) {
 }
 
 func TestMergeScopedQuery_FallsBackToGlobalAnswer(t *testing.T) {
-	repo := mcpQueryOutput{} // repo found nothing
-	global := mcpQueryOutput{Answer: "global answer", Claims: []domain.Claim{{ID: "g1", Text: "x"}}}
+	repo := recallOutput{} // repo found nothing
+	global := recallOutput{Answer: "global answer", Claims: []domain.Claim{{ID: "g1", Text: "x"}}}
 	out := mergeScopedQuery(repo, global, query.PrecedenceTenantWins)
 	if out.Answer != "global answer" {
 		t.Errorf("empty repo → global answer; got %q", out.Answer)
@@ -88,8 +88,8 @@ func TestMergeScopedQuery_FallsBackToGlobalAnswer(t *testing.T) {
 // TestMergeScopedQuery_PrecedencePolicies exercises the ADR 0011 Phase C policy
 // at the MCP scoped-query merge point.
 func TestMergeScopedQuery_PrecedencePolicies(t *testing.T) {
-	repoFn := func() mcpQueryOutput {
-		return mcpQueryOutput{
+	repoFn := func() recallOutput {
+		return recallOutput{
 			Answer: "repo answer",
 			Claims: []domain.Claim{
 				{ID: "r1", Text: "shared fact"},       // duplicate of g1
@@ -97,8 +97,8 @@ func TestMergeScopedQuery_PrecedencePolicies(t *testing.T) {
 			},
 		}
 	}
-	globalFn := func() mcpQueryOutput {
-		return mcpQueryOutput{
+	globalFn := func() recallOutput {
+		return recallOutput{
 			Answer: "global answer",
 			Claims: []domain.Claim{
 				{ID: "g1", Text: "shared fact"},
