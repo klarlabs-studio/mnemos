@@ -139,10 +139,12 @@ type ClaimRepository interface {
 	// means now.
 	MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error
 
-	// RepointEvidence rewrites every claim_evidence row pointing at
-	// fromClaimID to point at toClaimID instead, then deletes the
-	// original rows. Idempotent on the (claim_id, event_id) dedup
-	// key — duplicate evidence collapses silently. Used by
+	// RepointEvidence moves every evidence link of fromClaimID onto
+	// toClaimID (ADR 0036 §8): each of fromClaimID's links is closed (kept in
+	// closed_claim_evidence with its created_at, closed now with reason
+	// domain.MergeClosedReason) and toClaimID gains the episode as a link
+	// recorded now, unless it already holds one, which keeps its own time.
+	// Idempotent on the (claim_id, event_id) dedup key. Used by
 	// pipeline.ApplySemanticDedupe.
 	RepointEvidence(ctx context.Context, fromClaimID, toClaimID string) error
 
@@ -454,13 +456,17 @@ type HealthSampler interface {
 	CountHypercorrections(ctx context.Context, floor float64) (int, error)
 }
 
-// RelationshipDeleter is the optional capability to delete relationships by
-// ID. Pruning (`mnemos relate --prune-supports`) needs it: rewriting a 30M-row
-// edge table through DeleteAll + Upsert is not an option. Implementations
-// delete in one transaction and report how many rows went; unknown IDs are
-// not an error.
-type RelationshipDeleter interface {
-	DeleteByIDs(ctx context.Context, ids []string) (int64, error)
+// RelationshipCloser is the optional capability to close relationships by ID
+// (ADR 0036 §8): each named edge leaves the live table and is kept in
+// closed_relationships with closedAt and note, so a recorded-as-of read before
+// the prune still sees it. Pruning (`mnemos relate --prune-supports`,
+// `--prune-stale`, `prune --session-noise`) needs it: an edge judged spurious
+// later was still held until then, and rewriting a 30M-row edge table through
+// DeleteAll + Upsert is not an option. Implementations close in one
+// transaction and report how many rows went; unknown IDs are not an error.
+// Every backend implements it.
+type RelationshipCloser interface {
+	CloseByIDs(ctx context.Context, ids []string, closedAt time.Time, note domain.ChangeNote) (int64, error)
 }
 
 // RelationshipStrengthener is an optional capability (ADR 0015 §4, Hebbian

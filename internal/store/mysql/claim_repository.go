@@ -295,10 +295,20 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 		return fmt.Errorf("begin repoint evidence tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// The loser's links are closed (ADR 0036 §8); the winner gains each
+	// episode as a link recorded now.
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if _, err := tx.ExecContext(ctx, `
+INSERT IGNORE INTO closed_claim_evidence (claim_id, event_id, created_at, closed_at, closed_by, reason)
+SELECT claim_id, event_id, created_at, ?, ?, ? FROM claim_evidence WHERE claim_id = ?`,
+		now, domain.SystemUser, domain.MergeClosedReason(fromClaimID, toClaimID), fromClaimID,
+	); err != nil {
+		return fmt.Errorf("close evidence of %s: %w", fromClaimID, err)
+	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT IGNORE INTO claim_evidence (claim_id, event_id, created_at)
-SELECT ?, event_id, created_at FROM claim_evidence WHERE claim_id = ?`,
-		toClaimID, fromClaimID,
+SELECT ?, event_id, ? FROM claim_evidence WHERE claim_id = ?`,
+		toClaimID, now, fromClaimID,
 	); err != nil {
 		return fmt.Errorf("copy evidence %s -> %s: %w", fromClaimID, toClaimID, err)
 	}

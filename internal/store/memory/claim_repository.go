@@ -340,11 +340,17 @@ func (r ClaimRepository) RepointEvidence(_ context.Context, fromClaimID, toClaim
 		dst = map[string]time.Time{}
 		r.state.evidence[toClaimID] = dst
 	}
-	// A moved link keeps its recorded time; one the winner already holds
-	// keeps the winner's (INSERT OR IGNORE on the SQL backends).
+	// The loser's links are closed (ADR 0036 §8); the winner gains each
+	// episode as a link recorded now, unless it already holds one.
+	now := time.Now().UTC()
+	reason := domain.MergeClosedReason(fromClaimID, toClaimID)
 	for evID, at := range src {
+		r.state.closedEvidence = append(r.state.closedEvidence, domain.ClosedEvidence{
+			BeliefEvidence: domain.ClaimEvidence{ClaimID: fromClaimID, EventID: evID, CreatedAt: at},
+			ClosedAt:       now, ClosedBy: domain.SystemUser, Reason: reason,
+		})
 		if _, held := dst[evID]; !held {
-			dst[evID] = at
+			dst[evID] = now
 		}
 	}
 	delete(r.state.evidence, fromClaimID)

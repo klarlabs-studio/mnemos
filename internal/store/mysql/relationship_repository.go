@@ -267,14 +267,16 @@ func (r RelationshipRepository) DecayAssociations(ctx context.Context, retain fl
 // backend's bound-parameter limit.
 const deleteByIDsChunk = 500
 
-// DeleteByIDs implements ports.RelationshipDeleter.
-func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (int64, error) {
+// CloseByIDs implements ports.RelationshipCloser: the named edges leave the
+// live table and are kept in closed_relationships (ADR 0036 §8), in one
+// transaction.
+func (r RelationshipRepository) CloseByIDs(ctx context.Context, ids []string, closedAt time.Time, note domain.ChangeNote) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("begin relationship delete tx: %w", err)
+		return 0, fmt.Errorf("begin relationship close tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 	var n int64
@@ -286,18 +288,23 @@ func (r RelationshipRepository) DeleteByIDs(ctx context.Context, ids []string) (
 			args[i] = id
 			marks[i] = "?"
 		}
+		closeArgs := append([]any{closedAt.UTC().Truncate(time.Microsecond), actorOr(note.ChangedBy), note.Reason}, args...)
+		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO closed_relationships (id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by, closed_at, closed_by, reason)
+			SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by, ?, ?, ? FROM relationships WHERE id IN (`+strings.Join(marks, ",")+`)`, closeArgs...); err != nil { //nolint:gosec // G202: marks are literal "?" placeholders
+			return n, fmt.Errorf("record closed relationships: %w", err)
+		}
 		res, err := tx.ExecContext(ctx, `DELETE FROM relationships WHERE id IN (`+strings.Join(marks, ",")+`)`, args...)
 		if err != nil {
-			return n, fmt.Errorf("delete relationships by id: %w", err)
+			return n, fmt.Errorf("close relationships by id: %w", err)
 		}
 		k, err := res.RowsAffected()
 		if err != nil {
-			return n, fmt.Errorf("delete relationships by id: %w", err)
+			return n, fmt.Errorf("close relationships by id: %w", err)
 		}
 		n += k
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit relationship delete tx: %w", err)
+		return 0, fmt.Errorf("commit relationship close tx: %w", err)
 	}
 	return n, nil
 }

@@ -16,7 +16,8 @@ import (
 //   - a link written with a time keeps it;
 //   - a link written without one is stamped with the store's clock;
 //   - re-upserting an existing link keeps the original time;
-//   - a merge (RepointEvidence) moves the link with its time;
+//   - a merge (RepointEvidence) closes the loser's links with their times and
+//     gives the winner each episode as a link recorded at the merge;
 //   - ListEvidenceByClaimIDs and ListAllEvidence agree.
 func TestClaimEvidence_RecordedAtRoundTripsOnEveryBackend(t *testing.T) {
 	ctx := context.Background()
@@ -87,14 +88,45 @@ func TestClaimEvidence_RecordedAtRoundTripsOnEveryBackend(t *testing.T) {
 			}
 			check("ListAllEvidence", all, "c-rec")
 
+			// The winner already holds ev-rec-a, recorded Monday: a merge must
+			// keep the winner's own time for it.
+			if err := b.conn.Claims.UpsertEvidence(ctx, []domain.ClaimEvidence{{ClaimID: "c-rec-winner", EventID: "ev-rec-a", CreatedAt: monday}}); err != nil {
+				t.Fatalf("winner link: %v", err)
+			}
+			beforeMerge := time.Now().UTC().Add(-time.Second)
 			if err := b.conn.Claims.RepointEvidence(ctx, "c-rec", "c-rec-winner"); err != nil {
 				t.Fatalf("repoint: %v", err)
 			}
+			afterMerge := time.Now().UTC().Add(time.Second)
+			// ADR 0036 §8: the winner gains ev-rec-b as a link recorded at the
+			// merge, and keeps its own ev-rec-a; the loser's two links are
+			// closed with their original times.
 			moved, err := b.conn.Claims.ListEvidenceByClaimIDs(ctx, []string{"c-rec-winner"})
 			if err != nil {
 				t.Fatalf("list moved evidence: %v", err)
 			}
-			check("after RepointEvidence", moved, "c-rec-winner")
+			got := map[string]time.Time{}
+			for _, l := range moved {
+				got[l.EventID] = l.CreatedAt
+			}
+			if len(got) != 2 || !got["ev-rec-a"].Equal(monday) || got["ev-rec-b"].Before(beforeMerge) || got["ev-rec-b"].After(afterMerge) {
+				t.Errorf("winner evidence after the merge = %+v, want ev-rec-a at Monday and ev-rec-b at the merge", moved)
+			}
+			if left, err := b.conn.Claims.ListEvidenceByClaimIDs(ctx, []string{"c-rec"}); err != nil || len(left) != 0 {
+				t.Errorf("loser's live evidence after the merge = %+v (%v), want none", left, err)
+			}
+			closed, err := b.conn.Claims.ListClosedEvidenceByClaimIDs(ctx, []string{"c-rec"})
+			if err != nil {
+				t.Fatalf("closed evidence: %v", err)
+			}
+			closedLinks := make([]domain.ClaimEvidence, 0, len(closed))
+			for _, c := range closed {
+				if !domain.IsMergeClosureOf("c-rec", c.Reason) || c.ClosedAt.Before(beforeMerge) || c.ClosedAt.After(afterMerge) {
+					t.Errorf("closed link %+v, want closed by the merge of c-rec", c)
+				}
+				closedLinks = append(closedLinks, c.BeliefEvidence)
+			}
+			check("closed by RepointEvidence", closedLinks, "c-rec")
 		})
 	}
 }

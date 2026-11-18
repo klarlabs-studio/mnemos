@@ -297,12 +297,23 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 		return fmt.Errorf("begin repoint evidence tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// The loser's links are closed (ADR 0036 §8); the winner gains each
+	// episode as a link recorded now.
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
+INSERT INTO %s (claim_id, event_id, created_at, closed_at, closed_by, reason)
+SELECT claim_id, event_id, created_at, $2, $3, $4 FROM %s WHERE claim_id = $1
+ON CONFLICT DO NOTHING`, qualify(r.ns, "closed_claim_evidence"), qualify(r.ns, "claim_evidence")),
+		fromClaimID, now, domain.SystemUser, domain.MergeClosedReason(fromClaimID, toClaimID),
+	); err != nil {
+		return fmt.Errorf("close evidence of %s: %w", fromClaimID, err)
+	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 INSERT INTO %s (claim_id, event_id, created_at)
-SELECT $1, event_id, created_at FROM %s WHERE claim_id = $2
+SELECT $1, event_id, $3 FROM %s WHERE claim_id = $2
 ON CONFLICT (claim_id, event_id) DO NOTHING`,
 		qualify(r.ns, "claim_evidence"), qualify(r.ns, "claim_evidence")),
-		toClaimID, fromClaimID,
+		toClaimID, fromClaimID, now,
 	); err != nil {
 		return fmt.Errorf("copy evidence %s -> %s: %w", fromClaimID, toClaimID, err)
 	}

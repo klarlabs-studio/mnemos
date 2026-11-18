@@ -80,7 +80,7 @@ func TestDropRelationships_KeepsEdgesWrittenAfterTheSnapshot(t *testing.T) {
 	}
 
 	// --- The pruner commits its decision. ---
-	if _, err := w.DropRelationships(ctx, stale); err != nil {
+	if _, err := w.DropRelationships(ctx, stale, domain.ChangeNote{Reason: "pruned: test"}); err != nil {
 		t.Fatalf("DropRelationships: %v", err)
 	}
 
@@ -93,6 +93,14 @@ func TestDropRelationships_KeepsEdgesWrittenAfterTheSnapshot(t *testing.T) {
 	}
 	if !got["supports|c5|c6"] {
 		t.Fatal("the concurrently-inserted edge was deleted as stale — the pruner outran its own snapshot")
+	}
+	// ADR 0036 §8: the pruned edge is closed, not deleted, and only it.
+	closed, err := w.Conn().Relationships.ListAllClosed(ctx)
+	if err != nil {
+		t.Fatalf("closed edges: %v", err)
+	}
+	if len(closed) != 1 || closed[0].ID != stale[0].ID || closed[0].Reason != "pruned: test" {
+		t.Errorf("closed edges = %+v, want only the pruned contradiction with its reason", closed)
 	}
 }
 
@@ -150,7 +158,7 @@ func TestDropRelationships_ConcurrentWriterDuringPrune(t *testing.T) {
 	}()
 
 	close(start)
-	if _, err := w.DropRelationships(ctx, drop); err != nil {
+	if _, err := w.DropRelationships(ctx, drop, domain.ChangeNote{Reason: "pruned: test"}); err != nil {
 		t.Fatalf("DropRelationships: %v", err)
 	}
 	wg.Wait()
@@ -186,10 +194,10 @@ func TestDropRelationships_IsIdempotent(t *testing.T) {
 	}
 	drop := []domain.Relationship{rel("r_a", "contradicts", "a1", "a2")}
 
-	if _, err := w.DropRelationships(ctx, drop); err != nil {
+	if _, err := w.DropRelationships(ctx, drop, domain.ChangeNote{Reason: "pruned: test"}); err != nil {
 		t.Fatalf("first drop: %v", err)
 	}
-	if _, err := w.DropRelationships(ctx, drop); err != nil {
+	if _, err := w.DropRelationships(ctx, drop, domain.ChangeNote{Reason: "pruned: test"}); err != nil {
 		t.Fatalf("second drop: %v", err)
 	}
 	got := edgeSet(t, w)

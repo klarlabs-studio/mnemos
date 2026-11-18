@@ -285,14 +285,18 @@ func (r RelationshipRepository) DecayAssociations(_ context.Context, retain floa
 	return n, nil
 }
 
-// DeleteByIDs implements ports.RelationshipDeleter.
-func (r RelationshipRepository) DeleteByIDs(_ context.Context, ids []string) (int64, error) {
+// CloseByIDs implements ports.RelationshipCloser (ADR 0036 §8).
+func (r RelationshipRepository) CloseByIDs(_ context.Context, ids []string, closedAt time.Time, note domain.ChangeNote) (int64, error) {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
 	var n int64
 	for _, id := range ids {
-		if _, ok := r.state.relationships[id]; ok {
+		if rel, ok := r.state.relationships[id]; ok {
 			delete(r.state.relationships, id)
+			r.state.closedRels = append(r.state.closedRels, domain.ClosedRelationship{
+				Association: rel.toDomain(), ClosedAt: closedAt.UTC(),
+				ClosedBy: actorOr(note.ChangedBy), Reason: note.Reason,
+			})
 			n++
 		}
 	}

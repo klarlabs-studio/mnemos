@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -52,9 +53,16 @@ func (a ClosedAssociation) InForceAt(t time.Time) bool {
 // ClosedRelationship is the machine-term alias of ClosedAssociation.
 type ClosedRelationship = ClosedAssociation
 
-// MergeClosedReason is the reason recorded on an association a merge closed:
-// a self-loop between loser and winner, or a duplicate of an edge the winner
-// already had.
+// IsMergeClosureOf reports whether reason is the one the merge of claimID
+// recorded when it closed claimID's own evidence links or edges.
+func IsMergeClosureOf(claimID, reason string) bool {
+	return strings.HasPrefix(reason, "merged "+claimID+" into ")
+}
+
+// MergeClosedReason is the reason recorded on what a merge of loserID into
+// winnerID closed: each of the loser's evidence links (the winner gains the
+// episode as a new link), and each association it dropped (a self-loop between
+// loser and winner, or a duplicate of an edge the winner already had).
 func MergeClosedReason(loserID, winnerID string) string {
 	return fmt.Sprintf("merged %s into %s", loserID, winnerID)
 }

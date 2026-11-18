@@ -10,6 +10,7 @@ import (
 	"go.klarlabs.de/mnemos/internal/autoedge"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/pipeline"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -626,7 +627,10 @@ func (w *Writer) PruneRelationships(ctx context.Context, keep []domain.Relations
 
 // --- Relationship dropping (enumerated, snapshot-safe) ---
 
-type dropRelationshipsInput struct{ Drop []domain.Relationship }
+type dropRelationshipsInput struct {
+	Drop []domain.Relationship
+	Note domain.ChangeNote
+}
 
 type dropRelationshipsExecutor struct{ conn *store.Conn }
 
@@ -637,34 +641,21 @@ func edgeKey(r domain.Relationship) [3]string {
 	return [3]string{string(r.Type), r.FromClaimID, r.ToClaimID}
 }
 
-// Execute removes exactly the enumerated edges and leaves everything else,
+// Execute closes exactly the enumerated edges and leaves everything else,
 // including edges that did not exist when the caller took its snapshot.
 //
-// Two separate things make that true, and both are needed:
+// The predicate is an enumeration, not a complement. A pruner reads the
+// relationship set, spends however long it takes to re-derive each edge
+// against the current detectors, and only then writes. Expressed as "keep this
+// set", the write would delete every edge a concurrent `relate` or capture
+// inserted meanwhile: the snapshot predates them. Expressed as "drop these
+// edges", it cannot.
 //
-//  1. The predicate is an enumeration, not a complement. A pruner reads the
-//     relationship set, spends however long it takes to re-derive each edge
-//     against the current detectors, and only then writes. Expressed as "keep
-//     this set", the write deletes every edge a concurrent `relate` or capture
-//     inserted meanwhile: the snapshot predates them, so they fall outside keep
-//     and are destroyed as "stale" without ever having been evaluated.
-//     Expressed as "drop these edges", they cannot be — an edge absent from the
-//     snapshot is absent from the drop list.
-//
-//  2. The delete is scoped to the claims the drop list actually touches, and
-//     each one's surviving edges are re-read at write time. The repository has
-//     no delete-this-edge primitive, only DeleteAll and DeleteByClaim, and
-//     DeleteAll+restore reopens the whole race at the storage layer: everything
-//     a writer commits between the clear and the restore is lost regardless of
-//     how careful the predicate was. Working per affected claim shrinks the
-//     exposure from "the entire table" to "edges on this one claim, during one
-//     delete+restore" — and leaves edges on untouched claims, which is what a
-//     concurrent capture run is writing, provably alone.
-//
-// Cost is one list + one delete + one upsert per affected claim rather than a
-// single table sweep. A prune is a rare maintenance pass; paying for it there
-// is cheaper than losing edges. An exact per-edge delete in the repository
-// would remove the residual window entirely.
+// Edges are matched on content, re-read at write time per affected claim, and
+// closed by id (ports.RelationshipCloser), not deleted (ADR 0036 §8): the
+// brain held them until the prune judged them spurious, so a recorded-as-of
+// read of the past still sees them. Closing by id touches nothing else on the
+// claim, so a concurrent writer's edge is never at risk.
 func (e dropRelationshipsExecutor) Execute(ctx context.Context, input any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
 	in, ok := payload[dropRelationshipsInput](input)
 	if !ok {
@@ -676,57 +667,49 @@ func (e dropRelationshipsExecutor) Execute(ctx context.Context, input any, _ axi
 			Summary: "dropped 0 relationship(s)",
 		}, ev("mnemos.write.relationships.drop", map[string]any{"dropped": 0, "retained": 0}), nil
 	}
+	closer, ok := e.conn.Relationships.(ports.RelationshipCloser)
+	if !ok {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("drop_relationships: this backend cannot close relationships by id")
+	}
 
 	doomed := make(map[[3]string]struct{}, len(in.Drop))
 	affected := make([]string, 0, len(in.Drop))
 	seen := make(map[string]struct{}, len(in.Drop))
 	for _, r := range in.Drop {
 		doomed[edgeKey(r)] = struct{}{}
-		// The source endpoint alone is enough: DeleteByClaim matches an edge on
-		// either endpoint, so every doomed edge is reachable from its own
-		// FromClaimID. Visiting the target too would only widen the blast radius.
+		// Every doomed edge is reachable from its own FromClaimID.
 		if _, dup := seen[r.FromClaimID]; !dup {
 			seen[r.FromClaimID] = struct{}{}
 			affected = append(affected, r.FromClaimID)
 		}
 	}
 
-	dropped := 0
+	closedAt := time.Now().UTC()
+	var dropped int64
 	retainedEdges := map[[3]string]struct{}{}
 	for _, claimID := range affected {
-		// Read at WRITE time, per claim: the restore then carries whatever
-		// landed on this claim during the pruner's scan.
 		edges, err := e.conn.Relationships.ListByClaim(ctx, claimID)
 		if err != nil {
 			return axidomain.ExecutionResult{}, nil, fmt.Errorf("read relationships for %s: %w", claimID, err)
 		}
-		keep := make([]domain.Relationship, 0, len(edges))
+		var ids []string
 		for _, r := range edges {
 			if _, kill := doomed[edgeKey(r)]; kill {
+				ids = append(ids, r.ID)
 				continue
 			}
-			keep = append(keep, r)
-		}
-		for _, r := range keep {
 			retainedEdges[edgeKey(r)] = struct{}{}
 		}
-		if len(keep) == len(edges) {
+		if len(ids) == 0 {
 			// Nothing doomed left on this claim — a resumed run, or another
-			// pruner got there first. Do not touch it.
+			// pruner got there first.
 			continue
 		}
-		if err := e.conn.Relationships.DeleteByClaim(ctx, claimID); err != nil {
-			return axidomain.ExecutionResult{}, nil, fmt.Errorf("delete relationships for %s: %w", claimID, err)
+		n, err := closer.CloseByIDs(ctx, ids, closedAt, in.Note)
+		if err != nil {
+			return axidomain.ExecutionResult{}, nil, fmt.Errorf("close relationships for %s: %w", claimID, err)
 		}
-		if len(keep) > 0 {
-			if err := e.conn.Relationships.Upsert(ctx, keep); err != nil {
-				// This claim's edges are gone and the restore failed. Say so
-				// loudly, naming the claim, so the damage is bounded and locatable.
-				return axidomain.ExecutionResult{}, nil, fmt.Errorf(
-					"restore surviving relationships for claim %s (its edges are now MISSING): %w", claimID, err)
-			}
-		}
-		dropped += len(edges) - len(keep)
+		dropped += n
 	}
 	retained := len(retainedEdges)
 
@@ -738,16 +721,16 @@ func (e dropRelationshipsExecutor) Execute(ctx context.Context, input any, _ axi
 	}), nil
 }
 
-// DropRelationships removes exactly the enumerated edges, matched on content
-// (type + endpoints), and retains everything else — including edges written
-// after the caller built its list. Returns the number of edges retained across
-// the claims it touched.
+// DropRelationships closes exactly the enumerated edges (ADR 0036 §8), matched
+// on content (type + endpoints), with note as who and why, and retains
+// everything else — including edges written after the caller built its list.
+// Returns the number of edges retained across the claims it touched.
 //
 // This is the snapshot-safe counterpart to [Writer.PruneRelationships]: a
-// pruner that decides from a stale read can delete only what it actually saw
+// pruner that decides from a stale read can close only what it actually saw
 // and judged, never a concurrent writer's new edge. Edges on claims the drop
-// list does not name are never read, deleted, or rewritten.
-func (w *Writer) DropRelationships(ctx context.Context, drop []domain.Relationship) (int, error) {
-	out, err := dispatch[writeCount](ctx, w, actionDropRelationships, dropRelationshipsInput{Drop: drop})
+// list does not name are never read or rewritten.
+func (w *Writer) DropRelationships(ctx context.Context, drop []domain.Relationship, note domain.ChangeNote) (int, error) {
+	out, err := dispatch[writeCount](ctx, w, actionDropRelationships, dropRelationshipsInput{Drop: drop, Note: note})
 	return out.Accepted, err
 }

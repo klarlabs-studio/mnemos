@@ -109,13 +109,23 @@ func pruneStaleRelationships(dryRun bool, f Flags) {
 			// Through the governed writer, not the repository directly: dropping
 			// tens of thousands of edges belongs in the evidence chain like any
 			// other mutation.
-			drop := make([]domain.Relationship, 0, len(dropped)+orphaned)
-			drop = append(drop, dropped...)
-			drop = append(drop, orphanEdges...)
-			if _, err := w.DropRelationships(ctx, drop); err != nil {
-				return NewSystemError(err, "prune relationships")
+			// The edges are closed, not deleted (ADR 0036 §8): the brain held
+			// them until now, so a recorded-as-of read of the past sees them.
+			for _, batch := range []struct {
+				edges  []domain.Relationship
+				reason string
+			}{
+				{dropped, "pruned: contradiction no longer produced by the current detectors, or over the per-belief cap (relate --prune-stale)"},
+				{orphanEdges, "pruned: an endpoint belief no longer exists (relate --prune-stale)"},
+			} {
+				if len(batch.edges) == 0 {
+					continue
+				}
+				if _, err := w.DropRelationships(ctx, batch.edges, domain.ChangeNote{Reason: batch.reason}); err != nil {
+					return NewSystemError(err, "prune relationships")
+				}
 			}
-			fmt.Printf("\npruned %d stale edge(s); %d retained.\n", len(drop), len(keep))
+			fmt.Printf("\npruned %d stale edge(s); %d retained.\n", len(dropped)+orphaned, len(keep))
 			return nil
 		})
 	if err != nil {
