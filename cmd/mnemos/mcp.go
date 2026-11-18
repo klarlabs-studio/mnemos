@@ -2082,7 +2082,7 @@ func mcpRunMemoryDeprecate(ctx context.Context, actor string, input mcpMemoryDep
 	if reason == "" {
 		reason = "agent-deprecated"
 	}
-	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
+	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
 		return mcpMemoryDeprecateOutput{}, err
 	}
 	return mcpMemoryDeprecateOutput{
@@ -2130,7 +2130,7 @@ func mcpRunMemoryResolve(ctx context.Context, actor string, input mcpMemoryResol
 		}
 		updates = append(updates, c)
 	}
-	if _, err := gw.Claims(ctx, updates, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
+	if _, err := gw.Claims(ctx, updates, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
 		return mcpMemoryResolveOutput{}, err
 	}
 	return mcpMemoryResolveOutput{WinnerID: input.WinnerID, LoserID: input.LoserID}, nil
@@ -2368,7 +2368,7 @@ func mcpRunForget(ctx context.Context, actor string, input mcpForgetInput) (mcpF
 	if reason == "" {
 		reason = "agent-forget"
 	}
-	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
+	if _, err := gw.Claims(ctx, []domain.Claim{updated}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor, AssertStatus: true}); err != nil {
 		return mcpForgetOutput{}, err
 	}
 	return mcpForgetOutput{

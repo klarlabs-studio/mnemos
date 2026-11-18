@@ -255,12 +255,20 @@ nothing else has changed them since. A belief is restored when all hold:
   lives now);
 - it is deprecated, and its latest status transition is the retraction's own:
   `to_status = deprecated`, `changed_by` = the retraction's `retracted_by`, and
-  the exact reason the retraction wrote. Any later transition (a human
-  re-deprecating it with a reason of their own, a reactivation, another
-  retraction) means someone else owns its status now. A write that leaves a
-  deprecated belief deprecated records no transition (`claim_status_history`
-  logs changes only), so it is not seen; a person who wants the belief to stay
-  retired after an un-retraction deprecates it again afterwards;
+  the exact reason the retraction wrote. Any later row (a reactivation,
+  another retraction, or a person deprecating it again with a reason of their
+  own) means someone else owns its status now, and the belief is skipped with
+  that row's reason and actor. Deprecating an already-deprecated belief is
+  visible because a deliberate status decision records a row even when the
+  status does not change: `memory_deprecate`, `forget`,
+  `memory_resolve_dissonance` and `mnemos resolve` write through
+  `UpsertAssertingStatusAs` (governed: `ClaimReason.AssertStatus`, which
+  requires a reason), leaving a *reassertion*, a row with
+  `from_status = to_status` (`ClaimStatusTransition.IsReassertion`). Every
+  other write records changes only, so re-ingesting a belief, a backfill, a
+  federation pull or a dedupe redirect that carries the status a belief
+  already has adds no history. A reassertion changes no status, so
+  recorded-as-of reads (ADR 0036) are the same with or without it;
 - it has live evidence once the event is restored (normally the kept link to
   the event itself, §5).
 
