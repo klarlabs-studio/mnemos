@@ -42,7 +42,7 @@ func (m *memory) RecordObservation(ctx context.Context, claimID string, observed
 		return fmt.Errorf("mnemos: RecordObservation: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("mnemos: RecordObservation: no expectation for claim %s", claimID)
+		return fmt.Errorf("mnemos: RecordObservation: %w: %s", ErrExpectationNotFound, claimID)
 	}
 	exp.Observed = observed
 	exp.HasObservation = true

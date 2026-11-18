@@ -539,6 +539,10 @@ func clampUnit(x float64) float64 {
 // with no expectation store.
 var ErrExpectationsUnsupported = errors.New("mnemos: structured expectations not supported on this backend")
 
+// ErrExpectationNotFound is returned by [Memory.RecordObservation] when the
+// claim carries no expectation to resolve. Test with errors.Is.
+var ErrExpectationNotFound = errors.New("mnemos: no expectation for claim")
+
 // Reconciliation is the result of closing one structured expectation against its
 // observed value — the prediction-error event.
 type Reconciliation struct {
@@ -1241,6 +1245,12 @@ type Memory interface {
 	// asks for, or ranked past a reader's budget.
 	Passages(ctx context.Context, q PassageQuery) ([]Passage, error)
 
+	// ContextBlock renders a run's memory state as an agent-ready block —
+	// top beliefs by trust, open contradictions and a footer with counts —
+	// for dropping into a system prompt. The layout is the one REST
+	// /v1/context and the memory_context MCP tool return.
+	ContextBlock(ctx context.Context, q ContextBlockQuery) (string, error)
+
 	// RecallWithSufficiency is Recall plus a "feeling of knowing": a
 	// deterministic verdict on whether the memory Mnemos holds is strong
 	// enough to answer confidently, or whether the caller should seek more
@@ -1500,6 +1510,11 @@ type Memory interface {
 	// `health` entry (ADR 0019 + 0018), so vital signs become a queryable time series.
 	// Returns the computed health. A no-op record on backends without a journal.
 	SnapshotHealth(ctx context.Context) (BrainHealth, error)
+
+	// Metrics reports the knowledge-base counts: runs, events, claims
+	// (and how many are contested), relationships (and how many contradict)
+	// and embeddings. Strictly read-only.
+	Metrics(ctx context.Context) (Metrics, error)
 
 	// LastWriteSession returns the governance session recorded by the
 	// most recent write (Remember, RememberClaim, or RememberEvent) on

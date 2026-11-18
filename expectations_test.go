@@ -2,6 +2,7 @@ package mnemos
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -10,6 +11,16 @@ import (
 
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
 )
+
+// An observation for a claim with no expectation is reported with a sentinel,
+// so a transport can map it to its not-found form.
+func TestRecordObservation_NoExpectationIsErrExpectationNotFound(t *testing.T) {
+	m := calibMem(t)
+	err := m.RecordObservation(context.Background(), "c-none", 1)
+	if !errors.Is(err, ErrExpectationNotFound) {
+		t.Fatalf("err = %v, want ErrExpectationNotFound", err)
+	}
+}
 
 // TestExpectations_ReconcileConfirmedAndRefuted verifies the full prediction loop:
 // attach a structured expectation, record the observed value, reconcile into a
