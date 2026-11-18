@@ -58,30 +58,86 @@ func boundary() time.Time {
 	return at
 }
 
+// forwardReservation is how far ahead of the write clock a later phase's
+// start is reserved when a document announces facts that take effect then.
+//
+// A document ingested in February whose facts hold from March needs March's
+// start instant as its valid time at ingest, before March has begun. The
+// seeder reserves an instant this far ahead, and when March begins it waits
+// for that instant and uses it as the phase's start. If the phases in between
+// take longer than the reservation, the seed fails rather than silently
+// placing March's start before February's end. It is generous because a
+// loaded machine running -race is slow; it costs one sleep per announced phase.
+const forwardReservation = 2 * time.Second
+
 // timeline seeds the store phase by phase on the real clock.
 func (s *seeder) timeline(ctx context.Context, phases []Phase) (SeedStats, error) {
 	s.stats.Phases = make(PhaseTimes, len(phases))
-	for _, ph := range phases {
-		start := boundary()
+	order := make(map[string]int, len(phases))
+	for i, ph := range phases {
+		order[ph.Name] = i
+	}
+	reserved := make(map[string]time.Time)
+	for i, ph := range phases {
+		start, err := phaseStart(ph.Name, reserved)
+		if err != nil {
+			return s.stats, err
+		}
 		s.stats.Phases[ph.Name] = PhaseWindow{Start: start}
 		for _, doc := range ph.Docs {
 			observed := start
 			if doc.ValidFrom != "" {
-				observed = s.stats.Phases[doc.ValidFrom].Start
+				if order[doc.ValidFrom] > i {
+					observed = reserve(reserved, doc.ValidFrom)
+				} else {
+					observed = s.stats.Phases[doc.ValidFrom].Start
+				}
 			}
 			if err := s.ingest(ctx, doc.ID, doc.Source, doc.Text, observed, time.Now().UTC()); err != nil {
 				return s.stats, err
 			}
 		}
-		for i, ch := range ph.Changes {
+		began := time.Now()
+		for j, ch := range ph.Changes {
 			if err := s.apply(ctx, ch); err != nil {
-				return s.stats, fmt.Errorf("brainbench: phase %s change[%d]: %w", ph.Name, i, err)
+				return s.stats, fmt.Errorf("brainbench: phase %s change[%d]: %w", ph.Name, j, err)
 			}
 			s.stats.Changes++
 		}
+		s.stats.CurationDuration += time.Since(began)
 		s.stats.Phases[ph.Name] = PhaseWindow{Start: start, End: boundary()}
 	}
 	return s.stats, nil
+}
+
+// reserve returns the instant reserved for phase's start, reserving one
+// forwardReservation ahead of now on first use.
+func reserve(reserved map[string]time.Time, phase string) time.Time {
+	if at, ok := reserved[phase]; ok {
+		return at
+	}
+	at := time.Now().UTC().Add(forwardReservation)
+	reserved[phase] = at
+	return at
+}
+
+// phaseStart returns the instant a phase begins at: a fresh boundary, or the
+// instant reserved for it, waited for. A reserved instant already in the past
+// would put this phase's start before the previous phase's last write, so it
+// is an error, never a silent misordering.
+func phaseStart(phase string, reserved map[string]time.Time) (time.Time, error) {
+	start := boundary()
+	at, ok := reserved[phase]
+	if !ok {
+		return start, nil
+	}
+	if !start.Before(at) {
+		return time.Time{}, fmt.Errorf("brainbench: phase %s began at %s, after the instant %s reserved for it; "+
+			"the phases before it took longer than %s", phase, start.Format(time.RFC3339Nano),
+			at.Format(time.RFC3339Nano), forwardReservation)
+	}
+	time.Sleep(time.Until(at) + phaseGap)
+	return at, nil
 }
 
 // apply performs one curation change through the store's own write methods,
@@ -111,6 +167,22 @@ func (s *seeder) apply(ctx context.Context, ch Change) error {
 			return err
 		}
 		return s.conn.Claims.SetValidity(ctx, c.ID, time.Now().UTC(), note)
+	case ch.SupersedeBy != nil:
+		old, err := s.findCurrent(ctx, ch.SupersedeBy.Old)
+		if err != nil {
+			return err
+		}
+		successor, err := s.findCurrent(ctx, ch.SupersedeBy.New)
+		if err != nil {
+			return err
+		}
+		// The cutoff of `mnemos resolve --supersedes`: the successor's valid
+		// start, falling back to its creation.
+		cutoff := successor.ValidFrom
+		if cutoff.IsZero() {
+			cutoff = successor.CreatedAt
+		}
+		return s.conn.Claims.SetValidity(ctx, old.ID, cutoff, note)
 	case ch.Contradict != nil:
 		from, err := s.findCurrent(ctx, ch.Contradict.From)
 		if err != nil {

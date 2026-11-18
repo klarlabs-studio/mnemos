@@ -32,6 +32,15 @@ type SeedStats struct {
 	// Phases holds the real write-clock instants of a timeline scenario's
 	// phases. As-of probes are answered against them.
 	Phases PhaseTimes `json:"phases,omitempty"`
+
+	// IngestDuration is the wall time spent in the ingest path proper —
+	// extraction, dedupe, relationship detection, persistence and embedding
+	// — summed over documents. CurationDuration is the time spent applying a
+	// timeline's changes. Neither includes the phase-boundary sleeps. Both are
+	// wall-clock and vary run to run, so they feed the cost report and never
+	// a metric (the noise arm would flag them).
+	IngestDuration   time.Duration `json:"-"`
+	CurationDuration time.Duration `json:"-"`
 }
 
 // Seed builds a brain at dsn from the scenario corpus, or from its timeline.
@@ -94,6 +103,8 @@ type seeder struct {
 // ingest runs one document through the production ingest path.
 // observedAt is the event's valid time; ingestedAt its transaction time.
 func (s *seeder) ingest(ctx context.Context, docID, source, text string, observedAt, ingestedAt time.Time) error {
+	began := time.Now()
+	defer func() { s.stats.IngestDuration += time.Since(began) }()
 	// domain.Event requires a source input id. Defaulting it to the doc id
 	// keeps `source` an optional, human-facing label in scenario YAML instead
 	// of a mandatory field every author must remember to repeat.

@@ -161,6 +161,13 @@ type Probe struct {
 
 	// Limit caps results for this probe. 0 uses ProbeDefaultLimit.
 	Limit int `yaml:"limit"`
+
+	// Class optionally groups probes into a task class ("current",
+	// "change_why", ...). Every class present in a scenario gets an
+	// accuracy_<class> metric, scored by the strict rule as-of probes use, so
+	// a scenario can report accuracy per kind of question for Mnemos and for
+	// every baseline. A lowercase identifier: [a-z][a-z0-9_]*.
+	Class string `yaml:"class"`
 }
 
 // AsOfProbe is a question about the past, with its gold answer.
@@ -183,6 +190,8 @@ type AsOfProbe struct {
 	Expect       string   `yaml:"expect"`
 	MustNot      []string `yaml:"must_not"`
 	Limit        int      `yaml:"limit"`
+	// Class groups the probe into a task class; see Probe.Class.
+	Class string `yaml:"class"`
 }
 
 // Phase is one step of a timeline: documents ingested, then changes applied.
@@ -198,8 +207,11 @@ type TimelineDoc struct {
 	Source string `yaml:"source"`
 	// ValidFrom names the phase whose start the document's facts hold from.
 	// Empty means the phase it is ingested in. It separates valid time from
-	// transaction time: a root cause written down on Thursday was true since
-	// Monday's deploy.
+	// transaction time in both directions: a root cause written down on
+	// Thursday was true since Monday's deploy (an earlier phase), and an
+	// ownership change announced in February takes effect in March (a later
+	// phase). A later phase's start is reserved on the write clock when the
+	// document is ingested; see timeline.go.
 	ValidFrom string `yaml:"valid_from"`
 	Text      string `yaml:"text"`
 }
@@ -217,9 +229,20 @@ type Change struct {
 	Archive string `yaml:"archive"`
 	// Supersede ends the matching claim's valid time now.
 	Supersede string `yaml:"supersede"`
+	// SupersedeBy ends the old claim's valid time at the new claim's valid
+	// start — the semantics of `mnemos resolve --supersedes`. Unlike
+	// Supersede, the cutoff is not "now": a change recorded late ends the old
+	// claim in the past, and a change announced ahead ends it in the future.
+	SupersedeBy *SupersedeEdge `yaml:"supersede_by"`
 	// Contradict records a contradicts edge between two claims.
 	Contradict *ContradictEdge `yaml:"contradict"`
 	Reason     string          `yaml:"reason"`
+}
+
+// SupersedeEdge names the superseded claim and its successor.
+type SupersedeEdge struct {
+	Old string `yaml:"old"`
+	New string `yaml:"new"`
 }
 
 // ContradictEdge names the two claims of a contradicts edge.
@@ -230,7 +253,7 @@ type ContradictEdge struct {
 
 func (c Change) ops() int {
 	n := 0
-	for _, set := range []bool{c.Retract != "", c.Archive != "", c.Supersede != "", c.Contradict != nil} {
+	for _, set := range []bool{c.Retract != "", c.Archive != "", c.Supersede != "", c.SupersedeBy != nil, c.Contradict != nil} {
 		if set {
 			n++
 		}
@@ -353,6 +376,9 @@ func (s Scenario) Validate() error {
 		if p.Limit < 0 {
 			return fmt.Errorf("scenario %s: probe %s: limit must not be negative", s.ID, p.ID)
 		}
+		if !validClass(p.Class) {
+			return fmt.Errorf("scenario %s: probe %s: class %q must match [a-z][a-z0-9_]*", s.ID, p.ID, p.Class)
+		}
 	}
 	if err := s.validateAsOfProbes(seenProbe); err != nil {
 		return err
@@ -374,6 +400,10 @@ func (s Scenario) Validate() error {
 
 // validateTimeline checks phase names, doc ids and change shapes.
 func (s Scenario) validateTimeline() error {
+	all := make(map[string]struct{}, len(s.Timeline))
+	for _, ph := range s.Timeline {
+		all[ph.Name] = struct{}{}
+	}
 	phases := make(map[string]struct{}, len(s.Timeline))
 	docs := make(map[string]struct{})
 	for i, ph := range s.Timeline {
@@ -398,11 +428,11 @@ func (s Scenario) validateTimeline() error {
 			if strings.TrimSpace(d.Text) == "" {
 				return fmt.Errorf("scenario %s: doc %s: text is required", s.ID, d.ID)
 			}
-			// valid_from must name this phase or an earlier one: a document
-			// cannot report facts from an instant that has not happened yet.
+			// valid_from may name any phase: an earlier one (learned late),
+			// this one, or a later one (announced ahead of taking effect).
 			if d.ValidFrom != "" {
-				if _, ok := phases[d.ValidFrom]; !ok {
-					return fmt.Errorf("scenario %s: doc %s: valid_from %q is not this or an earlier phase",
+				if _, ok := all[d.ValidFrom]; !ok {
+					return fmt.Errorf("scenario %s: doc %s: valid_from %q is not a phase of this timeline",
 						s.ID, d.ID, d.ValidFrom)
 				}
 			}
@@ -410,7 +440,11 @@ func (s Scenario) validateTimeline() error {
 		for j, c := range ph.Changes {
 			if c.ops() != 1 {
 				return fmt.Errorf("scenario %s: phase %s changes[%d]: set exactly one of "+
-					"retract, archive, supersede, contradict", s.ID, ph.Name, j)
+					"retract, archive, supersede, supersede_by, contradict", s.ID, ph.Name, j)
+			}
+			if c.SupersedeBy != nil &&
+				(strings.TrimSpace(c.SupersedeBy.Old) == "" || strings.TrimSpace(c.SupersedeBy.New) == "") {
+				return fmt.Errorf("scenario %s: phase %s changes[%d]: supersede_by needs old and new", s.ID, ph.Name, j)
 			}
 			if c.Contradict != nil &&
 				(strings.TrimSpace(c.Contradict.From) == "" || strings.TrimSpace(c.Contradict.To) == "") {
@@ -451,8 +485,25 @@ func (s Scenario) validateAsOfProbes(seen map[string]struct{}) error {
 		if p.Limit < 0 {
 			return fmt.Errorf("scenario %s: as-of probe %s: limit must not be negative", s.ID, p.ID)
 		}
+		if !validClass(p.Class) {
+			return fmt.Errorf("scenario %s: as-of probe %s: class %q must match [a-z][a-z0-9_]*", s.ID, p.ID, p.Class)
+		}
 	}
 	return nil
+}
+
+// validClass reports whether class is empty or a lowercase identifier, so
+// accuracy_<class> is a well-formed metric name.
+func validClass(class string) bool {
+	for i, r := range class {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case i > 0 && (r == '_' || (r >= '0' && r <= '9')):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // ParseScenario decodes and validates one scenario YAML document.

@@ -1,0 +1,981 @@
+{
+  "schema_version": "scalebench/v1",
+  "params": {
+    "beliefs": 10000,
+    "seed": 1,
+    "shape": "uniform",
+    "anchor": "2026-10-01T00:00:00Z",
+    "batch": 1000,
+    "queries": 50,
+    "ingests": 20,
+    "backend": "sqlite",
+    "timeout_per_operation": "30m0s"
+  },
+  "environment": {
+    "commit": "25db8e33f4e58022b6dfb61a6896e3d3fb435214",
+    "dirty": false,
+    "go_version": "go1.27.4",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "num_cpu": 10,
+    "cpu": "Apple M5",
+    "mem_bytes": 25769803776,
+    "started_at": "2026-11-18T18:54:50Z"
+  },
+  "corpus": {
+    "events": 2000,
+    "claims": 10000,
+    "evidence": 14536,
+    "relationships": 7947,
+    "contradicts": 1191,
+    "topics": 50
+  },
+  "operations": [
+    {
+      "name": "open_empty_store",
+      "samples": 1,
+      "total_ms": 20.74,
+      "p50_ms": 20.74,
+      "p95_ms": 20.74,
+      "p99_ms": 20.74,
+      "max_ms": 20.74,
+      "outcome": "ok"
+    },
+    {
+      "name": "bulk_load",
+      "samples": 1,
+      "total_ms": 3726.773,
+      "p50_ms": 3726.773,
+      "p95_ms": 3726.773,
+      "p99_ms": 3726.773,
+      "max_ms": 3726.773,
+      "per_second": 2683.29,
+      "outcome": "ok",
+      "detail": "beliefs/s"
+    },
+    {
+      "name": "recompute_trust_full",
+      "samples": 1,
+      "total_ms": 270.745,
+      "p50_ms": 270.745,
+      "p95_ms": 270.745,
+      "p99_ms": 270.745,
+      "max_ms": 270.745,
+      "outcome": "ok",
+      "detail": "10000 beliefs rescored"
+    },
+    {
+      "name": "open_populated_store",
+      "samples": 1,
+      "total_ms": 2.088,
+      "p50_ms": 2.088,
+      "p95_ms": 2.088,
+      "p99_ms": 2.088,
+      "max_ms": 2.088,
+      "outcome": "ok"
+    },
+    {
+      "name": "library_open",
+      "samples": 1,
+      "total_ms": 1.904,
+      "p50_ms": 1.904,
+      "p95_ms": 1.904,
+      "p99_ms": 1.904,
+      "max_ms": 1.904,
+      "outcome": "ok"
+    },
+    {
+      "name": "recall_hops0",
+      "samples": 50,
+      "total_ms": 222.96,
+      "p50_ms": 4.196,
+      "p95_ms": 6.114,
+      "p99_ms": 6.642,
+      "max_ms": 6.642,
+      "per_second": 224.26,
+      "outcome": "ok",
+      "detail": "ops/s"
+    },
+    {
+      "name": "recall_hops1",
+      "samples": 50,
+      "total_ms": 265.755,
+      "p50_ms": 4.483,
+      "p95_ms": 9.107,
+      "p99_ms": 10.691,
+      "max_ms": 10.691,
+      "per_second": 188.14,
+      "outcome": "ok",
+      "detail": "ops/s"
+    },
+    {
+      "name": "brain_health",
+      "samples": 1,
+      "total_ms": 107.734,
+      "p50_ms": 107.734,
+      "p95_ms": 107.734,
+      "p99_ms": 107.734,
+      "max_ms": 107.734,
+      "outcome": "ok",
+      "detail": "status=unhealthy mode=exact"
+    },
+    {
+      "name": "brain_health_full",
+      "samples": 1,
+      "total_ms": 98.295,
+      "p50_ms": 98.295,
+      "p95_ms": 98.295,
+      "p99_ms": 98.295,
+      "max_ms": 98.295,
+      "outcome": "ok",
+      "detail": "status=unhealthy"
+    },
+    {
+      "name": "knowledge_gaps",
+      "samples": 1,
+      "total_ms": 22.614,
+      "p50_ms": 22.614,
+      "p95_ms": 22.614,
+      "p99_ms": 22.614,
+      "max_ms": 22.614,
+      "outcome": "ok",
+      "detail": "20 gaps"
+    },
+    {
+      "name": "ingest_remember",
+      "samples": 20,
+      "total_ms": 3583.333,
+      "p50_ms": 196.954,
+      "p95_ms": 240.989,
+      "p99_ms": 240.989,
+      "max_ms": 240.989,
+      "per_second": 5.58,
+      "outcome": "ok",
+      "detail": "ops/s"
+    },
+    {
+      "name": "consolidate_full",
+      "samples": 1,
+      "total_ms": 858.479,
+      "p50_ms": 858.479,
+      "p95_ms": 858.479,
+      "p99_ms": 858.479,
+      "max_ms": 858.479,
+      "outcome": "ok",
+      "detail": "scanned=200 merged=54 credited=40 trust_refreshed=10056"
+    },
+    {
+      "name": "retract_event",
+      "samples": 5,
+      "total_ms": 19.371,
+      "p50_ms": 3.468,
+      "p95_ms": 6.071,
+      "p99_ms": 6.071,
+      "max_ms": 6.071,
+      "per_second": 258.11,
+      "outcome": "ok",
+      "detail": "impact: 5 retracted/8 rescored/28 edges, 4 retracted/2 rescored/13 edges, 4 retracted/4 rescored/7 edges, 4 retracted/1 rescored/8 edges, 4 retracted/1 rescored/5 edges"
+    },
+    {
+      "name": "unretract_event",
+      "samples": 5,
+      "total_ms": 20.88,
+      "p50_ms": 2.897,
+      "p95_ms": 9.862,
+      "p99_ms": 9.862,
+      "max_ms": 9.862,
+      "per_second": 239.46,
+      "outcome": "ok",
+      "detail": "ops/s"
+    },
+    {
+      "name": "recompute_trust_after_churn",
+      "samples": 1,
+      "total_ms": 414.167,
+      "p50_ms": 414.167,
+      "p95_ms": 414.167,
+      "p99_ms": 414.167,
+      "max_ms": 414.167,
+      "outcome": "ok",
+      "detail": "10056 beliefs rescored"
+    },
+    {
+      "name": "recall_live_after_churn",
+      "samples": 200,
+      "total_ms": 2294.807,
+      "p50_ms": 11.898,
+      "p95_ms": 15.173,
+      "p99_ms": 17.716,
+      "max_ms": 19.178,
+      "per_second": 87.15,
+      "outcome": "ok",
+      "detail": "ops/s"
+    },
+    {
+      "name": "recall_recorded_as_of",
+      "samples": 200,
+      "total_ms": 5083.744,
+      "p50_ms": 31.478,
+      "p95_ms": 43.977,
+      "p99_ms": 54.773,
+      "max_ms": 55.004,
+      "per_second": 39.34,
+      "outcome": "ok",
+      "detail": "ops/s"
+    }
+  ],
+  "memory": {
+    "peak_heap_inuse_bytes": 41836544,
+    "max_rss_bytes": 96403456,
+    "db_bytes": 28628024
+  },
+  "notes": [
+    "Corpus is generated, not extracted: load time measures the storage write path, not extraction.",
+    "Beliefs carry no embeddings; recall uses the token-overlap path (passive mode).",
+    "ingest = mnemos.Remember in passive mode: rule extraction + incremental relate against the loaded corpus + persist + scoped trust.",
+    "Each operation runs under its own timeout; 'timeout' is a result, not a harness failure.",
+    "storage.after_seed is censused after bulk load and the first trust recompute; after_churn at the end of the run.",
+    "Churn phases perform the same number of operations at every size, so per-operation growth compares across sizes.",
+    "Merges come from 100 seeded pairs of identical stub embeddings; the corpus has no other embeddings."
+  ],
+  "storage": {
+    "after_seed": {
+      "db_bytes": 21995520,
+      "page_bytes": 21995520,
+      "beliefs": 10000,
+      "episodes": 2000,
+      "bytes_per_belief": 2199.55,
+      "bytes_per_episode": 10997.76,
+      "tables": {
+        "actions": {
+          "rows": 0,
+          "bytes": 24576,
+          "rows_per_belief": 0
+        },
+        "agents": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "claim_credit_history": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "claim_entities": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "claim_evidence": {
+          "rows": 14536,
+          "bytes": 2011136,
+          "rows_per_belief": 1.4536
+        },
+        "claim_expectations": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "claim_feedback": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "claim_status_history": {
+          "rows": 10000,
+          "bytes": 1372160,
+          "rows_per_belief": 1
+        },
+        "claim_tokens": {
+          "rows": 78483,
+          "bytes": 4984832,
+          "rows_per_belief": 7.8483
+        },
+        "claim_trust_input_history": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "claim_validity_history": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "claim_versions": {
+          "rows": 10000,
+          "bytes": 2125824,
+          "rows_per_belief": 1
+        },
+        "claims": {
+          "rows": 10000,
+          "bytes": 5578752,
+          "rows_per_belief": 1
+        },
+        "claims_fts": {
+          "rows": 10000,
+          "rows_per_belief": 1
+        },
+        "claims_fts_config": {
+          "rows": 1,
+          "bytes": 4096,
+          "rows_per_belief": 0.0001
+        },
+        "claims_fts_content": {
+          "rows": 10000,
+          "bytes": 1028096,
+          "rows_per_belief": 1
+        },
+        "claims_fts_data": {
+          "rows": 157,
+          "bytes": 643072,
+          "rows_per_belief": 0.0157
+        },
+        "claims_fts_docsize": {
+          "rows": 10000,
+          "bytes": 106496,
+          "rows_per_belief": 1
+        },
+        "claims_fts_idx": {
+          "rows": 143,
+          "bytes": 4096,
+          "rows_per_belief": 0.0143
+        },
+        "claims_fts_map": {
+          "rows": 10000,
+          "bytes": 524288,
+          "rows_per_belief": 1
+        },
+        "closed_claim_evidence": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "closed_relationships": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "cognitive_journal": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "compilation_jobs": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "decision_beliefs": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "decisions": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "embeddings": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "entities": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "entity_relationships": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "events": {
+          "rows": 2000,
+          "bytes": 610304,
+          "rows_per_belief": 0.2
+        },
+        "events_fts": {
+          "rows": 2000,
+          "rows_per_belief": 0.2
+        },
+        "events_fts_config": {
+          "rows": 1,
+          "bytes": 4096,
+          "rows_per_belief": 0.0001
+        },
+        "events_fts_content": {
+          "rows": 2000,
+          "bytes": 159744,
+          "rows_per_belief": 0.2
+        },
+        "events_fts_data": {
+          "rows": 25,
+          "bytes": 98304,
+          "rows_per_belief": 0.0025
+        },
+        "events_fts_docsize": {
+          "rows": 2000,
+          "bytes": 24576,
+          "rows_per_belief": 0.2
+        },
+        "events_fts_idx": {
+          "rows": 19,
+          "bytes": 4096,
+          "rows_per_belief": 0.0019
+        },
+        "events_fts_map": {
+          "rows": 2000,
+          "bytes": 114688,
+          "rows_per_belief": 0.2
+        },
+        "global_schemas": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "incidents": {
+          "rows": 0,
+          "bytes": 24576,
+          "rows_per_belief": 0
+        },
+        "lesson_evidence": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "lesson_versions": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "lessons": {
+          "rows": 0,
+          "bytes": 32768,
+          "rows_per_belief": 0
+        },
+        "outcomes": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "playbook_lessons": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "playbook_versions": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "playbooks": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "relate_token_state": {
+          "rows": 1,
+          "bytes": 4096,
+          "rows_per_belief": 0.0001
+        },
+        "relationships": {
+          "rows": 7947,
+          "bytes": 2117632,
+          "rows_per_belief": 0.7947
+        },
+        "revoked_tokens": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "users": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "working_memory_blocks": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        }
+      }
+    },
+    "after_churn": {
+      "db_bytes": 28628024,
+      "page_bytes": 22822912,
+      "beliefs": 10056,
+      "episodes": 2060,
+      "bytes_per_belief": 2846.86,
+      "bytes_per_episode": 13897.1,
+      "tables": {
+        "actions": {
+          "rows": 0,
+          "bytes": 24576,
+          "rows_per_belief": 0
+        },
+        "agents": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "claim_credit_history": {
+          "rows": 40,
+          "bytes": 8192,
+          "rows_per_belief": 0.004
+        },
+        "claim_entities": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "claim_evidence": {
+          "rows": 14592,
+          "bytes": 2027520,
+          "rows_per_belief": 1.4511
+        },
+        "claim_expectations": {
+          "rows": 40,
+          "bytes": 8192,
+          "rows_per_belief": 0.004
+        },
+        "claim_feedback": {
+          "rows": 50,
+          "bytes": 8192,
+          "rows_per_belief": 0.005
+        },
+        "claim_status_history": {
+          "rows": 10202,
+          "bytes": 1409024,
+          "rows_per_belief": 1.0145
+        },
+        "claim_tokens": {
+          "rows": 78863,
+          "bytes": 5017600,
+          "rows_per_belief": 7.8424
+        },
+        "claim_trust_input_history": {
+          "rows": 25,
+          "bytes": 8192,
+          "rows_per_belief": 0.0025
+        },
+        "claim_validity_history": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "claim_versions": {
+          "rows": 10252,
+          "bytes": 2174976,
+          "rows_per_belief": 1.0195
+        },
+        "claims": {
+          "rows": 10056,
+          "bytes": 5693440,
+          "rows_per_belief": 1
+        },
+        "claims_fts": {
+          "rows": 10056,
+          "rows_per_belief": 1
+        },
+        "claims_fts_config": {
+          "rows": 1,
+          "bytes": 4096,
+          "rows_per_belief": 0.0001
+        },
+        "claims_fts_content": {
+          "rows": 10056,
+          "bytes": 1032192,
+          "rows_per_belief": 1
+        },
+        "claims_fts_data": {
+          "rows": 169,
+          "bytes": 647168,
+          "rows_per_belief": 0.0168
+        },
+        "claims_fts_docsize": {
+          "rows": 10056,
+          "bytes": 106496,
+          "rows_per_belief": 1
+        },
+        "claims_fts_idx": {
+          "rows": 155,
+          "bytes": 4096,
+          "rows_per_belief": 0.0154
+        },
+        "claims_fts_map": {
+          "rows": 10056,
+          "bytes": 528384,
+          "rows_per_belief": 1
+        },
+        "closed_claim_evidence": {
+          "rows": 89,
+          "bytes": 36864,
+          "rows_per_belief": 0.0089
+        },
+        "closed_relationships": {
+          "rows": 1,
+          "bytes": 16384,
+          "rows_per_belief": 0.0001
+        },
+        "cognitive_journal": {
+          "rows": 51,
+          "bytes": 49152,
+          "rows_per_belief": 0.0051
+        },
+        "compilation_jobs": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "decision_beliefs": {
+          "rows": 40,
+          "bytes": 12288,
+          "rows_per_belief": 0.004
+        },
+        "decisions": {
+          "rows": 20,
+          "bytes": 20480,
+          "rows_per_belief": 0.002
+        },
+        "embeddings": {
+          "rows": 146,
+          "bytes": 98304,
+          "rows_per_belief": 0.0145
+        },
+        "entities": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "entity_relationships": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "events": {
+          "rows": 2060,
+          "bytes": 634880,
+          "rows_per_belief": 0.2049
+        },
+        "events_fts": {
+          "rows": 2060,
+          "rows_per_belief": 0.2049
+        },
+        "events_fts_config": {
+          "rows": 1,
+          "bytes": 4096,
+          "rows_per_belief": 0.0001
+        },
+        "events_fts_content": {
+          "rows": 2060,
+          "bytes": 167936,
+          "rows_per_belief": 0.2049
+        },
+        "events_fts_data": {
+          "rows": 39,
+          "bytes": 110592,
+          "rows_per_belief": 0.0039
+        },
+        "events_fts_docsize": {
+          "rows": 2060,
+          "bytes": 28672,
+          "rows_per_belief": 0.2049
+        },
+        "events_fts_idx": {
+          "rows": 33,
+          "bytes": 4096,
+          "rows_per_belief": 0.0033
+        },
+        "events_fts_map": {
+          "rows": 2060,
+          "bytes": 114688,
+          "rows_per_belief": 0.2049
+        },
+        "global_schemas": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "incidents": {
+          "rows": 0,
+          "bytes": 24576,
+          "rows_per_belief": 0
+        },
+        "lesson_evidence": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "lesson_versions": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "lessons": {
+          "rows": 0,
+          "bytes": 32768,
+          "rows_per_belief": 0
+        },
+        "outcomes": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "playbook_lessons": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "playbook_versions": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        },
+        "playbooks": {
+          "rows": 0,
+          "bytes": 20480,
+          "rows_per_belief": 0
+        },
+        "relate_token_state": {
+          "rows": 1,
+          "bytes": 4096,
+          "rows_per_belief": 0.0001
+        },
+        "relationships": {
+          "rows": 9148,
+          "bytes": 2490368,
+          "rows_per_belief": 0.9097
+        },
+        "revoked_tokens": {
+          "rows": 0,
+          "bytes": 12288,
+          "rows_per_belief": 0
+        },
+        "users": {
+          "rows": 0,
+          "bytes": 16384,
+          "rows_per_belief": 0
+        },
+        "working_memory_blocks": {
+          "rows": 0,
+          "bytes": 8192,
+          "rows_per_belief": 0
+        }
+      }
+    },
+    "phases": [
+      {
+        "name": "recall_hops1",
+        "kind": "recall",
+        "ops": 200,
+        "elapsed_ms": 2584.727,
+        "committed": true
+      },
+      {
+        "name": "get_belief",
+        "kind": "read",
+        "ops": 200,
+        "elapsed_ms": 12.263,
+        "committed": false
+      },
+      {
+        "name": "brain_health",
+        "kind": "read",
+        "ops": 1,
+        "elapsed_ms": 167.069,
+        "committed": false
+      },
+      {
+        "name": "recall_recorded_as_of",
+        "kind": "read",
+        "ops": 200,
+        "elapsed_ms": 3900.273,
+        "committed": false
+      },
+      {
+        "name": "reingest_same_document",
+        "kind": "write",
+        "ops": 20,
+        "elapsed_ms": 7.996,
+        "committed": true,
+        "growth": {
+          "events": 20,
+          "events_fts": 20,
+          "events_fts_content": 20,
+          "events_fts_data": 5,
+          "events_fts_docsize": 20,
+          "events_fts_idx": 5,
+          "events_fts_map": 20
+        },
+        "detail": "documents the warm phase already ingested, no session"
+      },
+      {
+        "name": "restate_new_session",
+        "kind": "write",
+        "ops": 20,
+        "elapsed_ms": 2227.371,
+        "committed": true,
+        "growth": {
+          "claim_evidence": 20,
+          "claim_status_history": 20,
+          "claim_tokens": 164,
+          "claim_versions": 20,
+          "claims": 20,
+          "claims_fts": 20,
+          "claims_fts_content": 20,
+          "claims_fts_data": 6,
+          "claims_fts_docsize": 20,
+          "claims_fts_idx": 6,
+          "claims_fts_map": 20,
+          "events": 20,
+          "events_fts": 20,
+          "events_fts_content": 20,
+          "events_fts_data": 3,
+          "events_fts_docsize": 20,
+          "events_fts_idx": 3,
+          "events_fts_map": 20,
+          "relationships": 482
+        },
+        "per_op": {
+          "claim_status_history": 1
+        },
+        "detail": "a held belief restated in a new session (episode + claim citing it)"
+      },
+      {
+        "name": "feedback",
+        "kind": "write",
+        "ops": 50,
+        "elapsed_ms": 39.989,
+        "committed": true,
+        "growth": {
+          "claim_feedback": 50,
+          "claim_trust_input_history": 25,
+          "claim_versions": 50
+        },
+        "per_op": {
+          "claim_trust_input_history": 0.5
+        }
+      },
+      {
+        "name": "decision_expectation",
+        "kind": "write",
+        "ops": 20,
+        "elapsed_ms": 20.831,
+        "committed": true,
+        "growth": {
+          "claim_expectations": 40,
+          "decision_beliefs": 40,
+          "decisions": 20
+        },
+        "detail": "one decision on two beliefs, each with an observed expectation (half validated, half refuted)"
+      },
+      {
+        "name": "embed_merge_pairs",
+        "kind": "setup",
+        "ops": 100,
+        "elapsed_ms": 14.495,
+        "committed": true,
+        "growth": {
+          "embeddings": 200
+        }
+      },
+      {
+        "name": "consolidate",
+        "kind": "maintenance",
+        "ops": 1,
+        "elapsed_ms": 858.481,
+        "committed": true,
+        "growth": {
+          "claim_credit_history": 40,
+          "claim_status_history": 54,
+          "claim_versions": 54,
+          "closed_claim_evidence": 73,
+          "closed_relationships": 1,
+          "cognitive_journal": 41,
+          "embeddings": -54,
+          "relationships": -1
+        },
+        "per_op": {
+          "claim_credit_history": 40,
+          "claim_status_history": 54,
+          "closed_claim_evidence": 73,
+          "closed_relationships": 1,
+          "cognitive_journal": 41
+        },
+        "detail": "scanned=200 merged=54 credited=40 trust_refreshed=10056"
+      },
+      {
+        "name": "retract_event",
+        "kind": "write",
+        "ops": 5,
+        "elapsed_ms": 19.375,
+        "committed": true,
+        "growth": {
+          "claim_evidence": -16,
+          "claim_status_history": 21,
+          "claim_versions": 21,
+          "closed_claim_evidence": 16,
+          "cognitive_journal": 5
+        },
+        "per_op": {
+          "claim_status_history": 4.2,
+          "closed_claim_evidence": 3.2,
+          "cognitive_journal": 1
+        },
+        "detail": "impact: 5 retracted/8 rescored/28 edges, 4 retracted/2 rescored/13 edges, 4 retracted/4 rescored/7 edges, 4 retracted/1 rescored/8 edges, 4 retracted/1 rescored/5 edges"
+      },
+      {
+        "name": "unretract_event",
+        "kind": "write",
+        "ops": 5,
+        "elapsed_ms": 20.882,
+        "committed": true,
+        "growth": {
+          "claim_evidence": 16,
+          "claim_status_history": 21,
+          "claim_versions": 21,
+          "cognitive_journal": 5
+        },
+        "per_op": {
+          "claim_status_history": 4.2,
+          "cognitive_journal": 1
+        }
+      },
+      {
+        "name": "prune_deprecate",
+        "kind": "write",
+        "ops": 50,
+        "elapsed_ms": 44.59,
+        "committed": true,
+        "growth": {
+          "claim_status_history": 50,
+          "claim_versions": 50
+        },
+        "per_op": {
+          "claim_status_history": 1
+        }
+      },
+      {
+        "name": "recompute_trust_full",
+        "kind": "maintenance",
+        "ops": 1,
+        "elapsed_ms": 414.169,
+        "committed": true,
+        "detail": "10056 beliefs rescored"
+      },
+      {
+        "name": "recall_live_vs_recorded",
+        "kind": "recall",
+        "ops": 400,
+        "elapsed_ms": 7378.643,
+        "committed": true,
+        "detail": "recorded-as-of p50 is 2.65x live"
+      }
+    ],
+    "findings": [
+      "DEFECT restate_new_session (20 ops) added 20 claims rows; it must add none"
+    ]
+  }
+}

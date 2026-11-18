@@ -131,9 +131,16 @@ type ScenarioResult struct {
 
 	// Questions lists the probe ids every answerer was asked, in order.
 	Questions []string `json:"questions"`
+	// Outcomes is the untreated Mnemos arm's per-question result, the
+	// counterpart of each baseline's metrics.outcomes.
+	Outcomes []Outcome `json:"outcomes"`
 	// Baselines compares the untreated Mnemos arm with raw retrieval over the
 	// same documents. Separate from Summary and Verdict by design.
 	Baselines []BaselineResult `json:"baselines"`
+	// Cost is what each system (Mnemos recall on the untreated arm, and each
+	// baseline) spent building its store and answering. Wall-clock, so it
+	// varies run to run and feeds no verdict.
+	Cost CostReport `json:"cost"`
 
 	// Retraction is the evidence-retraction track, for a scenario that
 	// declares one. Its own arms, verdict and baselines (retraction.go).
@@ -256,9 +263,15 @@ func run(ctx context.Context, sc Scenario, workDir string, retract retractFunc) 
 		return res, err
 	}
 	res.Questions = control.Questions
-	res.Baselines, err = runBaselines(ctx, events, qs, control)
+	res.Outcomes = control.Outcomes
+	var baseCosts []SystemCost
+	res.Baselines, baseCosts, err = runBaselines(ctx, events, qs, control)
 	if err != nil {
 		return res, err
+	}
+	res.Cost = CostReport{
+		CorpusBytes: corpusBytes(events),
+		Systems:     append([]SystemCost{mnemosCost(seedStats, control)}, baseCosts...),
 	}
 	if sc.Retraction != nil {
 		res.Retraction, err = runRetractionTrack(ctx, sc, dir, seedPath, events, retract)
