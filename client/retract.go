@@ -33,7 +33,33 @@ type RetractionImpact struct {
 	Relationships []string           `json:"associations,omitempty"`
 	Decisions     []DecisionExposure `json:"decisions,omitempty"`
 	OutcomeEdges  []string           `json:"outcome_edges,omitempty"`
-	Uncertainty   []string           `json:"uncertainty"`
+	// DependentEvents depend on the retracted event, directly or through
+	// other events (ADR 0038); they are not retracted themselves.
+	DependentEvents []EventDependencyHop `json:"dependent_episodes,omitempty"`
+	// ClaimPaths is the event chain that reached each withdrawn, rescored or
+	// dependent-kept claim.
+	ClaimPaths  []ClaimPath `json:"belief_paths,omitempty"`
+	Uncertainty []string    `json:"uncertainty"`
+}
+
+// EventDependencyHop is one recorded dependency (ADR 0038): EventID cites,
+// copies or derives from DependsOn.
+type EventDependencyHop struct {
+	EventID   string `json:"episode_id"`
+	DependsOn string `json:"depends_on"`
+	// Kind is cites, copies or derived_from.
+	Kind string `json:"kind"`
+	// Signal is metadata, link or named_source.
+	Signal    string `json:"signal"`
+	Reference string `json:"reference"`
+}
+
+// ClaimPath is how a retraction reached a claim: Outcome is retracted,
+// rescored or kept, Via the event chain from the retracted event.
+type ClaimPath struct {
+	ClaimID string   `json:"belief_id"`
+	Outcome string   `json:"outcome"`
+	Via     []string `json:"via"`
 }
 
 // RescoredClaim is a claim that survived a retraction on other evidence.

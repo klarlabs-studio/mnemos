@@ -119,9 +119,17 @@ func printRetraction(v retractionView) {
 		fmt.Printf("Retracted event %s.\n", v.EpisodeID)
 	}
 	im := v.Impact
-	fmt.Printf("  beliefs retracted (no live evidence left): %d %s\n", len(im.RetractedBeliefs), strings.Join(im.RetractedBeliefs, " "))
+	fmt.Printf("  beliefs retracted (no live independent evidence left): %d %s\n", len(im.RetractedBeliefs), strings.Join(im.RetractedBeliefs, " "))
 	for _, r := range im.Rescored {
-		fmt.Printf("  belief %s kept on %d other episode(s); trust %.3f -> %.3f\n", r.ID, r.RemainingEvidence, r.TrustBefore, r.TrustAfter)
+		fmt.Printf("  belief %s kept on %d independent episode(s); trust %.3f -> %.3f\n", r.ID, r.RemainingEvidence, r.TrustBefore, r.TrustAfter)
+	}
+	for _, h := range im.DependentEpisodes {
+		fmt.Printf("  episode %s %s %s (%s: %q); not retracted, not independent\n", h.EventID, h.Kind, h.DependsOn, h.Signal, h.Reference)
+	}
+	for _, p := range im.BeliefPaths {
+		if len(p.Via) > 1 {
+			fmt.Printf("  belief %s %s through %s\n", p.BeliefID, p.Outcome, strings.Join(p.Via, " -> "))
+		}
 	}
 	if len(im.AlreadyDeprecated) > 0 {
 		fmt.Printf("  already deprecated, left as is: %s\n", strings.Join(im.AlreadyDeprecated, " "))

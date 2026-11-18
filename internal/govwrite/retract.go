@@ -129,11 +129,23 @@ func retractEvent(ctx context.Context, conn *store.Conn, eventID string, note do
 		return domain.EventRetraction{}, fmt.Errorf("event %s not found: %w", eventID, err)
 	}
 
-	dependents, err := conn.Claims.ListByEventIDs(ctx, []string{eventID})
+	direct, err := conn.Claims.ListByEventIDs(ctx, []string{eventID})
 	if err != nil {
 		return domain.EventRetraction{}, fmt.Errorf("list dependent beliefs: %w", err)
 	}
-	live, err := liveEvidenceElsewhere(ctx, conn, dependents, eventID)
+	// ADR 0038 §4: the episodes that depend on this one, and the beliefs
+	// their evidence reaches.
+	closure, err := closureOf(ctx, conn, eventID)
+	if err != nil {
+		return domain.EventRetraction{}, err
+	}
+	reached, via, err := reachedThroughClosure(ctx, conn, closure, direct)
+	if err != nil {
+		return domain.EventRetraction{}, err
+	}
+	dependents := make([]domain.Claim, 0, len(direct)+len(reached))
+	dependents = append(append(dependents, direct...), reached...)
+	live, err := liveIndependentEvidence(ctx, conn, dependents, newIndependence(conn, map[string]bool{eventID: true}))
 	if err != nil {
 		return domain.EventRetraction{}, err
 	}
@@ -145,19 +157,38 @@ func retractEvent(ctx context.Context, conn *store.Conn, eventID string, note do
 	impact := &rec.Impact
 	impact.RetractedBeliefs = []string{}
 	impact.Rescored = []domain.RescoredBelief{}
+	impact.DependentEpisodes = closure.hops()
+
+	isDirect := make(map[string]bool, len(direct))
+	for _, c := range direct {
+		isDirect[c.ID] = true
+	}
+	pathOf := func(id string) []string {
+		if isDirect[id] {
+			return []string{eventID}
+		}
+		return closure.path(via[id])
+	}
 
 	var toRetract []domain.Claim
 	var kept []domain.Claim
 	for _, c := range dependents {
 		switch {
-		case live[c.ID] > 0:
+		case live[c.ID] > 0 && isDirect[c.ID]:
 			kept = append(kept, c)
+			impact.BeliefPaths = append(impact.BeliefPaths, domain.BeliefPath{BeliefID: c.ID, Outcome: domain.BeliefOutcomeRescored, Via: pathOf(c.ID)})
+		case live[c.ID] > 0:
+			// Reached only through a dependent episode, and kept on
+			// independent evidence. Nothing changes: the dependent's
+			// evidence never counted as independent (ADR 0038 §4.6).
+			impact.BeliefPaths = append(impact.BeliefPaths, domain.BeliefPath{BeliefID: c.ID, Outcome: domain.BeliefOutcomeKept, Via: pathOf(c.ID)})
 		case c.Status == domain.ClaimStatusDeprecated:
 			impact.AlreadyDeprecated = append(impact.AlreadyDeprecated, c.ID)
 		default:
 			c.Status = domain.ClaimStatusDeprecated
 			toRetract = append(toRetract, c)
 			impact.RetractedBeliefs = append(impact.RetractedBeliefs, c.ID)
+			impact.BeliefPaths = append(impact.BeliefPaths, domain.BeliefPath{BeliefID: c.ID, Outcome: domain.BeliefOutcomeRetracted, Via: pathOf(c.ID)})
 		}
 	}
 
@@ -216,40 +247,55 @@ func retractEvent(ctx context.Context, conn *store.Conn, eventID string, note do
 	return rec, nil
 }
 
-// liveEvidenceElsewhere counts, per belief, its evidence links to events other
-// than eventID that are not themselves retracted.
-func liveEvidenceElsewhere(ctx context.Context, conn *store.Conn, claims []domain.Claim, eventID string) (map[string]int, error) {
-	out := make(map[string]int, len(claims))
-	if len(claims) == 0 {
-		return out, nil
+// reachedThroughClosure returns the beliefs with evidence from an episode in
+// closure that are not already in direct, sorted by id, and for each the
+// closure episode that reached it (the nearest one, then the smallest id).
+func reachedThroughClosure(ctx context.Context, conn *store.Conn, closure dependencyClosure, direct []domain.Claim) ([]domain.Claim, map[string]string, error) {
+	via := map[string]string{}
+	if len(closure.order) == 0 {
+		return nil, via, nil
 	}
-	ids := make([]string, len(claims))
-	for i, c := range claims {
+	claims, err := conn.Claims.ListByEventIDs(ctx, closure.order)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list beliefs of dependent episodes: %w", err)
+	}
+	skip := make(map[string]bool, len(direct))
+	for _, c := range direct {
+		skip[c.ID] = true
+	}
+	var out []domain.Claim
+	for _, c := range claims {
+		if !skip[c.ID] {
+			skip[c.ID] = true
+			out = append(out, c)
+		}
+	}
+	if len(out) == 0 {
+		return nil, via, nil
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	ids := make([]string, len(out))
+	for i, c := range out {
 		ids[i] = c.ID
 	}
 	links, err := conn.Claims.ListEvidenceByClaimIDs(ctx, ids)
 	if err != nil {
-		return nil, fmt.Errorf("list evidence of dependent beliefs: %w", err)
+		return nil, nil, fmt.Errorf("list evidence of reached beliefs: %w", err)
 	}
-	retracted := map[string]bool{}
+	rank := make(map[string]int, len(closure.order))
+	for i, id := range closure.order {
+		rank[id] = i
+	}
 	for _, l := range links {
-		if l.EventID == eventID {
+		r, inClosure := rank[l.EventID]
+		if !inClosure {
 			continue
 		}
-		dead, seen := retracted[l.EventID]
-		if !seen {
-			_, isRetracted, err := LookupRetraction(ctx, conn, l.EventID)
-			if err != nil {
-				return nil, err
-			}
-			retracted[l.EventID] = isRetracted
-			dead = isRetracted
-		}
-		if !dead {
-			out[l.ClaimID]++
+		if cur, ok := via[l.ClaimID]; !ok || r < rank[cur] {
+			via[l.ClaimID] = l.EventID
 		}
 	}
-	return out, nil
+	return out, via, nil
 }
 
 // collectExposure lists what touches a retracted belief: associations,
@@ -320,6 +366,9 @@ func retractionUncertainty(impact *domain.RetractionImpact) []string {
 			"(lesson_evidence.action_id, playbook_lessons), not from episodes or beliefs, so no stored " +
 			"link reaches them from a retracted episode and none are listed; that is an absence of a link, not a finding that none depended on it.",
 		"Beliefs derived from a retracted belief by an association are not re-evaluated; the associations are listed, not judged.",
+		"Dependent episodes are found only where an episode says what it depends on (a citation marker naming a stored source, " +
+			"a link, or provenance metadata; ADR 0038). An uncited paraphrase or an uncited conclusion drawn from this episode " +
+			"is not detected and still counts as independent evidence.",
 	}
 	if len(impact.Decisions) > 0 {
 		out = append(out, "A listed decision cited a retracted belief. That does not make the decision wrong: "+
