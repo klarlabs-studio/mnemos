@@ -63,6 +63,15 @@ type ClaimRepository interface {
 	Upsert(ctx context.Context, claims []domain.Claim) error
 	UpsertWithReason(ctx context.Context, claims []domain.Claim, reason string) error
 	UpsertWithReasonAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error
+	// UpsertAssertingStatusAs is UpsertWithReasonAs for a write whose
+	// purpose is to set each claim's status: a deliberate act by changedBy
+	// (memory_deprecate, forget, resolving a contradiction). It records a
+	// status-history row for every claim even when the status does not
+	// change, a row with from_status == to_status, so whoever last decided
+	// a belief's status is visible (ADR 0037 §8). Ordinary writes (ingest,
+	// backfills, federation) use the other Upsert variants, which record
+	// changes only, so re-ingesting a belief never adds history.
+	UpsertAssertingStatusAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error
 	UpsertEvidence(ctx context.Context, links []domain.ClaimEvidence) error
 	ListByEventIDs(ctx context.Context, eventIDs []string) ([]domain.Claim, error)
 	ListEvidenceByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.ClaimEvidence, error)

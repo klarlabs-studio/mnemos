@@ -100,21 +100,26 @@ ON CONFLICT (id) DO UPDATE SET
 
 // Upsert satisfies the corresponding ports method.
 func (r ClaimRepository) Upsert(ctx context.Context, claims []domain.Claim) error {
-	return r.upsertWithReason(ctx, claims, "", "")
+	return r.upsertWithReason(ctx, claims, "", "", false)
 }
 
 // UpsertWithReason satisfies the corresponding ports method.
 func (r ClaimRepository) UpsertWithReason(ctx context.Context, claims []domain.Claim, reason string) error {
-	return r.upsertWithReason(ctx, claims, reason, "")
+	return r.upsertWithReason(ctx, claims, reason, "", false)
 }
 
 // UpsertWithReasonAs satisfies the corresponding ports method.
 func (r ClaimRepository) UpsertWithReasonAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
-	return r.upsertWithReason(ctx, claims, reason, changedBy)
+	return r.upsertWithReason(ctx, claims, reason, changedBy, false)
+}
+
+// UpsertAssertingStatusAs satisfies the corresponding ports method.
+func (r ClaimRepository) UpsertAssertingStatusAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
+	return r.upsertWithReason(ctx, claims, reason, changedBy, true)
 }
 
 // upsertWithReason satisfies the corresponding ports method.
-func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
+func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.Claim, reason, changedBy string, assert bool) error {
 	if len(claims) == 0 {
 		return nil
 	}
@@ -183,7 +188,7 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 		}
 
 		newStatus := string(claim.Status)
-		if priorStatus == newStatus {
+		if priorStatus == newStatus && !assert {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, historyInsert,
