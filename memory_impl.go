@@ -2334,7 +2334,7 @@ const (
 	// healthLowTrustFloor is the age-neutral trust below which a belief counts
 	// toward low_trust (ADR 0032): trust at its own evidence date, so a belief
 	// that merely aged onto the freshness floor is stale, not untrusted.
-	healthLowTrustFloor = 0.30
+	healthLowTrustFloor = trust.LowTrustFloor
 	// healthSkillCoverage* grade the share of actions with NO observed outcome.
 	// Generous thresholds: a run still in flight legitimately has unobserved
 	// actions, so this is meant to catch a loop that never closes, not one
@@ -2350,7 +2350,7 @@ const (
 	// a brain, and it is shorter than every half-life in play (the 90-day default,
 	// the 14-day volatile one), so the vital leads staleness rather than
 	// restating it after the fact.
-	healthTrustDecayHorizonDays = 30.0
+	healthTrustDecayHorizonDays = trust.DecayHorizonDays
 	// healthTrustDecay{Warn,Crit} grade trust_decay as a RATIO of observed to
 	// steady-state crossings (ADR 0032). A brain fed at a steady rate reads ~1.0
 	// whatever its half-lives; 1.5× is a backlog worth noticing, 3× is a burst of
@@ -2362,7 +2362,7 @@ const (
 	// healthTrustDecayMinExpected: below this many expected crossings the ratio
 	// is noise (one crossing against 0.2 expected reads 5×), so the vital is
 	// unknown rather than alarming on a handful of beliefs.
-	healthTrustDecayMinExpected = 1.0
+	healthTrustDecayMinExpected = trust.DecayMinExpected
 	// healthStaleExpectationCrit: an open-expectation backlog past this many overdue is
 	// critical (the prediction loop is stalling).
 	healthStaleExpectationCrit = 25
@@ -2447,59 +2447,17 @@ func (m *memory) skillCoverageVital(ctx context.Context) Vital {
 	return Vital{name, rate, gradeHigherWorse(1-rate, healthSkillCoverageWarn, healthSkillCoverageCrit), detail}
 }
 
-// trustReference is the instant a belief's freshness is measured from: its
-// latest dated evidence or its last confirmation, whichever is later (ADR 0026).
-func trustReference(in domain.TrustInput) time.Time {
-	if in.LastConfirmed.After(in.LatestEvidence) {
-		return in.LastConfirmed
-	}
-	return in.LatestEvidence
-}
+// trustReference, ageNeutralTrust, floorAgeDays and projectTrustDecay are the
+// decay model's readers (ADR 0026, ADR 0032). They live in internal/trust so the
+// brainbench harness projects with the same function the vital does.
+func trustReference(in domain.TrustInput) time.Time { return trust.Reference(in) }
 
-// ageNeutralTrust is a belief's trust at its own reference instant: trust.At
-// with freshness 1, so only confidence, corroboration and credit remain. It is
-// what low_trust grades (ADR 0032). Trust that is low only because the belief
-// aged onto the freshness floor is staleness's to report, and counting it here
-// put every belief with confidence below 1.0 under the floor for good (#481).
-func ageNeutralTrust(in domain.TrustInput, now time.Time) float64 {
-	ref := trustReference(in)
-	if ref.IsZero() || ref.After(now) {
-		ref = now
-	}
-	return trust.At(in, ref)
-}
+func ageNeutralTrust(in domain.TrustInput, now time.Time) float64 { return trust.AgeNeutral(in, now) }
 
-// floorAgeDays is how many days after its reference a belief's freshness
-// reaches trust.FreshnessFloor: τ·ln(1/floor), with τ its own time constant.
-func floorAgeDays(in domain.TrustInput) float64 {
-	tau := in.HalfLifeDays
-	if tau <= 0 {
-		tau = trust.FreshnessHalfLifeDays
-	}
-	return tau * math.Log(1/trust.FreshnessFloor)
-}
+func floorAgeDays(in domain.TrustInput) float64 { return trust.FloorAgeDays(in) }
 
-// projectTrustDecay places a belief on its way to the freshness floor (ADR
-// 0032). approaching: it has dated evidence, is not low-trust on its merits,
-// and has not reached the floor yet. crossing: it reaches the floor within the
-// horizon. expected: the chance a belief of its time constant crosses within
-// the horizon when beliefs arrive at a steady rate (horizon / floor age,
-// capped at 1), so summing it gives the crossings a steady brain would show.
-//
-// A belief with no dated evidence and no confirmation cannot be projected: its
-// freshness is undefined rather than perfect, so it is excluded.
 func projectTrustDecay(in domain.TrustInput, now time.Time) (approaching, crossing bool, expected float64) {
-	ref := trustReference(in)
-	if ref.IsZero() || ageNeutralTrust(in, now) < healthLowTrustFloor {
-		return false, false, 0
-	}
-	age := math.Max(0, now.Sub(ref).Hours()/24)
-	floorAge := floorAgeDays(in)
-	if age >= floorAge {
-		return false, false, 0 // already on the floor: staleness owns it
-	}
-	return true, age+healthTrustDecayHorizonDays >= floorAge,
-		math.Min(1, healthTrustDecayHorizonDays/floorAge)
+	return trust.ProjectDecay(in, now)
 }
 
 // trustDecayVital reports how many beliefs reach the freshness floor within

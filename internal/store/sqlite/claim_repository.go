@@ -29,7 +29,7 @@ func NewClaimRepository(db *sql.DB) ClaimRepository {
 // opt in — status is a first-class concept and its timeline should be
 // recorded for every write.
 func (r ClaimRepository) Upsert(ctx context.Context, claims []domain.Claim) error {
-	return r.upsertWithReason(ctx, claims, "", "")
+	return r.upsertWithReason(ctx, claims, "", "", false)
 }
 
 // UpsertWithReason is like Upsert but records a human-readable reason on
@@ -38,7 +38,7 @@ func (r ClaimRepository) Upsert(ctx context.Context, claims []domain.Claim) erro
 // resolve"); pass empty to Upsert and the transition records "" which
 // still captures the when, just not the why.
 func (r ClaimRepository) UpsertWithReason(ctx context.Context, claims []domain.Claim, reason string) error {
-	return r.upsertWithReason(ctx, claims, reason, "")
+	return r.upsertWithReason(ctx, claims, reason, "", false)
 }
 
 // UpsertWithReasonAs is the actor-aware variant of UpsertWithReason. The
@@ -46,10 +46,17 @@ func (r ClaimRepository) UpsertWithReason(ctx context.Context, claims []domain.C
 // trail can attribute the change to a specific user. Empty string falls
 // back to SystemUser via actorOr.
 func (r ClaimRepository) UpsertWithReasonAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
-	return r.upsertWithReason(ctx, claims, reason, changedBy)
+	return r.upsertWithReason(ctx, claims, reason, changedBy, false)
 }
 
-func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
+// UpsertAssertingStatusAs is UpsertWithReasonAs that records a status
+// history row for every claim, unchanged status included (see the ports
+// method).
+func (r ClaimRepository) UpsertAssertingStatusAs(ctx context.Context, claims []domain.Claim, reason, changedBy string) error {
+	return r.upsertWithReason(ctx, claims, reason, changedBy, true)
+}
+
+func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.Claim, reason, changedBy string, assert bool) error {
 	if len(claims) == 0 {
 		return nil
 	}
@@ -157,7 +164,7 @@ VALUES (
 		}
 
 		newStatus := string(claim.Status)
-		if priorStatus == newStatus {
+		if priorStatus == newStatus && !assert {
 			continue // no status transition row, but version row above still recorded the snapshot
 		}
 		if _, err := tx.ExecContext(ctx,

@@ -213,6 +213,14 @@ func restorable(ctx context.Context, conn *store.Conn, eventID string, active do
 			continue
 		}
 		last := history[len(history)-1]
+		// A retraction only deprecates beliefs that were not deprecated, so
+		// its own row is always a change. A reassertion after it is someone
+		// deciding the status again (ADR 0037 §8): their decision stands.
+		if last.IsReassertion() {
+			skip(id, fmt.Sprintf("status reasserted as %s since the retraction (%s by %s); that decision stands",
+				last.ToStatus, last.Reason, actorOr(last.ChangedBy)))
+			continue
+		}
 		if c.Status != domain.ClaimStatusDeprecated || last.ToStatus != domain.ClaimStatusDeprecated ||
 			last.Reason != wantReason || last.ChangedBy != active.RetractedBy {
 			skip(id, fmt.Sprintf("status changed since the retraction: now %s (%s by %s)", c.Status, last.Reason, actorOr(last.ChangedBy)))
