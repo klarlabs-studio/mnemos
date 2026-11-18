@@ -683,10 +683,16 @@ func (in trustInput) toDomain() domain.TrustInput {
 
 // trustInputsSelect is the aggregate that feeds trust scoring. COUNT distinct
 // evidence-event AUTHORS and total events separately, so corroboration can be
-// graded by independence (echo-chamber guard). LEFT JOIN so claims with no
-// evidence still appear.
+// graded by independence (echo-chamber guard). An evidence episode that depends
+// on another evidence episode of the same claim adds no author (ADR 0038 §3).
+// LEFT JOIN so claims with no evidence still appear.
 const trustInputsSelect = `
-SELECT c.id, c.confidence, COUNT(DISTINCT e.created_by), COUNT(DISTINCT ce.event_id), MAX(e.timestamp),
+SELECT c.id, c.confidence,
+       COUNT(DISTINCT CASE WHEN NOT EXISTS (
+         SELECT 1 FROM event_dependencies d JOIN claim_evidence ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
+         WHERE d.event_id = ce.event_id
+       ) THEN e.created_by END),
+       COUNT(DISTINCT ce.event_id), MAX(e.timestamp),
        c.last_confirmed, c.half_life_days, c.confidence_components
 FROM claims c
 LEFT JOIN claim_evidence ce ON ce.claim_id = c.id

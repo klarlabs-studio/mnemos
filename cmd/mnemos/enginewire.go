@@ -26,6 +26,8 @@ func engineDepsFor(conn *store.Conn) query.EngineDeps {
 		Decisions:  conn.Decisions,
 		Incidents:  conn.Incidents,
 		Journal:    conn.Journal,
+		// ADR 0038: recorded-as-of trust reads source dependence.
+		Dependencies: conn.Dependencies,
 	}
 
 	if cfg, err := embedding.ConfigFromEnv(); err == nil {

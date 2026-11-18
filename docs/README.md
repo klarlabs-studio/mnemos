@@ -65,6 +65,7 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [ADR 0036: A recorded-as-of read reconstructs what the brain believed](adr/0036-recorded-as-of-reconstructs-belief.md)
 - [ADR 0035: The dedupe scan has a time budget](adr/0035-dedupe-scan-has-a-time-budget.md)
 - [ADR 0037: Evidence retraction and dependency propagation](adr/0037-evidence-retraction-and-dependency-propagation.md)
+- [ADR 0038: Source dependence between episodes](adr/0038-source-dependence-between-episodes.md)
 - [ADR 0039: Trust and freshness are recall ranking inputs](adr/0039-trust-and-freshness-rank-recall.md)
 
 ## Working notes

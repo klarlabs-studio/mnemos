@@ -35,14 +35,17 @@ import (
 //     retracted document.
 //
 // How a dependent is recognised is the substance of the finding, so it is
-// stated rather than hidden: Mnemos follows EVIDENCE LINKS. A belief whose only
-// live evidence is the retracted episode is withdrawn; one with any other live
-// evidence is kept and rescored. A later document that restates the retracted
-// claim verbatim is folded onto the same belief at ingest (exact-text dedupe)
-// and so counts as independent evidence; a paraphrase or a conclusion drawn in
-// another document is a separate belief with its own evidence and is not
-// reached. The track measures that as it is. The scenario's gold says which
-// restatements are copies; nothing in the harness or the product reads it.
+// stated rather than hidden: Mnemos follows EVIDENCE LINKS and DECLARED SOURCE
+// DEPENDENCE (ADR 0038). A belief is withdrawn when it has no live evidence
+// independent of the retracted episode; an episode that says it depends on it
+// (a citation naming the source, a link, provenance metadata) is not
+// independent. A later document that restates the retracted claim verbatim is
+// folded onto the same belief at ingest (exact-text dedupe): if it cites the
+// source it falls with it, and if it cites nothing it counts as corroboration.
+// An uncited paraphrase or conclusion in another document is a separate belief
+// and is not reached. The track measures that as it is. The scenario's gold
+// says which restatements are copies; nothing in the harness or the product
+// reads it.
 
 // Roles a gold belief can play. The first three are dependents: they rest on
 // the retracted source and should stop being believed once it is withdrawn. The
@@ -319,12 +322,14 @@ type RetractionResult struct {
 }
 
 // recognitionNote is the statement of how dependents are recognised.
-const recognitionNote = "Mnemos follows evidence links (ADR 0037): a belief whose only live evidence is the " +
-	"retracted episode is withdrawn; a belief with any other live evidence is kept and rescored. " +
-	"A verbatim restatement in another document is folded onto the same belief at ingest and counts " +
-	"as independent evidence; a paraphrase or a conclusion in another document is a separate belief " +
-	"and is not reached. The baseline removes the retracted document's chunks only. " +
-	"The gold's copy/derived roles are author-declared and are read by neither side."
+const recognitionNote = "Mnemos follows evidence links (ADR 0037) and declared source dependence (ADR 0038): " +
+	"a belief is withdrawn when no live evidence independent of the retracted episode remains, where an " +
+	"episode that cites, copies or derives from it (a citation marker naming a stored source, a link, or " +
+	"provenance metadata, detected at ingest) is not independent. A verbatim restatement folded onto the " +
+	"same belief therefore falls with the source when its document cites it, and counts as corroboration " +
+	"when it does not. An uncited paraphrase or an uncited conclusion is a separate belief and is not " +
+	"reached; nothing matches text by similarity. The baseline removes the retracted document's chunks " +
+	"only. The gold's copy/derived roles are author-declared and are read by neither side."
 
 // runRetractionTrack runs the retraction experiment on copies of the warmed
 // seed. events are the seed's raw events (the baselines' corpus).

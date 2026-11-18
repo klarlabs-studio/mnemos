@@ -321,6 +321,24 @@ CREATE TABLE IF NOT EXISTS closed_relationships (
 CREATE INDEX IF NOT EXISTS idx_closed_relationships_from ON closed_relationships(from_claim_id);
 CREATE INDEX IF NOT EXISTS idx_closed_relationships_to   ON closed_relationships(to_claim_id);
 
+-- event_dependencies (ADR 0038): source dependence between episodes. A row
+-- says episode event_id cites, copies or derives from depends_on, which
+-- deterministic signal found it and the exact text that justified it.
+-- Append-only; the first justification for a pair stands. No foreign keys:
+-- deleting an event clears its rows in both directions explicitly. In the RLS
+-- scoped array below.
+CREATE TABLE IF NOT EXISTS event_dependencies (
+  event_id       text        NOT NULL,
+  depends_on     text        NOT NULL,
+  kind           text        NOT NULL,
+  signal_type    text        NOT NULL,
+  reference_text text        NOT NULL DEFAULT '',
+  created_at     timestamptz NOT NULL,
+  created_by     text        NOT NULL DEFAULT '<system>',
+  PRIMARY KEY (event_id, depends_on)
+);
+CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
+
 -- Embeddings: bytea matches the SQLite BLOB shape and stays the portable
 -- source of truth. When pgvector is installed, a nullable `embedding
 -- public.vector` accelerator column is added below (see the $mnemos_pgvector$
@@ -620,7 +638,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'events','claims','entities','claim_entities','claim_evidence','relationships',
-    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','closed_claim_evidence','closed_relationships','embeddings','agents','actions',
+    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','closed_claim_evidence','closed_relationships','event_dependencies','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
     'entity_relationships','working_memory_blocks','claim_expectations',

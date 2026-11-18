@@ -64,5 +64,13 @@ func retractionToProto(rep domain.EventRetraction) *mnemosv1.RetractEpisodeRespo
 	for _, d := range im.Decisions {
 		out.Impact.Decisions = append(out.Impact.Decisions, &mnemosv1.RetractionDecisionExposure{DecisionId: d.DecisionID, Beliefs: d.Beliefs})
 	}
+	for _, h := range im.DependentEpisodes {
+		out.Impact.DependentEpisodes = append(out.Impact.DependentEpisodes, &mnemosv1.EpisodeDependencyHop{
+			EpisodeId: h.EventID, DependsOn: h.DependsOn, Kind: string(h.Kind), Signal: string(h.Signal), Reference: h.Reference,
+		})
+	}
+	for _, p := range im.BeliefPaths {
+		out.Impact.BeliefPaths = append(out.Impact.BeliefPaths, &mnemosv1.RetractionBeliefPath{BeliefId: p.BeliefID, Outcome: p.Outcome, Via: p.Via})
+	}
 	return out
 }

@@ -261,30 +261,39 @@ operation under test
 The baseline rows and the hypothesis are findings and do not gate anything.
 
 **How dependents are recognised, which is the finding.** Mnemos follows
-evidence links. A belief whose only live evidence is the retracted episode is
-withdrawn. A belief with any other live evidence is kept and rescored. Two
-consequences follow, and the track measures them as they are instead of
-special-casing the scenario:
+evidence links and declared source dependence (ADR 0038). Ingest records that
+an episode depends on another when it says so: a citation marker whose phrase
+names a stored source ("Source: the libfoo vendor advisory." names
+`vendor-advisory`), a link, or provenance metadata. A belief is withdrawn when
+it has no live evidence independent of the retracted episode, and evidence
+from an episode that depends on it is not independent. A belief with
+independent evidence left is kept and rescored. Three consequences follow, and
+the track measures them as they are instead of special-casing the scenario:
 
-- A **verbatim copy** in another document is folded onto the original belief
-  by ingest-time exact-text dedupe. It becomes a second evidence link,
-  indistinguishable from real corroboration. In `evidence_retraction.yaml` the
-  false claim and the corroborated release date are both `SQ-R`: kept and
-  rescored.
-- A **paraphrased copy** or a **conclusion drawn in another document** is a
-  separate belief with its own evidence, and the retraction does not reach it.
-  The impact report names associations touching withdrawn beliefs, but it
-  does not re-evaluate them (ADR 0037 §3).
+- A **cited verbatim copy** is folded onto the original belief at ingest, but
+  its episode depends on the retracted one, so the belief falls with the
+  source. In `evidence_retraction.yaml` the blog's copy of the false claim is
+  `--W-`. The report's `belief_paths` shows it withdrawn with `via:
+  [advisory]`, and `dependent_episodes` lists the blog with the citation line
+  that justified it.
+- An **uncited verbatim restatement** is corroboration. Nothing tells it from
+  a copy except a citation, and similarity is deliberately not used. The
+  release notes repeat the release date in the advisory's words and cite
+  nothing, so the date is kept and rescored (`SQ-R`).
+- An **uncited paraphrase** or an **uncited conclusion** in another document
+  is a separate belief with apparently independent evidence, and the
+  retraction does not reach it. The newsletter says "according to the vendor",
+  which names no stored source. The checkout review cites nothing. Both stay
+  `SQ--`.
 
-On that scenario Mnemos and the baseline therefore **tie** on
-`unsupported_surviving` (0.6, so 3 of 5 dependents survive on both) and on
-`supported_surviving` (1.0). The hypothesis is **not supported**. Mnemos's
-report is more precise (1.0 vs 0.75), because the baseline also deletes the
-corroborated sentence's chunk. Its recall is lower (0.4 vs 0.6), because the
-baseline deletes the advisory's copy of the false sentence while the blog's
-copy remains. Mnemos keeps the one belief and rescores it. Closing that gap
-needs provenance between episodes (a copy is not independent evidence). That
-is product work, and the harness does not fake it.
+On that scenario Mnemos now holds **fewer** unsupported beliefs than the
+baseline: `unsupported_surviving` 0.4 vs 0.6 (2 of 5 dependents survive, against
+3), with `supported_surviving` tied at 1.0. The hypothesis is **supported**. The
+whole difference is the one cited copy. Detection catches nothing else, and
+the two surviving dependents are exactly the uncited ones above. Mnemos's
+report stays more precise (1.0 vs 0.75), because the baseline also deletes the
+corroborated sentence's chunk, and recall now ties (0.6). Before ADR 0038 the
+two tied at 0.6, and the blog's copy kept the false claim alive (`SQ-R`).
 
 
 ## Retrieval ablation (`make retrieval-ablation`)

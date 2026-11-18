@@ -1798,6 +1798,26 @@ components:
                   decision_id: { type: string }
                   beliefs: { type: array, items: { type: string } }
             outcome_edges: { type: array, items: { type: string } }
+            dependent_episodes:
+              type: array
+              description: "Episodes that depend on the retracted one, directly or through other episodes (ADR 0038), each with the dependency that first reached it. They are not retracted themselves."
+              items:
+                type: object
+                properties:
+                  episode_id: { type: string }
+                  depends_on: { type: string }
+                  kind: { type: string, enum: [cites, copies, derived_from] }
+                  signal: { type: string, enum: [metadata, link, named_source] }
+                  reference: { type: string, description: "The text that justified the dependency." }
+            belief_paths:
+              type: array
+              description: "For every belief the retraction withdrew, rescored or reached through a dependent episode and kept, the episode chain that reached it (ADR 0038)."
+              items:
+                type: object
+                properties:
+                  belief_id: { type: string }
+                  outcome: { type: string, enum: [retracted, rescored, kept] }
+                  via: { type: array, items: { type: string } }
             uncertainty: { type: array, items: { type: string } }
     Unretraction:
       type: object

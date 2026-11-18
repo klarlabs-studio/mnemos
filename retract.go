@@ -61,8 +61,37 @@ type RetractionImpact struct {
 	// OutcomeEdges are validates/refutes edges from outcomes onto a
 	// retracted claim, kept as recorded.
 	OutcomeEdges []string
+	// DependentEvents are the events that depend on the retracted one,
+	// directly or through other events (ADR 0038), each with the dependency
+	// that first reached it. They are not retracted themselves.
+	DependentEvents []EventDependencyHop
+	// ClaimPaths says, for every claim the retraction withdrew, rescored or
+	// reached through a dependent event and kept, the event chain that
+	// reached it.
+	ClaimPaths []ClaimPath
 	// Uncertainty states what the report cannot see or does not claim.
 	Uncertainty []string
+}
+
+// EventDependencyHop is one recorded dependency (ADR 0038): EventID cites,
+// copies or derives from DependsOn. Kind is cites, copies or derived_from;
+// Signal is metadata, link or named_source; Reference is the text that
+// justified it.
+type EventDependencyHop struct {
+	EventID   string
+	DependsOn string
+	Kind      string
+	Signal    string
+	Reference string
+}
+
+// ClaimPath is how a retraction reached a claim. Outcome is retracted,
+// rescored or kept; Via is the event chain from the retracted event to the
+// evidence that reached the claim.
+type ClaimPath struct {
+	ClaimID string
+	Outcome string
+	Via     []string
 }
 
 // RescoredClaim is a claim that survived a retraction on other evidence.
@@ -148,6 +177,14 @@ func toPublicRetraction(r domain.EventRetraction) EventRetraction {
 	}
 	for _, d := range im.Decisions {
 		out.Impact.Decisions = append(out.Impact.Decisions, DecisionExposure{DecisionID: d.DecisionID, Claims: d.Beliefs})
+	}
+	for _, h := range im.DependentEpisodes {
+		out.Impact.DependentEvents = append(out.Impact.DependentEvents, EventDependencyHop{
+			EventID: h.EventID, DependsOn: h.DependsOn, Kind: string(h.Kind), Signal: string(h.Signal), Reference: h.Reference,
+		})
+	}
+	for _, p := range im.BeliefPaths {
+		out.Impact.ClaimPaths = append(out.Impact.ClaimPaths, ClaimPath{ClaimID: p.BeliefID, Outcome: p.Outcome, Via: p.Via})
 	}
 	return out
 }

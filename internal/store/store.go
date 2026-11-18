@@ -74,6 +74,10 @@ type Conn struct {
 	// without an implementation; callers type-check before use.
 	Journal ports.JournalRepository
 
+	// Dependencies is source dependence between episodes (ADR 0038). Every
+	// shipped provider sets it; callers still nil-check.
+	Dependencies ports.EventDependencyRepository
+
 	// Raw is the provider's underlying handle (e.g. *sql.DB for
 	// SQLite/Postgres, an in-memory state struct for memory). It is
 	// nil-safe to ignore. Some call sites still issue raw SQL or

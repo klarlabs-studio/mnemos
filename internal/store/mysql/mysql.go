@@ -190,6 +190,7 @@ func openProvider(ctx context.Context, dsn string) (*store.Conn, error) {
 		Actions:       ActionRepository{db: db},
 		Outcomes:      OutcomeRepository{db: db},
 		Journal:       JournalRepository{db: db},
+		Dependencies:  EventDependencyRepository{db: db},
 		Lessons:       LessonRepository{db: db},
 		Decisions:     DecisionRepository{db: db},
 		Playbooks:     PlaybookRepository{db: db},

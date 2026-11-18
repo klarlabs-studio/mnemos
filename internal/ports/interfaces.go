@@ -51,6 +51,10 @@ type EventRepository interface {
 // disappears (ADR 0037). Every shipped backend implements it.
 type EventSourceLister interface {
 	ListBySourcePath(ctx context.Context, path string) ([]domain.Event, error)
+	// ListBySourceInputIDs returns the events whose source_input_id equals one
+	// of ids exactly, oldest first. Source-dependence detection (ADR 0038)
+	// resolves a citation to the episodes of the source it names.
+	ListBySourceInputIDs(ctx context.Context, ids []string) ([]domain.Event, error)
 }
 
 // ClaimRepository persists and retrieves extracted claims.
@@ -786,6 +790,21 @@ type JournalRepository interface {
 	// ListBySubject returns the most recent entries for one subject id (e.g. a claim's
 	// trust trajectory), newest first, capped at limit.
 	ListBySubject(ctx context.Context, subjectID string, limit int) ([]domain.JournalEntry, error)
+}
+
+// EventDependencyRepository stores source dependence between episodes (ADR
+// 0038): which episode cites, copies or derives from which. Rows are
+// append-only; a repeat of (EventID, DependsOn) is ignored. Every shipped
+// backend implements it.
+type EventDependencyRepository interface {
+	// Append records dependencies, ignoring any whose (EventID, DependsOn)
+	// is already stored.
+	Append(ctx context.Context, deps []domain.EventDependency) error
+	// ListByEventIDs returns what the given episodes depend on (outgoing).
+	ListByEventIDs(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
+	// ListDependents returns the dependencies ON the given episodes
+	// (incoming): the episodes that depend on them.
+	ListDependents(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
 }
 
 // EntityRelationshipRepository persists polymorphic edges between

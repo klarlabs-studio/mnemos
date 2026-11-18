@@ -241,37 +241,11 @@ func restorable(ctx context.Context, conn *store.Conn, eventID string, active do
 	return out, nil
 }
 
-// liveEvidenceRestored counts, per belief, its evidence links to events that
-// are not retracted, counting eventID (about to be restored) as live.
+// liveEvidenceRestored counts, per belief, its live independent evidence
+// (ADR 0038 §3) once eventID is restored: evidence from an episode that is
+// not retracted and depends on no episode still retracted.
 func liveEvidenceRestored(ctx context.Context, conn *store.Conn, claims []domain.Claim, eventID string) (map[string]int, error) {
-	out := make(map[string]int, len(claims))
-	if len(claims) == 0 {
-		return out, nil
-	}
-	ids := make([]string, len(claims))
-	for i, c := range claims {
-		ids[i] = c.ID
-	}
-	links, err := conn.Claims.ListEvidenceByClaimIDs(ctx, ids)
-	if err != nil {
-		return nil, fmt.Errorf("list evidence of retracted beliefs: %w", err)
-	}
-	retracted := map[string]bool{eventID: false}
-	for _, l := range links {
-		dead, seen := retracted[l.EventID]
-		if !seen {
-			_, isRetracted, err := LookupRetraction(ctx, conn, l.EventID)
-			if err != nil {
-				return nil, err
-			}
-			retracted[l.EventID] = isRetracted
-			dead = isRetracted
-		}
-		if !dead {
-			out[l.ClaimID]++
-		}
-	}
-	return out, nil
+	return liveIndependentEvidence(ctx, conn, claims, newIndependence(conn, map[string]bool{eventID: false}))
 }
 
 // relinkRescored gives every belief active rescored back its evidence link to

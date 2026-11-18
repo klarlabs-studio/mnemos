@@ -19,7 +19,7 @@ import (
 func (e Engine) recordedAt(t time.Time) Engine {
 	t = t.UTC()
 	claims, rels := e.claims, e.relationships
-	e.claims = recorded.Claims{ClaimRepository: claims, Events: e.events, At: t}
+	e.claims = recorded.Claims{ClaimRepository: claims, Events: e.events, Dependencies: e.dependencies, At: t}
 	e.relationships = recorded.Relationships{RelationshipRepository: rels, Claims: claims, At: t}
 	e.events = recorded.Events{EventRepository: e.events, At: t}
 	return e

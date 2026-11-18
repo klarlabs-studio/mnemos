@@ -111,6 +111,14 @@ type RetractionImpact struct {
 	// OutcomeEdges are validates/refutes edges from outcomes onto a retracted
 	// belief, kept as recorded.
 	OutcomeEdges []string `json:"outcome_edges,omitempty"`
+	// DependentEpisodes are the episodes that depend on the retracted one,
+	// directly or through other episodes (ADR 0038), each with the hop that
+	// first reached it. They are not retracted themselves.
+	DependentEpisodes []DependencyHop `json:"dependent_episodes,omitempty"`
+	// BeliefPaths says, for every belief the retraction withdrew, rescored or
+	// reached through a dependent episode and kept, the episode chain that
+	// reached it (ADR 0038 §5).
+	BeliefPaths []BeliefPath `json:"belief_paths,omitempty"`
 	// Uncertainty states what the report cannot see or does not claim.
 	Uncertainty []string `json:"uncertainty"`
 }

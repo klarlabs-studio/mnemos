@@ -101,6 +101,8 @@ func newFromCfg(cfg config) (Memory, error) {
 		Decisions:   conn.Decisions,
 		Incidents:   conn.Incidents,
 		Journal:     conn.Journal,
+		// ADR 0038: recorded-as-of trust reads source dependence.
+		Dependencies: conn.Dependencies,
 	})
 
 	// Chronos: use the supplied engine or boot a default in-memory one.

@@ -102,6 +102,7 @@ this file, which made them invisible to anyone navigating by it:
 | `internal/auth/` | Identity primitives: JWT issuance and verification |
 | `internal/runscope/` | Run-scoped token boundary (F.4.b) |
 | `internal/recorded/` | Recorded-as-of views (ADR 0036): rewinds claims, evidence, edges and merges to an instant; the one implementation recall, browse and gRPC share |
+| `internal/provenance/` | Source dependence between episodes (ADR 0038): detects only declared dependence (provenance metadata, an exact URL, a citation naming a stored source) at ingest, so a copy is not counted as independent corroboration and a retraction reaches it. Never similarity-matches: an uncited paraphrase is not detected, by design |
 
 ### Entrypoints
 

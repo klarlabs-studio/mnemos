@@ -339,6 +339,23 @@ CREATE TABLE IF NOT EXISTS closed_relationships (
   KEY idx_closed_relationships_to   (to_claim_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- event_dependencies (ADR 0038): source dependence between episodes. A row
+-- says episode event_id cites, copies or derives from depends_on, which
+-- deterministic signal found it and the exact text that justified it.
+-- Append-only; the first justification for a pair stands. No foreign keys:
+-- deleting an event clears its rows in both directions explicitly.
+CREATE TABLE IF NOT EXISTS event_dependencies (
+  event_id       VARCHAR(190) NOT NULL,
+  depends_on     VARCHAR(190) NOT NULL,
+  kind           VARCHAR(32)  NOT NULL,
+  signal_type    VARCHAR(32)  NOT NULL,
+  reference_text TEXT         NOT NULL,
+  created_at     DATETIME(6)  NOT NULL,
+  created_by     VARCHAR(190) NOT NULL DEFAULT '<system>',
+  PRIMARY KEY (event_id, depends_on),
+  KEY idx_event_dependencies_depends_on (depends_on)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS embeddings (
   entity_id   VARCHAR(190) NOT NULL,
   entity_type VARCHAR(64)  NOT NULL,

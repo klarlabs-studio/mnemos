@@ -100,6 +100,7 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 		Expectations:  ExpectationRepository{state: st},
 		GlobalSchemas: GlobalSchemaRepository{state: st},
 		Journal:       JournalRepository{state: st},
+		Dependencies:  EventDependencyRepository{state: st},
 		ClaimVersions: ClaimVersionRepository{state: st},
 		Raw:           st,
 		Closer:        func() error { st.clear(); return nil },
@@ -167,6 +168,7 @@ type state struct {
 	expectations      map[string]domain.Expectation        // claim_id -> forward expectation
 	globalSchemas     map[string]domain.GlobalSchema       // id -> promoted global (neocortex) schema
 	journalEntries    []domain.JournalEntry                // append-only cognitive journal (ADR 0018), insertion order
+	dependencies      []domain.EventDependency             // source dependence between episodes (ADR 0038), insertion order
 }
 
 // storedEntityVersion is the in-memory analogue of a row in
@@ -232,6 +234,7 @@ func (s *state) clear() {
 	s.creditHistory = nil
 	s.closedEvidence = nil
 	s.closedRels = nil
+	s.dependencies = nil
 	s.trustInputHistory = map[string][]domain.TrustInputChange{}
 	s.relationships = map[string]storedRelationship{}
 	s.embeddings = map[embeddingKey]storedEmbedding{}

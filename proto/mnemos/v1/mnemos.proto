@@ -876,6 +876,25 @@ message RetractionImpact {
   repeated RetractionDecisionExposure decisions = 5;
   repeated string outcome_edges               = 6;
   repeated string uncertainty                 = 7;
+  // ADR 0038: episodes that depend on the retracted one (not retracted
+  // themselves), and the episode chain that reached each belief.
+  repeated EpisodeDependencyHop dependent_episodes = 8;
+  repeated RetractionBeliefPath belief_paths       = 9;
+}
+// EpisodeDependencyHop is one recorded dependency: episode_id cites, copies or
+// derives from depends_on, found by signal, justified by reference.
+message EpisodeDependencyHop {
+  string episode_id = 1;
+  string depends_on = 2;
+  string kind       = 3; // cites | copies | derived_from
+  string signal     = 4; // metadata | link | named_source
+  string reference  = 5;
+}
+// RetractionBeliefPath says how a retraction reached a belief.
+message RetractionBeliefPath {
+  string belief_id    = 1;
+  string outcome      = 2; // retracted | rescored | kept
+  repeated string via = 3; // episode chain from the retracted episode
 }
 message RescoredBelief {
   string id              = 1;

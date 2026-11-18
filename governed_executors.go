@@ -468,6 +468,9 @@ func (e rememberEventExecutor) Execute(ctx context.Context, input any, _ axidoma
 	if err := m.conn.Events.Append(ctx, stored); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("append event: %w", err)
 	}
+	if err := pipeline.RecordEventDependencies(ctx, m.conn, []domain.Event{stored}); err != nil {
+		return axidomain.ExecutionResult{}, nil, err
+	}
 
 	// Forward to Chronos as a presence signal. Chronos failures are
 	// non-fatal: the Mnemos event store is the source of truth and was

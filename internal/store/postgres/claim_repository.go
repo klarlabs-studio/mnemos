@@ -706,7 +706,11 @@ func (in trustInput) toDomain() domain.TrustInput {
 func (r ClaimRepository) trustInputsSQL(where string) string {
 	return fmt.Sprintf(`
 SELECT c.id, c.confidence,
-       COUNT(DISTINCT e.created_by), COUNT(DISTINCT ce.event_id),
+       COUNT(DISTINCT CASE WHEN NOT EXISTS (
+         SELECT 1 FROM %s d JOIN %s ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
+         WHERE d.event_id = ce.event_id
+       ) THEN e.created_by END),
+       COUNT(DISTINCT ce.event_id),
        MAX(e.timestamp),
        c.last_confirmed, c.half_life_days, c.confidence_components
 FROM %s c
@@ -714,6 +718,8 @@ LEFT JOIN %s ce ON ce.claim_id = c.id
 LEFT JOIN %s e ON e.id = ce.event_id
 %s
 GROUP BY c.id, c.confidence`,
+		qualify(r.ns, "event_dependencies"),
+		qualify(r.ns, "claim_evidence"),
 		qualify(r.ns, "claims"),
 		qualify(r.ns, "claim_evidence"),
 		qualify(r.ns, "events"),

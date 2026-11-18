@@ -19,3 +19,19 @@ FROM %s WHERE metadata_json->>'input_source_path' = $1 ORDER BY ingested_at ASC,
 	defer func() { _ = rows.Close() }()
 	return collectEventRows(rows)
 }
+
+// ListBySourceInputIDs returns the events whose source_input_id is one of ids,
+// oldest first (ports.EventSourceLister).
+func (r EventRepository) ListBySourceInputIDs(ctx context.Context, ids []string) ([]domain.Event, error) {
+	if len(ids) == 0 {
+		return []domain.Event{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
+SELECT id, run_id, schema_version, content, source_input_id, timestamp, metadata_json::text, ingested_at, created_by
+FROM %s WHERE source_input_id = ANY($1) ORDER BY ingested_at ASC, id ASC`, qualify(r.ns, "events")), pgArray(ids))
+	if err != nil {
+		return nil, fmt.Errorf("list events by source input id: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return collectEventRows(rows)
+}

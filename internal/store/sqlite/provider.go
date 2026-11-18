@@ -50,6 +50,7 @@ func openProvider(_ context.Context, dsn string) (*store.Conn, error) {
 		Actions:       NewActionRepository(db),
 		Outcomes:      NewOutcomeRepository(db),
 		Journal:       NewJournalRepository(db),
+		Dependencies:  NewEventDependencyRepository(db),
 		Lessons:       NewLessonRepository(db),
 		Decisions:     NewDecisionRepository(db),
 		Playbooks:     NewPlaybookRepository(db),
