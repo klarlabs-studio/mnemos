@@ -178,6 +178,10 @@ func writeRPCs() []writeRPC {
 			_, err := c.RetractEpisode(ctx, &mnemosv1.RetractEpisodeRequest{EpisodeId: "ev-scope", Reason: "r"})
 			return err
 		}},
+		{"UnretractEpisode", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.UnretractEpisode(ctx, &mnemosv1.UnretractEpisodeRequest{EpisodeId: "ev-scope", Reason: "r"})
+			return err
+		}},
 	}
 }
 

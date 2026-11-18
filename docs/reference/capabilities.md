@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-76 capabilities, 80 acknowledged gaps.
+77 capabilities, 80 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -24,6 +24,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`ingest.watch`](#ingestwatch) | write | — | — | — | ✓ | — | — | — |
 | [`episode.append`](#episodeappend) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | [`episode.retract`](#episoderetract) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`episode.unretract`](#episodeunretract) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`episode.list`](#episodelist) | read | GAP | ✓ | ✓ | GAP | — | — | ✓ |
 | [`timeline.query`](#timelinequery) | read | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | [`timeline.signals`](#timelinesignals) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -173,6 +174,22 @@ Withdraw an episode as evidence: retract beliefs it alone supported, rescore the
 | client | `RetractEvent` |
 
 > Every binding and `mnemos retract-event` go through internal/retraction.Run (id, existence and run-scope checks) and govwrite's one retraction: Writer.RetractEvent on the daemon surfaces, ApplyRetraction inside the library's governed kernel. REST, MCP and the CLI return the same retraction.Report. watch_file calls Writer.RetractEvent for text a revised or deleted file no longer contains.
+
+### episode.unretract
+
+Clear an episode's retraction: restore the beliefs it deprecated that nothing changed since, relink the ones it rescored (ADR 0037 §8) (write).
+
+| Transport | Binding |
+|---|---|
+| go | `UnretractEvent` |
+| rest | `POST /v1/episodes/{id}/unretract` |
+| grpc | `UnretractEpisode` |
+| mcp | `unretract_episode` |
+| mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| client | `UnretractEvent` |
+
+> Every binding and `mnemos unretract-event` go through internal/retraction.Unretract (id, existence, run-scope and was-it-ever-retracted checks) and govwrite's one un-retraction: Writer.UnretractEvent on the daemon surfaces, ApplyUnretraction inside the library's governed kernel. REST, MCP and the CLI return the same retraction.UnretractionReport. A never-retracted episode is REST 409 / gRPC FailedPrecondition.
 
 ### episode.list
 

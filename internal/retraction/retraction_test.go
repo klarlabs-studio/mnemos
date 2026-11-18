@@ -71,3 +71,56 @@ func TestRun_ValidatesBeforeRetracting(t *testing.T) {
 		t.Errorf("report = %+v", view)
 	}
 }
+
+func TestUnretract_ValidatesBeforeUnretracting(t *testing.T) {
+	t.Parallel()
+	w := newWriter(t)
+	ctx := context.Background()
+	conn := w.Conn()
+	called := 0
+	spy := func(ctx context.Context, id string, note domain.ChangeNote) (domain.EventUnretraction, error) {
+		called++
+		return w.UnretractEvent(ctx, id, note)
+	}
+	cases := []struct {
+		name string
+		req  retraction.Request
+		want error
+	}{
+		{"empty id", retraction.Request{EventID: "  "}, retraction.ErrEventIDRequired},
+		{"unknown event", retraction.Request{EventID: "ev_missing"}, retraction.ErrEventNotFound},
+		{"run outside scope reads as not found", retraction.Request{EventID: "ev_1", RunAllowed: func(r string) bool { return r == "run-b" }}, retraction.ErrEventNotFound},
+		{"never retracted", retraction.Request{EventID: "ev_1"}, retraction.ErrNotRetracted},
+	}
+	for _, tc := range cases {
+		if _, err := retraction.Unretract(ctx, conn.Events, conn.Journal, spy, tc.req); !errors.Is(err, tc.want) {
+			t.Errorf("%s: err = %v, want %v", tc.name, err, tc.want)
+		}
+	}
+	if called != 0 {
+		t.Fatalf("un-retraction ran %d time(s) for rejected requests", called)
+	}
+
+	if _, err := w.RetractEvent(ctx, "ev_1", domain.ChangeNote{ChangedBy: "bob"}); err != nil {
+		t.Fatalf("retract: %v", err)
+	}
+	rep, err := retraction.Unretract(ctx, conn.Events, conn.Journal, spy, retraction.Request{
+		EventID: " ev_1 ", Reason: " was fine ", Actor: "alice", RunAllowed: func(r string) bool { return r == "run-a" },
+	})
+	if err != nil {
+		t.Fatalf("Unretract: %v", err)
+	}
+	if rep.EventID != "ev_1" || rep.Reason != "was fine" || rep.UnretractedBy != "alice" || rep.RetractedBy != "bob" {
+		t.Errorf("record = %+v, want trimmed id/reason, the actor and the cleared retraction", rep)
+	}
+	view := retraction.NewUnretractionReport(rep)
+	if view.EpisodeID != "ev_1" || view.UnretractedAt == "" || view.Generation != 1 || view.Impact.Restored == nil {
+		t.Errorf("report = %+v", view)
+	}
+
+	// A repeat is not an error: the stored record comes back.
+	again, err := retraction.Unretract(ctx, conn.Events, conn.Journal, spy, retraction.Request{EventID: "ev_1"})
+	if err != nil || !again.AlreadyUnretracted {
+		t.Errorf("repeat: %+v, %v; want the stored record with AlreadyUnretracted", again, err)
+	}
+}

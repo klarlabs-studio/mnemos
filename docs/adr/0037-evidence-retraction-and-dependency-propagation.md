@@ -1,13 +1,16 @@
 # ADR 0037: Evidence retraction and dependency propagation
 
-- **Status:** Accepted; step 1 implemented.
+- **Status:** Accepted; step 1 implemented; un-retraction (§8) implemented.
 - **Date:** 2026-11-17
 - **Deciders:** Felix Geelhaar
 - **Builds on:** ADR 0034 (three ways a belief retires), ADR 0036 (recorded-as-of
   reads), ADR 0033 (merged beliefs become redirects), ADR 0018 (cognitive journal)
 - **Adds:** `govwrite.Writer.RetractEvent`, `mnemos retract-event`, the
   `retract_episode` MCP tool, `ports.EventSourceLister`; amends `watch_file`
-  (`cmd/mnemos/watch.go`)
+  (`cmd/mnemos/watch.go`). §8 adds `govwrite.Writer.UnretractEvent`,
+  `mnemos unretract-event`, the `unretract_episode` MCP tool,
+  `POST /v1/episodes/{id}/unretract`, the `UnretractEpisode` RPC,
+  `Memory.UnretractEvent` and `Client.UnretractEvent`
 
 ## Context
 
@@ -214,6 +217,101 @@ Already retracted events are skipped before dispatch, so an unchanged history
 costs a journal read per old event, not a governed write. A failed retraction is
 logged and retried on the file's next change; the new version is already stored.
 
+### 8. Un-retraction
+
+A retraction can be wrong too: the source was right after all, or a revised
+file was reverted. Un-retraction clears it, and like the retraction it is an
+assertion about the past, never a deletion of it.
+
+**Representation.** `govwrite.Writer.UnretractEvent(ctx, eventID, note)`
+appends a journal row of kind `event_unretraction`
+(`domain.EventUnretraction`: who, when, why, which retraction it clears and
+what it changed). The retraction row stays. Each retraction carries a
+`generation` (1 for the first, which is also what a row written before this
+section decodes to); un-retraction *n* clears retraction *n*, and its row id is
+`domain.UnretractionJournalID(event, n)`. A later re-retraction is generation
+*n+1* with row id `domain.RetractionJournalIDGen(event, n+1)` (generation 1
+keeps the original `retraction_<event>` id, so existing rows need no
+migration). The journal's idempotent-on-id append still makes a duplicate of
+any one transition impossible.
+
+**Retracted at T.** `domain.RetractionHistory` folds an event's retraction and
+un-retraction rows. At an instant T the event is retracted iff the highest
+retraction generation recorded at or before T exceeds the highest
+un-retraction generation recorded at or before T. Generations strictly
+alternate in time (retraction *n* < un-retraction *n* < retraction *n+1*),
+so this is the state of the last transition at or before T. Recall
+(`internal/query/retracted.go`) reads both kinds once per recall and applies it
+at the read's instant: a recorded-as-of read inside the retracted window hides
+the episode, a read after the restoration shows it, and a read before the
+retraction shows it. Beliefs need nothing new: a restoration is a status
+transition in `claim_status_history`, which ADR 0036's rewind already reads.
+
+**Which beliefs come back.** Only beliefs the cleared retraction itself
+deprecated, i.e. its recorded `impact.retracted_beliefs`, and only while
+nothing else has changed them since. A belief is restored when all hold:
+
+- it still exists and has no `merged_into` (a merge decided where its belief
+  lives now);
+- it is deprecated, and its latest status transition is the retraction's own:
+  `to_status = deprecated`, `changed_by` = the retraction's `retracted_by`, and
+  the exact reason the retraction wrote. Any later transition (a human
+  re-deprecating it with a reason of their own, a reactivation, another
+  retraction) means someone else owns its status now. A write that leaves a
+  deprecated belief deprecated records no transition (`claim_status_history`
+  logs changes only), so it is not seen; a person who wants the belief to stay
+  retired after an un-retraction deprecates it again afterwards;
+- it has live evidence once the event is restored (normally the kept link to
+  the event itself, §5).
+
+A restored belief returns to the transition's `from_status` (its status before
+the retraction, `active` if none was recorded), through `UpsertWithReasonAs`
+with reason `unretracted: evidence event <id> was restored[: <why>]` and the
+caller as `changed_by`. Every other candidate is listed in `skipped_beliefs`
+with the reason it was skipped. Beliefs the retraction **rescored** get back
+the evidence link it removed (`UpsertEvidence`) and are rescored with the other
+restored beliefs (`rescoreKept`); their status is not touched, because the
+retraction never changed it. A relinked belief that is deprecated (by a later
+retraction of another source, say) stays deprecated: un-retracting this event
+does not undo another retraction, and the report says so. Associations,
+decisions and outcome edges were never rewritten, so nothing is restored for
+them. Trust is recomputed, never restored from the report: it reflects the
+evidence the belief has now.
+
+**Recorded trust (ADR 0036 step 3).** A relinked evidence link is a new link:
+it carries the un-retraction's time as its `created_at`, not the time of the
+link the retraction removed. A recorded-as-of read inside the retracted window
+therefore reconstructs a relinked belief's trust on its remaining evidence, and
+a read after the restoration on both (`TestRecall_RelinkedBeliefTrustFollowsTheWindow`).
+A read from before the retraction still misses the removed link, the
+limitation §5 already states, because the retraction deleted it rather than
+closing it. A restored belief kept its link (§5), so its original `created_at`
+stands. Un-retraction writes no credit, so the credit history is untouched.
+
+**Idempotency and errors.**
+
+- Un-retracting an event that was never retracted is a user error
+  (`retraction.ErrNotRetracted`: CLI exit with a user error, REST `409`, gRPC
+  `FailedPrecondition`), checked in `retraction.Unretract` before the governed
+  dispatch, like the not-found check.
+- Un-retracting an event whose latest transition is an un-retraction writes
+  nothing and returns that stored record with `already_unretracted: true`.
+- An unknown event, or one outside a run-scoped token's runs, is
+  `ErrEventNotFound`, exactly as for retraction.
+- As with retraction, the journal row is written last, so a failure part-way
+  leaves the event retracted and a re-run converges: a restored belief's latest
+  transition is now the restoration, so a re-run lists it as skipped rather
+  than restoring it twice, and relinking an existing link is a no-op.
+- `watch_file` skips an event only while it is retracted, so a file that is
+  revised again after an un-retraction retracts afresh (generation *n+1*).
+
+**Surfaces.** Every transport that binds retraction binds un-retraction, through
+`internal/retraction.Unretract`: `mnemos unretract-event <id> [--reason]
+[--json]`, the `unretract_episode` MCP tool (`claims:write`), REST
+`POST /v1/episodes/{id}/unretract`, gRPC `UnretractEpisode`, `Memory.UnretractEvent`
+and `Client.UnretractEvent`. The capability is `episode.unretract`. The CLI,
+MCP and REST return the same `retraction.UnretractionReport`.
+
 ## Consequences
 
 - A wrong or revised source can be withdrawn without destroying the record:
@@ -242,8 +340,7 @@ logged and retried on the file's next change; the new version is already stored.
 - **A persistent refresh flag** on lessons, playbooks and decisions that the
   synthesiser and `decision show` read. Today the flag lives only in the
   retraction record.
-- **Un-retraction.** Clearing a retraction needs its own recorded transition
-  (back to the prior status), not a deletion of the journal row.
+- ~~**Un-retraction.**~~ Done: §8.
 - **Evidence-link timestamps**, which would let a recorded-as-of read restore a
   rescored belief's link to the retracted event (ADR 0036 step 3).
 - **Watch-file path aliasing.** Matching is on the resolved absolute path the
@@ -261,5 +358,5 @@ logged and retried on the file's next change; the new version is already stored.
 2. Recall excludes retracted events; persistent refresh flags read by
    synthesis and decision review; REST, gRPC, Go library and client bindings
    (**bindings implemented**).
-3. Un-retraction as a recorded transition; evidence-link timestamps so as-of
-   reads restore rescored links.
+3. Un-retraction as a recorded transition (**implemented**, §8);
+   evidence-link timestamps so as-of reads restore rescored links.

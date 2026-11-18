@@ -64,16 +64,25 @@ func Run(ctx context.Context, events ports.EventRepository, retract RetractFunc,
 	if events == nil || retract == nil {
 		return domain.EventRetraction{}, errors.New("retraction: no event store or retraction to run")
 	}
+	if err := checkEvent(ctx, events, id, req.RunAllowed); err != nil {
+		return domain.EventRetraction{}, err
+	}
+	return retract(ctx, id, domain.ChangeNote{Reason: strings.TrimSpace(req.Reason), ChangedBy: req.Actor})
+}
+
+// checkEvent reports ErrEventNotFound unless id exists and runAllowed (when
+// set) covers its run.
+func checkEvent(ctx context.Context, events ports.EventRepository, id string, runAllowed func(string) bool) error {
 	// ListByIDs returns only the events that exist, on every backend, so an
 	// empty result is "not found" without matching a backend's error text.
 	found, err := events.ListByIDs(ctx, []string{id})
 	if err != nil {
-		return domain.EventRetraction{}, fmt.Errorf("look up episode %s: %w", id, err)
+		return fmt.Errorf("look up episode %s: %w", id, err)
 	}
-	if len(found) == 0 || (req.RunAllowed != nil && !req.RunAllowed(found[0].RunID)) {
-		return domain.EventRetraction{}, fmt.Errorf("%w: %s", ErrEventNotFound, id)
+	if len(found) == 0 || (runAllowed != nil && !runAllowed(found[0].RunID)) {
+		return fmt.Errorf("%w: %s", ErrEventNotFound, id)
 	}
-	return retract(ctx, id, domain.ChangeNote{Reason: strings.TrimSpace(req.Reason), ChangedBy: req.Actor})
+	return nil
 }
 
 // Report is the JSON wire form of a retraction, shared by the CLI's --json
@@ -97,5 +106,100 @@ func NewReport(rep domain.EventRetraction) Report {
 		Reason:           rep.Reason,
 		AlreadyRetracted: rep.AlreadyRetracted,
 		Impact:           rep.Impact,
+	}
+}
+
+// --- Un-retraction (ADR 0037 §8) ---
+
+// ErrNotRetracted is returned when un-retraction names an event that was never
+// retracted. It is the caller's mistake, not a failure: REST answers 409 and
+// gRPC FailedPrecondition. (An event whose retraction was already cleared is
+// not an error: the stored un-retraction comes back with AlreadyUnretracted.)
+var ErrNotRetracted = errors.New("episode was never retracted")
+
+// historyScanLimit bounds the journal read for one event's retraction history.
+// An event has one row per retraction and per un-retraction; reaching the
+// bound is an error rather than a silently truncated history.
+const historyScanLimit = 1000
+
+// LoadHistory reads eventID's retractions and un-retractions from the journal.
+// It is the one reader of an event's retraction state, shared by govwrite and
+// every surface's pre-checks.
+func LoadHistory(ctx context.Context, journal ports.JournalRepository, eventID string) (domain.RetractionHistory, error) {
+	if journal == nil {
+		return domain.RetractionHistory{}, errors.New("this backend has no journal to record retractions in")
+	}
+	entries, err := journal.ListBySubject(ctx, eventID, historyScanLimit)
+	if err != nil {
+		return domain.RetractionHistory{}, fmt.Errorf("read retraction history of %s: %w", eventID, err)
+	}
+	if len(entries) >= historyScanLimit {
+		return domain.RetractionHistory{}, fmt.Errorf("read retraction history of %s: %d or more journal rows; raise historyScanLimit", eventID, historyScanLimit)
+	}
+	folded, err := domain.FoldRetractionHistory(entries)
+	if err != nil {
+		return domain.RetractionHistory{}, err
+	}
+	if h := folded[eventID]; h != nil {
+		return *h, nil
+	}
+	return domain.RetractionHistory{}, nil
+}
+
+// UnretractFunc performs the governed un-retraction:
+// govwrite.Writer.UnretractEvent on the daemon surfaces and the library's own
+// governed dispatch in the root package.
+type UnretractFunc func(ctx context.Context, eventID string, note domain.ChangeNote) (domain.EventUnretraction, error)
+
+// Unretract validates req exactly as [Run] does, refuses an event that was
+// never retracted ([ErrNotRetracted]), and performs the un-retraction.
+func Unretract(ctx context.Context, events ports.EventRepository, journal ports.JournalRepository, unretract UnretractFunc, req Request) (domain.EventUnretraction, error) {
+	id := strings.TrimSpace(req.EventID)
+	if id == "" {
+		return domain.EventUnretraction{}, ErrEventIDRequired
+	}
+	if events == nil || unretract == nil {
+		return domain.EventUnretraction{}, errors.New("un-retraction: no event store or un-retraction to run")
+	}
+	if err := checkEvent(ctx, events, id, req.RunAllowed); err != nil {
+		return domain.EventUnretraction{}, err
+	}
+	history, err := LoadHistory(ctx, journal, id)
+	if err != nil {
+		return domain.EventUnretraction{}, err
+	}
+	if len(history.Retractions) == 0 {
+		return domain.EventUnretraction{}, fmt.Errorf("%w: %s", ErrNotRetracted, id)
+	}
+	return unretract(ctx, id, domain.ChangeNote{Reason: strings.TrimSpace(req.Reason), ChangedBy: req.Actor})
+}
+
+// UnretractionReport is the JSON wire form of an un-retraction, shared by the
+// CLI's --json output, the MCP unretract_episode tool and REST POST
+// /v1/episodes/{id}/unretract. Times are RFC 3339 strings.
+type UnretractionReport struct {
+	EpisodeID          string                    `json:"episode_id"`
+	UnretractedAt      string                    `json:"unretracted_at"`
+	UnretractedBy      string                    `json:"unretracted_by"`
+	Reason             string                    `json:"reason,omitempty"`
+	Generation         int                       `json:"generation"`
+	RetractedAt        string                    `json:"retracted_at"`
+	RetractedBy        string                    `json:"retracted_by"`
+	AlreadyUnretracted bool                      `json:"already_unretracted"`
+	Impact             domain.UnretractionImpact `json:"impact"`
+}
+
+// NewUnretractionReport renders an un-retraction record as its wire form.
+func NewUnretractionReport(rep domain.EventUnretraction) UnretractionReport {
+	return UnretractionReport{
+		EpisodeID:          rep.EventID,
+		UnretractedAt:      rep.UnretractedAt.UTC().Format(time.RFC3339Nano),
+		UnretractedBy:      rep.UnretractedBy,
+		Reason:             rep.Reason,
+		Generation:         rep.Generation,
+		RetractedAt:        rep.RetractedAt.UTC().Format(time.RFC3339Nano),
+		RetractedBy:        rep.RetractedBy,
+		AlreadyUnretracted: rep.AlreadyUnretracted,
+		Impact:             rep.Impact,
 	}
 }

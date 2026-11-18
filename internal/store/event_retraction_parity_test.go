@@ -119,6 +119,29 @@ func TestRetractEvent_AgreesAcrossBackends(t *testing.T) {
 		if len(historyAgain) != len(history) {
 			t.Errorf("%s: repeat retraction grew the history %d → %d", b.name, len(history), len(historyAgain))
 		}
+
+		// ADR 0037 §8: un-retraction restores the retracted belief and the
+		// rescored belief's link, on every backend.
+		un, err := w.UnretractEvent(ctx, "ev-rx-gone", domain.ChangeNote{Reason: "source was right", ChangedBy: "tester2"})
+		if err != nil {
+			t.Fatalf("%s: unretract: %v", b.name, err)
+		}
+		if len(un.Impact.Restored) != 1 || un.Impact.Restored[0].ID != "cl-rx-only" || len(un.Impact.Relinked) != 1 {
+			t.Errorf("%s: un-retraction impact = %+v, want cl-rx-only restored and cl-rx-shared relinked", b.name, un.Impact)
+		}
+		restored, err := b.conn.Claims.ListByIDs(ctx, []string{"cl-rx-only"})
+		if err != nil || len(restored) != 1 || restored[0].Status != domain.ClaimStatusActive {
+			t.Errorf("%s: cl-rx-only after un-retraction = %+v (%v), want active", b.name, restored, err)
+		}
+		if links, err := b.conn.Claims.ListEvidenceByClaimIDs(ctx, []string{"cl-rx-shared"}); err != nil || len(links) != 2 {
+			t.Errorf("%s: cl-rx-shared evidence after un-retraction = %+v (%v), want both episodes", b.name, links, err)
+		}
+		if _, ok, err := govwrite.LookupRetraction(ctx, b.conn, "ev-rx-gone"); err != nil || ok {
+			t.Errorf("%s: still retracted after un-retraction: ok=%v err=%v", b.name, ok, err)
+		}
+		if repeat, err := w.UnretractEvent(ctx, "ev-rx-gone", domain.ChangeNote{}); err != nil || !repeat.AlreadyUnretracted {
+			t.Errorf("%s: repeat un-retraction = %+v, %v; want AlreadyUnretracted", b.name, repeat, err)
+		}
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	axidomain "go.klarlabs.de/axi/domain"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/retraction"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -38,11 +39,6 @@ import (
 // deprecated belief and unlinking an absent link are both no-ops.
 
 const actionRetractEvent = "retract_event"
-
-// retractionJournalScan bounds the journal read that looks for an event's
-// retraction. The subject is an event id, which has few journal rows (one
-// retraction at most), so a small window is exhaustive in practice.
-const retractionJournalScan = 50
 
 type retractEventInput struct {
 	EventID string
@@ -97,36 +93,35 @@ func ApplyRetraction(ctx context.Context, conn *store.Conn, eventID string, note
 	return retractEvent(ctx, conn, eventID, note, time.Now().UTC())
 }
 
-// LookupRetraction returns eventID's recorded retraction, and false when the
-// event has not been retracted.
+// LookupRetraction returns eventID's retraction in force now, and false when
+// the event is not retracted: never retracted, or its latest retraction was
+// cleared by an un-retraction (ADR 0037 §8).
 func LookupRetraction(ctx context.Context, conn *store.Conn, eventID string) (domain.EventRetraction, bool, error) {
-	if conn == nil || conn.Journal == nil {
-		return domain.EventRetraction{}, false, errors.New("this backend has no journal to record retractions in")
-	}
-	entries, err := conn.Journal.ListBySubject(ctx, eventID, retractionJournalScan)
+	history, err := retractionHistory(ctx, conn, eventID)
 	if err != nil {
-		return domain.EventRetraction{}, false, fmt.Errorf("read retraction of %s: %w", eventID, err)
+		return domain.EventRetraction{}, false, err
 	}
-	for _, e := range entries {
-		if e.Kind != domain.JournalKindEventRetraction {
-			continue
-		}
-		var rec domain.EventRetraction
-		if err := json.Unmarshal([]byte(e.Data), &rec); err != nil {
-			return domain.EventRetraction{}, false, fmt.Errorf("decode retraction of %s: %w", eventID, err)
-		}
-		return rec, true, nil
+	rec, ok := history.Active()
+	return rec, ok, nil
+}
+
+func retractionHistory(ctx context.Context, conn *store.Conn, eventID string) (domain.RetractionHistory, error) {
+	if conn == nil {
+		return domain.RetractionHistory{}, errors.New("this backend has no journal to record retractions in")
 	}
-	return domain.EventRetraction{}, false, nil
+	return retraction.LoadHistory(ctx, conn.Journal, eventID)
 }
 
 func retractEvent(ctx context.Context, conn *store.Conn, eventID string, note domain.ChangeNote, now time.Time) (domain.EventRetraction, error) {
-	if prior, ok, err := LookupRetraction(ctx, conn, eventID); err != nil {
+	history, err := retractionHistory(ctx, conn, eventID)
+	if err != nil {
 		return domain.EventRetraction{}, err
-	} else if ok {
+	}
+	if prior, ok := history.Active(); ok {
 		prior.AlreadyRetracted = true
 		return prior, nil
 	}
+	gen := history.NextGeneration()
 	event, err := conn.Events.GetByID(ctx, eventID)
 	if err != nil {
 		return domain.EventRetraction{}, fmt.Errorf("event %s not found: %w", eventID, err)
@@ -143,6 +138,7 @@ func retractEvent(ctx context.Context, conn *store.Conn, eventID string, note do
 
 	rec := domain.EventRetraction{
 		EventID: eventID, RetractedAt: now, RetractedBy: actorOr(note.ChangedBy), Reason: note.Reason,
+		Generation: gen,
 	}
 	impact := &rec.Impact
 	impact.RetractedBeliefs = []string{}
@@ -164,10 +160,7 @@ func retractEvent(ctx context.Context, conn *store.Conn, eventID string, note do
 	}
 
 	if len(toRetract) > 0 {
-		reason := domain.RetractionReasonPrefix + "evidence event " + eventID + " was retracted"
-		if note.Reason != "" {
-			reason += ": " + note.Reason
-		}
+		reason := domain.RetractionReason(eventID, note.Reason)
 		if err := conn.Claims.UpsertWithReasonAs(ctx, toRetract, reason, rec.RetractedBy); err != nil {
 			return domain.EventRetraction{}, fmt.Errorf("retract dependent beliefs: %w", err)
 		}
@@ -209,7 +202,7 @@ func retractEvent(ctx context.Context, conn *store.Conn, eventID string, note do
 		return domain.EventRetraction{}, fmt.Errorf("encode retraction: %w", err)
 	}
 	if err := conn.Journal.Append(ctx, []domain.JournalEntry{{
-		ID: domain.RetractionJournalID(eventID), At: now, RunID: event.RunID,
+		ID: domain.RetractionJournalIDGen(eventID, gen), At: now, RunID: event.RunID,
 		Kind: domain.JournalKindEventRetraction, SubjectID: eventID, Data: string(data),
 	}}); err != nil {
 		return domain.EventRetraction{}, fmt.Errorf("record retraction: %w", err)

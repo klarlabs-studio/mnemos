@@ -136,3 +136,101 @@ func TestREST_RetractEpisode_UsesTheTenantWriter(t *testing.T) {
 		t.Errorf("tenant store has no retraction (ok=%v err=%v)", ok, err)
 	}
 }
+
+func (f runScopeFixture) unretract(t *testing.T, episodeID, token string, body any) *http.Response {
+	t.Helper()
+	return postJSON(t, f.srv.URL+"/v1/episodes/"+episodeID+"/unretract", body, map[string]string{"Authorization": "Bearer " + token})
+}
+
+// POST /v1/episodes/{id}/unretract returns the same retraction.UnretractionReport
+// the CLI and MCP paths return and restores the belief the retraction took.
+func TestREST_UnretractEpisode_SharesTheCLIReport(t *testing.T) {
+	f := newRunScopeFixture(t)
+	f.seedRun(t, "run-a", "ev-a", "cl-a")
+	tok := f.openToken(t, []string{domain.ScopeClaimsWrite})
+	resp := f.retract(t, "ev-a", tok, map[string]string{"reason": "wrong runbook"})
+	_ = resp.Body.Close()
+
+	resp = f.unretract(t, "ev-a", tok, map[string]string{"reason": "runbook was right"})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var got unretractionView
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.EpisodeID != "ev-a" || got.AlreadyUnretracted || got.Reason != "runbook was right" || got.UnretractedBy != "agt_open" {
+		t.Errorf("report = %+v, want a first un-retraction of ev-a by agt_open", got)
+	}
+	if r := got.Impact.Restored; len(r) != 1 || r[0].ID != "cl-a" {
+		t.Errorf("restored = %+v, want [cl-a]", r)
+	}
+	claims, err := f.conn.Claims.ListByIDs(context.Background(), []string{"cl-a"})
+	if err != nil || len(claims) != 1 || claims[0].Status != domain.ClaimStatusActive {
+		t.Errorf("cl-a after un-retraction = %+v (%v), want active", claims, err)
+	}
+
+	gw, err := govwrite.Wrap(f.conn, nil)
+	if err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	viaCLI, err := runUnretraction(context.Background(), gw, "ev-a", "", "operator", nil)
+	if err != nil {
+		t.Fatalf("CLI path: %v", err)
+	}
+	if !viaCLI.AlreadyUnretracted {
+		t.Error("CLI path did not see the REST un-retraction")
+	}
+	viaCLI.AlreadyUnretracted = false
+	if !reflect.DeepEqual(viaCLI, got) {
+		t.Errorf("CLI view %+v differs from REST view %+v", viaCLI, got)
+	}
+}
+
+func TestREST_UnretractEpisode_RefusalsAreClean(t *testing.T) {
+	f := newRunScopeFixture(t)
+	f.seedRun(t, "run-a", "ev-a", "cl-a")
+	f.seedRun(t, "run-b", "ev-b", "cl-b")
+	f.seedRun(t, "run-a", "ev-never", "cl-never")
+	write := f.openToken(t, []string{domain.ScopeClaimsWrite})
+	for _, id := range []string{"ev-a", "ev-b"} {
+		resp := f.retract(t, id, write, map[string]string{})
+		_ = resp.Body.Close()
+	}
+
+	cases := []struct {
+		name    string
+		episode string
+		token   string
+		body    any
+		method  string
+		want    int
+	}{
+		{"read-only token", "ev-a", f.openToken(t, []string{"claims:read"}), map[string]string{}, http.MethodPost, http.StatusForbidden},
+		{"unknown episode", "ev-missing", write, map[string]string{}, http.MethodPost, http.StatusNotFound},
+		{"episode in another run", "ev-b", f.runScopedToken(t, []string{domain.ScopeClaimsWrite}, []string{"run-a"}), map[string]string{}, http.MethodPost, http.StatusNotFound},
+		{"never retracted", "ev-never", write, map[string]string{}, http.MethodPost, http.StatusConflict},
+		{"unknown field", "ev-a", write, map[string]string{"why": "x"}, http.MethodPost, http.StatusBadRequest},
+		{"GET", "ev-a", write, nil, http.MethodGet, http.StatusMethodNotAllowed},
+	}
+	for _, tc := range cases {
+		var code int
+		if tc.method == http.MethodPost {
+			resp := f.unretract(t, tc.episode, tc.token, tc.body)
+			code = resp.StatusCode
+			_ = resp.Body.Close()
+		} else {
+			code = f.status(t, tc.method, "/v1/episodes/"+tc.episode+"/unretract", tc.token)
+		}
+		if code != tc.want {
+			t.Errorf("%s: status = %d, want %d", tc.name, code, tc.want)
+		}
+	}
+	for _, id := range []string{"cl-a", "cl-b"} {
+		got, err := f.conn.Claims.ListByIDs(context.Background(), []string{id})
+		if err != nil || len(got) != 1 || got[0].Status != domain.ClaimStatusDeprecated {
+			t.Errorf("%s after refused un-retractions = %+v (err %v), want still retracted", id, got, err)
+		}
+	}
+}

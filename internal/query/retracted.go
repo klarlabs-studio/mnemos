@@ -2,7 +2,6 @@ package query
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -33,21 +32,28 @@ func (e Engine) withoutRetracted(ctx context.Context, at time.Time) (Engine, err
 	if e.journal == nil {
 		return e, nil
 	}
-	entries, err := e.journal.List(ctx, domain.JournalKindEventRetraction, retractionScanLimit)
-	if err != nil {
-		return e, fmt.Errorf("list retractions: %w", err)
-	}
-	if len(entries) >= retractionScanLimit {
-		return e, fmt.Errorf("list retractions: %d or more recorded; raise retractionScanLimit", retractionScanLimit)
-	}
-	hidden := make(map[string]struct{}, len(entries))
-	for _, entry := range entries {
-		var rec domain.EventRetraction
-		if err := json.Unmarshal([]byte(entry.Data), &rec); err != nil {
-			return e, fmt.Errorf("decode retraction %s: %w", entry.ID, err)
+	// Retractions and un-retractions (ADR 0037 §8): an episode is hidden when
+	// its last transition at or before at is a retraction, so a read inside
+	// the retracted window hides it and a read after its restoration shows it.
+	var entries []domain.JournalEntry
+	for _, kind := range []string{domain.JournalKindEventRetraction, domain.JournalKindEventUnretraction} {
+		rows, err := e.journal.List(ctx, kind, retractionScanLimit)
+		if err != nil {
+			return e, fmt.Errorf("list %s rows: %w", kind, err)
 		}
-		if !rec.RetractedAt.After(at) {
-			hidden[rec.EventID] = struct{}{}
+		if len(rows) >= retractionScanLimit {
+			return e, fmt.Errorf("list %s rows: %d or more recorded; raise retractionScanLimit", kind, retractionScanLimit)
+		}
+		entries = append(entries, rows...)
+	}
+	histories, err := domain.FoldRetractionHistory(entries)
+	if err != nil {
+		return e, err
+	}
+	hidden := make(map[string]struct{}, len(histories))
+	for id, h := range histories {
+		if h.RetractedAt(at) {
+			hidden[id] = struct{}{}
 		}
 	}
 	if len(hidden) == 0 {

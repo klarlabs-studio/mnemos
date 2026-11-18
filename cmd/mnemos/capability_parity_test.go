@@ -243,7 +243,7 @@ func restSurface() ([]string, error) {
 }
 
 // comparedLiterals returns the string literals compared with == or != against
-// the expression expr (rendered as source, e.g. "sub" or "parts[1]") inside
+// the expression expr (rendered as source, e.g. "sub" or "parts[1]"), or used as a switch case against it, inside
 // function fn in file. Finding none is an error: the dispatcher changed shape
 // and the guard would otherwise compare against an empty set.
 func comparedLiterals(file, fn, expr string) ([]string, error) {
@@ -262,6 +262,19 @@ func comparedLiterals(file, fn, expr string) ([]string, error) {
 	}
 	set := map[string]bool{}
 	ast.Inspect(body, func(n ast.Node) bool {
+		// switch <expr> { case "a", "b": ... } compares expr with each literal.
+		if sw, ok := n.(*ast.SwitchStmt); ok && sw.Tag != nil && types.ExprString(sw.Tag) == expr {
+			for _, st := range sw.Body.List {
+				for _, e := range st.(*ast.CaseClause).List {
+					if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+						if s, err := strconv.Unquote(lit.Value); err == nil {
+							set[s] = true
+						}
+					}
+				}
+			}
+			return true
+		}
 		be, ok := n.(*ast.BinaryExpr)
 		if !ok || (be.Op != token.EQL && be.Op != token.NEQ) {
 			return true
