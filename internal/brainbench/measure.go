@@ -75,7 +75,7 @@ func Measure(ctx context.Context, dsn, dbPath string, sc Scenario, phases PhaseT
 	if err != nil {
 		return MetricSet{}, err
 	}
-	out := MetricSet{Questions: answers.asked}
+	out := MetricSet{Questions: answers.asked, Outcomes: answers.outcomes, latencies: answers.latencies}
 	out.Metrics = append(out.Metrics, answers.metrics...)
 	out.Metrics = append(out.Metrics, gold...)
 	out.Metrics = append(out.Metrics, census...)

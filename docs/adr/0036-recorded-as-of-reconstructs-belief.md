@@ -73,7 +73,11 @@ applied once per call in every exported entry point:
 | evidence links | live links, plus closed links with `created_at ≤ T < closed_at` (§8) |
 
 Admission then runs unchanged on the rewound claims, so the deprecated, validity
-and archive filters ask their questions of the state the brain held at T.
+and archive filters ask their questions of the state the brain held at T. Without
+`AsOf`, the validity filter's "valid now" is asked at T, the read's own now: a
+belief whose recorded `valid_to` falls between T and today was in force at T and
+is returned, and one recorded before T with a `valid_from` after T (an announced
+change) is not (`TestRecordedAsOf_ValidityIsReadAtT`).
 The rewind rule is a pure function (`recorded.Rewind`), tested in isolation.
 
 `AsOf` (valid time) keeps its meaning and composes: `RecordedAsOf=Tue, AsOf=Mon`

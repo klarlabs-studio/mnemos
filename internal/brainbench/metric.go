@@ -3,6 +3,7 @@ package brainbench
 import (
 	"fmt"
 	"math"
+	"time"
 )
 
 // Direction is a metric's normative orientation: which way is an improvement.
@@ -70,6 +71,13 @@ type MetricSet struct {
 	// Questions lists the probe ids put to the answerer, in order. Every
 	// answerer in a scenario must have been asked the identical list.
 	Questions []string `json:"questions,omitempty"`
+	// Outcomes is the per-question result behind the answer and accuracy
+	// metrics, in asking order.
+	Outcomes []Outcome `json:"outcomes,omitempty"`
+
+	// latencies are the per-question retrieval wall times, for the cost
+	// report. Unexported and never compared: wall time is noise by nature.
+	latencies []time.Duration
 }
 
 // Get returns the named metric.
