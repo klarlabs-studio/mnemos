@@ -17,10 +17,12 @@ type trustInputs struct {
 	confidence    float64
 	halfLifeDays  float64
 	lastConfirmed sql.NullTime
+	credit        float64
 }
 
-func (a trustInputs) equal(b trustInputs) bool {
-	return a.found == b.found && a.confidence == b.confidence && a.halfLifeDays == b.halfLifeDays &&
+// sameInputs reports whether the claims-row trust inputs are unchanged.
+func (a trustInputs) sameInputs(b trustInputs) bool {
+	return a.confidence == b.confidence && a.halfLifeDays == b.halfLifeDays &&
 		a.lastConfirmed.Valid == b.lastConfirmed.Valid &&
 		(!a.lastConfirmed.Valid || a.lastConfirmed.Time.Equal(b.lastConfirmed.Time))
 }
@@ -30,22 +32,27 @@ func (a trustInputs) equal(b trustInputs) bool {
 // false when the claim does not exist yet.
 func (r ClaimRepository) readTrustInputs(ctx context.Context, tx *sql.Tx, claimID string) (trustInputs, error) {
 	in := trustInputs{found: true}
+	var components sql.NullString
 	err := tx.QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT confidence, half_life_days, last_confirmed FROM %s WHERE id = $1 FOR UPDATE`, qualify(r.ns, "claims")), claimID,
-	).Scan(&in.confidence, &in.halfLifeDays, &in.lastConfirmed)
+		fmt.Sprintf(`SELECT confidence, half_life_days, last_confirmed, confidence_components::text FROM %s WHERE id = $1 FOR UPDATE`, qualify(r.ns, "claims")), claimID,
+	).Scan(&in.confidence, &in.halfLifeDays, &in.lastConfirmed, &components)
 	if errors.Is(err, sql.ErrNoRows) {
 		return trustInputs{}, nil
 	}
 	if err != nil {
 		return trustInputs{}, fmt.Errorf("read trust inputs of %s: %w", claimID, err)
 	}
+	in.credit = domain.AppliedCredit(decodeConfidenceComponents(components.String))
 	return in, nil
 }
 
 // recordTrustInputChange versions a write to claimID's stored trust inputs
 // (ADR 0036 §7). Call it in the write's transaction, after the write, with the
-// values read before it: it reads what the row holds now and, when that
-// differs, records the prior values. Comparing against the row rather than
+// values read before it: it reads what the row holds now and, when confidence,
+// half-life or last confirmation differ, records their prior values in
+// claim_trust_input_history; when the applied net credit differs, it records
+// the change in claim_credit_history (ADR 0036 step 3), whichever statement
+// made it — ApplyBeliefCredit or an upsert carrying confidence_components. Comparing against the row rather than
 // against what the caller wrote keeps it right whatever conflict rule the
 // statement applied. A claim the write created has no prior values and
 // records nothing.
@@ -60,7 +67,16 @@ func (r ClaimRepository) recordTrustInputChange(ctx context.Context, tx *sql.Tx,
 	if err != nil {
 		return err
 	}
-	if !now.found || now.equal(prior) {
+	if !now.found {
+		return nil
+	}
+	if now.credit != prior.credit {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s (claim_id, from_credit, to_credit, changed_at) VALUES ($1, $2, $3, $4)`, qualify(r.ns, "claim_credit_history")),
+			claimID, prior.credit, now.credit, at.UTC()); err != nil {
+			return fmt.Errorf("record credit change of %s: %w", claimID, err)
+		}
+	}
+	if now.sameInputs(prior) {
 		return nil
 	}
 	if _, err := tx.ExecContext(ctx,

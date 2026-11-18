@@ -777,11 +777,6 @@ func (r ClaimRepository) ApplyBeliefCredit(_ context.Context, claimID string, co
 	if !ok {
 		return fmt.Errorf("apply belief credit: claim %s not found", claimID)
 	}
-	if from, to := domain.AppliedCredit(c.ConfidenceComponents), domain.AppliedCredit(components); from != to {
-		r.state.creditHistory = append(r.state.creditHistory, domain.CreditChange{
-			ClaimID: claimID, From: from, To: to, ChangedAt: time.Now().UTC(),
-		})
-	}
 	if len(components) == 0 {
 		c.ConfidenceComponents = nil
 	} else {
@@ -1037,10 +1032,20 @@ func (r ClaimRepository) GapCandidates(ctx context.Context, minContradictions in
 // row on this backend, so it is where the trust inputs the row holds itself
 // (confidence, half-life, last confirmation) are versioned (ADR 0036 §7): when
 // the write changes any of them, the values it replaces are recorded with the
-// store's clock. A new claim has no prior values and records nothing. Callers
+// store's clock. A change to the applied net credit is recorded in the credit
+// history (ADR 0036 step 3), whether ApplyBeliefCredit or an upsert carrying
+// confidence components made it. A new claim has no prior values and records
+// nothing. Callers
 // hold state.mu. TestMemoryClaimWritesGoThroughPutClaimLocked fails if a write
 // bypasses it.
 func (r ClaimRepository) putClaimLocked(id string, c storedClaim) {
+	if prior, ok := r.state.claims[id]; ok {
+		if from, to := domain.AppliedCredit(prior.ConfidenceComponents), domain.AppliedCredit(c.ConfidenceComponents); from != to {
+			r.state.creditHistory = append(r.state.creditHistory, domain.CreditChange{
+				ClaimID: id, From: from, To: to, ChangedAt: time.Now().UTC(),
+			})
+		}
+	}
 	if prior, ok := r.state.claims[id]; ok &&
 		(prior.Confidence != c.Confidence || prior.HalfLifeDays != c.HalfLifeDays || !prior.LastConfirmed.Equal(c.LastConfirmed)) {
 		r.state.trustInputHistory[id] = append(r.state.trustInputHistory[id], domain.TrustInputChange{

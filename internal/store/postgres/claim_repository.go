@@ -596,21 +596,19 @@ func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, 
 		return fmt.Errorf("begin apply belief credit tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	var raw string
-	if err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT confidence_components::text FROM %s WHERE id = $1 FOR UPDATE`, qualify(r.ns, "claims")), claimID).Scan(&raw); err != nil {
-		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, err)
+	prior, err := r.readTrustInputs(ctx, tx, claimID)
+	if err != nil {
+		return err
 	}
-	from := domain.AppliedCredit(decodeConfidenceComponents(raw))
-	to := domain.AppliedCredit(components)
+	if !prior.found {
+		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, sql.ErrNoRows)
+	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET confidence_components = $1, trust_score = $2 WHERE id = $3`, qualify(r.ns, "claims")),
 		encodeConfidenceComponents(components), trustScore, claimID); err != nil {
 		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
 	}
-	if from != to {
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s (claim_id, from_credit, to_credit, changed_at) VALUES ($1, $2, $3, $4)`, qualify(r.ns, "claim_credit_history")),
-			claimID, from, to, time.Now().UTC()); err != nil {
-			return fmt.Errorf("record credit change of %s: %w", claimID, err)
-		}
+	if err := r.recordTrustInputChange(ctx, tx, claimID, prior, time.Now().UTC()); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit apply belief credit tx: %w", err)

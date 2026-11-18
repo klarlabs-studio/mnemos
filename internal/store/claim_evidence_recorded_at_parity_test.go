@@ -100,7 +100,9 @@ func TestClaimEvidence_RecordedAtRoundTripsOnEveryBackend(t *testing.T) {
 }
 
 // ADR 0036 step 3: every backend that applies credit records each change to
-// the applied net credit, so the credit a belief held at T is recoverable.
+// the applied net credit, so the credit a belief held at T is recoverable —
+// whichever write made it: ApplyBeliefCredit, or an upsert carrying
+// confidence_components (written by the conflict rule as given).
 func TestCreditHistory_RecordsEveryAppliedCreditChange(t *testing.T) {
 	ctx := context.Background()
 	at := time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC)
@@ -134,12 +136,25 @@ func TestCreditHistory_RecordsEveryAppliedCreditChange(t *testing.T) {
 			apply(0.1, nil)
 			apply(0.1, map[string]float64{domain.InhibitionComponentKey: 0.2}) // credit unchanged: no row
 			apply(-0.05, nil)
+			upsert := func(components map[string]float64) {
+				t.Helper()
+				if err := b.conn.Claims.Upsert(ctx, []domain.Claim{{
+					ID: "c-credit", Text: "the deploy caused the outage", Type: domain.ClaimTypeFact,
+					Confidence: 0.8, Status: domain.ClaimStatusActive, CreatedAt: at,
+					ConfidenceComponents: components,
+				}}); err != nil {
+					t.Fatalf("upsert with components %v: %v", components, err)
+				}
+			}
+			upsert(map[string]float64{domain.CreditAppliedComponentKey: 0.3}) // -0.05 -> 0.3
+			upsert(map[string]float64{domain.CreditAppliedComponentKey: 0.3}) // unchanged: no row
+			upsert(nil)                                                       // 0.3 -> 0: the conflict rule writes it
 
 			history, err := lister.ListCreditHistory(ctx, []string{"c-credit", "c-missing"})
 			if err != nil {
 				t.Fatalf("list credit history: %v", err)
 			}
-			want := []struct{ from, to float64 }{{0, 0.1}, {0.1, -0.05}}
+			want := []struct{ from, to float64 }{{0, 0.1}, {0.1, -0.05}, {-0.05, 0.3}, {0.3, 0}}
 			if len(history) != len(want) {
 				t.Fatalf("credit history = %+v, want %d changes", history, len(want))
 			}
@@ -149,8 +164,10 @@ func TestCreditHistory_RecordsEveryAppliedCreditChange(t *testing.T) {
 					t.Errorf("change %d = %+v, want c-credit %v -> %v with a time", i, h, w.from, w.to)
 				}
 			}
-			if history[1].ChangedAt.Before(history[0].ChangedAt) {
-				t.Errorf("credit history is not oldest first: %+v", history)
+			for i := 1; i < len(history); i++ {
+				if history[i].ChangedAt.Before(history[i-1].ChangedAt) {
+					t.Errorf("credit history is not oldest first: %+v", history)
+				}
 			}
 
 			if err := b.conn.Claims.DeleteCascade(ctx, "c-credit"); err != nil {

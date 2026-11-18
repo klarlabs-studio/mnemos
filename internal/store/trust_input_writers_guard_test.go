@@ -13,8 +13,9 @@ import (
 	"testing"
 )
 
-// ADR 0036 §7: a write that changes confidence, half_life_days or
-// last_confirmed without recording the values it replaced is the defect class
+// ADR 0036 §7: a write that changes confidence, half_life_days,
+// last_confirmed or the applied credit in confidence_components without
+// recording the values it replaced is the defect class
 // that made a recorded-as-of read report today's trust inputs as yesterday's.
 // TestTrustInputHistory_RecordsEveryWritePath proves the writers that exist
 // record; this proves no other writer exists, so a statement added later
@@ -43,7 +44,7 @@ func TestTrustInputWriters_RecordHistory(t *testing.T) {
 					len(g.writers), g.writerNames())
 			}
 			for _, f := range g.unversionedEntryPoints() {
-				t.Errorf("%s writes confidence, half_life_days or last_confirmed on claims without reaching recordTrustInputChange (ADR 0036 §7)", f)
+				t.Errorf("%s writes confidence, confidence_components, half_life_days or last_confirmed on claims without reaching recordTrustInputChange (ADR 0036 §7)", f)
 			}
 		})
 	}
@@ -95,7 +96,7 @@ func TestMemoryClaimWritesGoThroughPutClaimLocked(t *testing.T) {
 const recorderName = "recordTrustInputChange"
 
 var (
-	trustColumn  = `(confidence|half_life_days|last_confirmed)`
+	trustColumn  = `(confidence|confidence_components|half_life_days|last_confirmed)`
 	updateAssign = regexp.MustCompile(`(?is)\bUPDATE\s+(\S+)\s.*\bSET\b.*\b` + trustColumn + `\s*=`)
 	insertCols   = regexp.MustCompile(`(?is)\bINSERT\s+INTO\s+(\S+)\s*\(([^)]*)\)`)
 	columnWord   = regexp.MustCompile(`(?i)\b` + trustColumn + `\b`)

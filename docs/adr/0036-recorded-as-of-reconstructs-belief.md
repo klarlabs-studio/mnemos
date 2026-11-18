@@ -230,10 +230,13 @@ What made it possible:
   at all, `cognitive_journal` has no link kind, `claim_versions` dates claim
   writes, not links (a restatement links without rewriting the claim), and the
   kernel audit log is a process-local file outside the store.
-- **Credit is versioned.** `ApplyBeliefCredit` records a row in
-  `claim_credit_history` (claim, from, to, changed_at) in the same transaction
-  whenever it changes the applied net credit; a write that leaves it unchanged
-  (inhibition decay, an idempotent re-run) records nothing. Read through the
+- **Credit is versioned.** Two writers set `confidence_components`:
+  `ApplyBeliefCredit` and the upsert, whose conflict rule writes the incoming
+  map as given. Both record a row in `claim_credit_history` (claim, from, to,
+  changed_at) in the same transaction whenever the stored applied net credit
+  changed, through the same before/after comparison as the trust inputs below;
+  a write that leaves it unchanged (inhibition decay, an idempotent re-run, a
+  restatement carrying the same map) records nothing. Read through the
   optional `ports.CreditHistoryLister`. Every backend that implements
   `ports.BeliefCreditWriter` carries the table: SQLite (and libSQL), memory,
   Postgres (registered in the ADR-0007 RLS `scoped` array, so it gets a tenant
@@ -241,7 +244,9 @@ What made it possible:
   and MySQL the current value is read `FOR UPDATE`, so concurrent credit
   writes each record the value they replaced. Delete and cascade paths clear
   it. `TestCreditHistory_RecordsEveryAppliedCreditChange` fails if a backend
-  implements the writer without the lister. Credit applied before the table
+  implements the writer without the lister, or if either writer changes the
+  credit without a row; the AST guard below covers `confidence_components`
+  too. Credit applied before the table
   existed has no history, and reads as the stored value.
 - **The row's own trust inputs are versioned.** Confidence, `half_life_days`
   and `last_confirmed` are overwritten in place by three writers on every
@@ -266,8 +271,8 @@ What made it possible:
   backend and asserts the rows the lister returns.
   `TestTrustInputWriters_RecordHistory` reads the SQL backends' Go AST
   (literals and string constants, sqlc's generated queries included) and fails
-  if any function holding SQL that assigns one of the three columns on
-  `claims` reaches an entry point without passing through
+  if any function holding SQL that assigns one of the three columns, or
+  `confidence_components`, on `claims` reaches an entry point without passing through
   `recordTrustInputChange`; `TestMemoryClaimWritesGoThroughPutClaimLocked`
   fails on any other write into memory's claims map.
 - **Rows written before the history: one rule.** A claim with no recorded
