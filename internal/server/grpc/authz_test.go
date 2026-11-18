@@ -101,7 +101,7 @@ type writeRPC struct {
 // and trigger a synthesis pass. The four that were already guarded are listed
 // alongside so the table is the whole write surface, not a patch note.
 func writeRPCs() []writeRPC {
-	return []writeRPC{
+	rpcs := []writeRPC{
 		{"AppendEpisodes", domain.ScopeEventsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
 			_, err := c.AppendEpisodes(ctx, &mnemosv1.AppendEpisodesRequest{
 				Episodes: []*mnemosv1.Episode{{Id: "ev-scope", Content: "c", SourceInputId: "in"}},
@@ -180,6 +180,65 @@ func writeRPCs() []writeRPC {
 		}},
 		{"UnretractEpisode", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
 			_, err := c.UnretractEpisode(ctx, &mnemosv1.UnretractEpisodeRequest{EpisodeId: "ev-scope", Reason: "r"})
+			return err
+		}},
+		{"OpenIncident", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.OpenIncident(ctx, &mnemosv1.OpenIncidentRequest{Title: "scope probe"})
+			return err
+		}},
+		{"ResolveIncident", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.ResolveIncident(ctx, &mnemosv1.ResolveIncidentRequest{Id: "inc-scope"})
+			return err
+		}},
+		{"ProcessText", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.ProcessText(ctx, &mnemosv1.ProcessTextRequest{Text: "t"})
+			return err
+		}},
+		{"SetExpectation", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.SetExpectation(ctx, &mnemosv1.SetExpectationRequest{BeliefId: "cl-scope", Predicted: 1})
+			return err
+		}},
+		{"RecordObservation", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.RecordObservation(ctx, &mnemosv1.RecordObservationRequest{BeliefId: "cl-scope", Observed: 1})
+			return err
+		}},
+		{"ReconcileExpectations", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.ReconcileExpectations(ctx, &mnemosv1.ReconcileExpectationsRequest{})
+			return err
+		}},
+	}
+	return append(rpcs, beliefOpWriteRPCs()...)
+}
+
+// beliefOpWriteRPCs are the belief write and governance RPCs (beliefops).
+func beliefOpWriteRPCs() []writeRPC {
+	return []writeRPC{
+		{"RememberFact", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.RememberFact(ctx, &mnemosv1.RememberFactRequest{Text: "t", Evidence: []string{"e"}})
+			return err
+		}},
+		{"DeprecateBelief", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.DeprecateBelief(ctx, &mnemosv1.DeprecateBeliefRequest{BeliefId: "cl-scope"})
+			return err
+		}},
+		{"UpdateBelief", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.UpdateBelief(ctx, &mnemosv1.UpdateBeliefRequest{BeliefId: "cl-scope", Text: "t"})
+			return err
+		}},
+		{"ResolveDissonance", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.ResolveDissonance(ctx, &mnemosv1.ResolveDissonanceRequest{WinnerId: "a", LoserId: "b"})
+			return err
+		}},
+		{"EscalateBelief", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.EscalateBelief(ctx, &mnemosv1.EscalateBeliefRequest{BeliefId: "cl-scope"})
+			return err
+		}},
+		{"VerifyBelief", domain.ScopePromoteGlobal, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.VerifyBelief(ctx, &mnemosv1.VerifyBeliefRequest{BeliefId: "cl-scope"})
+			return err
+		}},
+		{"RecordBeliefFeedback", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.RecordBeliefFeedback(ctx, &mnemosv1.RecordBeliefFeedbackRequest{BeliefId: "cl-scope"})
 			return err
 		}},
 	}

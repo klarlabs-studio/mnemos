@@ -522,3 +522,26 @@ CREATE TABLE IF NOT EXISTS entity_relationships (
   KEY idx_entity_relationships_from (from_type, from_id),
   KEY idx_entity_relationships_to   (to_type, to_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Incidents (mirrors the SQLite table). Tenant isolation is the namespace
+-- (one database per tenant), as for every other table here.
+CREATE TABLE IF NOT EXISTS incidents (
+  id                      VARCHAR(190) NOT NULL,
+  title                   TEXT         NOT NULL,
+  summary                 TEXT         NOT NULL,
+  severity                VARCHAR(32)  NOT NULL,
+  status                  VARCHAR(32)  NOT NULL DEFAULT 'open',
+  timeline_event_ids_json JSON         NOT NULL,
+  root_cause_claim_id     VARCHAR(190) NOT NULL DEFAULT '',
+  decision_ids_json       JSON         NOT NULL,
+  outcome_ids_json        JSON         NOT NULL,
+  playbook_id             VARCHAR(190) NOT NULL DEFAULT '',
+  opened_at               DATETIME(6)  NOT NULL,
+  resolved_at             DATETIME(6)  NULL,
+  created_by              VARCHAR(190) NOT NULL DEFAULT '<system>',
+  PRIMARY KEY (id),
+  KEY idx_incidents_severity (severity),
+  KEY idx_incidents_status (status),
+  KEY idx_incidents_opened_at (opened_at),
+  KEY idx_incidents_root_cause_claim_id (root_cause_claim_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

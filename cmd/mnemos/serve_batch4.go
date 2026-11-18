@@ -8,6 +8,7 @@ import (
 
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/store"
 )
 
 // Working memory + skill loop + temporal over HTTP (v0.69, parity batch 4) —
@@ -87,8 +88,14 @@ func makeBlocksHandler(mem mnemos.Memory) http.HandlerFunc {
 
 // --- skill loop: /v1/actions + /v1/actions/{id}/outcome ----------------------
 
-func makeActionsHandler(mem mnemos.Memory) http.HandlerFunc {
+// makeActionsHandler serves GET /v1/actions (list, see listActionsHandler)
+// and POST /v1/actions (record).
+func makeActionsHandler(conn *store.Conn, mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			listActionsHandler(conn, w, r)
+			return
+		}
 		mem := scopedMem(r.Context(), mem)
 		if r.Method != http.MethodPost {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")

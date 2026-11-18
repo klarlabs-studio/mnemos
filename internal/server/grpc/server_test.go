@@ -449,6 +449,15 @@ func TestSchemasRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	now := timestamppb.New(time.Now().UTC())
 
+	// A schema's evidence must name stored actions; every backend refuses a
+	// dangling reference with InvalidArgument (SQL backends used to 500 on the
+	// foreign key while the memory backend stored it).
+	if _, err := client.AppendActions(ctx, &mnemosv1.AppendActionsRequest{
+		Actions: []*mnemosv1.Action{{Id: "ac_1", Kind: "rollback", Subject: "payments", At: now}},
+	}); err != nil {
+		t.Fatalf("AppendActions: %v", err)
+	}
+
 	if _, err := client.AppendSchemas(ctx, &mnemosv1.AppendSchemasRequest{
 		Schemas: []*mnemosv1.Schema{{
 			Id: "ls_1", Statement: "rollback works", Trigger: "x_trigger", Kind: "rollback",

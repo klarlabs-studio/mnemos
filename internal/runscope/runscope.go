@@ -89,3 +89,29 @@ func ClaimEventIDs(ctx context.Context, conn *store.Conn, claimIDs []string) ([]
 	}
 	return out, nil
 }
+
+// ClaimAllowed reports whether a bearer restricted to allowed may touch the
+// claim: it must have at least one evidence link and every linked event must
+// sit in an allowed run. A claim with no evidence has no run, so a restricted
+// bearer is refused it (fail closed), and a claim drawing on another run's
+// evidence is that run's too. An empty allowed list is unrestricted.
+//
+// Callers report a refusal exactly like a missing claim, so the answer never
+// confirms that a claim outside the bearer's runs exists.
+func ClaimAllowed(ctx context.Context, conn *store.Conn, claimID string, allowed []string) (bool, error) {
+	if len(allowed) == 0 {
+		return true, nil
+	}
+	eventIDs, err := ClaimEventIDs(ctx, conn, []string{claimID})
+	if err != nil {
+		return false, err
+	}
+	if len(eventIDs) == 0 {
+		return false, nil
+	}
+	bad, _, err := CheckEventRunsAllowed(ctx, conn, eventIDs, allowed)
+	if err != nil {
+		return false, err
+	}
+	return bad == "", nil
+}

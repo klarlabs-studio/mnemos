@@ -24,10 +24,13 @@ import (
 	"go.klarlabs.de/bolt"
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/auth"
+	"go.klarlabs.de/mnemos/internal/beliefops"
 	"go.klarlabs.de/mnemos/internal/browse"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/incident"
+	"go.klarlabs.de/mnemos/internal/kbmetrics"
 	markdownpkg "go.klarlabs.de/mnemos/internal/markdown"
 	"go.klarlabs.de/mnemos/internal/page"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -367,7 +370,7 @@ func startGRPCServer(port int, conn *store.Conn, mem mnemos.Memory, requireTenan
 	verifier := auth.NewVerifierWithPrevious(secret, prev, conn.RevokedTokens)
 	logger := bolt.New(bolt.NewJSONHandler(os.Stderr))
 
-	mnemosSrv := mnemosgrpc.NewServerWithMemory(conn, mem, verifier, logger, version)
+	mnemosSrv := withDaemonSurfaces(mnemosgrpc.NewServerWithMemory(conn, mem, verifier, logger, version))
 	if publicReads {
 		// Opt-in only: allow anonymous read RPCs (secure default requires a token).
 		mnemosSrv = mnemosSrv.WithPublicReads()
@@ -498,6 +501,9 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux.HandleFunc("/v1/incidents", makeIncidentsHandler(conn, gw))
 	mux.HandleFunc("/v1/federation/export", makeFederationExportHandler(conn))
 	mux.HandleFunc("/v1/incidents/", makeIncidentSubresourceHandler(conn, gw))
+	mux.HandleFunc("/v1/entity-associations", makeEntityAssociationsHandler(conn, gw))
+	mux.HandleFunc("/v1/facts", makeFactsHandler(mem))
+	mux.HandleFunc("/v1/scan", makeScanHandler(mem))
 	// Connected-brain reads (v0.66): the library's cognitive layer over HTTP.
 	// Delegate to the Memory facade; 503 when it's unavailable.
 	mux.HandleFunc("/v1/who-knows", makeWhoKnowsHandler(mem))
@@ -506,6 +512,8 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux.HandleFunc("/v1/hypercorrections", makeHypercorrectionsHandler(mem))
 	mux.HandleFunc("/v1/recombinations", makeRecombinationsHandler(mem))
 	mux.HandleFunc("/v1/brain/health", makeBrainHealthHandler(mem))
+	mux.HandleFunc("/v1/predictive-error", makePredictiveErrorHandler(mem))
+	mux.HandleFunc("/v1/expectations/reconcile", makeReconcileExpectationsHandler(gw))
 	// Claim CRUD parity (v0.67): novelty classification + decision browse surface.
 	mux.HandleFunc("/v1/classify", makeClassifyHandler(mem))
 	mux.HandleFunc("/v1/decisions", makeDecisionsHandler(mem))
@@ -515,7 +523,10 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	mux.HandleFunc("/v1/passages", makePassagesHandler(mem))
 	// Working memory + skill loop + temporal (v0.69): the last of the cognitive layer.
 	mux.HandleFunc("/v1/blocks", makeBlocksHandler(mem))
-	mux.HandleFunc("/v1/actions", makeActionsHandler(mem))
+	mux.HandleFunc("/v1/actions", makeActionsHandler(conn, mem))
+	mux.HandleFunc("/v1/outcomes", makeOutcomesHandler(conn))
+	mux.HandleFunc("/v1/tenant-schemas", makeTenantSchemasHandler(conn, gw))
+	mux.HandleFunc("/v1/reflexes", makeReflexesHandler(conn, gw))
 	mux.HandleFunc("/v1/actions/", makeActionSubresourceHandler(mem))
 	mux.HandleFunc("/v1/synthesize", makeSynthesizeHandler(mem))
 	mux.HandleFunc("/v1/timeline", makeTimelineHandler(mem))
@@ -841,37 +852,49 @@ func makeProcessHandler() http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "text is required")
 			return
 		}
-		// Default to LLM extraction iff this server has a provider configured, so
-		// a hook that omits the flags gets the best the server can do without
-		// hard-failing when no LLM is set. Explicit request flags override.
-		serverHasLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
-		useLLM := serverHasLLM
-		if req.UseLLM != nil {
-			useLLM = *req.UseLLM
-		}
-		useEmbeddings := useLLM
-		if req.UseEmbeddings != nil {
-			useEmbeddings = *req.UseEmbeddings
-		}
-		out, err := mcpRunProcessText(r.Context(), actorFromContext(r.Context()), mcpProcessTextInput{
-			Text:          req.Text,
-			UseLLM:        useLLM,
-			UseEmbeddings: useEmbeddings,
-		})
+		out, err := runProcessRequest(r.Context(), actorFromContext(r.Context()), req)
 		if err != nil {
 			writeInternalError(w, "process text", err)
 			return
 		}
-		writeJSON(w, http.StatusOK, processResponseDTO{
-			RunID:          out.RunID,
-			Events:         out.Events,
-			Claims:         out.Claims,
-			Relationships:  out.Relationships,
-			Embeddings:     out.Embeddings,
-			UsedLLM:        out.UsedLLM,
-			UsedEmbeddings: out.UsedEmbeddings,
-		})
+		writeJSON(w, http.StatusOK, out)
 	}
+}
+
+// runProcessRequest is the one server-side text-processing path: REST POST
+// /v1/process and gRPC ProcessText both call it, and it runs mcpRunProcessText,
+// the process_text MCP tool's pipeline. ctx carries the request's tenant, which
+// scopes the writer mcpRunProcessText opens.
+func runProcessRequest(ctx context.Context, actor string, req processRequestDTO) (processResponseDTO, error) {
+	// Default to LLM extraction iff this server has a provider configured, so
+	// a hook that omits the flags gets the best the server can do without
+	// hard-failing when no LLM is set. Explicit request flags override.
+	serverHasLLM := strings.TrimSpace(os.Getenv("MNEMOS_LLM_PROVIDER")) != ""
+	useLLM := serverHasLLM
+	if req.UseLLM != nil {
+		useLLM = *req.UseLLM
+	}
+	useEmbeddings := useLLM
+	if req.UseEmbeddings != nil {
+		useEmbeddings = *req.UseEmbeddings
+	}
+	out, err := mcpRunProcessText(ctx, actor, mcpProcessTextInput{
+		Text:          req.Text,
+		UseLLM:        useLLM,
+		UseEmbeddings: useEmbeddings,
+	})
+	if err != nil {
+		return processResponseDTO{}, err
+	}
+	return processResponseDTO{
+		RunID:          out.RunID,
+		Events:         out.Events,
+		Claims:         out.Claims,
+		Relationships:  out.Relationships,
+		Embeddings:     out.Embeddings,
+		UsedLLM:        out.UsedLLM,
+		UsedEmbeddings: out.UsedEmbeddings,
+	}, nil
 }
 
 func makeEventsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFunc {
@@ -2102,6 +2125,9 @@ type metricsResponse struct {
 	Embeddings      int64 `json:"embeddings"`
 }
 
+// makeMetricsHandler serves GET /v1/metrics: the knowledge-base counts from
+// kbmetrics, the one implementation gRPC, MCP and the library share. A
+// run-scoped token sees counts over its runs only, as on gRPC.
 func makeMetricsHandler(conn *store.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
@@ -2109,48 +2135,19 @@ func makeMetricsHandler(conn *store.Conn) http.HandlerFunc {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		ctx := r.Context()
-		events, _ := conn.Events.ListAll(ctx)
-		claims, _ := conn.Claims.ListAll(ctx)
-		// Same union pattern as listEmbeddingsHandler — no port-level
-		// "list every embedding type" since we deliberately segregate
-		// event vs claim vectors at the storage layer.
-		eventEmbs, _ := conn.Embeddings.ListByEntityType(ctx, "event")
-		claimEmbs, _ := conn.Embeddings.ListByEntityType(ctx, "claim")
-
-		runs := map[string]struct{}{}
-		for _, e := range events {
-			if e.RunID != "" {
-				runs[e.RunID] = struct{}{}
-			}
+		c, err := kbmetrics.Compute(r.Context(), conn, allowedRunsFromContext(r.Context()))
+		if err != nil {
+			writeInternalError(w, "metrics", err)
+			return
 		}
-		var contestedClaims int64
-		for _, c := range claims {
-			if c.Status == domain.ClaimStatusContested {
-				contestedClaims++
-			}
-		}
-		// Relationships need the union of every claim's edges.
-		ids := make([]string, 0, len(claims))
-		for _, c := range claims {
-			ids = append(ids, c.ID)
-		}
-		rels, _ := conn.Relationships.ListByClaimIDs(ctx, ids)
-		var contradictions int64
-		for _, rel := range rels {
-			if rel.Type == domain.RelationshipTypeContradicts {
-				contradictions++
-			}
-		}
-
 		writeJSON(w, http.StatusOK, metricsResponse{
-			Runs:            int64(len(runs)),
-			Events:          int64(len(events)),
-			Claims:          int64(len(claims)),
-			ContestedClaims: contestedClaims,
-			Relationships:   int64(len(rels)),
-			Contradictions:  contradictions,
-			Embeddings:      int64(len(eventEmbs) + len(claimEmbs)),
+			Runs:            c.Runs,
+			Events:          c.Events,
+			Claims:          c.Claims,
+			ContestedClaims: c.ContestedClaims,
+			Relationships:   c.Relationships,
+			Contradictions:  c.Contradictions,
+			Embeddings:      c.Embeddings,
 		})
 	}
 }
@@ -2396,51 +2393,7 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 		if !requireRunScope(w, r, req.RunID) {
 			return
 		}
-		if req.TopK <= 0 {
-			req.TopK = 10
-		}
-
-		// Same defaults as MCP and the CLI: a hosted brain is still a brain.
-		//
-		// SkipAnswerText: the response carries claims, never an answer text, so
-		// the engine must not pay for one — a configured LLM was called once per
-		// search and its answer discarded (#472).
-		// The same recall as the CLI and MCP (recall.go): one parser, one
-		// validator, one engine entry point.
-		//
-		// SkipAnswerText: the response carries claims, never an answer text, so
-		// the engine must not pay for one — a configured LLM was called once per
-		// search and its answer discarded (#472).
-		asOf, err := parseInstant(req.AsOf)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("as_of: %v", err))
-			return
-		}
-		recordedAsOf, err := parseInstant(req.RecordedAsOf)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("recorded_as_of: %v", err))
-			return
-		}
-		params := recallParams{
-			Question:       req.Query,
-			RunID:          req.RunID,
-			AsOf:           asOf,
-			RecordedAsOf:   recordedAsOf,
-			MinTrust:       req.MinTrust,
-			Visibility:     req.Visibility,
-			Consumer:       domain.ConsumerUser,
-			SkipAnswerText: true,
-		}
-		if req.Scope != nil {
-			params.Scope = domain.Scope{Service: req.Scope.Service, Env: req.Scope.Env, Team: req.Scope.Team}
-		}
-		if req.Consumer == "agent" {
-			params.Consumer = domain.ConsumerAgent
-		}
-
-		// Fully wired: embeddings, full-text, decisions — newQueryEngine, the
-		// constructor every recall surface shares.
-		answer, err := recallWith(r.Context(), newQueryEngine(conn), params)
+		res, err := runSearch(r.Context(), conn, req)
 		if isInvalidRecall(err) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -2449,102 +2402,163 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 			writeInternalError(w, "search", err)
 			return
 		}
+		writeJSON(w, http.StatusOK, res.response())
+	}
+}
 
-		// Post-filter on type/status — these aren't AnswerOptions
-		// fields. Cheap to do at the HTTP layer; cleaner than
-		// reaching into the engine.
-		filtered := answer.Claims
-		if req.Filters != nil {
-			if req.Filters.ClaimType != "" || req.Filters.Status != "" {
-				kept := make([]domain.Claim, 0, len(filtered))
-				for _, c := range filtered {
-					if req.Filters.ClaimType != "" && string(c.Type) != req.Filters.ClaimType {
-						continue
-					}
-					if req.Filters.Status != "" && string(c.Status) != req.Filters.Status {
-						continue
-					}
-					kept = append(kept, c)
-				}
-				filtered = kept
-			}
-		}
+// searchResult is one search's outcome before any transport shapes it: REST
+// /v1/search renders it as JSON and gRPC Search as protobuf, so the two cannot
+// filter, truncate or default differently.
+type searchResult struct {
+	req          searchRequest // with defaults applied
+	asOf         time.Time
+	recordedAsOf time.Time
+	answer       domain.Answer
+	claims       []domain.Claim // filtered, then truncated to top_k
+	total        int            // after filtering, before truncation
+}
 
-		// Truncate to top_k after filter so the cap reflects what the
-		// caller asked to see, not what the engine returned upstream.
-		total := len(filtered)
-		if total > req.TopK {
-			filtered = filtered[:req.TopK]
-		}
+// runSearch is the one search implementation. It recalls through recallWith —
+// the same query.Engine.Recall every recall surface uses — then applies the
+// type/status post-filter and the top_k cap. The caller has already checked
+// the query is non-empty and the run scope. Malformed input returns an error
+// wrapping query.ErrInvalidRecall.
+func runSearch(ctx context.Context, conn *store.Conn, req searchRequest) (searchResult, error) {
+	if req.TopK <= 0 {
+		req.TopK = 10
+	}
+	asOf, err := parseInstant(req.AsOf)
+	if err != nil {
+		return searchResult{}, fmt.Errorf("%w: as_of: %v", query.ErrInvalidRecall, err)
+	}
+	recordedAsOf, err := parseInstant(req.RecordedAsOf)
+	if err != nil {
+		return searchResult{}, fmt.Errorf("%w: recorded_as_of: %v", query.ErrInvalidRecall, err)
+	}
+	// Same defaults as MCP and the CLI: a hosted brain is still a brain.
+	//
+	// SkipAnswerText: the response carries claims, never an answer text, so
+	// the engine must not pay for one — a configured LLM was called once per
+	// search and its answer discarded (#472).
+	params := recallParams{
+		Question:       req.Query,
+		RunID:          req.RunID,
+		AsOf:           asOf,
+		RecordedAsOf:   recordedAsOf,
+		MinTrust:       req.MinTrust,
+		Visibility:     req.Visibility,
+		Consumer:       domain.ConsumerUser,
+		SkipAnswerText: true,
+	}
+	if req.Scope != nil {
+		params.Scope = domain.Scope{Service: req.Scope.Service, Env: req.Scope.Env, Team: req.Scope.Team}
+	}
+	if req.Consumer == "agent" {
+		params.Consumer = domain.ConsumerAgent
+	}
 
-		dto := make([]searchClaimDTO, 0, len(filtered))
+	// Fully wired: embeddings, full-text, decisions — newQueryEngine, the
+	// constructor every recall surface shares.
+	answer, err := recallWith(ctx, newQueryEngine(conn), params)
+	if err != nil {
+		return searchResult{}, err
+	}
+
+	// Post-filter on type/status — these aren't AnswerOptions fields.
+	filtered := answer.Claims
+	if req.Filters != nil && (req.Filters.ClaimType != "" || req.Filters.Status != "") {
+		kept := make([]domain.Claim, 0, len(filtered))
 		for _, c := range filtered {
-			dto = append(dto, searchClaimDTO{
-				ID:         c.ID,
-				Text:       c.Text,
-				Type:       string(c.Type),
-				Status:     string(c.Status),
-				Confidence: c.Confidence,
-				TrustScore: c.TrustScore,
-			})
-		}
-
-		contradictions := make([]relationshipDTO, 0, len(answer.Contradictions))
-		for _, rel := range answer.Contradictions {
-			contradictions = append(contradictions, relationshipDTO{
-				ID:          rel.ID,
-				Type:        string(rel.Type),
-				FromClaimID: rel.FromClaimID,
-				ToClaimID:   rel.ToClaimID,
-				CreatedAt:   rel.CreatedAt.UTC().Format(time.RFC3339),
-			})
-		}
-
-		applied := map[string]interface{}{}
-		if req.RunID != "" {
-			applied["run_id"] = req.RunID
-		}
-		if req.MinTrust > 0 {
-			applied["min_trust"] = req.MinTrust
-		}
-		if !asOf.IsZero() {
-			applied["as_of"] = asOf.UTC().Format(time.RFC3339)
-		}
-		if !recordedAsOf.IsZero() {
-			applied["recorded_as_of"] = recordedAsOf.UTC().Format(time.RFC3339)
-		}
-		if req.Filters != nil {
-			if req.Filters.ClaimType != "" {
-				applied["type"] = req.Filters.ClaimType
+			if req.Filters.ClaimType != "" && string(c.Type) != req.Filters.ClaimType {
+				continue
 			}
-			if req.Filters.Status != "" {
-				applied["status"] = req.Filters.Status
+			if req.Filters.Status != "" && string(c.Status) != req.Filters.Status {
+				continue
 			}
+			kept = append(kept, c)
 		}
+		filtered = kept
+	}
 
-		verdictDTOs := make([]verdictDTO, 0, len(answer.Verdicts))
-		for _, v := range answer.Verdicts {
-			verdictDTOs = append(verdictDTOs, verdictDTO{
-				WinnerClaimID:    v.WinnerClaimID,
-				LoserClaimID:     v.LoserClaimID,
-				Confidence:       v.Confidence,
-				Rationale:        v.Rationale,
-				Action:           string(v.Action),
-				EscalationReason: v.EscalationReason,
-			})
-		}
+	// Truncate to top_k after filter so the cap reflects what the
+	// caller asked to see, not what the engine returned upstream.
+	total := len(filtered)
+	if total > req.TopK {
+		filtered = filtered[:req.TopK]
+	}
+	return searchResult{req: req, asOf: asOf, recordedAsOf: recordedAsOf, answer: answer, claims: filtered, total: total}, nil
+}
 
-		writeJSON(w, http.StatusOK, searchResponse{
-			Query:                    req.Query,
-			Claims:                   dto,
-			Contradictions:           contradictions,
-			Total:                    total,
-			TopK:                     req.TopK,
-			AppliedFilters:           applied,
-			AutoResolved:             answer.AutoResolved,
-			ContradictionExplanation: answer.ContradictionExplanation,
-			Verdicts:                 verdictDTOs,
+// response renders the result as the REST /v1/search body.
+func (res searchResult) response() searchResponse {
+	req := res.req
+	dto := make([]searchClaimDTO, 0, len(res.claims))
+	for _, c := range res.claims {
+		dto = append(dto, searchClaimDTO{
+			ID:         c.ID,
+			Text:       c.Text,
+			Type:       string(c.Type),
+			Status:     string(c.Status),
+			Confidence: c.Confidence,
+			TrustScore: c.TrustScore,
 		})
+	}
+
+	contradictions := make([]relationshipDTO, 0, len(res.answer.Contradictions))
+	for _, rel := range res.answer.Contradictions {
+		contradictions = append(contradictions, relationshipDTO{
+			ID:          rel.ID,
+			Type:        string(rel.Type),
+			FromClaimID: rel.FromClaimID,
+			ToClaimID:   rel.ToClaimID,
+			CreatedAt:   rel.CreatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	applied := map[string]interface{}{}
+	if req.RunID != "" {
+		applied["run_id"] = req.RunID
+	}
+	if req.MinTrust > 0 {
+		applied["min_trust"] = req.MinTrust
+	}
+	if !res.asOf.IsZero() {
+		applied["as_of"] = res.asOf.UTC().Format(time.RFC3339)
+	}
+	if !res.recordedAsOf.IsZero() {
+		applied["recorded_as_of"] = res.recordedAsOf.UTC().Format(time.RFC3339)
+	}
+	if req.Filters != nil {
+		if req.Filters.ClaimType != "" {
+			applied["type"] = req.Filters.ClaimType
+		}
+		if req.Filters.Status != "" {
+			applied["status"] = req.Filters.Status
+		}
+	}
+
+	verdictDTOs := make([]verdictDTO, 0, len(res.answer.Verdicts))
+	for _, v := range res.answer.Verdicts {
+		verdictDTOs = append(verdictDTOs, verdictDTO{
+			WinnerClaimID:    v.WinnerClaimID,
+			LoserClaimID:     v.LoserClaimID,
+			Confidence:       v.Confidence,
+			Rationale:        v.Rationale,
+			Action:           string(v.Action),
+			EscalationReason: v.EscalationReason,
+		})
+	}
+
+	return searchResponse{
+		Query:                    req.Query,
+		Claims:                   dto,
+		Contradictions:           contradictions,
+		Total:                    res.total,
+		TopK:                     req.TopK,
+		AppliedFilters:           applied,
+		AutoResolved:             res.answer.AutoResolved,
+		ContradictionExplanation: res.answer.ContradictionExplanation,
+		Verdicts:                 verdictDTOs,
 	}
 }
 
@@ -2553,6 +2567,7 @@ func makeSearchHandler(conn *store.Conn) http.HandlerFunc {
 //
 //	GET /v1/beliefs/<id>/provenance  → trust provenance report for the belief
 //	GET /v1/beliefs/<id>/export.md   → human-readable markdown export with provenance annotations
+//	POST /v1/beliefs/<id>/{deprecate,update,resolve,escalate,verify} → governance edits (serve_beliefops.go)
 func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnemos.Memory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
@@ -2585,11 +2600,13 @@ func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnem
 		case "history":
 			makeClaimHistoryHandler(conn, claimID)(w, r)
 		case "expectation":
-			makeExpectationHandler(conn, claimID)(w, r)
+			makeExpectationHandler(conn, gw, claimID)(w, r)
 		case "observation":
-			makeObservationHandler(conn, claimID)(w, r)
+			makeObservationHandler(gw, claimID)(w, r)
 		case "analogous":
 			makeAnalogousHandler(mem, claimID)(w, r)
+		case "deprecate", "update", "resolve", "escalate", "verify":
+			makeBeliefEditHandler(conn, gw, claimID, subresource)(w, r)
 		default:
 			writeError(w, http.StatusNotFound, fmt.Sprintf("unknown subresource %q", subresource))
 		}
@@ -2622,29 +2639,31 @@ func makeClaimHistoryHandler(conn *store.Conn, claimID string) http.HandlerFunc 
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		if conn.ClaimVersions == nil {
-			writeError(w, http.StatusNotImplemented, "version history not available on this backend")
-			return
-		}
-		versions, err := conn.ClaimVersions.ListByClaim(r.Context(), claimID)
+		versions, err := beliefops.History(r.Context(), conn, claimID)
 		if err != nil {
-			writeInternalError(w, "list claim versions", err)
+			writeBeliefOpError(w, "list claim versions", err)
 			return
 		}
-		out := claimHistoryResponse{ClaimID: claimID, Versions: make([]claimVersionDTO, 0, len(versions))}
-		for _, v := range versions {
-			out.Versions = append(out.Versions, claimVersionDTO{
-				ClaimID:    v.ClaimID,
-				Version:    v.Version,
-				Text:       v.Text,
-				Confidence: v.Confidence,
-				Status:     string(v.Status),
-				WrittenAt:  v.WrittenAt.UTC().Format(time.RFC3339Nano),
-				WrittenBy:  v.WrittenBy,
-			})
-		}
-		writeJSON(w, http.StatusOK, out)
+		writeJSON(w, http.StatusOK, claimHistoryToDTO(claimID, versions))
 	}
+}
+
+// claimHistoryToDTO renders a version chain as the history wire document
+// REST and MCP return.
+func claimHistoryToDTO(claimID string, versions []domain.ClaimVersion) claimHistoryResponse {
+	out := claimHistoryResponse{ClaimID: claimID, Versions: make([]claimVersionDTO, 0, len(versions))}
+	for _, v := range versions {
+		out.Versions = append(out.Versions, claimVersionDTO{
+			ClaimID:    v.ClaimID,
+			Version:    v.Version,
+			Text:       v.Text,
+			Confidence: v.Confidence,
+			Status:     string(v.Status),
+			WrittenAt:  v.WrittenAt.UTC().Format(time.RFC3339Nano),
+			WrittenBy:  v.WrittenBy,
+		})
+	}
+	return out
 }
 
 // feedbackRequest is the inbound wire shape for
@@ -2657,37 +2676,6 @@ type feedbackRequest struct {
 	// feedback row. Useful for the human-review path; omit for
 	// programmatic signals.
 	Note string `json:"note,omitempty"`
-}
-
-// feedbackResponse echoes the post-application state of the claim
-// plus the feedback counters, so a caller can react to the streak
-// transition without a second GET.
-type feedbackResponse struct {
-	ClaimID                string  `json:"claim_id"`
-	Helpful                bool    `json:"helpful"`
-	NewStatus              string  `json:"new_status"`
-	NewConfidence          float64 `json:"new_confidence"`
-	NegativeFeedbackStreak int     `json:"negative_feedback_streak"`
-	HelpfulCount           int     `json:"helpful_count"`
-	AutoContested          bool    `json:"auto_contested"`
-}
-
-// feedbackDecayFactor is the per-negative-vote multiplier applied to
-// the scalar Confidence. 0.9 ≈ "each push-back trims 10% of
-// confidence" — keeps the decay shallow enough that a single bad
-// vote can't tank a well-corroborated claim while still being
-// observable. Env-tunable in case operators want a sharper or
-// softer slope.
-func feedbackDecayFactor() float64 {
-	return envFloat("MNEMOS_FEEDBACK_DECAY", 0.9)
-}
-
-// feedbackAutoContestThreshold is the consecutive-negative count
-// above which the claim's status auto-transitions to "contested".
-// 3 by default — enough to suppress noise from a single reviewer
-// having a bad day, low enough to surface real drift.
-func feedbackAutoContestThreshold() int {
-	return envInt("MNEMOS_FEEDBACK_CONTEST_THRESHOLD", 3)
 }
 
 // makeFeedbackHandler returns the POST /v1/beliefs/<id>/feedback
@@ -2706,112 +2694,26 @@ func makeFeedbackHandler(conn *store.Conn, gw *govwrite.Writer, claimID string) 
 		if !requireScope(w, r, domain.ScopeClaimsWrite) {
 			return
 		}
-		if conn.Feedback == nil {
-			writeError(w, http.StatusNotImplemented, "feedback storage not available on this backend")
-			return
-		}
 		var req feedbackRequest
 		if err := decodeJSON(r, &req); err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("decode body: %v", err))
 			return
 		}
 		ctx := r.Context()
-		claims, err := conn.Claims.ListByIDs(ctx, []string{claimID})
-		if err != nil || len(claims) == 0 {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("claim %q not found", claimID))
-			return
-		}
-		claim := claims[0]
-
-		state, _, err := conn.Feedback.Get(ctx, claimID)
+		res, err := beliefops.RecordFeedback(ctx, conn, gw, beliefops.FeedbackRequest{
+			ClaimID: claimID, Helpful: req.Helpful, Note: req.Note, Actor: actorFromContext(ctx),
+		}, beliefops.FeedbackPolicyFromEnv(), time.Now())
 		if err != nil {
-			writeInternalError(w, "load feedback state", err)
+			writeBeliefOpError(w, "record feedback", err)
 			return
 		}
-		state.ClaimID = claimID
-		now := time.Now().UTC()
-		state.LastFeedbackAt = now
-		state.LastFeedbackNote = req.Note
-
-		autoContested := false
-		if req.Helpful {
-			state.NegativeFeedbackStreak = 0
-			state.HelpfulCount++
-		} else {
-			state.NegativeFeedbackStreak++
-			// Decay the scalar confidence. The "corroboration"
-			// component (if surfaced) shrinks in lockstep so the
-			// decomposition stays internally consistent.
-			claim.Confidence *= feedbackDecayFactor()
-			if claim.Confidence < 0 {
-				claim.Confidence = 0
-			}
-			if claim.ConfidenceComponents != nil {
-				if v, ok := claim.ConfidenceComponents["corroboration"]; ok {
-					claim.ConfidenceComponents["corroboration"] = v * feedbackDecayFactor()
-				}
-			}
-			if state.NegativeFeedbackStreak >= feedbackAutoContestThreshold() && claim.Status == domain.ClaimStatusActive {
-				claim.Status = domain.ClaimStatusContested
-				autoContested = true
-			}
-		}
-
-		actor := actorFromContext(ctx)
-		reason := "agent-feedback"
-		if !req.Helpful {
-			reason = "agent-feedback-negative"
-		}
-		if _, err := gw.Claims(ctx, []domain.Claim{claim}, govwrite.ClaimReason{Reason: reason, ChangedBy: actor}); err != nil {
-			writeInternalError(w, "update claim", err)
-			return
-		}
-		if _, err := gw.Feedback(ctx, state); err != nil {
-			writeInternalError(w, "store feedback", err)
-			return
-		}
-		writeJSON(w, http.StatusOK, feedbackResponse{
-			ClaimID:                claimID,
-			Helpful:                req.Helpful,
-			NewStatus:              string(claim.Status),
-			NewConfidence:          claim.Confidence,
-			NegativeFeedbackStreak: state.NegativeFeedbackStreak,
-			HelpfulCount:           state.HelpfulCount,
-			AutoContested:          autoContested,
-		})
+		writeJSON(w, http.StatusOK, res)
 	}
 }
 
-// envFloat reads a float64 env var with a default.
-func envFloat(key string, fallback float64) float64 {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	f, err := strconv.ParseFloat(v, 64)
-	if err != nil {
-		return fallback
-	}
-	return f
-}
-
-// envInt reads an int env var with a default.
-func envInt(key string, fallback int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback
-	}
-	return n
-}
-
-// makeProvenanceHandler handles GET /v1/beliefs/<id>/provenance.
-// It builds a query.Engine and delegates to WhyTrustClaim to produce a
-// structured domain.ProvenanceReport explaining how the claim's trust
-// score was computed from its provenance signals.
+// makeProvenanceHandler handles GET /v1/beliefs/<id>/provenance: the
+// structured domain.ProvenanceReport (beliefops.Provenance) explaining how
+// the belief's trust score was computed. An unknown belief is a 404.
 func makeProvenanceHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
@@ -2819,11 +2721,9 @@ func makeProvenanceHandler(conn *store.Conn, claimID string) http.HandlerFunc {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		ctx := r.Context()
-		eng := query.NewEngine(conn.Events, conn.Claims, conn.Relationships)
-		report, err := eng.WhyTrustClaim(ctx, claimID)
+		report, err := beliefops.Provenance(r.Context(), conn, claimID)
 		if err != nil {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("provenance query failed: %v", err))
+			writeBeliefOpError(w, "provenance", err)
 			return
 		}
 		writeJSON(w, http.StatusOK, report)
@@ -2872,11 +2772,14 @@ func makeClaimMarkdownExportHandler(conn *store.Conn, claimID string) http.Handl
 
 // incidentRequest is the body for POST /v1/incidents.
 type incidentRequest struct {
-	ID               string `json:"id"`
-	Title            string `json:"title"`
-	Summary          string `json:"summary"`
-	Severity         string `json:"severity"`
-	RootCauseClaimID string `json:"root_cause_claim_id"`
+	ID               string   `json:"id"`
+	Title            string   `json:"title"`
+	Summary          string   `json:"summary"`
+	Severity         string   `json:"severity"`
+	RootCauseClaimID string   `json:"root_cause_claim_id"`
+	DecisionIDs      []string `json:"decision_ids"`
+	OutcomeIDs       []string `json:"outcome_ids"`
+	TimelineEventIDs []string `json:"timeline_event_ids"`
 	// CreatedBy is accepted and IGNORED. Authorship comes from the
 	// authenticated token (actorFromContext), never from the body — a caller
 	// that could name its own author could file an incident under someone
@@ -2895,7 +2798,7 @@ func makeIncidentsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFun
 		gw := scopedWriter(r.Context(), gw)
 		switch r.Method {
 		case http.MethodPost:
-			openIncidentHandler(gw, w, r)
+			openIncidentHandler(conn, gw, w, r)
 		case http.MethodGet:
 			listIncidentsHandler(conn, w, r)
 		default:
@@ -2904,7 +2807,7 @@ func makeIncidentsHandler(conn *store.Conn, gw *govwrite.Writer) http.HandlerFun
 	}
 }
 
-func openIncidentHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
+func openIncidentHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseWriter, r *http.Request) {
 	// Opening an incident is a durable, governed write; it was the only REST
 	// POST that took no scope at all, so a read-only token could file
 	// incidents. Incidents are claim-adjacent records, hence claims:write —
@@ -2917,69 +2820,34 @@ func openIncidentHandler(gw *govwrite.Writer, w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid body: %v", err))
 		return
 	}
-	if strings.TrimSpace(req.Title) == "" {
-		writeError(w, http.StatusBadRequest, "title is required")
-		return
-	}
-	id := req.ID
-	if id == "" {
-		gen, err := newID("inc_")
-		if err != nil {
-			writeInternalError(w, "generate incident id", err)
-			return
-		}
-		id = gen
-	}
-	severity := domain.IncidentSeverity(req.Severity)
-	if severity == "" {
-		severity = domain.IncidentSeverityMedium
-	}
 	ctx := r.Context()
-	inc := domain.Incident{
-		ID:               id,
-		Title:            req.Title,
-		Summary:          req.Summary,
-		Severity:         severity,
-		Status:           domain.IncidentStatusOpen,
-		RootCauseClaimID: req.RootCauseClaimID,
-		OpenedAt:         time.Now().UTC(),
+	inc, err := incident.Open(ctx, conn.Incidents, gw.Incident, incident.OpenRequest{
+		ID: req.ID, Title: req.Title, Summary: req.Summary, Severity: req.Severity,
+		RootCauseClaimID: req.RootCauseClaimID, DecisionIDs: req.DecisionIDs,
+		OutcomeIDs: req.OutcomeIDs, TimelineEventIDs: req.TimelineEventIDs,
 		// Attribution follows the token, not req.CreatedBy — every other write
 		// path on this surface stamps the context actor, and a body-supplied
 		// author is forgeable.
-		CreatedBy: actorFromContext(ctx),
-	}
-	if _, err := gw.Incident(ctx, inc); err != nil {
-		writeInternalError(w, "upsert incident", err)
+		Actor: actorFromContext(ctx),
+	})
+	if err != nil {
+		writeIncidentError(w, "open incident", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, inc)
 }
 
+// listIncidentsHandler serves GET /v1/incidents?severity=&status=&limit=&offset=
+// as {"incidents":[...],"total","limit","offset"}, like every paged listing.
 func listIncidentsHandler(conn *store.Conn, w http.ResponseWriter, r *http.Request) {
-	if conn.Incidents == nil {
-		writeError(w, http.StatusNotImplemented, "incident storage not available on this backend")
-		return
-	}
-	ctx := r.Context()
-	severityFilter := r.URL.Query().Get("severity")
-	statusFilter := r.URL.Query().Get("status")
-	var (
-		incidents []domain.Incident
-		err       error
-	)
-	switch {
-	case severityFilter != "":
-		incidents, err = conn.Incidents.ListBySeverity(ctx, domain.IncidentSeverity(severityFilter))
-	case statusFilter != "":
-		incidents, err = conn.Incidents.ListByStatus(ctx, domain.IncidentStatus(statusFilter))
-	default:
-		incidents, err = conn.Incidents.ListAll(ctx)
-	}
+	q := r.URL.Query()
+	limit, offset := pageQuery(r)
+	incidents, err := incident.List(r.Context(), conn.Incidents, incident.Filter{Severity: q.Get("severity"), Status: q.Get("status")})
 	if err != nil {
-		writeInternalError(w, "list incidents", err)
+		writeIncidentError(w, "list incidents", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, incidents)
+	writeList(w, "incidents", incidents, limit, offset, func(i domain.Incident) domain.Incident { return i })
 }
 
 // makeIncidentSubresourceHandler handles:
@@ -2991,10 +2859,6 @@ func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn := scopedConn(r.Context(), conn)
 		gw := scopedWriter(r.Context(), gw)
-		if conn.Incidents == nil {
-			writeError(w, http.StatusNotImplemented, "incident storage not available on this backend")
-			return
-		}
 		// Strip "/v1/incidents/" prefix and split remainder.
 		prefix := "/v1/incidents/"
 		tail := strings.TrimPrefix(r.URL.Path, prefix)
@@ -3012,13 +2876,9 @@ func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.
 		ctx := r.Context()
 		switch {
 		case sub == "" && r.Method == http.MethodGet:
-			inc, found, err := conn.Incidents.GetByID(ctx, id)
+			inc, err := incident.Get(ctx, conn.Incidents, id)
 			if err != nil {
-				writeInternalError(w, "get incident", err)
-				return
-			}
-			if !found {
-				writeError(w, http.StatusNotFound, fmt.Sprintf("incident %q not found", id))
+				writeIncidentError(w, "get incident", err)
 				return
 			}
 			writeJSON(w, http.StatusOK, inc)
@@ -3029,22 +2889,20 @@ func makeIncidentSubresourceHandler(conn *store.Conn, gw *govwrite.Writer) http.
 			if !requireScope(w, r, domain.ScopeClaimsWrite) {
 				return
 			}
-			if err := gw.ResolveIncident(ctx, id, time.Now().UTC()); err != nil {
-				writeInternalError(w, "resolve incident", err)
+			inc, err := incident.Resolve(ctx, conn.Incidents, gw.ResolveIncident, id)
+			if err != nil {
+				writeIncidentError(w, "resolve incident", err)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": string(domain.IncidentStatusResolved)})
+			writeJSON(w, http.StatusOK, map[string]string{"id": inc.ID, "status": string(inc.Status)})
 
 		case sub == "why-wrong" && r.Method == http.MethodGet:
-			eng := query.NewEngine(conn.Events, conn.Claims, conn.Relationships).
-				WithDecisions(conn.Decisions).
-				WithIncidents(conn.Incidents)
-			report, err := eng.WhyWereWeWrong(ctx, id)
+			report, err := incident.WhyWereWeWrong(ctx, conn, id)
 			if err != nil {
-				writeError(w, http.StatusNotFound, fmt.Sprintf("why-wrong analysis failed: %v", err))
+				writeIncidentError(w, "why-wrong analysis", err)
 				return
 			}
-			writeJSON(w, http.StatusOK, report)
+			writeJSON(w, http.StatusOK, whyWrongToDTO(report))
 
 		default:
 			writeError(w, http.StatusNotFound, fmt.Sprintf("unknown incident sub-resource %q", sub))
