@@ -176,8 +176,13 @@ CREATE INDEX IF NOT EXISTS idx_claim_entities_entity_id ON claim_entities(entity
 CREATE TABLE IF NOT EXISTS claim_evidence (
   claim_id text NOT NULL REFERENCES claims(id),
   event_id text NOT NULL REFERENCES events(id),
+  created_at timestamptz,
   PRIMARY KEY (claim_id, event_id)
 );
+-- created_at (ADR 0036 step 3): when the link was recorded. NULL on links
+-- written before the column existed; a recorded-as-of read then uses the later
+-- of the claim's created_at and the event's ingested_at (recorded.LinkRecordedAt).
+ALTER TABLE claim_evidence ADD COLUMN IF NOT EXISTS created_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_event_id ON claim_evidence(event_id);
 
@@ -254,6 +259,18 @@ CREATE TABLE IF NOT EXISTS claim_validity_history (
   changed_by  text        NOT NULL DEFAULT '<system>'
 );
 CREATE INDEX IF NOT EXISTS idx_claim_validity_history_claim_id ON claim_validity_history(claim_id);
+
+-- claim_credit_history (ADR 0036 step 3): every change ApplyBeliefCredit makes
+-- to a claim's applied net credit (confidence_components->'credit:applied'),
+-- so the credit a belief held at an earlier instant can be recovered.
+CREATE TABLE IF NOT EXISTS claim_credit_history (
+  id          bigserial        PRIMARY KEY,
+  claim_id    text             NOT NULL REFERENCES claims(id),
+  from_credit double precision NOT NULL DEFAULT 0,
+  to_credit   double precision NOT NULL DEFAULT 0,
+  changed_at  timestamptz      NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_claim_credit_history_claim_id ON claim_credit_history(claim_id);
 
 -- Embeddings: bytea matches the SQLite BLOB shape and stays the portable
 -- source of truth. When pgvector is installed, a nullable `embedding
@@ -532,7 +549,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'events','claims','entities','claim_entities','claim_evidence','relationships',
-    'compilation_jobs','claim_status_history','claim_validity_history','embeddings','agents','actions',
+    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
     'entity_relationships','working_memory_blocks','claim_expectations',

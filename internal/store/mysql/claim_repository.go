@@ -196,12 +196,14 @@ func (r ClaimRepository) UpsertEvidence(ctx context.Context, links []domain.Clai
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt := `INSERT IGNORE INTO claim_evidence (claim_id, event_id) VALUES (?, ?)`
+	// INSERT IGNORE keeps the original created_at: a link is recorded once.
+	stmt := `INSERT IGNORE INTO claim_evidence (claim_id, event_id, created_at) VALUES (?, ?, ?)`
+	now := time.Now().UTC()
 	for _, link := range links {
 		if err := link.Validate(); err != nil {
 			return fmt.Errorf("invalid claim evidence: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, stmt, link.ClaimID, link.EventID); err != nil {
+		if _, err := tx.ExecContext(ctx, stmt, link.ClaimID, link.EventID, domain.EvidenceRecordedAt(link, now)); err != nil {
 			return fmt.Errorf("upsert claim evidence (%s,%s): %w", link.ClaimID, link.EventID, err)
 		}
 	}
@@ -239,16 +241,29 @@ func (r ClaimRepository) ListEvidenceByClaimIDs(ctx context.Context, claimIDs []
 	}
 	placeholders, args := inPlaceholders(claimIDs)
 	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
-	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id FROM claim_evidence WHERE claim_id IN (`+placeholders+`)`, args...)
+	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id, created_at FROM claim_evidence WHERE claim_id IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list evidence by claim ids: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
+	return scanEvidenceRows(rows)
+}
+
+// scanEvidenceRows reads (claim_id, event_id, created_at) rows. A NULL
+// created_at (a link from before the column, ADR 0036 step 3) reads as the
+// zero time.
+func scanEvidenceRows(rows *sql.Rows) ([]domain.ClaimEvidence, error) {
 	out := make([]domain.ClaimEvidence, 0)
 	for rows.Next() {
-		var ev domain.ClaimEvidence
-		if err := rows.Scan(&ev.ClaimID, &ev.EventID); err != nil {
+		var (
+			ev        domain.ClaimEvidence
+			createdAt sql.NullTime
+		)
+		if err := rows.Scan(&ev.ClaimID, &ev.EventID, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan claim evidence row: %w", err)
+		}
+		if createdAt.Valid {
+			ev.CreatedAt = createdAt.Time.UTC()
 		}
 		out = append(out, ev)
 	}
@@ -281,8 +296,8 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx, `
-INSERT IGNORE INTO claim_evidence (claim_id, event_id)
-SELECT ?, event_id FROM claim_evidence WHERE claim_id = ?`,
+INSERT IGNORE INTO claim_evidence (claim_id, event_id, created_at)
+SELECT ?, event_id, created_at FROM claim_evidence WHERE claim_id = ?`,
 		toClaimID, fromClaimID,
 	); err != nil {
 		return fmt.Errorf("copy evidence %s -> %s: %w", fromClaimID, toClaimID, err)
@@ -311,7 +326,8 @@ func (r ClaimRepository) UnlinkEvidence(ctx context.Context, claimID, eventID st
 //
 // The set is the canonical one from [ports.ClaimRepository], narrowed to
 // the tables this backend declares: claim_evidence,
-// claim_status_history, claim_validity_history, then the claim row. MySQL has no
+// claim_status_history, claim_validity_history, claim_credit_history, then the
+// claim row. MySQL has no
 // claim_versions, claim_feedback or claim_expectations table, so there
 // is nothing to clear for those — if one is ever added to schema.sql it
 // must be added here in the same change, or a delete on MySQL will mean
@@ -326,6 +342,7 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 		`DELETE FROM claim_evidence WHERE claim_id = ?`,
 		`DELETE FROM claim_status_history WHERE claim_id = ?`,
 		`DELETE FROM claim_validity_history WHERE claim_id = ?`,
+		`DELETE FROM claim_credit_history WHERE claim_id = ?`,
 		`DELETE FROM claims WHERE id = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, claimID); err != nil {
@@ -384,20 +401,12 @@ func (r ClaimRepository) CountAll(ctx context.Context) (int64, error) {
 
 // ListAllEvidence returns every (claim_id, event_id) link.
 func (r ClaimRepository) ListAllEvidence(ctx context.Context) ([]domain.ClaimEvidence, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id FROM claim_evidence`)
+	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id, created_at FROM claim_evidence`)
 	if err != nil {
 		return nil, fmt.Errorf("list all claim evidence: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make([]domain.ClaimEvidence, 0)
-	for rows.Next() {
-		var ev domain.ClaimEvidence
-		if err := rows.Scan(&ev.ClaimID, &ev.EventID); err != nil {
-			return nil, fmt.Errorf("scan claim_evidence row: %w", err)
-		}
-		out = append(out, ev)
-	}
-	return out, rows.Err()
+	return scanEvidenceRows(rows)
 }
 
 // DeleteAll wipes claims plus the rows owned by claims (claim_evidence,
@@ -416,6 +425,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_validity_history`); err != nil {
 		return fmt.Errorf("delete claim_validity_history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_credit_history`); err != nil {
+		return fmt.Errorf("delete claim_credit_history: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claims`); err != nil {
 		return fmt.Errorf("delete claims: %w", err)
@@ -535,18 +547,65 @@ func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, conf
 // trust_score together (the ports.BeliefCreditWriter capability, ADR 0014). The
 // caller passes the already-merged map, so the write is a plain assignment and
 // re-running is idempotent — letting credit assignment + salience persist on MySQL.
+//
+// A change to the applied net credit is recorded in claim_credit_history in
+// the same transaction (ADR 0036 step 3); a write that leaves it unchanged
+// records nothing. The row lock serialises concurrent credit writes so each
+// history row's from-value is the value it replaced.
 func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, components map[string]float64, trustScore float64) error {
-	res, err := r.db.ExecContext(ctx,
-		`UPDATE claims SET confidence_components = ?, trust_score = ? WHERE id = ?`,
-		encodeConfidenceComponents(components), trustScore, claimID)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("begin apply belief credit tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var raw sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT confidence_components FROM claims WHERE id = ? FOR UPDATE`, claimID).Scan(&raw); err != nil {
+		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, err)
+	}
+	from := domain.AppliedCredit(decodeConfidenceComponents(raw.String))
+	to := domain.AppliedCredit(components)
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE claims SET confidence_components = ?, trust_score = ? WHERE id = ?`,
+		encodeConfidenceComponents(components), trustScore, claimID); err != nil {
 		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, sql.ErrNoRows)
+	if from != to {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO claim_credit_history (claim_id, from_credit, to_credit, changed_at) VALUES (?, ?, ?, ?)`,
+			claimID, from, to, time.Now().UTC()); err != nil {
+			return fmt.Errorf("record credit change of %s: %w", claimID, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit apply belief credit tx: %w", err)
 	}
 	return nil
+}
+
+// ListCreditHistory implements [ports.CreditHistoryLister]: the applied-credit
+// changes of claimIDs, oldest first.
+func (r ClaimRepository) ListCreditHistory(ctx context.Context, claimIDs []string) ([]domain.CreditChange, error) {
+	out := make([]domain.CreditChange, 0)
+	if len(claimIDs) == 0 {
+		return out, nil
+	}
+	placeholders, args := inPlaceholders(claimIDs)
+	//nolint:gosec // G202: placeholders are literal "?" tokens, not user input
+	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, from_credit, to_credit, changed_at
+		FROM claim_credit_history WHERE claim_id IN (`+placeholders+`) ORDER BY changed_at, id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list credit history: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var c domain.CreditChange
+		if err := rows.Scan(&c.ClaimID, &c.From, &c.To, &c.ChangedAt); err != nil {
+			return nil, fmt.Errorf("scan credit history row: %w", err)
+		}
+		c.ChangedAt = c.ChangedAt.UTC()
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // SetLifecycle transitions a claim's promotion state in place.

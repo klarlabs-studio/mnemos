@@ -129,6 +129,11 @@ CREATE INDEX IF NOT EXISTS idx_claim_entities_entity_id ON claim_entities(entity
 CREATE TABLE IF NOT EXISTS claim_evidence (
   claim_id TEXT NOT NULL,
   event_id TEXT NOT NULL,
+  -- created_at (ADR 0036 step 3): when the link was recorded, RFC 3339.
+  -- '' on links written before the column existed; a recorded-as-of read
+  -- then uses the later of the claim's created_at and the event's
+  -- ingested_at (recorded.LinkRecordedAt).
+  created_at TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (claim_id, event_id),
   FOREIGN KEY (claim_id) REFERENCES claims(id)
 );
@@ -207,6 +212,20 @@ CREATE TABLE IF NOT EXISTS claim_validity_history (
   FOREIGN KEY (claim_id) REFERENCES claims(id)
 );
 CREATE INDEX IF NOT EXISTS idx_claim_validity_history_claim_id ON claim_validity_history(claim_id);
+
+-- claim_credit_history (ADR 0036 step 3): every change ApplyBeliefCredit makes
+-- to a claim's applied net credit (confidence_components["credit:applied"]).
+-- claims holds the current value; this is the history behind it, so the
+-- credit a belief held at an earlier instant can be recovered.
+CREATE TABLE IF NOT EXISTS claim_credit_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  claim_id TEXT NOT NULL,
+  from_credit REAL NOT NULL DEFAULT 0,
+  to_credit REAL NOT NULL DEFAULT 0,
+  changed_at TEXT NOT NULL,
+  FOREIGN KEY (claim_id) REFERENCES claims(id)
+);
+CREATE INDEX IF NOT EXISTS idx_claim_credit_history_claim_id ON claim_credit_history(claim_id);
 CREATE INDEX IF NOT EXISTS idx_claim_status_history_changed_at ON claim_status_history(changed_at);
 
 CREATE TABLE IF NOT EXISTS embeddings (

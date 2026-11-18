@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -205,14 +206,16 @@ func (r ClaimRepository) UpsertEvidence(ctx context.Context, links []domain.Clai
 	defer rollbackTx(tx)
 
 	qtx := r.q.WithTx(tx)
+	now := time.Now().UTC()
 
 	for _, link := range links {
 		if err := link.Validate(); err != nil {
 			return fmt.Errorf("invalid claim evidence: %w", err)
 		}
 		err := qtx.UpsertClaimEvidence(ctx, sqlcgen.UpsertClaimEvidenceParams{
-			ClaimID: link.ClaimID,
-			EventID: link.EventID,
+			ClaimID:   link.ClaimID,
+			EventID:   link.EventID,
+			CreatedAt: domain.EvidenceRecordedAt(link, now).Format(time.RFC3339Nano),
 		})
 		if err != nil {
 			return fmt.Errorf("upsert claim evidence (%s,%s): %w", link.ClaimID, link.EventID, err)
@@ -330,7 +333,7 @@ func (r ClaimRepository) listEvidenceByClaimIDsChunk(ctx context.Context, claimI
 	}
 
 	query := fmt.Sprintf(`
-SELECT claim_id, event_id
+SELECT claim_id, event_id, created_at
 FROM claim_evidence
 WHERE claim_id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201: placeholders are literal "?" strings, not user input
 
@@ -339,19 +342,31 @@ WHERE claim_id IN (%s)`, strings.Join(placeholders, ",")) //nolint:gosec // G201
 		return nil, fmt.Errorf("list evidence by claim ids: %w", err)
 	}
 	defer closeRows(rows)
+	return scanEvidenceRows(rows)
+}
 
+// scanEvidenceRows reads (claim_id, event_id, created_at) rows. A ” created_at
+// (a link from before the column) reads as the zero time.
+func scanEvidenceRows(rows *sql.Rows) ([]domain.ClaimEvidence, error) {
 	out := make([]domain.ClaimEvidence, 0)
 	for rows.Next() {
-		var ev domain.ClaimEvidence
-		if err := rows.Scan(&ev.ClaimID, &ev.EventID); err != nil {
+		var (
+			ev        domain.ClaimEvidence
+			createdAt string
+		)
+		if err := rows.Scan(&ev.ClaimID, &ev.EventID, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan claim evidence row: %w", err)
 		}
+		at, err := parseOptionalTime(createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("parse claim evidence created_at (%s,%s): %w", ev.ClaimID, ev.EventID, err)
+		}
+		ev.CreatedAt = at
 		out = append(out, ev)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate claim evidence rows: %w", err)
 	}
-
 	return out, nil
 }
 
@@ -620,18 +635,84 @@ func pause(ctx context.Context, d time.Duration) error {
 // confidence_components column already exists in the schema, so credit
 // assignment needs no migration. Idempotent: callers pass an already-merged map,
 // so re-running writes the same value.
+//
+// A change to the applied net credit is recorded in claim_credit_history in
+// the same transaction (ADR 0036 step 3), so the credit a belief held at an
+// earlier instant stays recoverable. A write that leaves it unchanged (an
+// inhibition decay, an idempotent re-run) records nothing.
 func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, components map[string]float64, trustScore float64) error {
-	res, err := r.db.ExecContext(ctx,
-		`UPDATE claims SET confidence_components = ?, trust_score = ? WHERE id = ?`,
-		encodeConfidenceComponents(components), trustScore, claimID)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("begin apply belief credit tx: %w", err)
+	}
+	defer rollbackTx(tx)
+	var raw string
+	if err := tx.QueryRowContext(ctx, `SELECT confidence_components FROM claims WHERE id = ?`, claimID).Scan(&raw); err != nil {
+		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, err)
+	}
+	from := domain.AppliedCredit(decodeConfidenceComponents(raw))
+	to := domain.AppliedCredit(components)
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE claims SET confidence_components = ?, trust_score = ? WHERE id = ?`,
+		encodeConfidenceComponents(components), trustScore, claimID); err != nil {
 		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
 	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("apply belief credit: claim %s: %w", claimID, sql.ErrNoRows)
+	if from != to {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO claim_credit_history (claim_id, from_credit, to_credit, changed_at) VALUES (?, ?, ?, ?)`,
+			claimID, from, to, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			return fmt.Errorf("record credit change of %s: %w", claimID, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit apply belief credit tx: %w", err)
 	}
 	return nil
+}
+
+// ListCreditHistory implements [ports.CreditHistoryLister]: the applied-credit
+// changes of claimIDs, oldest first.
+func (r ClaimRepository) ListCreditHistory(ctx context.Context, claimIDs []string) ([]domain.CreditChange, error) {
+	out := make([]domain.CreditChange, 0)
+	err := inChunks(claimIDs, func(chunk []string) error {
+		part, err := r.listCreditHistoryChunk(ctx, chunk)
+		out = append(out, part...)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Chunks are each ordered; the whole list must be too.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].ChangedAt.Before(out[j].ChangedAt) })
+	return out, nil
+}
+
+func (r ClaimRepository) listCreditHistoryChunk(ctx context.Context, ids []string) ([]domain.CreditChange, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT claim_id, from_credit, to_credit, changed_at FROM claim_credit_history WHERE claim_id IN (`+placeholders(len(ids))+`) ORDER BY id`, //nolint:gosec // G202: placeholders are literal "?" strings
+		anyArgs(ids)...)
+	if err != nil {
+		return nil, fmt.Errorf("list credit history: %w", err)
+	}
+	defer closeRows(rows)
+	var out []domain.CreditChange
+	for rows.Next() {
+		var (
+			c  domain.CreditChange
+			at string
+		)
+		if err := rows.Scan(&c.ClaimID, &c.From, &c.To, &at); err != nil {
+			return nil, fmt.Errorf("scan credit history row: %w", err)
+		}
+		if c.ChangedAt, err = time.Parse(time.RFC3339Nano, at); err != nil {
+			return nil, fmt.Errorf("parse credit history changed_at of %s: %w", c.ClaimID, err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate credit history rows: %w", err)
+	}
+	return out, nil
 }
 
 // AverageTrust returns the mean trust_score across all claims; 0 when
@@ -659,8 +740,10 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 	}
 	defer rollbackTx(tx)
 	if _, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO claim_evidence (claim_id, event_id)
-		 SELECT ?, event_id FROM claim_evidence WHERE claim_id = ?`,
+		// A moved link keeps its created_at: the episode was recorded as
+		// evidence then, by the loser (ADR 0036 §5 states the approximation).
+		`INSERT OR IGNORE INTO claim_evidence (claim_id, event_id, created_at)
+		 SELECT ?, event_id, created_at FROM claim_evidence WHERE claim_id = ?`,
 		toClaimID, fromClaimID,
 	); err != nil {
 		return fmt.Errorf("copy evidence %s -> %s: %w", fromClaimID, toClaimID, err)
@@ -708,6 +791,9 @@ func (r ClaimRepository) DeleteCascade(ctx context.Context, claimID string) erro
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_validity_history WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_validity_history: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_credit_history WHERE claim_id = ?`, claimID); err != nil {
+		return fmt.Errorf("delete claim_credit_history: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_versions WHERE claim_id = ?`, claimID); err != nil {
 		return fmt.Errorf("delete claim_versions: %w", err)
 	}
@@ -738,24 +824,12 @@ func (r ClaimRepository) CountAll(ctx context.Context) (int64, error) {
 // ListAllEvidence returns every (claim_id, event_id) link in
 // claim_evidence. Order is undefined.
 func (r ClaimRepository) ListAllEvidence(ctx context.Context) ([]domain.ClaimEvidence, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id FROM claim_evidence`)
+	rows, err := r.db.QueryContext(ctx, `SELECT claim_id, event_id, created_at FROM claim_evidence`)
 	if err != nil {
 		return nil, fmt.Errorf("list all claim evidence: %w", err)
 	}
 	defer closeRows(rows)
-
-	out := make([]domain.ClaimEvidence, 0)
-	for rows.Next() {
-		var ev domain.ClaimEvidence
-		if err := rows.Scan(&ev.ClaimID, &ev.EventID); err != nil {
-			return nil, fmt.Errorf("scan claim_evidence row: %w", err)
-		}
-		out = append(out, ev)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate claim_evidence rows: %w", err)
-	}
-	return out, nil
+	return scanEvidenceRows(rows)
 }
 
 // DeleteAll wipes claims plus the rows owned by claims (claim_evidence,
@@ -776,6 +850,9 @@ func (r ClaimRepository) DeleteAll(ctx context.Context) error {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_validity_history`); err != nil {
 		return fmt.Errorf("delete claim_validity_history: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_credit_history`); err != nil {
+		return fmt.Errorf("delete claim_credit_history: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM claim_versions`); err != nil {
 		return fmt.Errorf("delete claim_versions: %w", err)
