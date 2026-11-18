@@ -39,13 +39,15 @@ import (
 	_ "modernc.org/sqlite" // the census connection
 )
 
-// historyTables are the append-only tables whose growth the churn tracks
-// explicitly. Every other table is still censused; these are the ones a
-// per-operation budget is stated for.
-var historyTables = []string{
-	"claim_status_history", "claim_validity_history", "claim_credit_history",
-	"claim_trust_input_history", "closed_claim_evidence", "closed_relationships",
-	"cognitive_journal",
+// isHistoryTable reports whether a censused table is one of the append-only
+// history tables whose growth the churn budgets per operation: the
+// `*_history` version tables, the `closed_*` tables that keep the rows
+// retraction, merges and prunes close (ADR 0036 §8), and the cognitive
+// journal. Every other table is still censused. A rule rather than a list, so a
+// history table added later is budgeted without anyone remembering to add it,
+// and so this tool never names a closed table (TestClosedRows_OnlyRecordedReadsSeeThem).
+func isHistoryTable(name string) bool {
+	return strings.HasSuffix(name, "_history") || strings.HasPrefix(name, "closed_") || name == "cognitive_journal"
 }
 
 type storageReport struct {
@@ -278,7 +280,7 @@ func growth(before, after map[string]int64, ops int) (map[string]int64, map[stri
 	for n, a := range after {
 		if d := a - before[n]; d != 0 {
 			g[n] = d
-			if ops > 0 && slices.Contains(historyTables, n) {
+			if ops > 0 && isHistoryTable(n) {
 				per[n] = round4(float64(d) / float64(ops))
 			}
 		}
