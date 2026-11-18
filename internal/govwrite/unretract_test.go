@@ -161,8 +161,6 @@ func TestUnretractEvent_LeavesABeliefSomeoneElseRedeprecated(t *testing.T) {
 		t.Fatalf("retract: %v", err)
 	}
 	// Erin reviews it: reinstates it, then deprecates it on her own judgement.
-	// (A write that leaves the status as it is records no transition, so a
-	// re-deprecation is observable only as a transition of its own.)
 	only := claimByID(t, w, "cl_only")
 	only.Status = domain.ClaimStatusActive
 	if err := w.Conn().Claims.UpsertWithReasonAs(ctx, []domain.Claim{only}, "reviewed: reinstated", "erin"); err != nil {
@@ -193,6 +191,67 @@ func TestUnretractEvent_LeavesABeliefSomeoneElseRedeprecated(t *testing.T) {
 	}
 	if last := historyAfter[len(historyAfter)-1]; last.ChangedBy != "erin" {
 		t.Errorf("last transition by %q, want erin's to stand", last.ChangedBy)
+	}
+}
+
+// A person who deprecates an already-retracted belief again, with a reason of
+// their own, owns its status: the deliberate write records a reassertion row
+// (deprecated → deprecated) and un-retraction leaves the belief deprecated and
+// says why. The write goes through the governed writer exactly as
+// memory_deprecate and forget do.
+func TestUnretractEvent_LeavesABeliefSomeoneReassertedDeprecated(t *testing.T) {
+	t.Parallel()
+	w := newSQLiteBrain(t)
+	ctx := context.Background()
+	seedRetractionFixture(t, w)
+	if _, err := w.RetractEvent(ctx, "ev_retract", domain.ChangeNote{Reason: "wrong", ChangedBy: "carol"}); err != nil {
+		t.Fatalf("retract: %v", err)
+	}
+	only := claimByID(t, w, "cl_only")
+	if only.Status != domain.ClaimStatusDeprecated {
+		t.Fatalf("cl_only status after retraction = %s, want deprecated", only.Status)
+	}
+	if _, err := w.Claims(ctx, []domain.Claim{only}, govwrite.ClaimReason{
+		Reason: "reviewed: wrong regardless of source", ChangedBy: "erin", AssertStatus: true,
+	}); err != nil {
+		t.Fatalf("re-deprecate: %v", err)
+	}
+	last := lastTransition(t, w, "cl_only")
+	if !last.IsReassertion() || last.ToStatus != domain.ClaimStatusDeprecated ||
+		last.ChangedBy != "erin" || last.Reason != "reviewed: wrong regardless of source" {
+		t.Fatalf("last transition = %+v, want erin's deprecated → deprecated reassertion", last)
+	}
+
+	rep, err := w.UnretractEvent(ctx, "ev_retract", domain.ChangeNote{ChangedBy: "dave"})
+	if err != nil {
+		t.Fatalf("unretract: %v", err)
+	}
+	if len(rep.Impact.Restored) != 0 {
+		t.Errorf("restored = %+v, want none", rep.Impact.Restored)
+	}
+	got := rep.Impact.Skipped
+	if len(got) != 1 || got[0].ID != "cl_only" ||
+		!strings.Contains(got[0].Reason, "reasserted as deprecated") || !strings.Contains(got[0].Reason, "erin") ||
+		!strings.Contains(got[0].Reason, "reviewed: wrong regardless of source") {
+		t.Errorf("skipped = %+v, want cl_only naming erin's reassertion and her reason", got)
+	}
+	if got := claimByID(t, w, "cl_only").Status; got != domain.ClaimStatusDeprecated {
+		t.Errorf("cl_only status = %s, want still deprecated", got)
+	}
+	if last := lastTransition(t, w, "cl_only"); last.ChangedBy != "erin" {
+		t.Errorf("last transition by %q, want erin's to stand", last.ChangedBy)
+	}
+}
+
+// Asserting a status needs a reason: the reassertion row is the record of a
+// decision, and a decision without its why is not one.
+func TestClaims_AssertStatusRequiresAReason(t *testing.T) {
+	t.Parallel()
+	w := newSQLiteBrain(t)
+	seedRetractionFixture(t, w)
+	only := claimByID(t, w, "cl_only")
+	if _, err := w.Claims(context.Background(), []domain.Claim{only}, govwrite.ClaimReason{ChangedBy: "erin", AssertStatus: true}); err == nil {
+		t.Fatal("asserting a status without a reason succeeded, want an error")
 	}
 }
 

@@ -1441,11 +1441,15 @@ func formatNarrative(hist []domain.ClaimStatusTransition) string {
 		case i == 0 && t.FromStatus == "":
 			// Fresh history: we saw the insert.
 			fmt.Fprintf(&b, "First recorded as %s on %s", t.ToStatus, t.ChangedAt.Format("2006-01-02"))
+		case i == 0 && t.IsReassertion():
+			fmt.Fprintf(&b, "Confirmed as %s on %s", t.ToStatus, t.ChangedAt.Format("2006-01-02"))
 		case i == 0:
 			// Backfilled / pre-existing: first recorded transition was
 			// from an already-known status. Phrase it as an update rather
 			// than as an initial creation.
 			fmt.Fprintf(&b, "Transitioned from %s to %s on %s", t.FromStatus, t.ToStatus, t.ChangedAt.Format("2006-01-02"))
+		case t.IsReassertion():
+			fmt.Fprintf(&b, "; confirmed as %s on %s", t.ToStatus, t.ChangedAt.Format("2006-01-02"))
 		default:
 			fmt.Fprintf(&b, "; became %s on %s", t.ToStatus, t.ChangedAt.Format("2006-01-02"))
 		}

@@ -189,8 +189,22 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 		}
 	}
 
+	// TREATMENT first: apply the process set, then read the merge identity it
+	// left behind, before any arm is measured. Every arm is scored by the same
+	// identity (see [Identity]); applying the treatment earlier changes nothing
+	// for the untreated arms, which are separate files.
+	activity, err := applyProcess(ctx, "sqlite://"+treatmentPath, sc.Process)
+	if err != nil {
+		return res, err
+	}
+	res.Activity = activity
+	ids, err := readIdentity(ctx, "sqlite://"+treatmentPath)
+	if err != nil {
+		return res, err
+	}
+
 	// CONTROL: untreated, measured once.
-	control, err := Measure(ctx, "sqlite://"+controlPath, controlPath, sc, seedStats.Phases)
+	control, err := Measure(ctx, "sqlite://"+controlPath, controlPath, sc, seedStats.Phases, ids)
 	if err != nil {
 		return res, fmt.Errorf("brainbench: measure control: %w", err)
 	}
@@ -198,18 +212,12 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 	// NOISE: a second untreated arm. Its only job is to establish whether two
 	// identical inputs produce identical measurements. Without it, every delta
 	// below the (unknown) noise floor would be reported as an effect.
-	noise, err := Measure(ctx, "sqlite://"+noisePath, noisePath, sc, seedStats.Phases)
+	noise, err := Measure(ctx, "sqlite://"+noisePath, noisePath, sc, seedStats.Phases, ids)
 	if err != nil {
 		return res, fmt.Errorf("brainbench: measure noise arm: %w", err)
 	}
 
-	// TREATMENT: the process set, then measured once.
-	activity, err := applyProcess(ctx, "sqlite://"+treatmentPath, sc.Process)
-	if err != nil {
-		return res, err
-	}
-	res.Activity = activity
-	treatment, err := Measure(ctx, "sqlite://"+treatmentPath, treatmentPath, sc, seedStats.Phases)
+	treatment, err := Measure(ctx, "sqlite://"+treatmentPath, treatmentPath, sc, seedStats.Phases, ids)
 	if err != nil {
 		return res, fmt.Errorf("brainbench: measure treatment: %w", err)
 	}
