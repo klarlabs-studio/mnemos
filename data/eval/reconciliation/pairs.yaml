@@ -1,0 +1,1457 @@
+# Reconciliation pairs (ADR 0042): is the relationship between two beliefs a
+# contradiction (including one superseding the other) or are they compatible?
+#
+# Labels are written by hand against the rules in README.md, never by asking a
+# model. `source` names where a pair was taken from; `hand` marks pairs written
+# for this set (the deterministic detectors' documented blind spots, ADR 0040
+# §Limitations, and their compatible counterparts). Where a pair comes from an
+# older corpus whose expectation described a detector's behaviour rather than
+# the meaning, the label here is the meaning and the rationale says so.
+#
+# The dev/test split is not stored: it is derived from the id (FNV-1a mod 10,
+# 0-2 dev, 3-9 test) so it cannot be edited to suit a result.
+version: 1
+pairs:
+  # ---------------------------------------------------------------------------
+  # data/eval/relationship_detection.yaml
+  # ---------------------------------------------------------------------------
+  - id: rd-001
+    a: The deployment succeeded in production
+    b: The deployment did not succeed in production
+    label: contradicts
+    category: polarity
+    source: relationship_detection.yaml#rel-001
+    rationale: Same event and scope, asserted and denied.
+  - id: rd-002
+    a: The service passed all integration tests
+    b: The service didn't pass all integration tests
+    label: contradicts
+    category: polarity
+    source: relationship_detection.yaml#rel-002
+    rationale: Same test run, asserted and denied.
+  - id: rd-003
+    a: The system never experiences downtime
+    b: The system experiences downtime during deployments
+    label: contradicts
+    category: polarity
+    source: relationship_detection.yaml#rel-003
+    rationale: '"Never" excludes any downtime, including during deployments.'
+  - id: rd-004
+    a: The database cannot handle concurrent writes
+    b: The database can handle concurrent writes efficiently
+    label: contradicts
+    category: polarity
+    source: relationship_detection.yaml#rel-004
+    rationale: Same capability asserted and denied.
+  - id: rd-005
+    a: Revenue increased significantly in Q2
+    b: Revenue increased after the product launch in Q2
+    label: compatible
+    category: supports
+    source: relationship_detection.yaml#rel-005
+    rationale: Both say Q2 revenue rose; one adds a cause.
+  - id: rd-006
+    a: PostgreSQL performance improved after indexing
+    b: PostgreSQL query performance improved with new indexes
+    label: compatible
+    category: supports
+    source: relationship_detection.yaml#rel-006
+    rationale: Paraphrases of one improvement.
+  - id: rd-007
+    a: The frontend uses React for rendering
+    b: The backend uses Kafka for messaging
+    label: compatible
+    category: unrelated
+    source: relationship_detection.yaml#rel-007
+    rationale: Different components, different facts.
+  - id: rd-008
+    a: Revenue increased in Q2
+    b: The team increased headcount
+    label: compatible
+    category: unrelated
+    source: relationship_detection.yaml#rel-008
+    rationale: Different subjects sharing a verb.
+  - id: rd-009
+    a: The API response time is 45ms
+    b: We hired three new engineers
+    label: compatible
+    category: unrelated
+    source: relationship_detection.yaml#rel-009
+    rationale: Nothing in common.
+  - id: rd-010
+    a: Python is used for data science
+    b: Go is used for backend services
+    label: compatible
+    category: unrelated
+    source: relationship_detection.yaml#rel-010
+    rationale: Same frame, different subjects; both can hold.
+  - id: rd-011a
+    a: The migration completed successfully in staging
+    b: The migration completed successfully in production
+    label: compatible
+    category: supports
+    source: relationship_detection.yaml#rel-011
+    rationale: Same outcome in two environments.
+  - id: rd-011b
+    a: The migration completed successfully in production
+    b: The migration failed in production
+    label: contradicts
+    category: value
+    source: relationship_detection.yaml#rel-011
+    rationale: Same migration and environment, opposite outcomes.
+  - id: rd-011c
+    a: The migration completed successfully in staging
+    b: The migration failed in production
+    label: compatible
+    category: scope-blind
+    source: relationship_detection.yaml#rel-011
+    rationale: Opposite outcomes in different environments can both be true (the source file expects no edge here either).
+  - id: rd-012
+    a: Meeting the Q4 deadline is achievable with current resources
+    b: Meeting the Q4 deadline is impossible with current resources
+    label: contradicts
+    category: value
+    source: relationship_detection.yaml#rel-012
+    rationale: Antonymous assessments of the same deadline.
+
+  # ---------------------------------------------------------------------------
+  # data/eval/contested_detection.yaml
+  # ---------------------------------------------------------------------------
+  - id: cd-001
+    a: The feature is complete
+    b: The feature is not complete
+    label: contradicts
+    category: polarity
+    source: contested_detection.yaml#contest-001
+    rationale: Asserted and denied.
+  - id: cd-002
+    a: The API never fails
+    b: The API sometimes fails under load
+    label: contradicts
+    category: polarity
+    source: contested_detection.yaml#contest-002
+    rationale: '"Never fails" is falsified by failing under load.'
+  - id: cd-003
+    a: The latency is 100ms
+    b: The latency is 500ms
+    label: contradicts
+    category: numeric
+    source: contested_detection.yaml#contest-003
+    rationale: One unscoped metric with two values. The source expects `active` because extraction's contested marker does not fire; the meaning is a conflict.
+  - id: cd-004
+    a: We will use React framework
+    b: We will use Vue framework
+    label: contradicts
+    category: value
+    source: contested_detection.yaml#contest-004
+    rationale: Competing decisions for one framework slot.
+  - id: cd-005
+    a: The server runs on AWS
+    b: The database uses PostgreSQL
+    label: compatible
+    category: unrelated
+    source: contested_detection.yaml#contest-005
+    rationale: Different components.
+  - id: cd-006
+    a: The frontend uses TypeScript
+    b: The backend uses Go
+    label: compatible
+    category: unrelated
+    source: contested_detection.yaml#contest-006
+    rationale: Different components.
+  - id: cd-007
+    a: The system uses authentication
+    b: The system uses authorization
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: contested_detection.yaml#contest-007
+    rationale: A system uses both; one word differs and it is not an exclusive value.
+  - id: cd-008
+    a: The system cannot handle 10K requests
+    b: The system can handle 10K requests
+    label: contradicts
+    category: polarity
+    source: contested_detection.yaml#contest-008
+    rationale: Same capability asserted and denied.
+  - id: cd-010
+    a: The feature might be ready by Friday
+    b: We will ship by Friday
+    label: compatible
+    category: supports
+    source: contested_detection.yaml#contest-010
+    rationale: A hedge and a plan that agree.
+
+  # ---------------------------------------------------------------------------
+  # data/eval/brainbench scenarios
+  # ---------------------------------------------------------------------------
+  - id: bb-region
+    a: The payments API is deployed to the eu-west-1 region.
+    b: The payments API is deployed to the eu-central-1 region.
+    label: contradicts
+    category: value
+    source: brainbench/stale_and_superseded.yaml#p-region
+    rationale: One deployment region replaced by another.
+  - id: bb-pager
+    a: Alerts route to the pager rotation named payments-oncall-legacy.
+    b: Alerts route to the pager rotation named payments-oncall.
+    label: contradicts
+    category: value
+    source: brainbench/stale_and_superseded.yaml#p-pager
+    rationale: One alert route replaced by another.
+  - id: bb-limit
+    a: The payments API rate limit is one hundred requests per minute.
+    b: The payments API rate limit is one thousand requests per minute.
+    label: contradicts
+    category: numeric
+    source: brainbench/stale_and_superseded.yaml#p-limit
+    rationale: One limit, two values.
+  - id: bb-deploy
+    a: Deployments are performed manually by an engineer running the release script.
+    b: Deployments are performed automatically by the release pipeline on merge to main.
+    label: contradicts
+    category: frame
+    source: brainbench/stale_and_superseded.yaml#p-deploy
+    rationale: The manner of deployment was replaced.
+  - id: bb-region-vs-limit
+    a: The payments API is deployed to the eu-west-1 region.
+    b: The payments API rate limit is one thousand requests per minute.
+    label: compatible
+    category: unrelated
+    source: brainbench/stale_and_superseded.yaml
+    rationale: Different attributes of one API.
+  - id: bb-pager-vs-region
+    a: Alerts route to the pager rotation named payments-oncall.
+    b: The payments API is deployed to the eu-central-1 region.
+    label: compatible
+    category: unrelated
+    source: brainbench/stale_and_superseded.yaml
+    rationale: Different attributes of one service.
+  - id: bb-own-checkout
+    a: The checkout service is owned by the Payments team.
+    b: The checkout service is owned by the Commerce team.
+    label: contradicts
+    category: supersession-owner
+    source: brainbench/ownership_timeline.yaml
+    rationale: One owner replaced by another.
+  - id: bb-own-search-1
+    a: The search service is owned by the Discovery team.
+    b: The search service is owned by the Platform team.
+    label: contradicts
+    category: supersession-owner
+    source: brainbench/ownership_timeline.yaml
+    rationale: One owner replaced by another.
+  - id: bb-own-search-2
+    a: The search service is owned by the Platform team.
+    b: The search service is owned by the Relevance team.
+    label: contradicts
+    category: supersession-owner
+    source: brainbench/ownership_timeline.yaml
+    rationale: One owner replaced by another.
+  - id: bb-own-billing
+    a: The billing service is owned by the Revenue team.
+    b: The billing service is owned by the Ledger team.
+    label: contradicts
+    category: supersession-owner
+    source: brainbench/ownership_timeline.yaml
+    rationale: One owner replaced by another.
+  - id: bb-oncall-1
+    a: The primary on-call for checkout is Alice Moreno.
+    b: The primary on-call for checkout is Bob Okafor.
+    label: contradicts
+    category: supersession-owner
+    source: brainbench/ownership_timeline.yaml
+    rationale: One primary on-call at a time.
+  - id: bb-oncall-2
+    a: The primary on-call for checkout is Bob Okafor.
+    b: The primary on-call for checkout is Chen Liu.
+    label: contradicts
+    category: supersession-owner
+    source: brainbench/ownership_timeline.yaml
+    rationale: One primary on-call at a time.
+  - id: bb-move-search-agrees
+    a: Search moves from the Discovery team to the Platform team in March to consolidate infrastructure ownership.
+    b: The search service is owned by the Platform team.
+    label: compatible
+    category: supersession-transition
+    source: brainbench/ownership_timeline.yaml
+    rationale: The move and its end state agree.
+  - id: bb-move-oncall-supersedes
+    a: Checkout on-call moved from Alice Moreno to Bob Okafor because Alice joined the fraud project.
+    b: The primary on-call for checkout is Alice Moreno.
+    label: contradicts
+    category: supersession-transition
+    source: brainbench/ownership_timeline.yaml
+    rationale: The transition says Alice no longer holds the role the other claim gives her.
+  - id: bb-move-checkout-supersedes
+    a: Checkout moved from the Payments team to the Commerce team after the storefront reorg.
+    b: For checkout escalations page the Payments team, which owns the checkout service.
+    label: contradicts
+    category: supersession-transition
+    source: brainbench/ownership_timeline.yaml
+    rationale: The second still names the owner the first says was replaced.
+  - id: bb-escalation-agrees
+    a: The checkout service is owned by the Payments team.
+    b: For checkout escalations page the Payments team, which owns the checkout service.
+    label: compatible
+    category: supports
+    source: brainbench/ownership_timeline.yaml
+    rationale: Both name the same owner.
+  - id: bb-owners-different-services
+    a: The checkout service is owned by the Payments team.
+    b: The search service is owned by the Discovery team.
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: brainbench/ownership_timeline.yaml
+    rationale: Same frame, different services.
+  - id: bb-owners-different-services-2
+    a: The billing service is owned by the Revenue team.
+    b: The search service is owned by the Discovery team.
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: brainbench/ownership_timeline.yaml
+    rationale: Same frame, different services.
+  - id: bb-correction-agrees
+    a: The February search announcement named the wrong team, and the Relevance team took search over in March.
+    b: The search service is owned by the Relevance team.
+    label: compatible
+    category: supersession-transition
+    source: brainbench/ownership_timeline.yaml
+    rationale: The correction and its end state agree.
+  - id: bb-correction-supersedes
+    a: The February search announcement named the wrong team, and the Relevance team took search over in March.
+    b: The search service is owned by the Platform team.
+    label: contradicts
+    category: supersession-transition
+    source: brainbench/ownership_timeline.yaml
+    rationale: The correction says Relevance, not Platform, owns search.
+  - id: bb-root-cause
+    a: The payments outage was caused by database disk saturation.
+    b: The payments outage was caused by the v2 connection pool change starving the payments database.
+    label: contradicts
+    category: competing-claim
+    source: brainbench/incident_timeline.yaml
+    rationale: Competing root causes for one outage; the later one revises the earlier.
+  - id: bb-pool-size
+    a: The payments connection pool size is 50.
+    b: The payments connection pool size is 200.
+    label: contradicts
+    category: numeric
+    source: brainbench/incident_timeline.yaml
+    rationale: One setting, two values.
+  - id: bb-pool-change-agrees
+    a: The v2 deploy changed the payments connection pool settings.
+    b: The payments connection pool size is 200.
+    label: compatible
+    category: supports
+    source: brainbench/incident_timeline.yaml
+    rationale: A change and a current value; no conflict.
+  - id: bb-runbook-vs-cause
+    a: The payments runbook says to restart the payments database first during an outage.
+    b: The payments outage was caused by database disk saturation.
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: brainbench/incident_timeline.yaml
+    rationale: A procedure and a cause; different assertions.
+  - id: bb-pg-restated
+    a: The billing service runs on PostgreSQL 16.
+    b: Billing runs on PostgreSQL 16 in production.
+    label: compatible
+    category: supports
+    source: brainbench/redundant_sessions.yaml
+    rationale: Restatement with a scope added.
+  - id: bb-pg-today
+    a: The billing service runs on PostgreSQL 16 today.
+    b: The billing service runs on PostgreSQL 16.
+    label: compatible
+    category: supports
+    source: brainbench/redundant_sessions.yaml
+    rationale: Restatement.
+  - id: bb-latency-restated
+    a: Checkout latency dropped by thirty percent after the migration.
+    b: Checkout latency dropped by thirty percent after the migration overall.
+    label: compatible
+    category: supports
+    source: brainbench/redundant_sessions.yaml
+    rationale: Restatement.
+  - id: bb-pgbouncer
+    a: Connection pooling is handled by pgbouncer in transaction mode.
+    b: The team agreed to keep pgbouncer in transaction mode.
+    label: compatible
+    category: supports
+    source: brainbench/redundant_sessions.yaml
+    rationale: A fact and a decision to keep it.
+  - id: bb-migrated-from-mysql
+    a: We migrated it from MySQL in Q3.
+    b: The billing service runs on PostgreSQL 16.
+    label: compatible
+    category: supersession-transition
+    source: brainbench/redundant_sessions.yaml
+    rationale: The migration explains the current database; no conflict.
+  - id: bb-cache
+    a: Redis is the cache layer in front of the billing service.
+    b: The cache TTL is sixty seconds.
+    label: compatible
+    category: unrelated
+    source: brainbench/redundant_sessions.yaml
+    rationale: Different attributes of the cache.
+  - id: bb-openssl
+    a: libfoo 2.3 drops support for OpenSSL 1.1.
+    b: Support for OpenSSL 1.1 was removed in libfoo 2.3.
+    label: compatible
+    category: agreeing-paraphrase
+    source: brainbench/evidence_retraction.yaml
+    rationale: Paraphrase.
+  - id: bb-libfoo-services
+    a: The payments service pins libfoo 2.2.
+    b: The checkout service is no longer exposed to CVE-2026-1234 after its upgrade to libfoo 2.3.
+    label: compatible
+    category: scope-blind
+    source: brainbench/evidence_retraction.yaml
+    rationale: Different services on different versions.
+  - id: bb-cve-patched
+    a: The libfoo 2.3 release fixed the heap overflow CVE-2026-1234.
+    b: According to the vendor, CVE-2026-1234 is patched in libfoo 2.3.
+    label: compatible
+    category: agreeing-paraphrase
+    source: brainbench/evidence_retraction.yaml
+    rationale: Paraphrase.
+  - id: bb-gateway-vs-breaker
+    a: The API gateway timeout is thirty seconds.
+    b: Circuit breakers open after five consecutive failures.
+    label: compatible
+    category: unrelated
+    source: brainbench/noisy_capture.yaml
+    rationale: Different mechanisms.
+  - id: bb-retry-vs-timeout
+    a: The retry budget for downstream calls is three attempts with exponential backoff.
+    b: The API gateway timeout is thirty seconds.
+    label: compatible
+    category: unrelated
+    source: brainbench/noisy_capture.yaml
+    rationale: Different settings.
+
+  # ---------------------------------------------------------------------------
+  # internal/relate test fixtures
+  # ---------------------------------------------------------------------------
+  - id: rt-replicas
+    a: The cluster runs three replicas of the API
+    b: The cluster runs five replicas of the API
+    label: contradicts
+    category: numeric
+    source: relate/supersession_test.go
+    rationale: One replica count, two values.
+  - id: rt-pods
+    a: The cluster runs twenty-five worker pods
+    b: The cluster runs 30 worker pods
+    label: contradicts
+    category: numeric
+    source: relate/supersession_test.go
+    rationale: One pod count, two values.
+  - id: rt-backups-manner
+    a: Backups are taken manually every Friday
+    b: Backups are taken automatically by the scheduler
+    label: contradicts
+    category: frame
+    source: relate/supersession_test.go
+    rationale: The manner of taking backups was replaced.
+  - id: rt-deploys-manner
+    a: Production deploys are manual for the payments service
+    b: Production deploys are automatic for the payments service
+    label: contradicts
+    category: value
+    source: relate/supersession_test.go
+    rationale: Exclusive manners for one scope.
+  - id: rt-replicas-digit
+    a: The cluster runs three replicas of the API
+    b: The cluster runs 3 replicas of the API
+    label: compatible
+    category: agreeing-paraphrase
+    source: relate/supersession_test.go
+    rationale: Same count written two ways.
+  - id: rt-limit-tenant
+    a: The rate limit is one thousand requests per minute
+    b: The rate limit is one thousand requests per minute for every tenant
+    label: compatible
+    category: supports
+    source: relate/supersession_test.go
+    rationale: Same value, scope added.
+  - id: rt-reviewers
+    a: One reviewer approved the change to the API gateway
+    b: Two reviewers approved the change to the API gateway config
+    label: compatible
+    category: scope-blind
+    source: relate/supersession_test.go
+    rationale: '"One reviewer approved" does not say only one did; both can hold.'
+  - id: rt-before-after
+    a: Tests run before the merge to main
+    b: Tests run after the deploy to staging
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: relate/supersession_test.go
+    rationale: Two test stages; an ordering antonym, not a conflict.
+  - id: rt-backups-scope
+    a: Backups run automatically in production
+    b: Backups run manually in staging
+    label: compatible
+    category: scope-blind
+    source: relate/supersession_test.go
+    rationale: Different environments.
+  - id: rt-negated-manner
+    a: Deployments are not performed manually
+    b: Deployments are performed automatically by the pipeline
+    label: compatible
+    category: agreeing-paraphrase
+    source: relate/supersession_test.go
+    rationale: A negated antonym agrees.
+  - id: rt-commits-tests
+    a: Five commits, tree clean, tests and lint green
+    b: 693 tests green, tree clean
+    label: compatible
+    category: scope-blind
+    source: relate/supersession_test.go
+    rationale: Different counted nouns.
+  - id: rt-mutants
+    a: Nine mutants total, all killed
+    b: All mutants killed, 100% coverage
+    label: compatible
+    category: supports
+    source: relate/supersession_test.go
+    rationale: Both report all mutants killed.
+  - id: rt-style
+    a: Manual review catches style issues
+    b: Automatic formatting fixes style issues
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: relate/supersession_test.go
+    rationale: Two mechanisms that coexist.
+  - id: rt-pg-version
+    a: The deploy uses Postgres 15
+    b: The deploy uses Postgres 16
+    label: contradicts
+    category: numeric
+    source: relate/contradiction_test.go
+    rationale: One version, two values.
+  - id: rt-refunds
+    a: the customer had 12 prior refunds
+    b: the customer had 0 prior refunds
+    label: contradicts
+    category: numeric
+    source: relate/contradiction_test.go
+    rationale: One count, two values.
+  - id: rt-feature-antonym
+    a: Feature X is enabled in prod
+    b: Feature X is disabled in prod
+    label: contradicts
+    category: value
+    source: relate/contradiction_test.go
+    rationale: Antonymous states in one scope.
+  - id: rt-frontend
+    a: The frontend uses React
+    b: The frontend uses Vue
+    label: contradicts
+    category: value
+    source: relate/contradiction_test.go
+    rationale: One framework slot.
+  - id: rt-feature-polarity
+    a: Feature X is enabled in prod
+    b: Feature X is not enabled in prod
+    label: contradicts
+    category: polarity
+    source: relate/contradiction_test.go
+    rationale: Asserted and denied.
+  - id: rt-revenue
+    a: Revenue decreased after launch
+    b: Revenue did not decrease after launch
+    label: contradicts
+    category: polarity
+    source: relate/contradiction_test.go
+    rationale: Asserted and denied.
+  - id: rt-ceo
+    a: The CEO is Alice
+    b: The CEO is Bob
+    label: contradicts
+    category: entity
+    source: relate/contradiction_test.go
+    rationale: One role, two holders.
+  - id: rt-ceo-initial
+    a: Alice is the CEO
+    b: Bob is the CEO
+    label: contradicts
+    category: entity
+    source: relate/false_positive_regression_test.go
+    rationale: One role, two holders.
+  - id: rt-migration-aspect
+    a: migration completed Tuesday
+    b: migration is still running
+    label: contradicts
+    category: temporal
+    source: relate/contradiction_test.go
+    rationale: Completed and still running cannot both hold.
+  - id: rt-session-header
+    a: 'User messages in this session:'
+    b: User messages are not persisted in this session
+    label: compatible
+    category: fragment
+    source: relate/contradiction_test.go
+    rationale: A header asserts nothing.
+  - id: rt-boilerplate
+    a: All user messages
+    b: User messages were not captured
+    label: compatible
+    category: fragment
+    source: relate/contradiction_test.go
+    rationale: A fragment asserts nothing.
+  - id: rt-gate
+    a: The gate passed
+    b: The gate did not pass on the first push
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: relate/contradiction_test.go
+    rationale: It can pass later after failing on the first push.
+  - id: rt-paraphrase-redgreen
+    a: Tests fail without the fix and pass with it
+    b: The fix makes the test go red→green
+    label: compatible
+    category: agreeing-paraphrase
+    source: relate/contradiction_test.go
+    rationale: Paraphrase.
+  - id: rt-paraphrase-before-after
+    a: Tests fail without the fix and pass with it
+    b: The new test failed before the fix and passes after it
+    label: compatible
+    category: agreeing-paraphrase
+    source: relate/contradiction_test.go
+    rationale: Paraphrase.
+  - id: rt-paraphrase-reorder
+    a: The test fails without the fix
+    b: Without the fix the test fails
+    label: compatible
+    category: agreeing-paraphrase
+    source: relate/contradiction_test.go
+    rationale: Same sentence reordered.
+  - id: rt-negated-antonym
+    a: Feature X is not enabled in prod
+    b: Feature X is disabled in prod
+    label: compatible
+    category: agreeing-paraphrase
+    source: relate/contradiction_test.go
+    rationale: A negated antonym agrees.
+  - id: rt-synonym
+    a: The fix makes tests pass
+    b: The fix makes tests green
+    label: compatible
+    category: agreeing-paraphrase
+    source: relate/contradiction_test.go
+    rationale: Synonyms.
+  - id: rt-both-negated
+    a: The cache is not shared across tenants
+    b: Tenants never share the cache
+    label: compatible
+    category: agreeing-paraphrase
+    source: relate/contradiction_test.go
+    rationale: Both deny sharing.
+  - id: rt-unrelated-release
+    a: Release build is still running
+    b: The release notes were finished yesterday
+    label: compatible
+    category: unrelated
+    source: relate/contradiction_test.go
+    rationale: Different artefacts.
+  - id: rt-unrelated-gate
+    a: The gate passed after the rebase
+    b: Docs build failed without network access
+    label: compatible
+    category: unrelated
+    source: relate/contradiction_test.go
+    rationale: Different builds.
+  - id: rt-importer
+    a: The importer does not retry on timeouts
+    b: The importer writes one row per invoice line
+    label: compatible
+    category: unrelated
+    source: relate/contradiction_test.go
+    rationale: Different behaviours of one component.
+  - id: rt-overlay
+    a: Now the overlay
+    b: Clear picture now
+    label: compatible
+    category: fragment
+    source: relate/false_positive_regression_test.go
+    rationale: Fragments.
+  - id: rt-arrow
+    a: 269 → 9
+    b: 'Removed the four services from compose (9 → 6: consul, postgres, ai-services, redis, dev)'
+    label: compatible
+    category: fragment
+    source: relate/false_positive_regression_test.go
+    rationale: A shared numeral is not a shared subject.
+  - id: rt-demo-vault
+    a: Release build is still running
+    b: Demo vault (GitHub, Netflix, Chase, Google, Amazon) with placeholder passwords is hardcoded
+    label: compatible
+    category: unrelated
+    source: relate/false_positive_regression_test.go
+    rationale: Nothing in common.
+  - id: rt-narration
+    a: 'Let me check:'
+    b: 'Let me look:'
+    label: compatible
+    category: fragment
+    source: relate/false_positive_regression_test.go
+    rationale: Narration.
+  - id: rt-found-gap
+    a: Found the gap
+    b: 'The scoped check immediately found a real, actionable gap: no test at all'
+    label: compatible
+    category: supports
+    source: relate/false_positive_regression_test.go
+    rationale: Both report finding a gap.
+  - id: rt-prepush
+    a: 'pre_push: [rebase, vet, test]'
+    b: Warden ran its full pre-push gate (vet + complete test suite)
+    label: compatible
+    category: supports
+    source: relate/false_positive_regression_test.go
+    rationale: Agree.
+  - id: rt-storage-done
+    a: Storage layer done
+    b: Both keys present — the PAT preserved for the release workflow
+    label: compatible
+    category: unrelated
+    source: relate/false_positive_regression_test.go
+    rationale: Unrelated.
+  - id: rt-pr-ids
+    a: 'PR #225'
+    b: 'PR #257 needs a rebase before it can merge'
+    label: compatible
+    category: fragment
+    source: relate/false_positive_regression_test.go
+    rationale: Different PRs.
+  - id: rt-issue-pr
+    a: 'Issue #1 (gRPC auth) is crisp and self-contained'
+    b: 'PR #257'
+    label: compatible
+    category: fragment
+    source: relate/false_positive_regression_test.go
+    rationale: Different items.
+  - id: rt-merged-unmerged
+    a: 'PRs #1 and #2 merged cleanly'
+    b: 'PRs #1 and #2 are green and unmerged so far'
+    label: contradicts
+    category: paraphrased-negation
+    source: relate/false_positive_regression_test.go
+    rationale: Merged versus unmerged for the same two PRs. The source only asserts the numeric path stays silent; the meaning is a conflict.
+  - id: rt-pushed
+    a: All pushed — remote and local at 007ddf2
+    b: Push didn't land — remote still at 3ca2416, 8 commits unpushed
+    label: contradicts
+    category: polarity
+    source: relate/false_positive_regression_test.go
+    rationale: Pushed versus not pushed, one remote.
+  - id: rt-pg17
+    a: runs on PostgreSQL 16 today
+    b: runs on PostgreSQL 17
+    label: contradicts
+    category: numeric
+    source: relate/numeric_test.go
+    rationale: One version, two values.
+
+  # ---------------------------------------------------------------------------
+  # Hand-written: scope-blind counts (same noun, different scope -> compatible)
+  # and their same-scope counterparts.
+  # ---------------------------------------------------------------------------
+  - id: hw-scope-01
+    a: The main branch has 12 failing tests
+    b: The release branch has 3 failing tests
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different branches.
+  - id: hw-scope-02
+    a: The api repo has 40 open issues
+    b: The web repo has 12 open issues
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different repositories.
+  - id: hw-scope-03
+    a: Yesterday's session produced 5 commits
+    b: Today's session produced 9 commits
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different sessions.
+  - id: hw-scope-04
+    a: The staging cluster runs 3 replicas of the API
+    b: The production cluster runs 12 replicas of the API
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different clusters.
+  - id: hw-scope-05
+    a: The EU region serves 200 requests per second
+    b: The US region serves 900 requests per second
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different regions.
+  - id: hw-scope-06
+    a: Sprint 14 closed 23 tickets
+    b: Sprint 15 closed 31 tickets
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different sprints.
+  - id: hw-scope-07
+    a: The Go service has 85% test coverage
+    b: The Python service has 62% test coverage
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different services.
+  - id: hw-scope-08
+    a: The nightly job processed 1.2 million rows on Monday
+    b: The nightly job processed 900 thousand rows on Tuesday
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different nights.
+  - id: hw-scope-09
+    a: The feature branch is 4 commits ahead of main
+    b: The hotfix branch is 1 commit ahead of main
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different branches.
+  - id: hw-scope-10
+    a: The free plan allows 3 projects
+    b: The pro plan allows 50 projects
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different plans.
+  - id: hw-scope-11
+    a: The p99 latency of the search endpoint is 180ms
+    b: The p99 latency of the checkout endpoint is 420ms
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different endpoints.
+  - id: hw-scope-12
+    a: The read replica has 64 GB of memory
+    b: The primary database has 256 GB of memory
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different machines.
+  - id: hw-scope-13
+    a: Our staging environment uses Postgres 15
+    b: Our production environment uses Postgres 16
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different environments.
+  - id: hw-scope-14
+    a: The login page loads in 1.2 seconds on desktop
+    b: The login page loads in 3.4 seconds on mobile
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different devices.
+  - id: hw-scope-15
+    a: The cache TTL for product pages is 60 seconds
+    b: The cache TTL for search results is 300 seconds
+    label: compatible
+    category: scope-blind
+    source: hand
+    rationale: Different caches.
+  - id: hw-same-scope-01
+    a: The main branch has 12 failing tests
+    b: The main branch has no failing tests
+    label: contradicts
+    category: numeric
+    source: hand
+    rationale: Same branch, twelve versus none.
+  - id: hw-same-scope-02
+    a: The staging cluster runs 3 replicas of the API
+    b: The staging cluster runs 6 replicas of the API
+    label: contradicts
+    category: numeric
+    source: hand
+    rationale: Same cluster, two counts.
+  - id: hw-same-scope-03
+    a: The pro plan allows 50 projects
+    b: The pro plan allows unlimited projects
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: A cap versus no cap, one plan; only one side has a number.
+  - id: hw-same-scope-04
+    a: The SLA for P1 incidents is a four hour response
+    b: The SLA for P1 incidents is a one hour response
+    label: contradicts
+    category: numeric
+    source: hand
+    rationale: One SLA, two values.
+  - id: hw-same-scope-05
+    a: The project is written in Python 3.9
+    b: The project now requires Python 3.12
+    label: contradicts
+    category: numeric
+    source: hand
+    rationale: A newer required version replaces the old one.
+
+  # ---------------------------------------------------------------------------
+  # Hand-written: supersession with no antonym and no number (ADR 0040
+  # §Limitations "Manner only") -> contradicts.
+  # ---------------------------------------------------------------------------
+  - id: hw-owner-01
+    a: Maria Lopez maintains the billing exporter
+    b: The billing exporter is now maintained by Tom Becker
+    label: contradicts
+    category: supersession-owner
+    source: hand
+    rationale: '"Now maintained by" another person replaces the maintainer.'
+  - id: hw-owner-02
+    a: The SRE team owns the alerting pipeline
+    b: Ownership of the alerting pipeline passed to the Observability team
+    label: contradicts
+    category: supersession-owner
+    source: hand
+    rationale: Ownership transferred away from the SRE team.
+  - id: hw-owner-03
+    a: Priya is the release manager for v3
+    b: Daniel took over as release manager for v3
+    label: contradicts
+    category: supersession-owner
+    source: hand
+    rationale: One release manager, replaced.
+  - id: hw-owner-04
+    a: Database migrations are approved by the platform lead
+    b: Database migrations are now approved by the data governance board
+    label: contradicts
+    category: supersession-owner
+    source: hand
+    rationale: The approver changed.
+  - id: hw-owner-05
+    a: The mobile app is built by an external agency
+    b: The mobile app is now built in-house by the Apps team
+    label: contradicts
+    category: supersession-owner
+    source: hand
+    rationale: Builder changed from agency to in-house.
+  - id: hw-tool-01
+    a: CI runs on Jenkins
+    b: CI runs on GitHub Actions
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: One CI system replaced by another.
+  - id: hw-tool-02
+    a: We use Jenkins for continuous integration
+    b: Continuous integration moved to GitHub Actions last quarter
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: CI moved away from Jenkins.
+  - id: hw-tool-03
+    a: Secrets are stored in HashiCorp Vault
+    b: Secrets are stored in AWS Secrets Manager
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: One secret store for "secrets" in general.
+  - id: hw-tool-04
+    a: Logs are shipped to Elasticsearch
+    b: Logs are shipped to Loki
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: One log destination replaced by another.
+  - id: hw-tool-05
+    a: The team tracks work in Jira
+    b: The team switched its issue tracking to Linear
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: Switched away from Jira.
+  - id: hw-tool-06
+    a: Feature flags are managed with LaunchDarkly
+    b: We replaced LaunchDarkly with an in-house flag service
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: LaunchDarkly was replaced.
+  - id: hw-tool-07
+    a: The frontend is bundled with webpack
+    b: The frontend bundler is Vite
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: One bundler slot.
+  - id: hw-tool-08
+    a: Infrastructure is provisioned with Terraform
+    b: Infrastructure is provisioned with Pulumi
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: One provisioning tool for all infrastructure.
+  - id: hw-tool-09
+    a: Payments are processed through Stripe
+    b: Payments are processed through Adyen
+    label: contradicts
+    category: supersession-tool
+    source: hand
+    rationale: One processor for payments in general.
+  - id: hw-policy-01
+    a: Engineers may deploy on Fridays
+    b: Friday deploys are frozen
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: Allowed versus frozen.
+  - id: hw-policy-02
+    a: Employees may work fully remote
+    b: Employees must be in the office three days a week
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: Fully remote is excluded by an office requirement.
+  - id: hw-policy-03
+    a: Access to production requires a VPN connection
+    b: Access to production goes through the zero-trust proxy instead of the VPN
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: '"Instead of the VPN" replaces the VPN requirement.'
+  - id: hw-policy-04
+    a: Customer data is retained indefinitely
+    b: Customer data is deleted 30 days after account closure
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: Indefinite retention versus deletion.
+  - id: hw-policy-05
+    a: Releases are cut every two weeks
+    b: Releases are cut on demand whenever main is green
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: A fixed cadence replaced by on-demand releases.
+  - id: hw-policy-06
+    a: Hotfixes go straight to production
+    b: Hotfixes must pass through staging first
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: Straight to production versus staging first.
+  - id: hw-policy-07
+    a: On-call engineers are paged for every alert
+    b: On-call engineers are paged only for critical alerts
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: Every alert versus only critical ones.
+  - id: hw-policy-08
+    a: Contractors have write access to the monorepo
+    b: Contractors have read-only access to the monorepo
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: Write versus read-only for one group.
+  - id: hw-policy-09
+    a: The API is versioned in the URL path
+    b: The API is versioned through an Accept header
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: One versioning scheme replaced by another.
+  - id: hw-policy-10
+    a: Passwords must be rotated every 90 days
+    b: Password rotation is no longer required
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: Required versus no longer required.
+  - id: hw-policy-11
+    a: Pull requests need one approving review before merge
+    b: Pull requests need two approving reviews before merge
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: One required review count, two values.
+  - id: hw-policy-12
+    a: The team standup is at 9:30
+    b: The team standup moved to 10:00
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: The standup time changed.
+  - id: hw-policy-13
+    a: The primary database is in us-east-1
+    b: The primary database was failed over to us-west-2 and stays there
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: The primary moved region.
+  - id: hw-policy-14
+    a: The default branch is master
+    b: The default branch was renamed to main
+    label: contradicts
+    category: supersession-policy
+    source: hand
+    rationale: The default branch name changed.
+
+  # Compatible counterparts sharing the subject of a supersession pair.
+  - id: hw-owner-ok-01
+    a: Maria Lopez maintains the billing exporter
+    b: Maria Lopez wrote the alert rules for the billing exporter
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Same person, two compatible roles.
+  - id: hw-tool-ok-01
+    a: CI runs on Jenkins
+    b: Jenkins CI jobs time out after 60 minutes
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Adds a detail about the same CI.
+  - id: hw-tool-ok-02
+    a: Secrets are stored in HashiCorp Vault
+    b: Vault secrets are rotated by a nightly job
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Adds a detail about the same store.
+  - id: hw-tool-ok-03
+    a: The team tracks work in Jira
+    b: The team tracks incidents in PagerDuty
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Different things tracked in different tools.
+  - id: hw-tool-ok-04
+    a: Infrastructure is provisioned with Terraform
+    b: Terraform state is stored in an S3 bucket
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Adds a detail.
+  - id: hw-tool-ok-05
+    a: Payments are processed through Stripe
+    b: Refunds are processed through Stripe as well
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Same processor for another flow.
+  - id: hw-policy-ok-01
+    a: Pull requests need one approving review before merge
+    b: Pull requests need a passing CI run before merge
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Two merge requirements that coexist.
+  - id: hw-policy-ok-02
+    a: Hotfixes go straight to production
+    b: Hotfixes are announced in the incident channel
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: A path and a notification.
+  - id: hw-policy-ok-03
+    a: The API is versioned in the URL path
+    b: The API is documented in an OpenAPI spec
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Different facts about one API.
+  - id: hw-policy-ok-04
+    a: The default branch is main
+    b: The default branch is protected against force pushes
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Name and protection coexist.
+
+  # ---------------------------------------------------------------------------
+  # Hand-written: paraphrased negation (conflict with no mirrored "not")
+  # and paraphrases that agree.
+  # ---------------------------------------------------------------------------
+  - id: hw-neg-01
+    a: The cache is shared across all tenants
+    b: Each tenant gets its own isolated cache
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Shared versus isolated per tenant.
+  - id: hw-neg-02
+    a: The import job is idempotent
+    b: Running the import job twice creates duplicate rows
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Duplicates on re-run means not idempotent.
+  - id: hw-neg-03
+    a: The service is stateless
+    b: The service keeps session state in local memory
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Keeping session state means not stateless.
+  - id: hw-neg-04
+    a: The endpoint requires authentication
+    b: Anyone can call the endpoint anonymously
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Anonymous access excludes required authentication.
+  - id: hw-neg-05
+    a: The migration was rolled back
+    b: The migration is live in production
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Rolled back versus live.
+  - id: hw-neg-06
+    a: All tests passed on the release build
+    b: Two tests failed on the release build
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: All passed versus two failed, one build.
+  - id: hw-neg-07
+    a: The bug is fixed in version 4.2
+    b: Version 4.2 still has the bug
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Fixed versus still present, one version.
+  - id: hw-neg-08
+    a: The backup completed last night
+    b: Last night's backup never finished
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Completed versus never finished.
+  - id: hw-neg-09
+    a: Writes are acknowledged after replication
+    b: Writes are acknowledged before they are replicated
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Exclusive orderings of one acknowledgement.
+  - id: hw-neg-10
+    a: The queue guarantees ordering
+    b: Messages on the queue can arrive out of order
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Out-of-order delivery breaks the ordering guarantee.
+  - id: hw-neg-11
+    a: Search results are cached
+    b: Every search query hits the index directly
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Every query reaching the index means no cache.
+  - id: hw-neg-12
+    a: The feature launched to all users
+    b: The feature is still limited to the beta group
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: All users versus beta only.
+  - id: hw-neg-13
+    a: The vendor contract was renewed
+    b: We let the vendor contract lapse
+    label: contradicts
+    category: paraphrased-negation
+    source: hand
+    rationale: Renewed versus lapsed.
+  - id: hw-neg-ok-01
+    a: The service is stateless
+    b: The service does not keep any session state
+    label: compatible
+    category: agreeing-paraphrase
+    source: hand
+    rationale: A negated paraphrase that agrees.
+  - id: hw-neg-ok-02
+    a: The import job is idempotent
+    b: Running the import job twice does not create duplicates
+    label: compatible
+    category: agreeing-paraphrase
+    source: hand
+    rationale: A negated paraphrase that agrees.
+  - id: hw-neg-ok-03
+    a: The endpoint requires authentication
+    b: Anonymous calls to the endpoint are rejected
+    label: compatible
+    category: agreeing-paraphrase
+    source: hand
+    rationale: Agree.
+  - id: hw-neg-ok-04
+    a: The queue guarantees ordering
+    b: Messages on the queue never arrive out of order
+    label: compatible
+    category: agreeing-paraphrase
+    source: hand
+    rationale: A negated paraphrase that agrees.
+  - id: hw-neg-ok-05
+    a: The backup completed last night
+    b: Last night's backup did not fail
+    label: compatible
+    category: agreeing-paraphrase
+    source: hand
+    rationale: A negated paraphrase that agrees.
+  - id: hw-neg-ok-06
+    a: The migration was rolled back
+    b: The migration is no longer live
+    label: compatible
+    category: agreeing-paraphrase
+    source: hand
+    rationale: A negated paraphrase that agrees.
+
+  # ---------------------------------------------------------------------------
+  # Hand-written: compatible pairs sharing many tokens (false-positive bait).
+  # ---------------------------------------------------------------------------
+  - id: hw-bait-01
+    a: The payments service retries failed webhook deliveries three times
+    b: The payments service logs failed webhook deliveries to the audit table
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Retrying and logging coexist.
+  - id: hw-bait-02
+    a: The deploy pipeline runs unit tests before building the image
+    b: The deploy pipeline runs integration tests after building the image
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Two stages; before/after is not a conflict here.
+  - id: hw-bait-03
+    a: The checkout service reads prices from the pricing service
+    b: The checkout service reads stock levels from the inventory service
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Two dependencies.
+  - id: hw-bait-04
+    a: Alice reviewed the database migration PR
+    b: Bob reviewed the database migration PR
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: A PR can have several reviewers.
+  - id: hw-bait-05
+    a: The API returns 404 for unknown users
+    b: The API returns 403 for suspended users
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Different cases, different status codes.
+  - id: hw-bait-06
+    a: Version 2 of the API adds pagination
+    b: Version 3 of the API adds filtering
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Different versions, different features.
+  - id: hw-bait-07
+    a: The cron job runs at 02:00 UTC to compact logs
+    b: The cron job runs at 03:00 UTC to rotate certificates
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Two different jobs.
+  - id: hw-bait-08
+    a: The web app is deployed to Vercel
+    b: The web app's API is deployed to Fly.io
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Frontend and API hosted separately.
+  - id: hw-bait-09
+    a: The billing database is backed up hourly
+    b: The billing database is replicated to a second region
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Backup and replication coexist.
+  - id: hw-bait-10
+    a: Enable the feature flag for internal users first
+    b: Enable the feature flag for all users after a week
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Two steps of one rollout.
+  - id: hw-bait-11
+    a: The mobile team uses React Native
+    b: The web team uses React
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Different teams.
+  - id: hw-bait-12
+    a: The incident started at 14:05
+    b: The incident was resolved at 15:40
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Start and end times.
+  - id: hw-bait-13
+    a: Carol is the tech lead for search
+    b: Dave is the tech lead for billing
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Different teams.
+  - id: hw-bait-14
+    a: The old dashboard is deprecated
+    b: The new dashboard is the default for all teams
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Different dashboards; consistent.
+  - id: hw-bait-15
+    a: Rate limiting is enabled for the public API
+    b: Rate limiting is disabled for internal service-to-service calls
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Antonyms across different scopes.
+  - id: hw-bait-16
+    a: The release was tagged v1.4.0
+    b: The release notes for v1.4.0 were published
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Two events of one release.
+  - id: hw-bait-17
+    a: Dependabot opens pull requests for npm updates
+    b: Renovate opens pull requests for Docker image updates
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Two bots for different ecosystems.
+  - id: hw-bait-18
+    a: The search service is written in Go
+    b: The search service's indexer is written in Rust
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: The service and one component.
+  - id: hw-bait-19
+    a: Alerts for the payments API route to Slack
+    b: Alerts for the payments API also page the on-call engineer
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Two alert channels.
+  - id: hw-bait-20
+    a: The staging database is reset every night
+    b: The staging database is seeded with anonymised production data
+    label: compatible
+    category: fp-bait-shared-tokens
+    source: hand
+    rationale: Reset and seeding coexist.

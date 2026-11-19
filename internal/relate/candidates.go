@@ -248,3 +248,20 @@ func tokenizerVersion() string {
 	h.Write([]byte(strings.Join(SortedContentTokens(tokenizerProbe), ",")))
 	return "relate-tokens/" + hex.EncodeToString(h.Sum(nil))[:16]
 }
+
+// SharesTopic reports whether two texts pass the topical-overlap gate the
+// supports path applies before it relates two claims at all: at least
+// minContentTokenOverlap shared content tokens, covering at least
+// minOverlapRatio of the shorter claim's tokens. It is read-only and changes
+// no detector; the reconciliation experiment (ADR 0042) uses it to define the
+// candidate pairs it routes, so the experiment and the engine cannot disagree
+// about what "high topical overlap" means.
+func SharesTopic(a, b string) bool {
+	ta, tb := ContentTokens(a), ContentTokens(b)
+	overlap := contentOverlap(ta, tb)
+	if overlap < minContentTokenOverlap {
+		return false
+	}
+	shorter := min(len(ta), len(tb))
+	return shorter > 0 && float64(overlap)/float64(shorter) >= minOverlapRatio
+}

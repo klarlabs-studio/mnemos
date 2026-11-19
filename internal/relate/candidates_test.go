@@ -107,3 +107,21 @@ func TestTokenizerVersionTracksTheTokenizer(t *testing.T) {
 		t.Errorf("probe tokens %v do not exercise the stemmer", got)
 	}
 }
+
+func TestSharesTopic(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"The payments API rate limit is one hundred requests per minute", "The payments API rate limit is one thousand requests per minute", true},
+		{"The team tracks work in Jira", "The team switched its issue tracking to Linear", false}, // one shared content token
+		{"The frontend uses React for rendering", "The backend uses Kafka for messaging", false},
+		{"Revenue increased significantly in Q2", "Revenue increased after the product launch in Q2", true},
+		{"", "anything at all", false},
+	}
+	for _, tc := range cases {
+		if got := SharesTopic(tc.a, tc.b); got != tc.want {
+			t.Errorf("SharesTopic(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
