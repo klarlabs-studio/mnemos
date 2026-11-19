@@ -363,6 +363,18 @@ type contradictionView struct {
 	concepts map[string]struct{}
 	values   map[string]struct{}
 	sequence []string // concept tokens in sentence order, for the frame detector
+
+	text  string
+	scope *numericScope // derived on first use: only numeric proposals need it
+}
+
+// numericScope returns what the claim's numbers are about, deriving it once.
+func (v *contradictionView) numericScope() *numericScope {
+	if v.scope == nil {
+		s := newNumericScope(v.text)
+		v.scope = &s
+	}
+	return v.scope
 }
 
 func newContradictionView(text string) *contradictionView {
@@ -372,6 +384,7 @@ func newContradictionView(text string) *contradictionView {
 		concepts: conceptTokens(text),
 		values:   valueTokens(text),
 		sequence: conceptSequence(text),
+		text:     text,
 	}
 }
 
@@ -456,7 +469,7 @@ func frameConflict(a, b *contradictionView) (float64, bool) {
 	if _, ok := frameAntonymIndex[[2]string{a.sequence[k], b.sequence[k]}]; !ok {
 		return 0, false
 	}
-	if tailScopesDiffer(a.sequence[k+1:], b.sequence[k+1:]) {
+	if scopesDiffer(a.sequence[k+1:], b.sequence[k+1:], scopeConcepts) {
 		return 0, false
 	}
 	// The frame is the alignment: how much of the shorter claim it covers.
@@ -464,11 +477,14 @@ func frameConflict(a, b *contradictionView) (float64, bool) {
 	return strengthOf(priorFrame, float64(k+1)/float64(shorter)), true
 }
 
-func tailScopesDiffer(a, b []string) bool {
+// scopesDiffer reports whether one concept sequence names a scope from vocab
+// that the other does not. The frame detector applies it to the tails after
+// the shared frame; the numeric detector to whole claims (ADR 0044).
+func scopesDiffer(a, b []string, vocab map[string]struct{}) bool {
 	scopes := func(seq []string) map[string]struct{} {
 		out := map[string]struct{}{}
 		for _, w := range seq {
-			if _, ok := scopeConcepts[w]; ok {
+			if _, ok := vocab[w]; ok {
 				out[w] = struct{}{}
 			}
 		}
@@ -619,7 +635,9 @@ func classifyPair(a, b *claimDerived, overlap int, bothEnumerated bool) (pairVer
 		if s, ok := frameConflict(av, bv); ok {
 			return contra(DetectorFrame, s)
 		}
-		if av.strict == bv.strict && numericDivergesPre(a.nums, a.words, b.nums, b.words) {
+		// Two numbers about different scopes ("main" vs "release" branch) do
+		// not disagree (ADR 0044); such a pair falls through to the rest.
+		if av.strict == bv.strict && numericDivergesPre(a.nums, a.words, b.nums, b.words) && !numericScopesDiffer(av, bv) {
 			if _, _, j := setDiff(a.words, b.words); j >= minNumericAlignment {
 				return contra(DetectorNumeric, strengthOf(priorNumeric, j))
 			}
