@@ -98,3 +98,59 @@ The LLM arms reach only a local Ollama (`-llm-base-url`, default
 `http://localhost:11434`) at temperature 0 with a fixed seed; there is no cloud
 path. An unreachable model stops the run. `make test` never needs a model: the
 unit tests use a fake judge.
+
+## Results (2026-11-19)
+
+Full report: [`results/2026-11-19-qwen2.5-3b-gemma3-12b.json`](results/2026-11-19-qwen2.5-3b-gemma3-12b.json)
+(every pair, every verdict, every raw reply). Relate `relate/v5`, prompt
+`reconcile-prompt/v1`, Ollama 0.40.16, temperature 0, seed 42, 2000 bootstrap
+resamples. Test split: 151 pairs, 71 labelled contradicts.
+
+| arm | precision [95% CI] | recall [95% CI] | F1 [95% CI] | TP/FP/FN/TN | ΔF1 vs deterministic [paired 95% CI] |
+|---|---|---|---|---|---|
+| deterministic | 0.667 [0.512, 0.816] | 0.366 [0.254, 0.479] | 0.473 [0.352, 0.584] | 26/13/45/67 | — |
+| llm, qwen2.5:3b | 0.778 [0.676, 0.872] | 0.789 [0.689, 0.879] | 0.783 [0.703, 0.854] | 56/16/15/64 | +0.310 [+0.182, +0.434] |
+| hybrid, qwen2.5:3b | 0.687 [0.574, 0.800] | 0.648 [0.535, 0.756] | 0.667 [0.571, 0.752] | 46/21/25/59 | +0.194 [+0.088, +0.301] |
+| llm, gemma3:12b | 0.945 [0.886, 0.987] | 0.972 [0.926, 1.000] | 0.958 [0.919, 0.986] | 69/4/2/76 | +0.486 [+0.368, +0.604] |
+| hybrid, gemma3:12b | 0.784 [0.685, 0.877] | 0.817 [0.721, 0.901] | 0.800 [0.719, 0.868] | 58/16/13/64 | +0.327 [+0.221, +0.432] |
+
+Cost on the test split (spend 0; one machine, sequential calls):
+
+| arm | LLM calls | LLM wall time | p50 / p95 per call | prompt + completion tokens |
+|---|---|---|---|---|
+| deterministic | 0 | 0 (10 ms for all 151 pairs) | — | — |
+| llm, qwen2.5:3b | 151 | 1,120 s (71 s without 5 contended calls) | 483 / 627 ms | 34,574 + 1,352 |
+| hybrid, qwen2.5:3b | 88 | 204 s (41 s without 1 contended call) | 468 / 619 ms | 20,260 + 780 |
+| llm, gemma3:12b | 151 | 568 s | 3,185 / 3,547 ms | 35,671 + 1,281 |
+| hybrid, gemma3:12b | 88 | 282 s | 3,201 / 3,510 ms | 20,907 + 749 |
+
+The qwen pass started while other clients were using the same Ollama server;
+its first seven calls took 75–456 s each (five fall in the test split). Verdicts
+are unaffected (temperature 0); p50 and p95 are robust to them; wall time is
+shown with and without. There is no price table in the repo, so no cloud cost
+is quoted.
+
+Hand-written hard cases turned into contradiction edges (both splits):
+
+| arm | contradicts edged (of 46) | compatible wrongly edged (of 51) |
+|---|---|---|
+| deterministic | 7 | 12 |
+| llm, qwen2.5:3b | 35 | 5 |
+| hybrid, qwen2.5:3b | 24 | 14 |
+| llm, gemma3:12b | 46 | 1 |
+| hybrid, gemma3:12b | 35 | 13 |
+
+Where the hybrid (gemma3:12b) still errs on the test split, by route: 13 false
+edges kept from confident deterministic verdicts (11 are scope-blind numeric
+edges such as "main branch has 12 failing tests" / "release branch has 3"), 11
+missed contradictions on pairs the topical gate never sends to the model
+(paraphrased negations, new tools, policy changes with little shared
+vocabulary; the model alone got all 11 right), and 5 model errors on routed
+pairs. Both large error sources are the routing rule's, not the model's. The
+descriptive dev sweep moves F1 by at most 0.03 across thresholds, so the
+strength threshold is not the lever.
+
+Read these numbers with the limitations in ADR 0042 and in the report: the set
+is small, hand-labelled by the detectors' authors, deliberately heavy in the
+detectors' blind spots, and the prompt states the same labelling rules the
+labeller used.

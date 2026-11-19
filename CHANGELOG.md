@@ -10,6 +10,16 @@ notable changes.
 
 ### Added
 
+- Deterministic vs LLM reconciliation experiment (ADR 0042, nothing wired into production):
+  `go run ./tools/brainbench -mode reconcile [-llm-model gemma3:12b,qwen2.5:3b]` scores
+  the relate classifier, a local Ollama model alone, and a pre-registered hybrid on 201
+  hand-labelled pairs (`data/eval/reconciliation/`). On the 151-pair test split, contradiction
+  F1 was 0.47 for the deterministic arm, 0.80 for the hybrid and 0.96 for the model alone
+  (gemma3:12b). The ADR recommends an opt-in, offline adjudication pass with guardrails
+  rather than the routing rule tested. The OpenAI-compatible LLM client gains opt-in
+  `WithTemperature` / `WithSeed`, and `relate.SharesTopic` exposes the supports path's
+  topical gate read-only.
+
 - Episode dependency edits keep their history (ADR 0038, edit history). Declaring a
   removed pair again no longer overwrites it: the tombstone moves, unchanged, into the new
   append-only `event_dependency_history` table (SQLite schema v39, libSQL, memory, Postgres
