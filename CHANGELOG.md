@@ -20,6 +20,13 @@ notable changes.
   `WithTemperature` / `WithSeed`, and `relate.SharesTopic` exposes the supports path's
   topical gate read-only.
 
+- Relational vs graph experiment (ADR 0043): `tools/graphbench` and
+  `scripts/graphbench.sh` load one corpus into SQLite, Postgres and Neo4j Community. They
+  time recall expansion, retraction closure, dissonance, merge redirects, provenance and
+  batch writes on the production path, a single-query CTE, Cypher and an in-process
+  adjacency map, and check every answer for parity. Results are in
+  `docs/eval/graphbench`. The decision: no graph backend.
+
 - Episode dependency edits keep their history (ADR 0038, edit history). Declaring a
   removed pair again no longer overwrites it: the tombstone moves, unchanged, into the new
   append-only `event_dependency_history` table (SQLite schema v39, libSQL, memory, Postgres
