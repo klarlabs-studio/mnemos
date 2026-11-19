@@ -17,7 +17,7 @@
 //
 //	go run ./tools/graphbench -beliefs 10000                             # SQLite + adjacency map only
 //	go run ./tools/graphbench -beliefs 100000 -profile dense \
-//	    -pg 'postgres://mnemos:mnemos@127.0.0.1:5432/mnemos?sslmode=disable' \
+//	    -pg "$PG_DSN" \
 //	    -neo4j http://127.0.0.1:7474 -json out.json
 //
 // Neither Docker nor a server is needed unless -pg / -neo4j are given, so the

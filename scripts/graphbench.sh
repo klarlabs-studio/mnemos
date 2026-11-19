@@ -56,8 +56,11 @@ mkdir -p "${OUT_DIR}"
 BIN="$(mktemp -d)/graphbench"
 go build -o "${BIN}" ./tools/graphbench
 
+# A random password per run: the container is throwaway, and a fixed
+# credential in a committed DSN is exactly what the secret scan looks for.
+PG_PASSWORD="$(openssl rand -hex 16)"
 docker run -d --rm --name "${PG_NAME}" --label "${LABEL}=$$" \
-  -e POSTGRES_USER=mnemos -e POSTGRES_PASSWORD=mnemos -e POSTGRES_DB=mnemos \
+  -e POSTGRES_USER=mnemos -e POSTGRES_PASSWORD="${PG_PASSWORD}" -e POSTGRES_DB=mnemos \
   -p "127.0.0.1::5432" "${PG_IMAGE}" >/dev/null
 PG_PORT="$(host_port "${PG_NAME}" 5432)"
 echo "started postgres on :${PG_PORT}"
@@ -65,7 +68,7 @@ for _ in $(seq 1 60); do
   if docker exec "${PG_NAME}" pg_isready -U mnemos -q 2>/dev/null; then break; fi
   sleep 1
 done
-PG_DSN="postgres://mnemos:mnemos@127.0.0.1:${PG_PORT}/mnemos?sslmode=disable"
+PG_DSN="postgres://mnemos:${PG_PASSWORD}@127.0.0.1:${PG_PORT}/mnemos?sslmode=disable"
 
 for profile in ${PROFILES}; do
   for size in ${SIZES}; do
