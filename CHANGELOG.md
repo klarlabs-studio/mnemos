@@ -10,6 +10,22 @@ notable changes.
 
 ### Added
 
+- Episode dependency edits keep their history (ADR 0038, edit history). Declaring a
+  removed pair again no longer overwrites it: the tombstone moves, unchanged, into the new
+  append-only `event_dependency_history` table (SQLite schema v39, libSQL, memory, Postgres
+  with RLS, MySQL) in the same transaction, so recorded-as-of reads count a dependency at T
+  iff one of its intervals contains T, and the removal stays on record. `--include-removed`
+  listings return one entry per interval. No backfill: an existing tombstone is already one
+  closed interval. Destroying an episode still hard-deletes its history.
+
+- Removing an episode dependency takes an optional reason (at most 512 characters):
+  `mnemos dependencies <id> --remove <src> --reason <text>`, `reason` on the
+  `remove_episode_dependency` MCP tool, `?reason=` or a `{"reason"}` body on REST `DELETE
+  /v1/episodes/{id}/dependencies/{depends_on}`, `reason` on gRPC
+  `RemoveEpisodeDependencyRequest`, and a `reason` argument on `Memory.RemoveEventDependency`
+  and `client.RemoveEventDependency` (both signatures change). It is stored as
+  `event_dependencies.removal_reason` and shown as `removal_reason` in listings.
+
 - Episode dependencies can be listed, declared and removed from every transport (ADR 0038,
   editing dependencies): `mnemos dependencies <id>` (`--include-removed`, `--declare <src>
   --kind cites|copies|derived_from [--note]`, `--remove <src>`), the `episode_dependencies`,
@@ -93,6 +109,14 @@ notable changes.
   pushed from two brains stays one belief. The REST and gRPC responses report
   `folded` and `remapped` (incoming id → held id), as does the Go client's
   `AppendResponse`. `mnemos push` and `mnemos pull` print the folded count.
+
+- A typed error raised inside a governed write now survives the kernel. axi flattens an
+  executor's error to text, so a dependency conflict a concurrent edit caused between the
+  request's own check and the write surfaced as REST 500 / gRPC `Internal` / MCP -32603.
+  `kernel.Governed.ExecuteWithCause` returns the executor's error alongside the result and
+  every governed dispatch wraps it, so the race is 409 / `AlreadyExists` and 404 /
+  `NotFound` like the check. The MCP dependency tools also return refusals (unknown episode,
+  bad kind or reason, conflict, not found) as -32602 with the message instead of -32603.
 
 - Consolidate no longer runs the quadratic near-duplicate scan without a bound
   (#387, #466). `ConsolidateOptions.DedupeScanBudget` caps it (default 5 minutes,
