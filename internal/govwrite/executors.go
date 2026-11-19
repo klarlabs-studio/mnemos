@@ -99,21 +99,10 @@ func (e claimsExecutor) Execute(ctx context.Context, input any, _ axidomain.Capa
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("write_claims: unexpected input %T", input)
 	}
-	var err error
-	switch {
-	case in.Reason.AssertStatus:
-		if in.Reason.Reason == "" {
-			return axidomain.ExecutionResult{}, nil, fmt.Errorf("write_claims: asserting a status requires a reason")
-		}
-		err = e.conn.Claims.UpsertAssertingStatusAs(ctx, in.Claims, in.Reason.Reason, in.Reason.ChangedBy)
-	case in.Reason.ChangedBy != "":
-		err = e.conn.Claims.UpsertWithReasonAs(ctx, in.Claims, in.Reason.Reason, in.Reason.ChangedBy)
-	case in.Reason.Reason != "":
-		err = e.conn.Claims.UpsertWithReason(ctx, in.Claims, in.Reason.Reason)
-	default:
-		err = e.conn.Claims.Upsert(ctx, in.Claims)
+	if in.Reason.AssertStatus && in.Reason.Reason == "" {
+		return axidomain.ExecutionResult{}, nil, fmt.Errorf("write_claims: asserting a status requires a reason")
 	}
-	if err != nil {
+	if err := upsertClaims(ctx, e.conn, in.Claims, in.Reason); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert claims: %w", err)
 	}
 	ids := make([]string, 0, len(in.Claims))
@@ -177,7 +166,14 @@ func (e relationshipsExecutor) Execute(ctx context.Context, input any, _ axidoma
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("write_relationships: unexpected input %T", input)
 	}
-	rels, overCap := pipeline.CapStoredContradictions(ctx, e.conn.Relationships, in.Relationships)
+	// An end addressed to a merge redirect follows it to the live claim, so a
+	// sender that still holds the merged id does not attach an edge to a
+	// retired row (ADR 0041).
+	resolved, err := pipeline.FollowRedirectsInRelationships(ctx, e.conn, in.Relationships)
+	if err != nil {
+		return axidomain.ExecutionResult{}, nil, err
+	}
+	rels, overCap := pipeline.CapStoredContradictions(ctx, e.conn.Relationships, resolved)
 	if err := e.conn.Relationships.Upsert(ctx, rels); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert relationships: %w", err)
 	}
@@ -211,6 +207,22 @@ func (e embeddingExecutor) Execute(ctx context.Context, input any, _ axidomain.C
 	in, ok := payload[embeddingInput](input)
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("write_embedding: unexpected input %T", input)
+	}
+	// A merge redirect has no embedding of its own: the live claim it points
+	// at has one, and the merge deleted the redirect's (ADR 0033, 0041).
+	if in.EntityType == "claim" {
+		redirect, err := pipeline.IsStoredRedirect(ctx, e.conn, in.EntityID)
+		if err != nil {
+			return axidomain.ExecutionResult{}, nil, err
+		}
+		if redirect {
+			return axidomain.ExecutionResult{
+				Data:    writeCount{Accepted: 0},
+				Summary: fmt.Sprintf("dropped embedding for merge redirect %s", in.EntityID),
+			}, ev("mnemos.write.embedding", map[string]any{
+				"entity_id": in.EntityID, "entity_type": in.EntityType, "dropped": "merge redirect",
+			}), nil
+		}
 	}
 	if err := e.conn.Embeddings.Upsert(ctx, in.EntityID, in.EntityType, in.Vector, in.Model, in.CreatedBy); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("upsert embedding: %w", err)
