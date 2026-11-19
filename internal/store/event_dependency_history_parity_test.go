@@ -155,11 +155,29 @@ func TestEventDependencies_RevivalKeepsTheEditHistoryAcrossBackends(t *testing.T
 			}
 		}
 
-		// Destroying an episode hard-deletes its whole history too.
-		if err := b.conn.Events.DeleteByID(ctx, "hi-orig"); err != nil {
-			t.Fatalf("%s: delete hi-orig: %v", b.name, err)
+		// Destroying an episode hard-deletes its whole history too. (A pair of
+		// its own: the episodes above are evidence, which SQL backends keep
+		// from being deleted under them.)
+		for _, id := range []string{"hi-gone-src", "hi-gone-copy"} {
+			if err := b.conn.Events.Append(ctx, domain.Event{ID: id, Content: id, SourceInputID: id, SchemaVersion: "v1", Timestamp: base, IngestedAt: base}); err != nil {
+				t.Fatalf("%s: append %s: %v", b.name, id, err)
+			}
 		}
-		if left, err := deps.ListByEventIDsWithRemoved(ctx, []string{"hi-copy"}); err != nil || len(left) != 0 {
+		gone := domain.EventDependency{EventID: "hi-gone-copy", DependsOn: "hi-gone-src", Kind: domain.DependencyCites, Signal: domain.SignalDeclared, CreatedAt: declared}
+		if _, err := deps.Declare(ctx, gone); err != nil {
+			t.Fatalf("%s: declare the pair to destroy: %v", b.name, err)
+		}
+		if _, err := deps.Remove(ctx, "hi-gone-copy", "hi-gone-src", "bob", "wrong", removed); err != nil {
+			t.Fatalf("%s: remove the pair to destroy: %v", b.name, err)
+		}
+		gone.CreatedAt = revived
+		if _, err := deps.Declare(ctx, gone); err != nil {
+			t.Fatalf("%s: revive the pair to destroy: %v", b.name, err)
+		}
+		if err := b.conn.Events.DeleteByID(ctx, "hi-gone-src"); err != nil {
+			t.Fatalf("%s: delete hi-gone-src: %v", b.name, err)
+		}
+		if left, err := deps.ListByEventIDsWithRemoved(ctx, []string{"hi-gone-copy"}); err != nil || len(left) != 0 {
 			t.Errorf("%s: intervals after destroying the source = %v (%v), want none", b.name, depPairs(left), err)
 		}
 	}
