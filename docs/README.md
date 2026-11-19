@@ -70,6 +70,7 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [ADR 0040: Relationship detection reads spelled-out counts and manner swaps](adr/0040-supersession-readings-in-relate.md)
 - [ADR 0041: Id-addressed writes follow redirects](adr/0041-id-addressed-writes-follow-redirects.md)
 - [ADR 0042: Deterministic vs LLM reconciliation (experiment)](adr/0042-deterministic-vs-llm-reconciliation.md)
+- [ADR 0044: Scope-aware numeric contradictions](adr/0044-scope-aware-numeric-contradictions.md)
 
 ## Working notes
 

@@ -107,6 +107,18 @@ notable changes.
 
 ### Fixed
 
+- The numeric contradiction detector no longer treats two counts about different scopes as
+  one quantity (ADR 0044, `relate/v6`). "The main branch has 12 failing tests" and "The
+  release branch has 3 failing tests" no longer contradict. Two numeric claims are about
+  different scopes when a qualifier is swapped in the same aligned position, when one names
+  an environment the other does not, or when they carry different label numbers ("Sprint
+  14" / "Sprint 15"). On the ADR 0042 reconciliation test split, deterministic precision
+  rose from 0.67 to 0.93 (11 of 13 false positives gone) with recall unchanged. The
+  retrieval ablation and `make brain-eval` are unchanged. On a real brain, 101 of 345
+  numeric edges were removed and none added; 90 removals were judged correct, 4 wrong and
+  7 ambiguous. Run `mnemos relate --prune-stale` to drop the stored edges the rule no
+  longer produces.
+
 - Writes that address beliefs by id no longer revive merged beliefs or duplicate
   a belief another brain already pushed (ADR 0041). These are REST `POST
   /v1/beliefs` (registry push), gRPC `AppendBeliefs` and registry pull.
