@@ -10,6 +10,8 @@
 //	go run ./tools/brainbench -fail-on-regression              # exit 1 on any degraded metric
 //	go run ./tools/brainbench -mode ablation                   # retrieval ablation at fixed token budgets
 //	go run ./tools/brainbench -mode ablation -budgets 64,256   # explicit budgets
+//	go run ./tools/brainbench -mode reconcile                  # deterministic reconciliation arm only
+//	go run ./tools/brainbench -mode reconcile -llm-model gemma3:12b,qwen2.5:3b  # + llm and hybrid arms (local Ollama)
 //
 // See internal/brainbench for the method and its limitations; the limitations
 // are also embedded in every report it emits.
@@ -25,6 +27,7 @@ import (
 	"strings"
 
 	"go.klarlabs.de/mnemos/internal/brainbench"
+	"go.klarlabs.de/mnemos/internal/llm"
 
 	// The harness opens sqlite:// DSNs for every arm.
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
@@ -39,16 +42,29 @@ func main() {
 		failOnReg   bool
 		mode        string
 		budgets     string
+		recon       reconcileFlags
 	)
 	flag.StringVar(&scenarioDir, "scenarios", "data/eval/brainbench", "directory of scenario YAML files")
 	flag.StringVar(&jsonOut, "json", "", "write the machine-readable report to this path (\"-\" for stdout)")
 	flag.StringVar(&workDir, "work", "", "keep experiment databases here instead of a temp dir (for debugging)")
 	flag.BoolVar(&human, "human", true, "print the human-readable report to stdout")
 	flag.BoolVar(&failOnReg, "fail-on-regression", false, "exit 1 when any scored metric degraded")
-	flag.StringVar(&mode, "mode", "ab", "ab: the paired consolidation experiment; ablation: retrieval ranking ablation")
+	flag.StringVar(&mode, "mode", "ab", "ab: the paired consolidation experiment; ablation: retrieval ranking ablation; reconcile: deterministic vs LLM reconciliation (ADR 0042)")
 	flag.StringVar(&budgets, "budgets", "", "ablation token budgets, comma-separated (default 32,64,128,256,512,1024,2048)")
+	flag.StringVar(&recon.pairs, "pairs", "data/eval/reconciliation/pairs.yaml", "reconcile: labelled pair set")
+	flag.StringVar(&recon.models, "llm-model", "", "reconcile: comma-separated local Ollama models for the llm and hybrid arms (empty: deterministic arm only)")
+	flag.StringVar(&recon.baseURL, "llm-base-url", llm.DefaultBaseURL(llm.ProviderOllama), "reconcile: Ollama endpoint")
+	flag.IntVar(&recon.bootstrap, "bootstrap", 2000, "reconcile: bootstrap resamples")
+	flag.Uint64Var(&recon.seed, "seed", 42, "reconcile: bootstrap and sampling seed")
 	flag.Parse()
 
+	if mode == "reconcile" {
+		if err := runReconcile(recon, jsonOut, human); err != nil {
+			fmt.Fprintf(os.Stderr, "brainbench: %v\n", err)
+			os.Exit(2)
+		}
+		return
+	}
 	if mode == "ablation" {
 		if err := runAblation(scenarioDir, jsonOut, workDir, budgets, human); err != nil {
 			fmt.Fprintf(os.Stderr, "brainbench: %v\n", err)
@@ -57,7 +73,7 @@ func main() {
 		return
 	}
 	if mode != "ab" {
-		fmt.Fprintf(os.Stderr, "brainbench: unknown -mode %q (want ab or ablation)\n", mode)
+		fmt.Fprintf(os.Stderr, "brainbench: unknown -mode %q (want ab, ablation or reconcile)\n", mode)
 		os.Exit(2)
 	}
 	if err := run(scenarioDir, jsonOut, workDir, human, failOnReg); err != nil {
