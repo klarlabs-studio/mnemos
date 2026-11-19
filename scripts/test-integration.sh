@@ -89,7 +89,9 @@ done
 echo "running integration tests…"
 TEST_POSTGRES_DSN="${PG_DSN}" \
 TEST_MYSQL_DSN="${MY_DSN}" \
-  go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/ ./internal/store/
+  go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/ ./internal/store/ ./internal/govwrite/
 # ./internal/store/ holds the cross-backend suites (trust invariance,
 # DeleteByIDs, ...): without a live Postgres and MySQL they run on memory and
 # SQLite only, which is how they ran everywhere before this line.
+# ./internal/govwrite/ holds the id-addressed belief suite (ADR 0041), which
+# asserts redirects and folds on what each backend returns.
