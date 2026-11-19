@@ -74,7 +74,7 @@ func (s *Server) RemoveEpisodeDependency(ctx context.Context, req *mnemosv1.Remo
 	allowed := allowedRunsFromContext(ctx)
 	conn := w.Conn()
 	change, err := dependency.Remove(ctx, conn.Events, conn.Dependencies, w.RemoveEventDependency, dependency.RemoveRequest{
-		EventID: req.GetEpisodeId(), DependsOn: req.GetDependsOn(),
+		EventID: req.GetEpisodeId(), DependsOn: req.GetDependsOn(), Reason: req.GetReason(),
 		Actor: actorFromContext(ctx), RunAllowed: func(runID string) bool { return runAllowed(allowed, runID) },
 	})
 	if err != nil {
@@ -103,7 +103,7 @@ func dependencyStatus(err error, label string) error {
 func dependencyToProto(d domain.EventDependency) *mnemosv1.EpisodeDependency {
 	out := &mnemosv1.EpisodeDependency{
 		EpisodeId: d.EventID, DependsOn: d.DependsOn, Kind: string(d.Kind), Signal: string(d.Signal), Reference: d.Reference,
-		CreatedAt: timestamppb.New(d.CreatedAt), CreatedBy: d.CreatedBy, RemovedBy: d.RemovedBy,
+		CreatedAt: timestamppb.New(d.CreatedAt), CreatedBy: d.CreatedBy, RemovedBy: d.RemovedBy, RemovalReason: d.RemovalReason,
 	}
 	if d.RemovedAt != nil {
 		out.RemovedAt = timestamppb.New(*d.RemovedAt)

@@ -66,7 +66,7 @@ func TestREST_EpisodeDependencies_ConcurrentEditsAreRefusals(t *testing.T) {
 	}
 
 	raceDependencyEdits(t, &f.conn.Dependencies, func(ctx context.Context, deps ports.EventDependencyRepository) error {
-		_, err := deps.Remove(ctx, "ev-a2", "ev-a", "other-writer", time.Now().UTC())
+		_, err := deps.Remove(ctx, "ev-a2", "ev-a", "other-writer", "", time.Now().UTC())
 		return err
 	})
 	if got := f.status(t, http.MethodDelete, "/v1/episodes/ev-a2/dependencies/ev-a", write); got != http.StatusNotFound {
@@ -107,10 +107,10 @@ func TestEpisodeDependencies_ConcurrentEditsAreRefusalsOnCLIAndMCP(t *testing.T)
 	}
 
 	raceDependencyEdits(t, &w.Conn().Dependencies, func(ctx context.Context, deps ports.EventDependencyRepository) error {
-		_, err := deps.Remove(ctx, "ev-copy", "ev-src", "other-writer", time.Now().UTC())
+		_, err := deps.Remove(ctx, "ev-copy", "ev-src", "other-writer", "", time.Now().UTC())
 		return err
 	})
-	if _, err := runDependencyRemove(ctx, w, "ev-copy", "ev-src", "me", nil); !errors.Is(err, domain.ErrDependencyNotFound) {
+	if _, err := runDependencyRemove(ctx, w, "ev-copy", "ev-src", "", "me", nil); !errors.Is(err, domain.ErrDependencyNotFound) {
 		t.Errorf("raced removal: err = %v, want ErrDependencyNotFound through the governed write", err)
 	}
 }

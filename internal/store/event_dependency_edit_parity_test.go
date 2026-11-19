@@ -46,17 +46,17 @@ func TestEventDependencies_DeclareAndRemoveAgreeAcrossBackends(t *testing.T) {
 		}
 
 		removedAt := at.Add(time.Hour)
-		removed, err := deps.Remove(ctx, "de-copy", "de-src", "bob", removedAt)
+		removed, err := deps.Remove(ctx, "de-copy", "de-src", "bob", "", removedAt)
 		if err != nil {
 			t.Fatalf("%s: remove: %v", b.name, err)
 		}
 		if removed.RemovedAt == nil || !removed.RemovedAt.Equal(removedAt) || removed.RemovedBy != "bob" || removed.CreatedBy != "alice" {
 			t.Errorf("%s: removed row = %+v", b.name, removed)
 		}
-		if _, err := deps.Remove(ctx, "de-copy", "de-src", "bob", removedAt); !errors.Is(err, domain.ErrDependencyNotFound) {
+		if _, err := deps.Remove(ctx, "de-copy", "de-src", "bob", "", removedAt); !errors.Is(err, domain.ErrDependencyNotFound) {
 			t.Errorf("%s: removing again: err = %v, want ErrDependencyNotFound", b.name, err)
 		}
-		if _, err := deps.Remove(ctx, "de-src", "de-copy", "bob", removedAt); !errors.Is(err, domain.ErrDependencyNotFound) {
+		if _, err := deps.Remove(ctx, "de-src", "de-copy", "bob", "", removedAt); !errors.Is(err, domain.ErrDependencyNotFound) {
 			t.Errorf("%s: removing a pair never stored: err = %v, want ErrDependencyNotFound", b.name, err)
 		}
 
@@ -103,7 +103,7 @@ func TestEventDependencies_DeclareAndRemoveAgreeAcrossBackends(t *testing.T) {
 		assertLive("after revival", 1, 1)
 
 		// Destroying an episode still hard-deletes its rows, tombstones too.
-		if _, err := deps.Remove(ctx, "de-copy", "de-src", "bob", revivedAt.Add(time.Minute)); err != nil {
+		if _, err := deps.Remove(ctx, "de-copy", "de-src", "bob", "", revivedAt.Add(time.Minute)); err != nil {
 			t.Fatalf("%s: remove before destroy: %v", b.name, err)
 		}
 		if err := b.conn.Events.DeleteByID(ctx, "de-copy"); err != nil {
@@ -194,7 +194,7 @@ func TestTrustInput_FollowsDependencyEditsAcrossBackends(t *testing.T) {
 		}
 		count("after declaring", dependent)
 		removedAt := at.Add(-24 * time.Hour)
-		if _, err := b.conn.Dependencies.Remove(ctx, "te-copy", "te-orig", "bob", removedAt); err != nil {
+		if _, err := b.conn.Dependencies.Remove(ctx, "te-copy", "te-orig", "bob", "", removedAt); err != nil {
 			t.Fatalf("%s: remove: %v", b.name, err)
 		}
 		count("after removing", independent)

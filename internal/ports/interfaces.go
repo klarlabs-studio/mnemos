@@ -807,19 +807,23 @@ type EventDependencyRepository interface {
 	// ListDependents returns the live dependencies ON the given episodes
 	// (incoming): the episodes that depend on them.
 	ListDependents(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
-	// ListByEventIDsWithRemoved is ListByEventIDs plus removed rows (RemovedAt
-	// set), for recorded-as-of reads and audit.
+	// ListByEventIDsWithRemoved is ListByEventIDs plus every closed interval:
+	// the current tombstones (RemovedAt set) and the intervals a revival moved
+	// into the edit history. For recorded-as-of reads and audit; a pair may
+	// appear more than once.
 	ListByEventIDsWithRemoved(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
-	// ListDependentsWithRemoved is ListDependents plus removed rows.
+	// ListDependentsWithRemoved is ListDependents plus every closed interval.
 	ListDependentsWithRemoved(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
 	// Declare stores a hand-declared dependency and returns the stored row.
 	// A live row for the pair is domain.ErrDependencyExists; a removed one is
-	// revived: RemovedAt/RemovedBy cleared, every other field overwritten.
+	// revived: in one transaction the tombstone is copied, unchanged, into
+	// the edit history as a closed interval, then the current row is
+	// overwritten with dep (RemovedAt, RemovedBy and RemovalReason cleared).
 	Declare(ctx context.Context, dep domain.EventDependency) (domain.EventDependency, error)
 	// Remove marks the live (eventID, dependsOn) row removed by removedBy at
-	// at and returns it. A missing or already removed row is
-	// domain.ErrDependencyNotFound.
-	Remove(ctx context.Context, eventID, dependsOn, removedBy string, at time.Time) (domain.EventDependency, error)
+	// at, for reason (may be empty), and returns it. A missing or already
+	// removed row is domain.ErrDependencyNotFound.
+	Remove(ctx context.Context, eventID, dependsOn, removedBy, reason string, at time.Time) (domain.EventDependency, error)
 
 	// AppendPending records citations that named no stored episode yet
 	// (ADR 0038, late citations), ignoring any (EventID, LookupKey) already

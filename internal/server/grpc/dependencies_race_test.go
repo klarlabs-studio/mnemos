@@ -51,7 +51,7 @@ func TestGRPC_EpisodeDependencies_ConcurrentEditsAreRefusals(t *testing.T) {
 	}
 
 	conn.Dependencies = concurrentDependencyEdit{EventDependencyRepository: inner, once: &sync.Once{}, edit: func(ctx context.Context, deps ports.EventDependencyRepository) {
-		if _, err := deps.Remove(ctx, "ev-other", "ev-mine", "other-writer", time.Now().UTC()); err != nil {
+		if _, err := deps.Remove(ctx, "ev-other", "ev-mine", "other-writer", "", time.Now().UTC()); err != nil {
 			t.Errorf("concurrent removal: %v", err)
 		}
 	}}

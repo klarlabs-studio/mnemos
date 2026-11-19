@@ -221,12 +221,13 @@ type MnemosServiceClient interface {
 	// tool. Requires claims:write; an unknown episode is NOT_FOUND, a bad kind,
 	// note or pair INVALID_ARGUMENT, a live dependency ALREADY_EXISTS.
 	DeclareEpisodeDependency(ctx context.Context, in *DeclareEpisodeDependencyRequest, opts ...grpc.CallOption) (*EpisodeDependencyChange, error)
-	// RemoveEpisodeDependency marks a dependency removed (kept as a tombstone,
-	// so detection cannot re-add it) and rescores the dependent episode's
+	// RemoveEpisodeDependency marks a dependency removed, with an optional
+	// reason (kept as a tombstone, so detection cannot re-add it; a revival
+	// keeps it in the edit history) and rescores the dependent episode's
 	// beliefs; it never un-retracts anything. The same operation as REST
 	// DELETE /v1/episodes/{id}/dependencies/{depends_on} and the
 	// remove_episode_dependency MCP tool. Requires claims:write; a pair with no
-	// live dependency is NOT_FOUND.
+	// live dependency is NOT_FOUND, an over-long reason INVALID_ARGUMENT.
 	RemoveEpisodeDependency(ctx context.Context, in *RemoveEpisodeDependencyRequest, opts ...grpc.CallOption) (*EpisodeDependencyChange, error)
 	// Classify reports whether a candidate statement fits established knowledge or is novel.
 	Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error)
@@ -1144,12 +1145,13 @@ type MnemosServiceServer interface {
 	// tool. Requires claims:write; an unknown episode is NOT_FOUND, a bad kind,
 	// note or pair INVALID_ARGUMENT, a live dependency ALREADY_EXISTS.
 	DeclareEpisodeDependency(context.Context, *DeclareEpisodeDependencyRequest) (*EpisodeDependencyChange, error)
-	// RemoveEpisodeDependency marks a dependency removed (kept as a tombstone,
-	// so detection cannot re-add it) and rescores the dependent episode's
+	// RemoveEpisodeDependency marks a dependency removed, with an optional
+	// reason (kept as a tombstone, so detection cannot re-add it; a revival
+	// keeps it in the edit history) and rescores the dependent episode's
 	// beliefs; it never un-retracts anything. The same operation as REST
 	// DELETE /v1/episodes/{id}/dependencies/{depends_on} and the
 	// remove_episode_dependency MCP tool. Requires claims:write; a pair with no
-	// live dependency is NOT_FOUND.
+	// live dependency is NOT_FOUND, an over-long reason INVALID_ARGUMENT.
 	RemoveEpisodeDependency(context.Context, *RemoveEpisodeDependencyRequest) (*EpisodeDependencyChange, error)
 	// Classify reports whether a candidate statement fits established knowledge or is novel.
 	Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error)

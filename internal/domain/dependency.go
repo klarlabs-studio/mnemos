@@ -50,6 +50,10 @@ const (
 // dependency may carry: the same bound as a pending citation's lookup key.
 const MaxDependencyReferenceLen = 512
 
+// MaxDependencyRemovalReasonLen is the longest reason, in characters, a
+// removal may record: the same bound as a declaration's note.
+const MaxDependencyRemovalReasonLen = 512
+
 // ErrDependencyExists is returned when a dependency is declared for a pair of
 // episodes that already has a live one.
 var ErrDependencyExists = errors.New("episode dependency already exists")
@@ -58,11 +62,17 @@ var ErrDependencyExists = errors.New("episode dependency already exists")
 // or was already removed.
 var ErrDependencyNotFound = errors.New("episode dependency not found")
 
-// EventDependency records that EventID depends on DependsOn (ADR 0038).
-// Rows are keyed by (EventID, DependsOn); the first recorded justification
-// stands. A removed dependency is a tombstone (RemovedAt set), not a deleted
-// row, so automatic detection cannot bring back what a person removed; only a
-// declaration revives it.
+// EventDependency records that EventID depends on DependsOn (ADR 0038) over
+// one interval of recorded time, [CreatedAt, RemovedAt).
+//
+// The current row for a pair is keyed by (EventID, DependsOn); the first
+// recorded justification stands. A removed dependency is a tombstone
+// (RemovedAt set), not a deleted row, so automatic detection cannot bring back
+// what a person removed; only a declaration revives it. Reviving moves the
+// tombstone, unchanged, into the pair's edit history before the new interval
+// is written, so a pair has at most one current row and any number of closed
+// intervals before it, and a recorded-as-of read counts the dependency at T
+// iff one of them contains T.
 type EventDependency struct {
 	EventID   string           `json:"episode_id"`
 	DependsOn string           `json:"depends_on"`
@@ -77,13 +87,19 @@ type EventDependency struct {
 	RemovedAt *time.Time `json:"removed_at,omitempty"`
 	// RemovedBy is who removed it, empty while it is live.
 	RemovedBy string `json:"removed_by,omitempty"`
+	// RemovalReason is why it was removed, as the remover gave it (at most
+	// MaxDependencyRemovalReasonLen characters); empty while it is live and
+	// when no reason was given.
+	RemovalReason string `json:"removal_reason,omitempty"`
 }
 
 // Live reports whether the dependency has not been removed.
 func (d EventDependency) Live() bool { return d.RemovedAt == nil }
 
-// LiveAt reports whether the dependency was in force at t: recorded by t and
-// not removed by then.
+// LiveAt reports whether this interval of the dependency was in force at t:
+// recorded by t and not removed by then. A pair revived after a removal has
+// several intervals (the WithRemoved reads return them all); it was in force
+// at t iff one of them is LiveAt(t).
 func (d EventDependency) LiveAt(t time.Time) bool {
 	if d.CreatedAt.After(t) {
 		return false

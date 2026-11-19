@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"go.klarlabs.de/mnemos/internal/dependency"
@@ -13,7 +16,7 @@ import (
 //
 //	GET    /v1/episodes/{id}/dependencies[?include_removed=true]
 //	POST   /v1/episodes/{id}/dependencies               body: {"depends_on", "kind", "note"}
-//	DELETE /v1/episodes/{id}/dependencies/{depends_on}
+//	DELETE /v1/episodes/{id}/dependencies/{depends_on}[?reason=...]  body (optional): {"reason"}
 //
 // Each goes through the same internal/dependency call as the CLI and the MCP
 // tools, so the bodies are the same dependency.ListReport / ChangeReport
@@ -100,13 +103,57 @@ func removeEpisodeDependency(w http.ResponseWriter, r *http.Request, gw *govwrit
 		writeError(w, http.StatusServiceUnavailable, "writer unavailable")
 		return
 	}
+	reason, err := removalReason(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	// r.URL.Path is already decoded, like the episode id segment.
-	view, err := runDependencyRemove(r.Context(), gw, episodeID, dependsOn, actorFromContext(r.Context()),
+	view, err := runDependencyRemove(r.Context(), gw, episodeID, dependsOn, reason, actorFromContext(r.Context()),
 		func(runID string) bool { return runAllowedForRequest(r, runID) })
 	if writeDependencyError(w, err, "remove episode dependency") {
 		return
 	}
 	writeJSON(w, http.StatusOK, view)
+}
+
+// removeDependencyRequest is the optional body of DELETE
+// /v1/episodes/{id}/dependencies/{depends_on}.
+type removeDependencyRequest struct {
+	Reason string `json:"reason"`
+}
+
+// removalReason reads the optional removal reason from the ?reason= query or
+// a JSON body ({"reason"}); giving it in both is refused, so neither silently
+// wins. Its length is checked by internal/dependency like every surface's.
+func removalReason(r *http.Request) (string, error) {
+	query := r.URL.Query().Get("reason")
+	if r.Body == nil {
+		return query, nil
+	}
+	raw, err := io.ReadAll(http.MaxBytesReader(nil, r.Body, maxRequestBytes))
+	if err != nil {
+		return "", errors.New("read body: " + err.Error())
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return query, nil
+	}
+	var body removeDependencyRequest
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		return "", errors.New("decode body: " + err.Error())
+	}
+	if dec.More() {
+		return "", errors.New("decode body: trailing content after the JSON object")
+	}
+	if query != "" && body.Reason != "" {
+		return "", errors.New("give the reason in the query or the body, not both")
+	}
+	if body.Reason != "" {
+		return body.Reason, nil
+	}
+	return query, nil
 }
 
 // writeDependencyError maps the internal/dependency errors to statuses and

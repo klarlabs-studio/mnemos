@@ -12,7 +12,8 @@
 //     the caller's run scope does not cover reads exactly like one that does
 //     not exist (retraction.CheckEvent), so a run-scoped token cannot probe
 //     other runs;
-//   - the kind is one of cites, copies, derived_from and the note is bounded;
+//   - the kind is one of cites, copies, derived_from, and the note and the
+//     removal reason are bounded;
 //   - declaring a pair with a live dependency is [ErrExists] and removing a
 //     pair without one is [ErrNotFound]. Both are checked here before the
 //     governed write, and the store decides them again inside it: a
@@ -63,7 +64,7 @@ var ErrNotFound = domain.ErrDependencyNotFound
 type DeclareFunc func(ctx context.Context, dep domain.EventDependency) (domain.DependencyChange, error)
 
 // RemoveFunc performs the governed removal.
-type RemoveFunc func(ctx context.Context, eventID, dependsOn, actor string) (domain.DependencyChange, error)
+type RemoveFunc func(ctx context.Context, eventID, dependsOn, actor, reason string) (domain.DependencyChange, error)
 
 // DeclareRequest is one surface's declaration, already translated from its
 // own input.
@@ -85,8 +86,11 @@ type DeclareRequest struct {
 
 // RemoveRequest is one surface's removal.
 type RemoveRequest struct {
-	EventID    string
-	DependsOn  string
+	EventID   string
+	DependsOn string
+	// Reason is an optional note saying why, stored with the removal (at
+	// most domain.MaxDependencyRemovalReasonLen characters).
+	Reason     string
 	Actor      string
 	RunAllowed func(runID string) bool
 }
@@ -95,7 +99,7 @@ type RemoveRequest struct {
 type ListRequest struct {
 	EventID string
 	// IncludeRemoved also returns removed dependencies, with who removed
-	// them and when.
+	// them, when and why, and every earlier interval of a revived pair.
 	IncludeRemoved bool
 	RunAllowed     func(runID string) bool
 }
@@ -138,6 +142,10 @@ func Remove(ctx context.Context, events ports.EventRepository, deps ports.EventD
 	if err != nil {
 		return domain.DependencyChange{}, err
 	}
+	reason := strings.TrimSpace(req.Reason)
+	if n := utf8.RuneCountInString(reason); n > domain.MaxDependencyRemovalReasonLen {
+		return domain.DependencyChange{}, fmt.Errorf("%w: reason is %d characters, at most %d", ErrInvalid, n, domain.MaxDependencyRemovalReasonLen)
+	}
 	if events == nil || deps == nil || remove == nil {
 		return domain.DependencyChange{}, errors.New("dependency: no event store, dependency store or removal to run")
 	}
@@ -149,7 +157,7 @@ func Remove(ctx context.Context, events ports.EventRepository, deps ports.EventD
 	} else if !live {
 		return domain.DependencyChange{}, fmt.Errorf("%w: %s -> %s", ErrNotFound, id, source)
 	}
-	return remove(ctx, id, source, req.Actor)
+	return remove(ctx, id, source, req.Actor, reason)
 }
 
 // Listing is one episode's dependencies: what it depends on, what depends on
@@ -279,15 +287,16 @@ func sortDependencies(rows []domain.EventDependency) {
 
 // View is the JSON wire form of one dependency. Times are RFC 3339.
 type View struct {
-	EpisodeID string `json:"episode_id"`
-	DependsOn string `json:"depends_on"`
-	Kind      string `json:"kind"`
-	Signal    string `json:"signal"`
-	Reference string `json:"reference"`
-	CreatedAt string `json:"created_at"`
-	CreatedBy string `json:"created_by"`
-	RemovedAt string `json:"removed_at,omitempty"`
-	RemovedBy string `json:"removed_by,omitempty"`
+	EpisodeID     string `json:"episode_id"`
+	DependsOn     string `json:"depends_on"`
+	Kind          string `json:"kind"`
+	Signal        string `json:"signal"`
+	Reference     string `json:"reference"`
+	CreatedAt     string `json:"created_at"`
+	CreatedBy     string `json:"created_by"`
+	RemovedAt     string `json:"removed_at,omitempty"`
+	RemovedBy     string `json:"removed_by,omitempty"`
+	RemovalReason string `json:"removal_reason,omitempty"`
 }
 
 // PendingView is the JSON wire form of a pending citation.
@@ -319,7 +328,7 @@ func NewView(d domain.EventDependency) View {
 	v := View{
 		EpisodeID: d.EventID, DependsOn: d.DependsOn, Kind: string(d.Kind), Signal: string(d.Signal),
 		Reference: d.Reference, CreatedAt: d.CreatedAt.UTC().Format(time.RFC3339Nano), CreatedBy: d.CreatedBy,
-		RemovedBy: d.RemovedBy,
+		RemovedBy: d.RemovedBy, RemovalReason: d.RemovalReason,
 	}
 	if d.RemovedAt != nil {
 		v.RemovedAt = d.RemovedAt.UTC().Format(time.RFC3339Nano)

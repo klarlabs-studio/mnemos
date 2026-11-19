@@ -294,7 +294,9 @@ paths:
         episodes that depend on it (`dependents`), and its citations that named
         no stored episode yet (`pending_citations`). Live dependencies only,
         unless `include_removed=true`, which adds the ones removed by hand with
-        `removed_at` / `removed_by`. The same document as `mnemos dependencies
+        `removed_at` / `removed_by` / `removal_reason`, one entry per interval:
+        a dependency removed and declared again appears once for each time it
+        was in force. The same document as `mnemos dependencies
         --json` and the `episode_dependencies` MCP tool. A run-scoped token
         sees only episodes of its runs: another run's episode is a `404`, and
         rows whose other episode is outside its runs are left out.
@@ -361,7 +363,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "409":
-          description: The pair already has a live dependency
+          description: The pair already has a live dependency (also when another request declared it concurrently)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -369,22 +371,40 @@ paths:
     delete:
       summary: Remove an episode dependency (ADR 0038)
       description: |
-        Marks the dependency removed (who, when). The row is kept, so detecting
-        the same citation again does not bring it back; only a declaration
-        revives it. The beliefs the episode evidences are rescored. Nothing is
-        un-retracted; `source_retracted` reports the source's state.
+        Marks the dependency removed (who, when and, optionally, why). The row
+        is kept, so detecting the same citation again does not bring it back;
+        only a declaration revives it, and a revival keeps this removal in the
+        pair's edit history. The beliefs the episode evidences are rescored.
+        Nothing is un-retracted; `source_retracted` reports the source's state.
 
-        Requires the `claims:write` scope. A pair with no live dependency, or
-        an episode outside the token's runs, is a `404`.
+        The reason goes in the `reason` query parameter or a JSON body
+        `{"reason": "..."}`, not both. Requires the `claims:write` scope. A
+        pair with no live dependency, or an episode outside the token's runs,
+        is a `404`; one removed concurrently by another request is the same
+        `404`.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string }, description: "The dependent episode id." }
         - { name: depends_on, in: path, required: true, schema: { type: string }, description: "The source episode id." }
+        - { name: reason, in: query, required: false, schema: { type: string, maxLength: 512 }, description: "Why it is wrong; stored with the removal." }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 512, description: "Why it is wrong; stored with the removal." }
       responses:
         "200":
           description: The removal (the same document as `mnemos dependencies --remove --json` and `remove_episode_dependency`)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EpisodeDependencyChange" }
+        "400":
+          description: An over-long reason, a reason in both the query and the body, or an invalid body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404":
@@ -1983,6 +2003,7 @@ components:
         created_by: { type: string }
         removed_at: { type: string, format: date-time, description: "Set on a dependency removed by hand." }
         removed_by: { type: string }
+        removal_reason: { type: string, description: "Why it was removed, when the remover said." }
     EpisodeDependencies:
       type: object
       properties:

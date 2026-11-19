@@ -71,19 +71,35 @@ func (r EventDependencyRepository) ListDependentsWithRemoved(ctx context.Context
 	return r.list(ctx, "depends_on", ids, true)
 }
 
-// Declare implements [ports.EventDependencyRepository.Declare]. One upsert:
-// a new pair is inserted, a removed one revived, and a live one left alone
-// (no row affected), which is ErrDependencyExists.
+// Declare implements [ports.EventDependencyRepository.Declare]. In one
+// transaction: a tombstone for the pair is copied into the edit history, then
+// one upsert inserts a new pair, revives a removed one, or leaves a live one
+// alone (no row affected), which is ErrDependencyExists and rolls the copy
+// back. Both statements are conditional on the stored row being removed, so
+// they agree on what they saw.
 func (r EventDependencyRepository) Declare(ctx context.Context, d domain.EventDependency) (domain.EventDependency, error) {
 	if err := d.Validate(); err != nil {
 		return domain.EventDependency{}, fmt.Errorf("invalid event dependency: %w", err)
 	}
-	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO event_dependencies (event_id, depends_on, kind, signal_type, reference_text, created_at, created_by, removed_at, removed_by)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '')
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.EventDependency{}, fmt.Errorf("begin declare tx: %w", err)
+	}
+	defer rollbackTx(tx)
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO event_dependency_history (event_id, depends_on, kind, signal_type, reference_text, valid_from, recorded_by, valid_to, removed_by, removal_reason)
+		 SELECT event_id, depends_on, kind, signal_type, reference_text, created_at, created_by, removed_at, removed_by, removal_reason
+		 FROM event_dependencies WHERE event_id = ? AND depends_on = ? AND removed_at IS NOT NULL`,
+		d.EventID, d.DependsOn,
+	); err != nil {
+		return domain.EventDependency{}, fmt.Errorf("keep the removed interval of %s -> %s: %w", d.EventID, d.DependsOn, err)
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO event_dependencies (event_id, depends_on, kind, signal_type, reference_text, created_at, created_by, removed_at, removed_by, removal_reason)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '', '')
 		 ON CONFLICT (event_id, depends_on) DO UPDATE SET
 		   kind = excluded.kind, signal_type = excluded.signal_type, reference_text = excluded.reference_text,
-		   created_at = excluded.created_at, created_by = excluded.created_by, removed_at = NULL, removed_by = ''
+		   created_at = excluded.created_at, created_by = excluded.created_by, removed_at = NULL, removed_by = '', removal_reason = ''
 		 WHERE event_dependencies.removed_at IS NOT NULL`,
 		d.EventID, d.DependsOn, string(d.Kind), string(d.Signal), d.Reference,
 		d.CreatedAt.UTC().Format(time.RFC3339Nano), actorOr(d.CreatedBy),
@@ -96,14 +112,17 @@ func (r EventDependencyRepository) Declare(ctx context.Context, d domain.EventDe
 	} else if n == 0 {
 		return domain.EventDependency{}, fmt.Errorf("%w: %s -> %s", domain.ErrDependencyExists, d.EventID, d.DependsOn)
 	}
+	if err := tx.Commit(); err != nil {
+		return domain.EventDependency{}, fmt.Errorf("commit declare tx: %w", err)
+	}
 	return r.get(ctx, d.EventID, d.DependsOn)
 }
 
 // Remove implements [ports.EventDependencyRepository.Remove].
-func (r EventDependencyRepository) Remove(ctx context.Context, eventID, dependsOn, removedBy string, at time.Time) (domain.EventDependency, error) {
+func (r EventDependencyRepository) Remove(ctx context.Context, eventID, dependsOn, removedBy, reason string, at time.Time) (domain.EventDependency, error) {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE event_dependencies SET removed_at = ?, removed_by = ? WHERE event_id = ? AND depends_on = ? AND removed_at IS NULL`,
-		at.UTC().Format(time.RFC3339Nano), actorOr(removedBy), eventID, dependsOn,
+		`UPDATE event_dependencies SET removed_at = ?, removed_by = ?, removal_reason = ? WHERE event_id = ? AND depends_on = ? AND removed_at IS NULL`,
+		at.UTC().Format(time.RFC3339Nano), actorOr(removedBy), reason, eventID, dependsOn,
 	)
 	if err != nil {
 		return domain.EventDependency{}, fmt.Errorf("remove event dependency %s -> %s: %w", eventID, dependsOn, err)
@@ -116,54 +135,55 @@ func (r EventDependencyRepository) Remove(ctx context.Context, eventID, dependsO
 	return r.get(ctx, eventID, dependsOn)
 }
 
-// get reads back one stored row, live or removed.
+// get reads back the current row of one pair, live or removed.
 func (r EventDependencyRepository) get(ctx context.Context, eventID, dependsOn string) (domain.EventDependency, error) {
-	rows, err := r.ListByEventIDsWithRemoved(ctx, []string{eventID})
+	rows, err := r.db.QueryContext(ctx, `SELECT `+dependencyColumns+` FROM event_dependencies WHERE event_id = ? AND depends_on = ?`, eventID, dependsOn)
 	if err != nil {
-		return domain.EventDependency{}, err
+		return domain.EventDependency{}, fmt.Errorf("read event dependency %s -> %s: %w", eventID, dependsOn, err)
 	}
-	for _, d := range rows {
-		if d.DependsOn == dependsOn {
-			return d, nil
+	defer closeRows(rows)
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return domain.EventDependency{}, err
 		}
+		return domain.EventDependency{}, fmt.Errorf("%w: %s -> %s", domain.ErrDependencyNotFound, eventID, dependsOn)
 	}
-	return domain.EventDependency{}, fmt.Errorf("%w: %s -> %s", domain.ErrDependencyNotFound, eventID, dependsOn)
+	return scanDependency(rows)
 }
 
+// dependencyColumns is the projection of event_dependencies; the history's
+// historyColumns names the same values in the same order.
+const (
+	dependencyColumns = `event_id, depends_on, kind, signal_type, reference_text, created_at, created_by, removed_at, removed_by, removal_reason`
+	historyColumns    = `event_id, depends_on, kind, signal_type, reference_text, valid_from, recorded_by, valid_to, removed_by, removal_reason`
+)
+
 func (r EventDependencyRepository) list(ctx context.Context, column string, ids []string, withRemoved bool) ([]domain.EventDependency, error) {
-	live := " AND removed_at IS NULL"
-	if withRemoved {
-		live = ""
+	query := func(n int) string {
+		in := column + ` IN (` + placeholders(n) + `)`
+		if !withRemoved {
+			return `SELECT ` + dependencyColumns + ` FROM event_dependencies WHERE ` + in + ` AND removed_at IS NULL ORDER BY created_at, event_id, depends_on`
+		}
+		// Every interval: the current rows and the ones a revival superseded.
+		return `SELECT ` + dependencyColumns + ` FROM event_dependencies WHERE ` + in +
+			` UNION ALL SELECT ` + historyColumns + ` FROM event_dependency_history WHERE ` + in +
+			` ORDER BY 6, 1, 2`
 	}
 	out := make([]domain.EventDependency, 0)
 	err := inChunks(ids, func(chunk []string) error {
-		rows, err := r.db.QueryContext(ctx,
-			`SELECT event_id, depends_on, kind, signal_type, reference_text, created_at, created_by, removed_at, removed_by FROM event_dependencies WHERE `+column+` IN (`+placeholders(len(chunk))+`)`+live+` ORDER BY created_at, event_id, depends_on`, //nolint:gosec // G202: column and live are literals, placeholders are literal "?"
-			anyArgs(chunk)...)
+		args := anyArgs(chunk)
+		if withRemoved {
+			args = append(args, anyArgs(chunk)...)
+		}
+		rows, err := r.db.QueryContext(ctx, query(len(chunk)), args...) //nolint:gosec // G202: column is a literal, placeholders are literal "?"
 		if err != nil {
 			return fmt.Errorf("list event dependencies: %w", err)
 		}
 		defer closeRows(rows)
 		for rows.Next() {
-			var (
-				d            domain.EventDependency
-				kind, signal string
-				created      string
-				removed      sql.NullString
-			)
-			if err := rows.Scan(&d.EventID, &d.DependsOn, &kind, &signal, &d.Reference, &created, &d.CreatedBy, &removed, &d.RemovedBy); err != nil {
-				return fmt.Errorf("scan event dependency: %w", err)
-			}
-			d.Kind, d.Signal = domain.DependencyKind(kind), domain.DependencySignal(signal)
-			if d.CreatedAt, err = time.Parse(time.RFC3339Nano, created); err != nil {
-				return fmt.Errorf("parse event dependency created_at: %w", err)
-			}
-			if removed.Valid {
-				at, err := time.Parse(time.RFC3339Nano, removed.String)
-				if err != nil {
-					return fmt.Errorf("parse event dependency removed_at: %w", err)
-				}
-				d.RemovedAt = &at
+			d, err := scanDependency(rows)
+			if err != nil {
+				return err
 			}
 			out = append(out, d)
 		}
@@ -173,4 +193,29 @@ func (r EventDependencyRepository) list(ctx context.Context, column string, ids 
 		return nil, err
 	}
 	return out, nil
+}
+
+func scanDependency(rows *sql.Rows) (domain.EventDependency, error) {
+	var (
+		d            domain.EventDependency
+		kind, signal string
+		created      string
+		removed      sql.NullString
+	)
+	if err := rows.Scan(&d.EventID, &d.DependsOn, &kind, &signal, &d.Reference, &created, &d.CreatedBy, &removed, &d.RemovedBy, &d.RemovalReason); err != nil {
+		return domain.EventDependency{}, fmt.Errorf("scan event dependency: %w", err)
+	}
+	d.Kind, d.Signal = domain.DependencyKind(kind), domain.DependencySignal(signal)
+	var err error
+	if d.CreatedAt, err = time.Parse(time.RFC3339Nano, created); err != nil {
+		return domain.EventDependency{}, fmt.Errorf("parse event dependency created_at: %w", err)
+	}
+	if removed.Valid {
+		at, err := time.Parse(time.RFC3339Nano, removed.String)
+		if err != nil {
+			return domain.EventDependency{}, fmt.Errorf("parse event dependency removed_at: %w", err)
+		}
+		d.RemovedAt = &at
+	}
+	return d, nil
 }

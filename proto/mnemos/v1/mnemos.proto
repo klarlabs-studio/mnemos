@@ -154,12 +154,13 @@ service MnemosService {
   // tool. Requires claims:write; an unknown episode is NOT_FOUND, a bad kind,
   // note or pair INVALID_ARGUMENT, a live dependency ALREADY_EXISTS.
   rpc DeclareEpisodeDependency(DeclareEpisodeDependencyRequest) returns (EpisodeDependencyChange);
-  // RemoveEpisodeDependency marks a dependency removed (kept as a tombstone,
-  // so detection cannot re-add it) and rescores the dependent episode's
+  // RemoveEpisodeDependency marks a dependency removed, with an optional
+  // reason (kept as a tombstone, so detection cannot re-add it; a revival
+  // keeps it in the edit history) and rescores the dependent episode's
   // beliefs; it never un-retracts anything. The same operation as REST
   // DELETE /v1/episodes/{id}/dependencies/{depends_on} and the
   // remove_episode_dependency MCP tool. Requires claims:write; a pair with no
-  // live dependency is NOT_FOUND.
+  // live dependency is NOT_FOUND, an over-long reason INVALID_ARGUMENT.
   rpc RemoveEpisodeDependency(RemoveEpisodeDependencyRequest) returns (EpisodeDependencyChange);
   // Classify reports whether a candidate statement fits established knowledge or is novel.
   rpc Classify(ClassifyRequest) returns (ClassifyResponse);
@@ -975,7 +976,8 @@ message RelinkedBelief {
 
 // EpisodeDependency is one source dependency (ADR 0038): episode_id cites,
 // copies or derives from depends_on. signal is metadata, link, named_source or
-// declared; removed_at is set on one removed by hand.
+// declared; removed_at is set on one removed by hand, with removal_reason. A
+// listing with include_removed has one entry per interval of a pair.
 message EpisodeDependency {
   string episode_id                    = 1;
   string depends_on                    = 2;
@@ -986,6 +988,7 @@ message EpisodeDependency {
   string created_by                    = 7;
   google.protobuf.Timestamp removed_at = 8;
   string removed_by                    = 9;
+  string removal_reason                = 10; // why it was removed, if given
 }
 message PendingCitation {
   string lookup_key                    = 1;
@@ -1010,6 +1013,7 @@ message DeclareEpisodeDependencyRequest {
 message RemoveEpisodeDependencyRequest {
   string episode_id = 1;
   string depends_on = 2;
+  string reason     = 3; // optional, at most 512 characters
 }
 // EpisodeDependencyChange is what a declaration or removal did.
 message EpisodeDependencyChange {

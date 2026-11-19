@@ -41,17 +41,20 @@ var ErrInvalidDependency = dependency.ErrInvalid
 // from DependsOn. Kind is cites, copies or derived_from; Signal is what
 // recorded it (metadata, link, named_source, or declared for one declared by
 // hand); Reference is the text or note that justified it. RemovedAt is set on
-// a dependency removed by hand.
+// a dependency removed by hand, with RemovalReason the remover's reason, if
+// any. A listing with removed dependencies has one entry per interval, so a
+// pair removed and declared again appears once per time it was in force.
 type EventDependency struct {
-	EventID   string
-	DependsOn string
-	Kind      string
-	Signal    string
-	Reference string
-	CreatedAt time.Time
-	CreatedBy string
-	RemovedAt *time.Time
-	RemovedBy string
+	EventID       string
+	DependsOn     string
+	Kind          string
+	Signal        string
+	Reference     string
+	CreatedAt     time.Time
+	CreatedBy     string
+	RemovedAt     *time.Time
+	RemovedBy     string
+	RemovalReason string
 }
 
 // PendingCitation is a citation of an event that named no stored event yet;
@@ -84,7 +87,7 @@ type EventDependencyChange struct {
 
 type declareDependencyInput struct{ Dependency domain.EventDependency }
 
-type removeDependencyInput struct{ EventID, DependsOn, Actor string }
+type removeDependencyInput struct{ EventID, DependsOn, Actor, Reason string }
 
 // EventDependencies implements [Memory.EventDependencies].
 func (m *memory) EventDependencies(ctx context.Context, eventID string, includeRemoved bool) (EventDependencies, error) {
@@ -120,12 +123,12 @@ func (m *memory) DeclareEventDependency(ctx context.Context, eventID, dependsOn,
 }
 
 // RemoveEventDependency implements [Memory.RemoveEventDependency].
-func (m *memory) RemoveEventDependency(ctx context.Context, eventID, dependsOn string) (EventDependencyChange, error) {
-	remove := func(ctx context.Context, id, source, actor string) (domain.DependencyChange, error) {
-		return dispatchWrite[domain.DependencyChange](ctx, m, actionRemoveDependency, removeDependencyInput{EventID: id, DependsOn: source, Actor: actor})
+func (m *memory) RemoveEventDependency(ctx context.Context, eventID, dependsOn, reason string) (EventDependencyChange, error) {
+	remove := func(ctx context.Context, id, source, actor, reason string) (domain.DependencyChange, error) {
+		return dispatchWrite[domain.DependencyChange](ctx, m, actionRemoveDependency, removeDependencyInput{EventID: id, DependsOn: source, Actor: actor, Reason: reason})
 	}
 	change, err := dependency.Remove(ctx, m.conn.Events, m.conn.Dependencies, remove, dependency.RemoveRequest{
-		EventID: eventID, DependsOn: dependsOn, Actor: m.actorID,
+		EventID: eventID, DependsOn: dependsOn, Reason: reason, Actor: m.actorID,
 	})
 	if err != nil {
 		return EventDependencyChange{}, fmt.Errorf("mnemos: RemoveEventDependency: %w", err)
@@ -158,7 +161,7 @@ func (e removeDependencyExecutor) Execute(ctx context.Context, input any, _ axid
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("%s: unexpected input type %T", actionRemoveDependency, input)
 	}
-	change, err := govwrite.ApplyDependencyRemoval(ctx, e.m.conn, in.EventID, in.DependsOn, in.Actor)
+	change, err := govwrite.ApplyDependencyRemoval(ctx, e.m.conn, in.EventID, in.DependsOn, in.Actor, in.Reason)
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, err
 	}
@@ -178,13 +181,14 @@ func dependencyResult(verb, kind string, change domain.DependencyChange) (axidom
 	}, []axidomain.EvidenceRecord{{Kind: kind, Source: evidenceSourceLibrary, Value: map[string]any{
 		"event_id": d.EventID, "depends_on": d.DependsOn, "kind": string(d.Kind), "signal": string(d.Signal),
 		"rescored_claims": len(change.RescoredBeliefs), "source_retracted": change.SourceRetracted, "changed_by": actor,
+		"reason": d.RemovalReason,
 	}}}, nil
 }
 
 func toPublicDependency(d domain.EventDependency) EventDependency {
 	return EventDependency{
 		EventID: d.EventID, DependsOn: d.DependsOn, Kind: string(d.Kind), Signal: string(d.Signal), Reference: d.Reference,
-		CreatedAt: d.CreatedAt, CreatedBy: d.CreatedBy, RemovedAt: d.RemovedAt, RemovedBy: d.RemovedBy,
+		CreatedAt: d.CreatedAt, CreatedBy: d.CreatedBy, RemovedAt: d.RemovedAt, RemovedBy: d.RemovedBy, RemovalReason: d.RemovalReason,
 	}
 }
 

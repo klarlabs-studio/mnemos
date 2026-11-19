@@ -69,10 +69,10 @@ func TestEventDependencies_ConcurrentEditsKeepTheirSentinel(t *testing.T) {
 	}
 
 	editErr = race(func(ctx context.Context, deps ports.EventDependencyRepository) error {
-		_, err := deps.Remove(ctx, "ev_copy", "ev_src", "other-writer", time.Now().UTC())
+		_, err := deps.Remove(ctx, "ev_copy", "ev_src", "other-writer", "", time.Now().UTC())
 		return err
 	})
-	if _, err := mem.RemoveEventDependency(ctx, "ev_copy", "ev_src"); !errors.Is(err, ErrDependencyNotFound) {
+	if _, err := mem.RemoveEventDependency(ctx, "ev_copy", "ev_src", ""); !errors.Is(err, ErrDependencyNotFound) {
 		t.Errorf("raced removal: err = %v, want ErrDependencyNotFound", err)
 	}
 	if *editErr != nil {

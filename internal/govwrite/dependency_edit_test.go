@@ -52,7 +52,7 @@ func TestRemoveEventDependency_RestoresIndependence(t *testing.T) {
 	if got, want := evidenceCount(t, w, "cl_false"), domain.EffectiveEvidenceCount(1, 2); got != want {
 		t.Fatalf("cl_false evidence count before = %d, want %d (the blog is a copy)", got, want)
 	}
-	change, err := w.RemoveEventDependency(ctx, "ev_blog", "ev_adv", "dave")
+	change, err := w.RemoveEventDependency(ctx, "ev_blog", "ev_adv", "dave", "")
 	if err != nil {
 		t.Fatalf("RemoveEventDependency: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestRemoveEventDependency_MissingIsAnError(t *testing.T) {
 	t.Parallel()
 	w := newWriter(t)
 	seedDependenceFixture(t, w)
-	if _, err := govwrite.ApplyDependencyRemoval(context.Background(), w.Conn(), "ev_notes", "ev_adv", "x"); err == nil {
+	if _, err := govwrite.ApplyDependencyRemoval(context.Background(), w.Conn(), "ev_notes", "ev_adv", "x", ""); err == nil {
 		t.Fatal("removing a dependency that was never recorded succeeded")
 	}
 }
@@ -175,10 +175,10 @@ func TestDependencyEdits_GovernedConflictsKeepTheirType(t *testing.T) {
 	if _, err := w.DeclareEventDependency(ctx, dep); !errors.Is(err, domain.ErrDependencyExists) {
 		t.Errorf("declaring a live pair: err = %v, want ErrDependencyExists", err)
 	}
-	if _, err := w.RemoveEventDependency(ctx, "ev_blog", "ev_adv", "dave"); err != nil {
+	if _, err := w.RemoveEventDependency(ctx, "ev_blog", "ev_adv", "dave", ""); err != nil {
 		t.Fatalf("RemoveEventDependency: %v", err)
 	}
-	if _, err := w.RemoveEventDependency(ctx, "ev_blog", "ev_adv", "dave"); !errors.Is(err, domain.ErrDependencyNotFound) {
+	if _, err := w.RemoveEventDependency(ctx, "ev_blog", "ev_adv", "dave", ""); !errors.Is(err, domain.ErrDependencyNotFound) {
 		t.Errorf("removing a removed pair: err = %v, want ErrDependencyNotFound", err)
 	}
 	if _, err := w.DeclareEventDependency(ctx, dep); err != nil {

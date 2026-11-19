@@ -52,10 +52,10 @@ func runDependencyDeclare(ctx context.Context, w *govwrite.Writer, eventID, depe
 }
 
 // runDependencyRemove is the one call path from a daemon surface to a removal.
-func runDependencyRemove(ctx context.Context, w *govwrite.Writer, eventID, dependsOn, actor string, runAllowed func(string) bool) (dependencyChangeView, error) {
+func runDependencyRemove(ctx context.Context, w *govwrite.Writer, eventID, dependsOn, reason, actor string, runAllowed func(string) bool) (dependencyChangeView, error) {
 	conn := w.Conn()
 	change, err := dependency.Remove(ctx, conn.Events, conn.Dependencies, w.RemoveEventDependency, dependency.RemoveRequest{
-		EventID: eventID, DependsOn: dependsOn, Actor: actor, RunAllowed: runAllowed,
+		EventID: eventID, DependsOn: dependsOn, Reason: reason, Actor: actor, RunAllowed: runAllowed,
 	})
 	if err != nil {
 		return dependencyChangeView{}, err
@@ -67,7 +67,7 @@ func runDependencyRemove(ctx context.Context, w *govwrite.Writer, eventID, depen
 
 type mcpEpisodeDependenciesInput struct {
 	EpisodeID      string `json:"episode_id" jsonschema:"required,description=ID of the episode (event) whose source dependencies to list"`
-	IncludeRemoved bool   `json:"include_removed,omitempty" jsonschema:"description=Also list dependencies removed by hand, with who removed them and when"`
+	IncludeRemoved bool   `json:"include_removed,omitempty" jsonschema:"description=Also list dependencies removed by hand, with who removed them, when and why, and every earlier interval of a dependency declared again"`
 }
 
 type mcpDeclareEpisodeDependencyInput struct {
@@ -80,6 +80,7 @@ type mcpDeclareEpisodeDependencyInput struct {
 type mcpRemoveEpisodeDependencyInput struct {
 	EpisodeID string `json:"episode_id" jsonschema:"required,description=ID of the dependent episode"`
 	DependsOn string `json:"depends_on" jsonschema:"required,description=ID of the source episode whose dependency to remove"`
+	Reason    string `json:"reason,omitempty" jsonschema:"description=Why it is wrong (at most 512 characters); stored with the removal"`
 }
 
 func mcpRunEpisodeDependencies(ctx context.Context, input mcpEpisodeDependenciesInput) (dependencyListView, error) {
@@ -112,7 +113,7 @@ func mcpRunRemoveEpisodeDependency(ctx context.Context, actor string, input mcpR
 		return dependencyChangeView{}, err
 	}
 	defer closeWriter(gw)
-	view, err := runDependencyRemove(ctx, gw, input.EpisodeID, input.DependsOn, actor, func(runID string) bool {
+	view, err := runDependencyRemove(ctx, gw, input.EpisodeID, input.DependsOn, input.Reason, actor, func(runID string) bool {
 		return mcpRunAllowed(ctx, runID)
 	})
 	return view, mcpDependencyError(err, input.EpisodeID, input.DependsOn)
@@ -122,11 +123,11 @@ func mcpRunRemoveEpisodeDependency(ctx context.Context, actor string, input mcpR
 
 const dependenciesUsage = "  mnemos dependencies <episode-id> [--include-removed]\n" +
 	"  mnemos dependencies <episode-id> --declare <source-id> --kind cites|copies|derived_from [--note <text>]\n" +
-	"  mnemos dependencies <episode-id> --remove <source-id>"
+	"  mnemos dependencies <episode-id> --remove <source-id> [--reason <text>]"
 
 type dependenciesArgs struct {
-	id, declare, remove, kind, note string
-	includeRemoved                  bool
+	id, declare, remove, kind, note, reason string
+	includeRemoved                          bool
 }
 
 func parseDependenciesArgs(args []string) (dependenciesArgs, error) {
@@ -155,6 +156,8 @@ func parseDependenciesArgs(args []string) (dependenciesArgs, error) {
 			a.kind, err = value(&i, name)
 		case name == "--note":
 			a.note, err = value(&i, name)
+		case name == "--reason":
+			a.reason, err = value(&i, name)
 		case arg == "--include-removed":
 			a.includeRemoved = true
 		case strings.HasPrefix(arg, "-"):
@@ -175,6 +178,8 @@ func parseDependenciesArgs(args []string) (dependenciesArgs, error) {
 		return a, NewUserError("--declare and --remove cannot be combined\n%s", dependenciesUsage)
 	case a.declare == "" && (a.kind != "" || a.note != ""):
 		return a, NewUserError("--kind and --note go with --declare\n%s", dependenciesUsage)
+	case a.remove == "" && a.reason != "":
+		return a, NewUserError("--reason goes with --remove\n%s", dependenciesUsage)
 	case a.declare != "" && a.kind == "":
 		return a, NewUserError("--declare requires --kind cites|copies|derived_from\n%s", dependenciesUsage)
 	case a.includeRemoved && (a.declare != "" || a.remove != ""):
@@ -203,7 +208,7 @@ func handleDependencies(args []string, f Flags) {
 		if a.declare != "" {
 			view, err = runDependencyDeclare(ctx, w, a.id, a.declare, a.kind, a.note, actor, nil)
 		} else {
-			view, err = runDependencyRemove(ctx, w, a.id, a.remove, actor, nil)
+			view, err = runDependencyRemove(ctx, w, a.id, a.remove, a.reason, actor, nil)
 		}
 		if err := dependencyCLIError(err, a); err != nil {
 			return err
@@ -290,6 +295,9 @@ func printDependencyRow(d dependency.View) {
 	line += fmt.Sprintf(", by %s at %s)", d.CreatedBy, d.CreatedAt)
 	if d.RemovedAt != "" {
 		line += fmt.Sprintf(" removed by %s at %s", d.RemovedBy, d.RemovedAt)
+		if d.RemovalReason != "" {
+			line += fmt.Sprintf(": %q", d.RemovalReason)
+		}
 	}
 	fmt.Println(line)
 }
@@ -316,6 +324,9 @@ func printDependencyChange(v dependencyChangeView) {
 	d := v.Dependency
 	if d.RemovedAt != "" {
 		fmt.Printf("Removed: episode %s no longer %s episode %s (removed by %s).\n", d.EpisodeID, d.Kind, d.DependsOn, d.RemovedBy)
+		if d.RemovalReason != "" {
+			fmt.Printf("  reason: %s\n", d.RemovalReason)
+		}
 	} else {
 		fmt.Printf("Declared: episode %s %s episode %s (by %s).\n", d.EpisodeID, d.Kind, d.DependsOn, d.CreatedBy)
 	}

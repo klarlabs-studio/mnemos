@@ -355,6 +355,7 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
   created_by     VARCHAR(190) NOT NULL DEFAULT '<system>',
   removed_at     DATETIME(6)  NULL,
   removed_by     VARCHAR(190) NOT NULL DEFAULT '',
+  removal_reason VARCHAR(512) NOT NULL DEFAULT '',
   PRIMARY KEY (event_id, depends_on),
   KEY idx_event_dependencies_depends_on (depends_on)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -362,6 +363,34 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
 -- dependency keeps its row with removed_at set, so detection cannot re-add it.
 ALTER TABLE event_dependencies ADD COLUMN IF NOT EXISTS removed_at DATETIME(6) NULL;
 ALTER TABLE event_dependencies ADD COLUMN IF NOT EXISTS removed_by VARCHAR(190) NOT NULL DEFAULT '';
+-- Why it was removed (ADR 0038, edit history); existing tombstones read ''.
+-- VARCHAR(512) counts characters, the bound every surface enforces.
+ALTER TABLE event_dependencies ADD COLUMN IF NOT EXISTS removal_reason VARCHAR(512) NOT NULL DEFAULT '';
+
+-- event_dependency_history (ADR 0038, editing dependencies): the closed
+-- intervals of a pair's record that a revival superseded. Declaring a removed
+-- pair copies its tombstone here, unchanged, in the transaction that
+-- overwrites the current row. Append-only; recorded-as-of reads count a
+-- dependency at T iff the current row or one of these contains T. Existing
+-- tombstones need no backfill: each is already one closed interval and moves
+-- here on its first revival. No foreign keys: deleting an event clears its
+-- rows in both directions explicitly.
+CREATE TABLE IF NOT EXISTS event_dependency_history (
+  id             BIGINT       NOT NULL AUTO_INCREMENT,
+  event_id       VARCHAR(190) NOT NULL,
+  depends_on     VARCHAR(190) NOT NULL,
+  kind           VARCHAR(32)  NOT NULL,
+  signal_type    VARCHAR(32)  NOT NULL,
+  reference_text TEXT         NOT NULL,
+  valid_from     DATETIME(6)  NOT NULL,
+  recorded_by    VARCHAR(190) NOT NULL DEFAULT '<system>',
+  valid_to       DATETIME(6)  NOT NULL,
+  removed_by     VARCHAR(190) NOT NULL DEFAULT '',
+  removal_reason VARCHAR(512) NOT NULL DEFAULT '',
+  PRIMARY KEY (id),
+  KEY idx_event_dependency_history_event_id (event_id),
+  KEY idx_event_dependency_history_depends_on (depends_on)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- pending_references (ADR 0038, late citations): a citation in episode
 -- event_id that named no stored episode when it was written, under a

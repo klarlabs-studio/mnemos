@@ -1285,15 +1285,17 @@ type Memory interface {
 	DeclareEventDependency(ctx context.Context, eventID, dependsOn, kind, note string) (EventDependencyChange, error)
 
 	// RemoveEventDependency marks eventID's dependency on dependsOn removed,
-	// with the Memory's actor, and rescores the claims eventID evidences. The
-	// row is kept, so detecting the same citation again does not bring it
-	// back; only DeclareEventDependency does. It never un-retracts anything.
-	// Returns an error wrapping [ErrDependencyNotFound] when the pair has no
-	// live dependency. It is the same operation as `mnemos dependencies
+	// with the Memory's actor and reason (optional, at most 512 characters),
+	// and rescores the claims eventID evidences. The row is kept, so
+	// detecting the same citation again does not bring it back; only
+	// DeclareEventDependency does, and a revival keeps this removal in the
+	// pair's edit history. It never un-retracts anything. Returns an error
+	// wrapping [ErrDependencyNotFound] when the pair has no live dependency,
+	// and [ErrInvalidDependency] for an over-long reason. It is the same operation as `mnemos dependencies
 	// --remove`, the remove_episode_dependency MCP tool, REST DELETE
 	// /v1/episodes/{id}/dependencies/{depends_on} and the gRPC
 	// RemoveEpisodeDependency RPC.
-	RemoveEventDependency(ctx context.Context, eventID, dependsOn string) (EventDependencyChange, error)
+	RemoveEventDependency(ctx context.Context, eventID, dependsOn, reason string) (EventDependencyChange, error)
 
 	// DeprecateClaim marks a claim deprecated, recording reason (or a default)
 	// and the Memory's actor on the status transition; the claim, its evidence
