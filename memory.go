@@ -1259,6 +1259,42 @@ type Memory interface {
 	// the gRPC UnretractEpisode RPC.
 	UnretractEvent(ctx context.Context, eventID, reason string) (EventUnretraction, error)
 
+	// EventDependencies lists eventID's source dependencies (ADR 0038): the
+	// events it cites, copies or derives from, the events that depend on it,
+	// and its citations that named no stored event yet. includeRemoved also
+	// returns dependencies removed by hand, with who removed them and when.
+	// Returns an error wrapping [ErrEventNotFound] when eventID does not
+	// exist. It is the same read as `mnemos dependencies`, the
+	// episode_dependencies MCP tool, REST GET /v1/episodes/{id}/dependencies
+	// and the gRPC ListEpisodeDependencies RPC.
+	EventDependencies(ctx context.Context, eventID string, includeRemoved bool) (EventDependencies, error)
+
+	// DeclareEventDependency records by hand that eventID depends on
+	// dependsOn (kind is cites, copies or derived_from; note is an optional
+	// justification of at most 512 characters), with the Memory's actor, and
+	// rescores the claims eventID evidences: a dependent event is not counted
+	// as an independent source. It never retracts anything; the result says
+	// whether dependsOn is retracted, in which case retracting it again would
+	// now reach eventID's claims. Declaring a pair whose dependency was
+	// removed revives it. Returns an error wrapping [ErrEventNotFound] when
+	// either event does not exist, [ErrDependencyExists] when the pair already
+	// has a live dependency and [ErrInvalidDependency] for a bad kind, note or
+	// pair. It is the same operation as `mnemos dependencies --declare`, the
+	// declare_episode_dependency MCP tool, REST POST
+	// /v1/episodes/{id}/dependencies and the gRPC DeclareEpisodeDependency RPC.
+	DeclareEventDependency(ctx context.Context, eventID, dependsOn, kind, note string) (EventDependencyChange, error)
+
+	// RemoveEventDependency marks eventID's dependency on dependsOn removed,
+	// with the Memory's actor, and rescores the claims eventID evidences. The
+	// row is kept, so detecting the same citation again does not bring it
+	// back; only DeclareEventDependency does. It never un-retracts anything.
+	// Returns an error wrapping [ErrDependencyNotFound] when the pair has no
+	// live dependency. It is the same operation as `mnemos dependencies
+	// --remove`, the remove_episode_dependency MCP tool, REST DELETE
+	// /v1/episodes/{id}/dependencies/{depends_on} and the gRPC
+	// RemoveEpisodeDependency RPC.
+	RemoveEventDependency(ctx context.Context, eventID, dependsOn string) (EventDependencyChange, error)
+
 	// DeprecateClaim marks a claim deprecated, recording reason (or a default)
 	// and the Memory's actor on the status transition; the claim, its evidence
 	// and its history stay readable. It is the memory_deprecate / forget MCP

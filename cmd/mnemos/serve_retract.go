@@ -30,8 +30,14 @@ type retractRequest struct {
 func makeEpisodeSubresourceHandler(gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tail := strings.TrimPrefix(r.URL.Path, "/v1/episodes/")
-		parts := strings.SplitN(tail, "/", 2)
-		if len(parts) != 2 || parts[0] == "" {
+		parts := strings.SplitN(tail, "/", 3)
+		if len(parts) < 2 || parts[0] == "" {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		// /v1/episodes/{id}/dependencies/{depends_on} is the one three-segment
+		// route; every other sub-resource is exactly two segments.
+		if len(parts) == 3 && parts[1] != "dependencies" {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
@@ -40,6 +46,12 @@ func makeEpisodeSubresourceHandler(gw *govwrite.Writer) http.HandlerFunc {
 			makeRetractEpisodeHandler(gw, parts[0])(w, r)
 		case "unretract":
 			makeUnretractEpisodeHandler(gw, parts[0])(w, r)
+		case "dependencies":
+			dependsOn := ""
+			if len(parts) == 3 {
+				dependsOn = parts[2]
+			}
+			makeEpisodeDependenciesHandler(gw, parts[0], dependsOn)(w, r)
 		default:
 			writeError(w, http.StatusNotFound, "not found")
 		}
