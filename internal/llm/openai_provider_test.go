@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -77,5 +78,50 @@ func TestOpenAIClientSendsStreamFalse(t *testing.T) {
 	}
 	if !strings.Contains(gotStream, `"stream":false`) {
 		t.Fatalf("request body should include stream:false, got: %s", gotStream)
+	}
+}
+
+// Sampling parameters are opt-in: a default client sends neither, so every
+// existing caller keeps the provider's defaults; WithTemperature / WithSeed
+// send them, which is what a reproducible experiment needs.
+func TestOpenAIClientSamplingIsOptIn(t *testing.T) {
+	var bodies []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		bodies = append(bodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	msgs := []Message{{Role: RoleUser, Content: "hi"}}
+	base := NewOpenAIClient(server.URL, "", "m", "ollama")
+	if _, err := base.Complete(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+	tuned := base.WithTemperature(0).WithSeed(7)
+	if _, err := tuned.Complete(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := base.Complete(context.Background(), msgs); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, i := range []int{0, 2} {
+		if _, ok := bodies[i]["temperature"]; ok {
+			t.Errorf("request %d: default client sent temperature", i)
+		}
+		if _, ok := bodies[i]["seed"]; ok {
+			t.Errorf("request %d: default client sent seed", i)
+		}
+	}
+	if got, ok := bodies[1]["temperature"]; !ok || got != float64(0) {
+		t.Errorf("temperature = %v (present %v), want 0", got, ok)
+	}
+	if got := bodies[1]["seed"]; got != float64(7) {
+		t.Errorf("seed = %v, want 7", got)
 	}
 }

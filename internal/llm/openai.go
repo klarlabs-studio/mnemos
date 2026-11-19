@@ -19,6 +19,28 @@ type OpenAIClient struct {
 	model    string
 	provider string // for error labels: "openai", "ollama", "openai-compat"
 	http     *http.Client
+	// temperature and seed are sent only when set (WithTemperature,
+	// WithSeed); nil leaves sampling to the provider's defaults, which is
+	// what every production caller has always had.
+	temperature *float64
+	seed        *int
+}
+
+// WithTemperature returns a copy of c that sends the given sampling
+// temperature with every request. 0 asks for greedy decoding, which an
+// experiment needs to be reproducible.
+func (c *OpenAIClient) WithTemperature(t float64) *OpenAIClient {
+	cp := *c
+	cp.temperature = &t
+	return &cp
+}
+
+// WithSeed returns a copy of c that sends the given sampling seed with every
+// request (honoured by Ollama and OpenAI; ignored by backends without it).
+func (c *OpenAIClient) WithSeed(seed int) *OpenAIClient {
+	cp := *c
+	cp.seed = &seed
+	return &cp
 }
 
 // NewOpenAIClient creates a client for any OpenAI-compatible API.
@@ -42,6 +64,8 @@ type openAIRequest struct {
 	Messages       []openAIMessage    `json:"messages"`
 	Stream         bool               `json:"stream"` // explicit false: Ollama /api/chat defaults to streaming
 	ResponseFormat *openAIResponseFmt `json:"response_format,omitempty"`
+	Temperature    *float64           `json:"temperature,omitempty"`
+	Seed           *int               `json:"seed,omitempty"`
 }
 
 type openAIMessage struct {
@@ -82,9 +106,11 @@ func (c *OpenAIClient) Complete(ctx context.Context, messages []Message) (Respon
 	}
 
 	reqBody := openAIRequest{
-		Model:    c.model,
-		Messages: apiMsgs,
-		Stream:   false,
+		Model:       c.model,
+		Messages:    apiMsgs,
+		Stream:      false,
+		Temperature: c.temperature,
+		Seed:        c.seed,
 	}
 
 	// Enable JSON mode when the system prompt asks for a JSON OBJECT.
