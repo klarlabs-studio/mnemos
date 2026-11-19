@@ -460,6 +460,16 @@ type RelationshipTypeLister interface {
 	ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error)
 }
 
+// RelationshipTypePager is the optional capability to read one page of a
+// relationship type, newest first (created_at descending, id descending on
+// ties), with the total number of edges of that type. list_dissonances pages
+// 50 contradictions; it used to decode every association in the brain to do
+// it, ~0.5 s at 100k beliefs (ADR 0043). Backends serve it from an index on
+// relationships(type, created_at, id).
+type RelationshipTypePager interface {
+	PageByType(ctx context.Context, relType domain.RelationshipType, limit, offset int) ([]domain.Relationship, int, error)
+}
+
 // HealthSampler is the optional capability brain health uses on a large
 // brain: exact counts computed in the store instead of over every decoded row,
 // and a deterministic uniform sample of live beliefs for the per-belief rate

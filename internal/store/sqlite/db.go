@@ -184,6 +184,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_unique_edge
 	ON relationships(type, from_claim_id, to_claim_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_from_claim ON relationships(from_claim_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_to_claim ON relationships(to_claim_id);
+-- list_dissonances pages one type newest first (RelationshipTypePager, ADR 0043).
+CREATE INDEX IF NOT EXISTS idx_relationships_type_created ON relationships(type, created_at, id);
 
 -- cognitive_journal (ADR 0018): append-only learning log; data is a kind-specific JSON payload.
 CREATE TABLE IF NOT EXISTS cognitive_journal (

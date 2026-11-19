@@ -303,6 +303,29 @@ func (r RelationshipRepository) CloseByIDs(_ context.Context, ids []string, clos
 	return n, nil
 }
 
+// PageByType implements ports.RelationshipTypePager.
+func (r RelationshipRepository) PageByType(ctx context.Context, relType domain.RelationshipType, limit, offset int) ([]domain.Relationship, int, error) {
+	all, err := r.ListByType(ctx, relType)
+	if err != nil {
+		return nil, 0, err
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		if !all[i].CreatedAt.Equal(all[j].CreatedAt) {
+			return all[i].CreatedAt.After(all[j].CreatedAt)
+		}
+		return all[i].ID > all[j].ID
+	})
+	total := len(all)
+	if offset >= total {
+		return []domain.Relationship{}, total, nil
+	}
+	end := total
+	if limit >= 0 && offset+limit < total {
+		end = offset + limit
+	}
+	return append([]domain.Relationship(nil), all[offset:end]...), total, nil
+}
+
 // ListByType implements ports.RelationshipTypeLister.
 func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error) {
 	all, err := r.ListAll(ctx)
