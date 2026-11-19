@@ -68,22 +68,22 @@
         "fp": 13,
         "fn": 45,
         "tn": 67,
-        "precision": 0.6666666666666666,
-        "recall": 0.36619718309859156,
-        "f1": 0.4727272727272727,
+        "precision": 0.6667,
+        "recall": 0.3662,
+        "f1": 0.4727,
         "precision_ci95": {
-          "lo": 0.5116279069767442,
-          "hi": 0.8163265306122449,
+          "lo": 0.5116,
+          "hi": 0.8163,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.2537313432835821,
-          "hi": 0.4788732394366197,
+          "lo": 0.2537,
+          "hi": 0.4789,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.3516483516483517,
-          "hi": 0.583941605839416,
+          "lo": 0.3516,
+          "hi": 0.5839,
           "defined_resamples": 2000
         }
       },
@@ -94,22 +94,22 @@
         "fp": 1,
         "fn": 6,
         "tn": 32,
-        "precision": 0.9166666666666666,
-        "recall": 0.6470588235294118,
-        "f1": 0.7586206896551724,
+        "precision": 0.9167,
+        "recall": 0.6471,
+        "f1": 0.7586,
         "precision_ci95": {
-          "lo": 0.7142857142857143,
+          "lo": 0.7143,
           "hi": 1,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.4090909090909091,
+          "lo": 0.4091,
           "hi": 0.875,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.5454545454545454,
-          "hi": 0.9090909090909091,
+          "lo": 0.5455,
+          "hi": 0.9091,
           "defined_resamples": 2000
         }
       },
@@ -120,28 +120,28 @@
         "fp": 14,
         "fn": 51,
         "tn": 99,
-        "precision": 0.7254901960784313,
-        "recall": 0.42045454545454547,
-        "f1": 0.5323741007194245,
+        "precision": 0.7255,
+        "recall": 0.4205,
+        "f1": 0.5324,
         "precision_ci95": {
-          "lo": 0.5957446808510638,
-          "hi": 0.8478260869565217,
+          "lo": 0.5957,
+          "hi": 0.8478,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.31868131868131866,
-          "hi": 0.5217391304347826,
+          "lo": 0.3187,
+          "hi": 0.5217,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.42735042735042733,
+          "lo": 0.4274,
           "hi": 0.625,
           "defined_resamples": 2000
         }
       },
       "cost_test": {
         "pairs": 151,
-        "deterministic_ms": 10.057540999999997,
+        "deterministic_ms": 10.0575,
         "llm_calls": 0,
         "llm_wall_ms": 0,
         "llm_p50_ms": 0,
@@ -154,7 +154,7 @@
       },
       "cost_all": {
         "pairs": 201,
-        "deterministic_ms": 13.547080999999995,
+        "deterministic_ms": 13.5471,
         "llm_calls": 0,
         "llm_wall_ms": 0,
         "llm_p50_ms": 0,
@@ -400,22 +400,22 @@
         "fp": 16,
         "fn": 15,
         "tn": 64,
-        "precision": 0.7777777777777778,
-        "recall": 0.7887323943661971,
-        "f1": 0.7832167832167832,
+        "precision": 0.7778,
+        "recall": 0.7887,
+        "f1": 0.7832,
         "precision_ci95": {
-          "lo": 0.6756756756756757,
-          "hi": 0.8717948717948718,
+          "lo": 0.6757,
+          "hi": 0.8718,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.6891891891891891,
-          "hi": 0.8787878787878788,
+          "lo": 0.6892,
+          "hi": 0.8788,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.703125,
-          "hi": 0.8536585365853658,
+          "lo": 0.7031,
+          "hi": 0.8537,
           "defined_resamples": 2000
         }
       },
@@ -426,8 +426,8 @@
         "fp": 7,
         "fn": 1,
         "tn": 26,
-        "precision": 0.6956521739130435,
-        "recall": 0.9411764705882353,
+        "precision": 0.6957,
+        "recall": 0.9412,
         "f1": 0.8,
         "precision_ci95": {
           "lo": 0.5,
@@ -435,12 +435,12 @@
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.7894736842105263,
+          "lo": 0.7895,
           "hi": 1,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.6363636363636364,
+          "lo": 0.6364,
           "hi": 0.92,
           "defined_resamples": 2000
         }
@@ -452,38 +452,38 @@
         "fp": 23,
         "fn": 16,
         "tn": 90,
-        "precision": 0.7578947368421053,
-        "recall": 0.8181818181818182,
-        "f1": 0.7868852459016393,
+        "precision": 0.7579,
+        "recall": 0.8182,
+        "f1": 0.7869,
         "precision_ci95": {
-          "lo": 0.6702127659574468,
-          "hi": 0.8369565217391305,
+          "lo": 0.6702,
+          "hi": 0.837,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.7352941176470589,
-          "hi": 0.891566265060241,
+          "lo": 0.7353,
+          "hi": 0.8916,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.7176470588235294,
-          "hi": 0.8446601941747572,
+          "lo": 0.7176,
+          "hi": 0.8447,
           "defined_resamples": 2000
         }
       },
-      "delta_f1_vs_deterministic": 0.3104895104895105,
+      "delta_f1_vs_deterministic": 0.3105,
       "delta_f1_ci95": {
-        "lo": 0.18192974382574023,
-        "hi": 0.43394199785177223,
+        "lo": 0.1819,
+        "hi": 0.4339,
         "defined_resamples": 2000
       },
       "cost_test": {
         "pairs": 151,
         "deterministic_ms": 0,
         "llm_calls": 151,
-        "llm_wall_ms": 1119891.0315779997,
-        "llm_p50_ms": 483.393167,
-        "llm_p95_ms": 627.133833,
+        "llm_wall_ms": 1119891.0316,
+        "llm_p50_ms": 483.3932,
+        "llm_p95_ms": 627.1338,
         "prompt_tokens": 34574,
         "completion_tokens": 1352,
         "tokens_reported": true,
@@ -494,8 +494,8 @@
         "pairs": 201,
         "deterministic_ms": 0,
         "llm_calls": 201,
-        "llm_wall_ms": 1674840.838705,
-        "llm_p50_ms": 483.751042,
+        "llm_wall_ms": 1674840.8387,
+        "llm_p50_ms": 483.751,
         "llm_p95_ms": 638.406,
         "prompt_tokens": 46028,
         "completion_tokens": 1798,
@@ -738,22 +738,22 @@
         "fp": 21,
         "fn": 25,
         "tn": 59,
-        "precision": 0.6865671641791045,
-        "recall": 0.647887323943662,
-        "f1": 0.6666666666666666,
+        "precision": 0.6866,
+        "recall": 0.6479,
+        "f1": 0.6667,
         "precision_ci95": {
-          "lo": 0.5735294117647058,
+          "lo": 0.5735,
           "hi": 0.8,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.5352112676056338,
-          "hi": 0.7564102564102564,
+          "lo": 0.5352,
+          "hi": 0.7564,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.5714285714285714,
-          "hi": 0.7516778523489933,
+          "lo": 0.5714,
+          "hi": 0.7517,
           "defined_resamples": 2000
         }
       },
@@ -764,12 +764,12 @@
         "fp": 8,
         "fn": 2,
         "tn": 25,
-        "precision": 0.6521739130434783,
-        "recall": 0.8823529411764706,
+        "precision": 0.6522,
+        "recall": 0.8824,
         "f1": 0.75,
         "precision_ci95": {
-          "lo": 0.43478260869565216,
-          "hi": 0.8333333333333334,
+          "lo": 0.4348,
+          "hi": 0.8333,
           "defined_resamples": 2000
         },
         "recall_ci95": {
@@ -790,38 +790,38 @@
         "fp": 29,
         "fn": 27,
         "tn": 84,
-        "precision": 0.6777777777777778,
-        "recall": 0.6931818181818182,
-        "f1": 0.6853932584269663,
+        "precision": 0.6778,
+        "recall": 0.6932,
+        "f1": 0.6854,
         "precision_ci95": {
-          "lo": 0.5747126436781609,
-          "hi": 0.7701149425287356,
+          "lo": 0.5747,
+          "hi": 0.7701,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.5975609756097561,
-          "hi": 0.7840909090909091,
+          "lo": 0.5976,
+          "hi": 0.7841,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.6012269938650306,
-          "hi": 0.7555555555555555,
+          "lo": 0.6012,
+          "hi": 0.7556,
           "defined_resamples": 2000
         }
       },
-      "delta_f1_vs_deterministic": 0.1939393939393939,
+      "delta_f1_vs_deterministic": 0.1939,
       "delta_f1_ci95": {
-        "lo": 0.08794508794508793,
-        "hi": 0.3007623007623008,
+        "lo": 0.0879,
+        "hi": 0.3008,
         "defined_resamples": 2000
       },
       "cost_test": {
         "pairs": 151,
-        "deterministic_ms": 10.057540999999997,
+        "deterministic_ms": 10.0575,
         "llm_calls": 88,
-        "llm_wall_ms": 204324.50116700004,
-        "llm_p50_ms": 468.111958,
-        "llm_p95_ms": 619.405625,
+        "llm_wall_ms": 204324.5012,
+        "llm_p50_ms": 468.112,
+        "llm_p95_ms": 619.4056,
         "prompt_tokens": 20260,
         "completion_tokens": 780,
         "tokens_reported": true,
@@ -830,11 +830,11 @@
       },
       "cost_all": {
         "pairs": 201,
-        "deterministic_ms": 13.547080999999995,
+        "deterministic_ms": 13.5471,
         "llm_calls": 124,
-        "llm_wall_ms": 677355.9321279998,
-        "llm_p50_ms": 470.577541,
-        "llm_p95_ms": 613.297167,
+        "llm_wall_ms": 677355.9321,
+        "llm_p50_ms": 470.5775,
+        "llm_p95_ms": 613.2972,
         "prompt_tokens": 28534,
         "completion_tokens": 1102,
         "tokens_reported": true,
@@ -1082,22 +1082,22 @@
         "fp": 4,
         "fn": 2,
         "tn": 76,
-        "precision": 0.9452054794520548,
-        "recall": 0.971830985915493,
-        "f1": 0.9583333333333334,
+        "precision": 0.9452,
+        "recall": 0.9718,
+        "f1": 0.9583,
         "precision_ci95": {
-          "lo": 0.8860759493670886,
-          "hi": 0.9873417721518988,
+          "lo": 0.8861,
+          "hi": 0.9873,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.9264705882352942,
+          "lo": 0.9265,
           "hi": 1,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.9193548387096774,
-          "hi": 0.9864864864864865,
+          "lo": 0.9194,
+          "hi": 0.9865,
           "defined_resamples": 2000
         }
       },
@@ -1108,9 +1108,9 @@
         "fp": 1,
         "fn": 0,
         "tn": 32,
-        "precision": 0.9444444444444444,
+        "precision": 0.9444,
         "recall": 1,
-        "f1": 0.9714285714285714,
+        "f1": 0.9714,
         "precision_ci95": {
           "lo": 0.8125,
           "hi": 1,
@@ -1122,7 +1122,7 @@
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.896551724137931,
+          "lo": 0.8966,
           "hi": 1,
           "defined_resamples": 2000
         }
@@ -1134,38 +1134,38 @@
         "fp": 5,
         "fn": 2,
         "tn": 108,
-        "precision": 0.945054945054945,
-        "recall": 0.9772727272727273,
-        "f1": 0.9608938547486033,
+        "precision": 0.9451,
+        "recall": 0.9773,
+        "f1": 0.9609,
         "precision_ci95": {
-          "lo": 0.891566265060241,
-          "hi": 0.9876543209876543,
+          "lo": 0.8916,
+          "hi": 0.9877,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.9411764705882353,
+          "lo": 0.9412,
           "hi": 1,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.927710843373494,
-          "hi": 0.9850746268656716,
+          "lo": 0.9277,
+          "hi": 0.9851,
           "defined_resamples": 2000
         }
       },
-      "delta_f1_vs_deterministic": 0.48560606060606065,
+      "delta_f1_vs_deterministic": 0.4856,
       "delta_f1_ci95": {
-        "lo": 0.36753754890824186,
-        "hi": 0.6036281480497043,
+        "lo": 0.3675,
+        "hi": 0.6036,
         "defined_resamples": 2000
       },
       "cost_test": {
         "pairs": 151,
         "deterministic_ms": 0,
         "llm_calls": 151,
-        "llm_wall_ms": 567919.6496649997,
-        "llm_p50_ms": 3185.433917,
-        "llm_p95_ms": 3547.107791,
+        "llm_wall_ms": 567919.6497,
+        "llm_p50_ms": 3185.4339,
+        "llm_p95_ms": 3547.1078,
         "prompt_tokens": 35671,
         "completion_tokens": 1281,
         "tokens_reported": true,
@@ -1176,9 +1176,9 @@
         "pairs": 201,
         "deterministic_ms": 0,
         "llm_calls": 201,
-        "llm_wall_ms": 728156.0472900006,
-        "llm_p50_ms": 3178.128833,
-        "llm_p95_ms": 3547.107791,
+        "llm_wall_ms": 728156.0473,
+        "llm_p50_ms": 3178.1288,
+        "llm_p95_ms": 3547.1078,
         "prompt_tokens": 47476,
         "completion_tokens": 1699,
         "tokens_reported": true,
@@ -1420,22 +1420,22 @@
         "fp": 16,
         "fn": 13,
         "tn": 64,
-        "precision": 0.7837837837837838,
-        "recall": 0.8169014084507042,
+        "precision": 0.7838,
+        "recall": 0.8169,
         "f1": 0.8,
         "precision_ci95": {
-          "lo": 0.684931506849315,
-          "hi": 0.8771929824561403,
+          "lo": 0.6849,
+          "hi": 0.8772,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.7205882352941176,
-          "hi": 0.9012345679012346,
+          "lo": 0.7206,
+          "hi": 0.9012,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.7189542483660131,
-          "hi": 0.8679245283018868,
+          "lo": 0.719,
+          "hi": 0.8679,
           "defined_resamples": 2000
         }
       },
@@ -1446,11 +1446,11 @@
         "fp": 2,
         "fn": 1,
         "tn": 31,
-        "precision": 0.8888888888888888,
-        "recall": 0.9411764705882353,
-        "f1": 0.9142857142857143,
+        "precision": 0.8889,
+        "recall": 0.9412,
+        "f1": 0.9143,
         "precision_ci95": {
-          "lo": 0.7142857142857143,
+          "lo": 0.7143,
           "hi": 1,
           "defined_resamples": 2000
         },
@@ -1472,38 +1472,38 @@
         "fp": 18,
         "fn": 14,
         "tn": 95,
-        "precision": 0.8043478260869565,
-        "recall": 0.8409090909090909,
-        "f1": 0.8222222222222222,
+        "precision": 0.8043,
+        "recall": 0.8409,
+        "f1": 0.8222,
         "precision_ci95": {
-          "lo": 0.7159090909090909,
-          "hi": 0.8823529411764706,
+          "lo": 0.7159,
+          "hi": 0.8824,
           "defined_resamples": 2000
         },
         "recall_ci95": {
-          "lo": 0.7641509433962265,
-          "hi": 0.9120879120879121,
+          "lo": 0.7642,
+          "hi": 0.9121,
           "defined_resamples": 2000
         },
         "f1_ci95": {
-          "lo": 0.7582417582417582,
-          "hi": 0.8777777777777778,
+          "lo": 0.7582,
+          "hi": 0.8778,
           "defined_resamples": 2000
         }
       },
-      "delta_f1_vs_deterministic": 0.3272727272727273,
+      "delta_f1_vs_deterministic": 0.3273,
       "delta_f1_ci95": {
-        "lo": 0.22115384615384615,
-        "hi": 0.43221476510067114,
+        "lo": 0.2212,
+        "hi": 0.4322,
         "defined_resamples": 2000
       },
       "cost_test": {
         "pairs": 151,
-        "deterministic_ms": 10.057540999999997,
+        "deterministic_ms": 10.0575,
         "llm_calls": 88,
-        "llm_wall_ms": 281718.08154200006,
-        "llm_p50_ms": 3200.700459,
-        "llm_p95_ms": 3510.467417,
+        "llm_wall_ms": 281718.0815,
+        "llm_p50_ms": 3200.7005,
+        "llm_p95_ms": 3510.4674,
         "prompt_tokens": 20907,
         "completion_tokens": 749,
         "tokens_reported": true,
@@ -1512,10 +1512,10 @@
       },
       "cost_all": {
         "pairs": 201,
-        "deterministic_ms": 13.547080999999995,
+        "deterministic_ms": 13.5471,
         "llm_calls": 124,
-        "llm_wall_ms": 396751.41337299993,
-        "llm_p50_ms": 3174.265375,
+        "llm_wall_ms": 396751.4134,
+        "llm_p50_ms": 3174.2654,
         "llm_p95_ms": 3521.4545,
         "prompt_tokens": 29440,
         "completion_tokens": 1049,
@@ -1759,49 +1759,49 @@
     "gemma3:12b": [
       {
         "threshold": 0,
-        "f1": 0.9142857142857143,
+        "f1": 0.9143,
         "llm_calls": 30
       },
       {
         "threshold": 0.5,
-        "f1": 0.9142857142857143,
+        "f1": 0.9143,
         "llm_calls": 31
       },
       {
         "threshold": 0.6,
-        "f1": 0.9142857142857143,
+        "f1": 0.9143,
         "llm_calls": 34
       },
       {
         "threshold": 0.65,
-        "f1": 0.9142857142857143,
+        "f1": 0.9143,
         "llm_calls": 36
       },
       {
         "threshold": 0.7,
-        "f1": 0.9411764705882353,
+        "f1": 0.9412,
         "llm_calls": 37
       },
       {
         "threshold": 0.8,
-        "f1": 0.9411764705882353,
+        "f1": 0.9412,
         "llm_calls": 38
       },
       {
         "threshold": 1.01,
-        "f1": 0.9411764705882353,
+        "f1": 0.9412,
         "llm_calls": 42
       }
     ],
     "qwen2.5:3b": [
       {
         "threshold": 0,
-        "f1": 0.7804878048780488,
+        "f1": 0.7805,
         "llm_calls": 30
       },
       {
         "threshold": 0.5,
-        "f1": 0.7804878048780488,
+        "f1": 0.7805,
         "llm_calls": 31
       },
       {
@@ -1816,17 +1816,17 @@
       },
       {
         "threshold": 0.7,
-        "f1": 0.7692307692307693,
+        "f1": 0.7692,
         "llm_calls": 37
       },
       {
         "threshold": 0.8,
-        "f1": 0.7692307692307693,
+        "f1": 0.7692,
         "llm_calls": 38
       },
       {
         "threshold": 1.01,
-        "f1": 0.7692307692307693,
+        "f1": 0.7692,
         "llm_calls": 42
       }
     ]
@@ -1849,20 +1849,20 @@
         "strength": 0.9,
         "shares_topic": true
       },
-      "deterministic_ms": 0.139375,
+      "deterministic_ms": 0.1394,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3048.442166,
+          "latency_ms": 3048.4422,
           "input_tokens": 231,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 75299.945875,
+          "latency_ms": 75299.9459,
           "input_tokens": 224,
           "output_tokens": 10
         }
@@ -1891,14 +1891,14 @@
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3138.403042,
+          "latency_ms": 3138.403,
           "input_tokens": 234,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 298647.219666,
+          "latency_ms": 298647.2197,
           "input_tokens": 226,
           "output_tokens": 10
         }
@@ -1921,20 +1921,20 @@
         "strength": 0.79,
         "shares_topic": true
       },
-      "deterministic_ms": 0.078708,
+      "deterministic_ms": 0.0787,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3130.107291,
+          "latency_ms": 3130.1073,
           "input_tokens": 230,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 118192.282834,
+          "latency_ms": 118192.2828,
           "input_tokens": 223,
           "output_tokens": 8
         }
@@ -1957,20 +1957,20 @@
         "strength": 0.81,
         "shares_topic": true
       },
-      "deterministic_ms": 0.080459,
+      "deterministic_ms": 0.0805,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3285.837083,
+          "latency_ms": 3285.8371,
           "input_tokens": 232,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 385279.123708,
+          "latency_ms": 385279.1237,
           "input_tokens": 225,
           "output_tokens": 10
         }
@@ -1991,20 +1991,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.07925,
+      "deterministic_ms": 0.0793,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2973.879416,
+          "latency_ms": 2973.8794,
           "input_tokens": 234,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 162907.981459,
+          "latency_ms": 162907.9815,
           "input_tokens": 227,
           "output_tokens": 8
         }
@@ -2025,20 +2025,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.070333,
+      "deterministic_ms": 0.0703,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3111.261542,
+          "latency_ms": 3111.2615,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 456206.915667,
+          "latency_ms": 456206.9157,
           "input_tokens": 224,
           "output_tokens": 8
         }
@@ -2059,20 +2059,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.054333,
+      "deterministic_ms": 0.0543,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3037.448042,
+          "latency_ms": 3037.448,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 84156.140417,
+          "latency_ms": 84156.1404,
           "input_tokens": 224,
           "output_tokens": 8
         }
@@ -2093,20 +2093,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.045291,
+      "deterministic_ms": 0.0453,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3076.648167,
+          "latency_ms": 3076.6482,
           "input_tokens": 228,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 389.010084,
+          "latency_ms": 389.0101,
           "input_tokens": 222,
           "output_tokens": 8
         }
@@ -2133,14 +2133,14 @@
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3041.532167,
+          "latency_ms": 3041.5322,
           "input_tokens": 233,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 995.311792,
+          "latency_ms": 995.3118,
           "input_tokens": 226,
           "output_tokens": 8
         }
@@ -2161,20 +2161,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.048625,
+      "deterministic_ms": 0.0486,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3161.69625,
+          "latency_ms": 3161.6962,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 673.834958,
+          "latency_ms": 673.835,
           "input_tokens": 224,
           "output_tokens": 8
         }
@@ -2195,20 +2195,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.083791,
+      "deterministic_ms": 0.0838,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3066.731625,
+          "latency_ms": 3066.7316,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 499.80125,
+          "latency_ms": 499.8012,
           "input_tokens": 224,
           "output_tokens": 10
         }
@@ -2231,20 +2231,20 @@
         "strength": 0.63,
         "shares_topic": true
       },
-      "deterministic_ms": 0.076209,
+      "deterministic_ms": 0.0762,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3234.682292,
+          "latency_ms": 3234.6823,
           "input_tokens": 230,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 372.267208,
+          "latency_ms": 372.2672,
           "input_tokens": 223,
           "output_tokens": 10
         }
@@ -2265,20 +2265,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.057958,
+      "deterministic_ms": 0.058,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3178.128833,
+          "latency_ms": 3178.1288,
           "input_tokens": 230,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 414.95325,
+          "latency_ms": 414.9533,
           "input_tokens": 223,
           "output_tokens": 10
         }
@@ -2301,7 +2301,7 @@
         "strength": 0.77,
         "shares_topic": true
       },
-      "deterministic_ms": 0.082791,
+      "deterministic_ms": 0.0828,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
@@ -2335,20 +2335,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.047792,
+      "deterministic_ms": 0.0478,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3271.15825,
+          "latency_ms": 3271.1582,
           "input_tokens": 228,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 627.133833,
+          "latency_ms": 627.1338,
           "input_tokens": 221,
           "output_tokens": 10
         }
@@ -2369,20 +2369,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.048584,
+      "deterministic_ms": 0.0486,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3305.856792,
+          "latency_ms": 3305.8568,
           "input_tokens": 229,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 611.282375,
+          "latency_ms": 611.2824,
           "input_tokens": 222,
           "output_tokens": 10
         }
@@ -2403,20 +2403,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.042042,
+      "deterministic_ms": 0.042,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3240.385041,
+          "latency_ms": 3240.385,
           "input_tokens": 235,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 562.418333,
+          "latency_ms": 562.4183,
           "input_tokens": 228,
           "output_tokens": 10
         }
@@ -2439,20 +2439,20 @@
         "strength": 0.56,
         "shares_topic": true
       },
-      "deterministic_ms": 0.04475,
+      "deterministic_ms": 0.0447,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3350.800958,
+          "latency_ms": 3350.801,
           "input_tokens": 229,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 517.165833,
+          "latency_ms": 517.1658,
           "input_tokens": 222,
           "output_tokens": 10
         }
@@ -2479,14 +2479,14 @@
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3334.177209,
+          "latency_ms": 3334.1772,
           "input_tokens": 228,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 481.823875,
+          "latency_ms": 481.8239,
           "input_tokens": 221,
           "output_tokens": 8
         }
@@ -2509,20 +2509,20 @@
         "strength": 0.8,
         "shares_topic": false
       },
-      "deterministic_ms": 0.041916,
+      "deterministic_ms": 0.0419,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3284.758084,
+          "latency_ms": 3284.7581,
           "input_tokens": 227,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 353.568333,
+          "latency_ms": 353.5683,
           "input_tokens": 220,
           "output_tokens": 8
         }
@@ -2543,20 +2543,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.069709,
+      "deterministic_ms": 0.0697,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3081.994083,
+          "latency_ms": 3081.9941,
           "input_tokens": 227,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 360.403667,
+          "latency_ms": 360.4037,
           "input_tokens": 220,
           "output_tokens": 8
         }
@@ -2579,20 +2579,20 @@
         "strength": 0.9,
         "shares_topic": true
       },
-      "deterministic_ms": 0.074458,
+      "deterministic_ms": 0.0745,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3394.425959,
+          "latency_ms": 3394.426,
           "input_tokens": 237,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 557.092416,
+          "latency_ms": 557.0924,
           "input_tokens": 230,
           "output_tokens": 10
         }
@@ -2613,20 +2613,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.048916,
+      "deterministic_ms": 0.0489,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3396.476125,
+          "latency_ms": 3396.4761,
           "input_tokens": 231,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 573.552708,
+          "latency_ms": 573.5527,
           "input_tokens": 224,
           "output_tokens": 10
         }
@@ -2649,20 +2649,20 @@
         "strength": 0.63,
         "shares_topic": true
       },
-      "deterministic_ms": 0.079833,
+      "deterministic_ms": 0.0798,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3321.751916,
+          "latency_ms": 3321.7519,
           "input_tokens": 247,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 537.907583,
+          "latency_ms": 537.9076,
           "input_tokens": 237,
           "output_tokens": 10
         }
@@ -2685,20 +2685,20 @@
         "strength": 0.64,
         "shares_topic": true
       },
-      "deterministic_ms": 0.108792,
+      "deterministic_ms": 0.1088,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3489.767083,
+          "latency_ms": 3489.7671,
           "input_tokens": 245,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 477.836209,
+          "latency_ms": 477.8362,
           "input_tokens": 235,
           "output_tokens": 8
         }
@@ -2721,20 +2721,20 @@
         "strength": 0.77,
         "shares_topic": true
       },
-      "deterministic_ms": 0.106208,
+      "deterministic_ms": 0.1062,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3311.563125,
+          "latency_ms": 3311.5631,
           "input_tokens": 243,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 535.235209,
+          "latency_ms": 535.2352,
           "input_tokens": 235,
           "output_tokens": 10
         }
@@ -2757,20 +2757,20 @@
         "strength": 0.5,
         "shares_topic": true
       },
-      "deterministic_ms": 0.112875,
+      "deterministic_ms": 0.1129,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3420.487833,
+          "latency_ms": 3420.4878,
           "input_tokens": 246,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 522.068792,
+          "latency_ms": 522.0688,
           "input_tokens": 238,
           "output_tokens": 10
         }
@@ -2791,20 +2791,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.104458,
+      "deterministic_ms": 0.1045,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3409.164708,
+          "latency_ms": 3409.1647,
           "input_tokens": 245,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 500.380083,
+          "latency_ms": 500.3801,
           "input_tokens": 236,
           "output_tokens": 8
         }
@@ -2825,20 +2825,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.099583,
+      "deterministic_ms": 0.0996,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3077.464208,
+          "latency_ms": 3077.4642,
           "input_tokens": 245,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 522.707208,
+          "latency_ms": 522.7072,
           "input_tokens": 235,
           "output_tokens": 8
         }
@@ -2861,20 +2861,20 @@
         "strength": 0.63,
         "shares_topic": true
       },
-      "deterministic_ms": 0.066834,
+      "deterministic_ms": 0.0668,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3358.316875,
+          "latency_ms": 3358.3169,
           "input_tokens": 239,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 588.754917,
+          "latency_ms": 588.7549,
           "input_tokens": 231,
           "output_tokens": 10
         }
@@ -2897,7 +2897,7 @@
         "strength": 0.63,
         "shares_topic": true
       },
-      "deterministic_ms": 0.069625,
+      "deterministic_ms": 0.0696,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
@@ -2910,7 +2910,7 @@
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 501.401333,
+          "latency_ms": 501.4013,
           "input_tokens": 231,
           "output_tokens": 10
         }
@@ -2933,20 +2933,20 @@
         "strength": 0.63,
         "shares_topic": true
       },
-      "deterministic_ms": 0.076416,
+      "deterministic_ms": 0.0764,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3368.64525,
+          "latency_ms": 3368.6453,
           "input_tokens": 239,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 584.030542,
+          "latency_ms": 584.0305,
           "input_tokens": 232,
           "output_tokens": 10
         }
@@ -2969,20 +2969,20 @@
         "strength": 0.63,
         "shares_topic": true
       },
-      "deterministic_ms": 0.158542,
+      "deterministic_ms": 0.1585,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3296.226875,
+          "latency_ms": 3296.2269,
           "input_tokens": 239,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 493.362709,
+          "latency_ms": 493.3627,
           "input_tokens": 231,
           "output_tokens": 10
         }
@@ -3003,20 +3003,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.075541,
+      "deterministic_ms": 0.0755,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3311.811833,
+          "latency_ms": 3311.8118,
           "input_tokens": 242,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 552.999458,
+          "latency_ms": 552.9995,
           "input_tokens": 233,
           "output_tokens": 10
         }
@@ -3037,13 +3037,13 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.069541,
+      "deterministic_ms": 0.0695,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3212.492583,
+          "latency_ms": 3212.4926,
           "input_tokens": 242,
           "output_tokens": 9
         },
@@ -3071,20 +3071,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.105583,
+      "deterministic_ms": 0.1056,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3204.480541,
+          "latency_ms": 3204.4805,
           "input_tokens": 246,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 461.875667,
+          "latency_ms": 461.8757,
           "input_tokens": 238,
           "output_tokens": 8
         }
@@ -3105,20 +3105,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.095834,
+      "deterministic_ms": 0.0958,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3310.860667,
+          "latency_ms": 3310.8607,
           "input_tokens": 249,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 577.386958,
+          "latency_ms": 577.387,
           "input_tokens": 240,
           "output_tokens": 10
         }
@@ -3139,20 +3139,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.103917,
+      "deterministic_ms": 0.1039,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3129.179667,
+          "latency_ms": 3129.1797,
           "input_tokens": 250,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 530.100542,
+          "latency_ms": 530.1005,
           "input_tokens": 242,
           "output_tokens": 8
         }
@@ -3173,20 +3173,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.081292,
+      "deterministic_ms": 0.0813,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3072.114875,
+          "latency_ms": 3072.1149,
           "input_tokens": 244,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 454.460708,
+          "latency_ms": 454.4607,
           "input_tokens": 236,
           "output_tokens": 8
         }
@@ -3207,20 +3207,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.068334,
+      "deterministic_ms": 0.0683,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3058.951667,
+          "latency_ms": 3058.9517,
           "input_tokens": 239,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 331.609875,
+          "latency_ms": 331.6099,
           "input_tokens": 231,
           "output_tokens": 8
         }
@@ -3241,20 +3241,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.067584,
+      "deterministic_ms": 0.0676,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3084.92575,
+          "latency_ms": 3084.9257,
           "input_tokens": 239,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 445.919334,
+          "latency_ms": 445.9193,
           "input_tokens": 231,
           "output_tokens": 8
         }
@@ -3275,20 +3275,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.098917,
+      "deterministic_ms": 0.0989,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3067.462667,
+          "latency_ms": 3067.4627,
           "input_tokens": 248,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 533.526917,
+          "latency_ms": 533.5269,
           "input_tokens": 242,
           "output_tokens": 10
         }
@@ -3309,20 +3309,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.095042,
+      "deterministic_ms": 0.095,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3101.477041,
+          "latency_ms": 3101.477,
           "input_tokens": 248,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 298.935791,
+          "latency_ms": 298.9358,
           "input_tokens": 241,
           "output_tokens": 8
         }
@@ -3343,20 +3343,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.096125,
+      "deterministic_ms": 0.0961,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3317.563208,
+          "latency_ms": 3317.5632,
           "input_tokens": 246,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 515.949459,
+          "latency_ms": 515.9495,
           "input_tokens": 238,
           "output_tokens": 10
         }
@@ -3379,20 +3379,20 @@
         "strength": 0.85,
         "shares_topic": true
       },
-      "deterministic_ms": 0.062292,
+      "deterministic_ms": 0.0623,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3159.981334,
+          "latency_ms": 3159.9813,
           "input_tokens": 240,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 552.339084,
+          "latency_ms": 552.3391,
           "input_tokens": 232,
           "output_tokens": 10
         }
@@ -3413,7 +3413,7 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.066917,
+      "deterministic_ms": 0.0669,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
@@ -3447,20 +3447,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.086667,
+      "deterministic_ms": 0.0867,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3083.164875,
+          "latency_ms": 3083.1649,
           "input_tokens": 244,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 464.866042,
+          "latency_ms": 464.866,
           "input_tokens": 236,
           "output_tokens": 8
         }
@@ -3481,13 +3481,13 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.066125,
+      "deterministic_ms": 0.0661,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3062.233333,
+          "latency_ms": 3062.2333,
           "input_tokens": 239,
           "output_tokens": 8
         },
@@ -3515,20 +3515,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.059875,
+      "deterministic_ms": 0.0599,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3119.48125,
+          "latency_ms": 3119.4812,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 462.816042,
+          "latency_ms": 462.816,
           "input_tokens": 232,
           "output_tokens": 8
         }
@@ -3549,20 +3549,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.081959,
+      "deterministic_ms": 0.082,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3055.735083,
+          "latency_ms": 3055.7351,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 481.745792,
+          "latency_ms": 481.7458,
           "input_tokens": 232,
           "output_tokens": 8
         }
@@ -3583,20 +3583,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.074459,
+      "deterministic_ms": 0.0745,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3140.233084,
+          "latency_ms": 3140.2331,
           "input_tokens": 243,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 466.493541,
+          "latency_ms": 466.4935,
           "input_tokens": 235,
           "output_tokens": 8
         }
@@ -3617,20 +3617,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.055209,
+      "deterministic_ms": 0.0552,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3079.398583,
+          "latency_ms": 3079.3986,
           "input_tokens": 238,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 458.447416,
+          "latency_ms": 458.4474,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -3651,20 +3651,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.064333,
+      "deterministic_ms": 0.0643,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2968.805625,
+          "latency_ms": 2968.8056,
           "input_tokens": 238,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 447.056958,
+          "latency_ms": 447.057,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -3687,20 +3687,20 @@
         "strength": 0.68,
         "shares_topic": true
       },
-      "deterministic_ms": 0.072667,
+      "deterministic_ms": 0.0727,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3067.827667,
+          "latency_ms": 3067.8277,
           "input_tokens": 253,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 491.714458,
+          "latency_ms": 491.7145,
           "input_tokens": 243,
           "output_tokens": 8
         }
@@ -3721,20 +3721,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.093333,
+      "deterministic_ms": 0.0933,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3040.636208,
+          "latency_ms": 3040.6362,
           "input_tokens": 260,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 452.749708,
+          "latency_ms": 452.7497,
           "input_tokens": 252,
           "output_tokens": 8
         }
@@ -3755,20 +3755,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.087666,
+      "deterministic_ms": 0.0877,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3960.765208,
+          "latency_ms": 3960.7652,
           "input_tokens": 269,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 473.096959,
+          "latency_ms": 473.097,
           "input_tokens": 261,
           "output_tokens": 8
         }
@@ -3789,20 +3789,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.341458,
+      "deterministic_ms": 0.3415,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3026.678792,
+          "latency_ms": 3026.6788,
           "input_tokens": 235,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 466.72775,
+          "latency_ms": 466.7278,
           "input_tokens": 228,
           "output_tokens": 8
         }
@@ -3829,14 +3829,14 @@
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2998.917667,
+          "latency_ms": 2998.9177,
           "input_tokens": 241,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 477.589041,
+          "latency_ms": 477.589,
           "input_tokens": 233,
           "output_tokens": 8
         }
@@ -3859,20 +3859,20 @@
         "strength": 0.71,
         "shares_topic": true
       },
-      "deterministic_ms": 0.135459,
+      "deterministic_ms": 0.1355,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3448.820833,
+          "latency_ms": 3448.8208,
           "input_tokens": 235,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 521.150958,
+          "latency_ms": 521.151,
           "input_tokens": 228,
           "output_tokens": 10
         }
@@ -3895,20 +3895,20 @@
         "strength": 0.77,
         "shares_topic": true
       },
-      "deterministic_ms": 0.053958,
+      "deterministic_ms": 0.054,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3267.409917,
+          "latency_ms": 3267.4099,
           "input_tokens": 235,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 502.176208,
+          "latency_ms": 502.1762,
           "input_tokens": 227,
           "output_tokens": 10
         }
@@ -3931,20 +3931,20 @@
         "strength": 0.61,
         "shares_topic": true
       },
-      "deterministic_ms": 0.060583,
+      "deterministic_ms": 0.0606,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3115.385916,
+          "latency_ms": 3115.3859,
           "input_tokens": 234,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 567.684042,
+          "latency_ms": 567.684,
           "input_tokens": 227,
           "output_tokens": 10
         }
@@ -3967,20 +3967,20 @@
         "strength": 0.75,
         "shares_topic": true
       },
-      "deterministic_ms": 0.068541,
+      "deterministic_ms": 0.0685,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3273.118917,
+          "latency_ms": 3273.1189,
           "input_tokens": 237,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 658.672042,
+          "latency_ms": 658.672,
           "input_tokens": 230,
           "output_tokens": 10
         }
@@ -4001,20 +4001,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.05975,
+      "deterministic_ms": 0.0597,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3042.082709,
+          "latency_ms": 3042.0827,
           "input_tokens": 236,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 540.596458,
+          "latency_ms": 540.5965,
           "input_tokens": 229,
           "output_tokens": 8
         }
@@ -4041,14 +4041,14 @@
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3059.659208,
+          "latency_ms": 3059.6592,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 521.634208,
+          "latency_ms": 521.6342,
           "input_tokens": 233,
           "output_tokens": 8
         }
@@ -4075,14 +4075,14 @@
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3101.838208,
+          "latency_ms": 3101.8382,
           "input_tokens": 238,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 589.648458,
+          "latency_ms": 589.6485,
           "input_tokens": 231,
           "output_tokens": 10
         }
@@ -4103,20 +4103,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.059708,
+      "deterministic_ms": 0.0597,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3238.060292,
+          "latency_ms": 3238.0603,
           "input_tokens": 233,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 528.639334,
+          "latency_ms": 528.6393,
           "input_tokens": 226,
           "output_tokens": 8
         }
@@ -4137,20 +4137,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.055916,
+      "deterministic_ms": 0.0559,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3093.782917,
+          "latency_ms": 3093.7829,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 607.878708,
+          "latency_ms": 607.8787,
           "input_tokens": 224,
           "output_tokens": 10
         }
@@ -4171,7 +4171,7 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.063167,
+      "deterministic_ms": 0.0632,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
@@ -4184,7 +4184,7 @@
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 619.606167,
+          "latency_ms": 619.6062,
           "input_tokens": 226,
           "output_tokens": 10
         }
@@ -4205,20 +4205,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.064125,
+      "deterministic_ms": 0.0641,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3109.215458,
+          "latency_ms": 3109.2155,
           "input_tokens": 238,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 542.779708,
+          "latency_ms": 542.7797,
           "input_tokens": 231,
           "output_tokens": 8
         }
@@ -4239,20 +4239,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.059833,
+      "deterministic_ms": 0.0598,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3148.685625,
+          "latency_ms": 3148.6856,
           "input_tokens": 235,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 604.841083,
+          "latency_ms": 604.8411,
           "input_tokens": 228,
           "output_tokens": 10
         }
@@ -4273,20 +4273,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.060667,
+      "deterministic_ms": 0.0607,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2955.790458,
+          "latency_ms": 2955.7905,
           "input_tokens": 229,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 544.068334,
+          "latency_ms": 544.0683,
           "input_tokens": 222,
           "output_tokens": 8
         }
@@ -4309,20 +4309,20 @@
         "strength": 0.85,
         "shares_topic": true
       },
-      "deterministic_ms": 0.052333,
+      "deterministic_ms": 0.0523,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3269.022958,
+          "latency_ms": 3269.023,
           "input_tokens": 233,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 611.125625,
+          "latency_ms": 611.1256,
           "input_tokens": 228,
           "output_tokens": 10
         }
@@ -4345,20 +4345,20 @@
         "strength": 0.85,
         "shares_topic": true
       },
-      "deterministic_ms": 0.054541,
+      "deterministic_ms": 0.0545,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3246.435583,
+          "latency_ms": 3246.4356,
           "input_tokens": 234,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 619.288458,
+          "latency_ms": 619.2885,
           "input_tokens": 227,
           "output_tokens": 10
         }
@@ -4381,20 +4381,20 @@
         "strength": 0.72,
         "shares_topic": true
       },
-      "deterministic_ms": 0.049833,
+      "deterministic_ms": 0.0498,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3246.195708,
+          "latency_ms": 3246.1957,
           "input_tokens": 231,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 610.421375,
+          "latency_ms": 610.4214,
           "input_tokens": 224,
           "output_tokens": 10
         }
@@ -4423,14 +4423,14 @@
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3174.265375,
+          "latency_ms": 3174.2654,
           "input_tokens": 227,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 613.297167,
+          "latency_ms": 613.2972,
           "input_tokens": 220,
           "output_tokens": 10
         }
@@ -4453,20 +4453,20 @@
         "strength": 0.9,
         "shares_topic": true
       },
-      "deterministic_ms": 0.049917,
+      "deterministic_ms": 0.0499,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3262.149958,
+          "latency_ms": 3262.15,
           "input_tokens": 232,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 599.464333,
+          "latency_ms": 599.4643,
           "input_tokens": 225,
           "output_tokens": 10
         }
@@ -4489,20 +4489,20 @@
         "strength": 0.9,
         "shares_topic": true
       },
-      "deterministic_ms": 0.05075,
+      "deterministic_ms": 0.0508,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3180.787167,
+          "latency_ms": 3180.7872,
           "input_tokens": 229,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 610.907667,
+          "latency_ms": 610.9077,
           "input_tokens": 222,
           "output_tokens": 10
         }
@@ -4525,20 +4525,20 @@
         "strength": 0.8,
         "shares_topic": false
       },
-      "deterministic_ms": 0.040834,
+      "deterministic_ms": 0.0408,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3191.800916,
+          "latency_ms": 3191.8009,
           "input_tokens": 227,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 574.437042,
+          "latency_ms": 574.437,
           "input_tokens": 220,
           "output_tokens": 10
         }
@@ -4561,7 +4561,7 @@
         "strength": 0.8,
         "shares_topic": false
       },
-      "deterministic_ms": 0.036125,
+      "deterministic_ms": 0.0361,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
@@ -4574,7 +4574,7 @@
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 495.62925,
+          "latency_ms": 495.6293,
           "input_tokens": 220,
           "output_tokens": 10
         }
@@ -4597,20 +4597,20 @@
         "strength": 0.45,
         "shares_topic": false
       },
-      "deterministic_ms": 0.044625,
+      "deterministic_ms": 0.0446,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3161.832458,
+          "latency_ms": 3161.8325,
           "input_tokens": 226,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 397.244208,
+          "latency_ms": 397.2442,
           "input_tokens": 219,
           "output_tokens": 10
         }
@@ -4631,20 +4631,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.039666,
+      "deterministic_ms": 0.0397,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3140.343834,
+          "latency_ms": 3140.3438,
           "input_tokens": 233,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 587.735708,
+          "latency_ms": 587.7357,
           "input_tokens": 225,
           "output_tokens": 10
         }
@@ -4665,20 +4665,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.039541,
+      "deterministic_ms": 0.0395,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3256.06925,
+          "latency_ms": 3256.0693,
           "input_tokens": 227,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 619.405625,
+          "latency_ms": 619.4056,
           "input_tokens": 220,
           "output_tokens": 10
         }
@@ -4699,20 +4699,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.049792,
+      "deterministic_ms": 0.0498,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3095.121334,
+          "latency_ms": 3095.1213,
           "input_tokens": 231,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 484.747083,
+          "latency_ms": 484.7471,
           "input_tokens": 224,
           "output_tokens": 10
         }
@@ -4733,20 +4733,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.072709,
+      "deterministic_ms": 0.0727,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2970.177708,
+          "latency_ms": 2970.1777,
           "input_tokens": 237,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 411.226084,
+          "latency_ms": 411.2261,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -4767,20 +4767,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.079959,
+      "deterministic_ms": 0.08,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3029.216084,
+          "latency_ms": 3029.2161,
           "input_tokens": 239,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 392.548167,
+          "latency_ms": 392.5482,
           "input_tokens": 232,
           "output_tokens": 10
         }
@@ -4801,20 +4801,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.050167,
+      "deterministic_ms": 0.0502,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3021.654291,
+          "latency_ms": 3021.6543,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 494.212333,
+          "latency_ms": 494.2123,
           "input_tokens": 224,
           "output_tokens": 10
         }
@@ -4835,20 +4835,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.051375,
+      "deterministic_ms": 0.0514,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2916.045708,
+          "latency_ms": 2916.0457,
           "input_tokens": 232,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 569.337208,
+          "latency_ms": 569.3372,
           "input_tokens": 225,
           "output_tokens": 10
         }
@@ -4869,7 +4869,7 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.050167,
+      "deterministic_ms": 0.0502,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
@@ -4882,7 +4882,7 @@
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 513.42975,
+          "latency_ms": 513.4298,
           "input_tokens": 222,
           "output_tokens": 8
         }
@@ -4903,20 +4903,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.055292,
+      "deterministic_ms": 0.0553,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3024.625541,
+          "latency_ms": 3024.6255,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 442.02175,
+          "latency_ms": 442.0217,
           "input_tokens": 225,
           "output_tokens": 8
         }
@@ -4937,20 +4937,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.056666,
+      "deterministic_ms": 0.0567,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3064.538875,
+          "latency_ms": 3064.5389,
           "input_tokens": 230,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 417.97975,
+          "latency_ms": 417.9798,
           "input_tokens": 223,
           "output_tokens": 8
         }
@@ -4971,20 +4971,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.054791,
+      "deterministic_ms": 0.0548,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3005.417458,
+          "latency_ms": 3005.4175,
           "input_tokens": 232,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 416.383167,
+          "latency_ms": 416.3832,
           "input_tokens": 225,
           "output_tokens": 8
         }
@@ -5005,20 +5005,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.060458,
+      "deterministic_ms": 0.0605,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2967.376083,
+          "latency_ms": 2967.3761,
           "input_tokens": 234,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 521.033791,
+          "latency_ms": 521.0338,
           "input_tokens": 227,
           "output_tokens": 10
         }
@@ -5039,20 +5039,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.032166,
+      "deterministic_ms": 0.0322,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2987.276084,
+          "latency_ms": 2987.2761,
           "input_tokens": 225,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 369.454708,
+          "latency_ms": 369.4547,
           "input_tokens": 218,
           "output_tokens": 8
         }
@@ -5073,20 +5073,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.082083,
+      "deterministic_ms": 0.0821,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3082.414458,
+          "latency_ms": 3082.4145,
           "input_tokens": 250,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 466.021959,
+          "latency_ms": 466.022,
           "input_tokens": 242,
           "output_tokens": 8
         }
@@ -5107,20 +5107,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.086125,
+      "deterministic_ms": 0.0861,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3049.702875,
+          "latency_ms": 3049.7029,
           "input_tokens": 243,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 562.899208,
+          "latency_ms": 562.8992,
           "input_tokens": 235,
           "output_tokens": 10
         }
@@ -5141,20 +5141,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.01175,
+      "deterministic_ms": 0.0118,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2898.548417,
+          "latency_ms": 2898.5484,
           "input_tokens": 227,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 331.671333,
+          "latency_ms": 331.6713,
           "input_tokens": 219,
           "output_tokens": 8
         }
@@ -5175,13 +5175,13 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.070333,
+      "deterministic_ms": 0.0703,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3085.493834,
+          "latency_ms": 3085.4938,
           "input_tokens": 237,
           "output_tokens": 8
         },
@@ -5209,20 +5209,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.075042,
+      "deterministic_ms": 0.075,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3003.811875,
+          "latency_ms": 3003.8119,
           "input_tokens": 246,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 448.531083,
+          "latency_ms": 448.5311,
           "input_tokens": 237,
           "output_tokens": 8
         }
@@ -5243,20 +5243,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.065583,
+      "deterministic_ms": 0.0656,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3055.181541,
+          "latency_ms": 3055.1815,
           "input_tokens": 233,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 484.919291,
+          "latency_ms": 484.9193,
           "input_tokens": 226,
           "output_tokens": 8
         }
@@ -5277,20 +5277,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.045125,
+      "deterministic_ms": 0.0451,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2972.621625,
+          "latency_ms": 2972.6216,
           "input_tokens": 237,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 448.090042,
+          "latency_ms": 448.09,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -5311,20 +5311,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.047375,
+      "deterministic_ms": 0.0474,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3272.339666,
+          "latency_ms": 3272.3397,
           "input_tokens": 238,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 568.522375,
+          "latency_ms": 568.5224,
           "input_tokens": 230,
           "output_tokens": 10
         }
@@ -5345,20 +5345,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.063167,
+      "deterministic_ms": 0.0632,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3227.048583,
+          "latency_ms": 3227.0486,
           "input_tokens": 242,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 460.767917,
+          "latency_ms": 460.7679,
           "input_tokens": 235,
           "output_tokens": 8
         }
@@ -5379,20 +5379,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.085708,
+      "deterministic_ms": 0.0857,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3182.783916,
+          "latency_ms": 3182.7839,
           "input_tokens": 256,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 470.577541,
+          "latency_ms": 470.5775,
           "input_tokens": 247,
           "output_tokens": 10
         }
@@ -5413,20 +5413,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.04675,
+      "deterministic_ms": 0.0467,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3185.433917,
+          "latency_ms": 3185.4339,
           "input_tokens": 232,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 466.434375,
+          "latency_ms": 466.4344,
           "input_tokens": 225,
           "output_tokens": 10
         }
@@ -5449,20 +5449,20 @@
         "strength": 0.68,
         "shares_topic": true
       },
-      "deterministic_ms": 0.062042,
+      "deterministic_ms": 0.062,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2989.68125,
+          "latency_ms": 2989.6813,
           "input_tokens": 236,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 435.703875,
+          "latency_ms": 435.7039,
           "input_tokens": 229,
           "output_tokens": 8
         }
@@ -5485,13 +5485,13 @@
         "strength": 0.68,
         "shares_topic": true
       },
-      "deterministic_ms": 0.053125,
+      "deterministic_ms": 0.0531,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3192.620584,
+          "latency_ms": 3192.6206,
           "input_tokens": 237,
           "output_tokens": 8
         },
@@ -5521,20 +5521,20 @@
         "strength": 0.68,
         "shares_topic": true
       },
-      "deterministic_ms": 0.062917,
+      "deterministic_ms": 0.0629,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2850.303417,
+          "latency_ms": 2850.3034,
           "input_tokens": 235,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 524.04725,
+          "latency_ms": 524.0472,
           "input_tokens": 226,
           "output_tokens": 10
         }
@@ -5557,20 +5557,20 @@
         "strength": 0.71,
         "shares_topic": true
       },
-      "deterministic_ms": 0.074875,
+      "deterministic_ms": 0.0749,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2988.009625,
+          "latency_ms": 2988.0096,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 426.704083,
+          "latency_ms": 426.7041,
           "input_tokens": 233,
           "output_tokens": 8
         }
@@ -5593,20 +5593,20 @@
         "strength": 0.78,
         "shares_topic": true
       },
-      "deterministic_ms": 0.066958,
+      "deterministic_ms": 0.067,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3005.62475,
+          "latency_ms": 3005.6247,
           "input_tokens": 241,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 504.925917,
+          "latency_ms": 504.9259,
           "input_tokens": 234,
           "output_tokens": 10
         }
@@ -5629,20 +5629,20 @@
         "strength": 0.85,
         "shares_topic": true
       },
-      "deterministic_ms": 0.05275,
+      "deterministic_ms": 0.0527,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2956.869458,
+          "latency_ms": 2956.8695,
           "input_tokens": 237,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 466.268334,
+          "latency_ms": 466.2683,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -5665,7 +5665,7 @@
         "strength": 0.68,
         "shares_topic": true
       },
-      "deterministic_ms": 0.060917,
+      "deterministic_ms": 0.0609,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
@@ -5678,7 +5678,7 @@
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 445.808375,
+          "latency_ms": 445.8084,
           "input_tokens": 232,
           "output_tokens": 8
         }
@@ -5699,20 +5699,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.079584,
+      "deterministic_ms": 0.0796,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2981.666667,
+          "latency_ms": 2981.6667,
           "input_tokens": 243,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 483.751042,
+          "latency_ms": 483.751,
           "input_tokens": 236,
           "output_tokens": 10
         }
@@ -5735,20 +5735,20 @@
         "strength": 0.71,
         "shares_topic": true
       },
-      "deterministic_ms": 0.071166,
+      "deterministic_ms": 0.0712,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3031.99525,
+          "latency_ms": 3031.9952,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 440.727333,
+          "latency_ms": 440.7273,
           "input_tokens": 233,
           "output_tokens": 8
         }
@@ -5771,20 +5771,20 @@
         "strength": 0.68,
         "shares_topic": true
       },
-      "deterministic_ms": 0.051292,
+      "deterministic_ms": 0.0513,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2929.629041,
+          "latency_ms": 2929.629,
           "input_tokens": 234,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 477.488583,
+          "latency_ms": 477.4886,
           "input_tokens": 227,
           "output_tokens": 8
         }
@@ -5805,20 +5805,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.074959,
+      "deterministic_ms": 0.075,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3046.74625,
+          "latency_ms": 3046.7463,
           "input_tokens": 249,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 433.713667,
+          "latency_ms": 433.7137,
           "input_tokens": 242,
           "output_tokens": 8
         }
@@ -5839,20 +5839,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.062292,
+      "deterministic_ms": 0.0623,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3006.817625,
+          "latency_ms": 3006.8176,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 436.086416,
+          "latency_ms": 436.0864,
           "input_tokens": 233,
           "output_tokens": 8
         }
@@ -5875,7 +5875,7 @@
         "strength": 0.68,
         "shares_topic": true
       },
-      "deterministic_ms": 0.061042,
+      "deterministic_ms": 0.061,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
@@ -5888,7 +5888,7 @@
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 494.57275,
+          "latency_ms": 494.5727,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -5917,7 +5917,7 @@
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3091.764542,
+          "latency_ms": 3091.7645,
           "input_tokens": 243,
           "output_tokens": 8
         },
@@ -5945,20 +5945,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.071917,
+      "deterministic_ms": 0.0719,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3162.262708,
+          "latency_ms": 3162.2627,
           "input_tokens": 242,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 411.318959,
+          "latency_ms": 411.319,
           "input_tokens": 235,
           "output_tokens": 8
         }
@@ -5981,13 +5981,13 @@
         "strength": 0.81,
         "shares_topic": true
       },
-      "deterministic_ms": 0.055792,
+      "deterministic_ms": 0.0558,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3283.017875,
+          "latency_ms": 3283.0179,
           "input_tokens": 235,
           "output_tokens": 9
         },
@@ -6017,13 +6017,13 @@
         "strength": 0.85,
         "shares_topic": true
       },
-      "deterministic_ms": 0.069917,
+      "deterministic_ms": 0.0699,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3335.600375,
+          "latency_ms": 3335.6004,
           "input_tokens": 239,
           "output_tokens": 9
         },
@@ -6051,20 +6051,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.051291,
+      "deterministic_ms": 0.0513,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3358.838041,
+          "latency_ms": 3358.838,
           "input_tokens": 233,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 511.370584,
+          "latency_ms": 511.3706,
           "input_tokens": 226,
           "output_tokens": 10
         }
@@ -6085,13 +6085,13 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.076458,
+      "deterministic_ms": 0.0765,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3454.24075,
+          "latency_ms": 3454.2407,
           "input_tokens": 241,
           "output_tokens": 9
         },
@@ -6119,20 +6119,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.057708,
+      "deterministic_ms": 0.0577,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3426.408375,
+          "latency_ms": 3426.4084,
           "input_tokens": 239,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 514.055875,
+          "latency_ms": 514.0559,
           "input_tokens": 232,
           "output_tokens": 10
         }
@@ -6153,20 +6153,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.067583,
+      "deterministic_ms": 0.0676,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3436.048125,
+          "latency_ms": 3436.0481,
           "input_tokens": 234,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 488.813084,
+          "latency_ms": 488.8131,
           "input_tokens": 227,
           "output_tokens": 10
         }
@@ -6187,20 +6187,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.077542,
+      "deterministic_ms": 0.0775,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3373.228542,
+          "latency_ms": 3373.2285,
           "input_tokens": 238,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 502.223917,
+          "latency_ms": 502.2239,
           "input_tokens": 233,
           "output_tokens": 10
         }
@@ -6221,20 +6221,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.060375,
+      "deterministic_ms": 0.0604,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3465.526583,
+          "latency_ms": 3465.5266,
           "input_tokens": 236,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 437.243125,
+          "latency_ms": 437.2431,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -6255,20 +6255,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.07925,
+      "deterministic_ms": 0.0793,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3444.717625,
+          "latency_ms": 3444.7176,
           "input_tokens": 237,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 499.95625,
+          "latency_ms": 499.9563,
           "input_tokens": 230,
           "output_tokens": 10
         }
@@ -6295,14 +6295,14 @@
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3489.230917,
+          "latency_ms": 3489.2309,
           "input_tokens": 241,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 501.065042,
+          "latency_ms": 501.065,
           "input_tokens": 233,
           "output_tokens": 10
         }
@@ -6323,20 +6323,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.046334,
+      "deterministic_ms": 0.0463,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3407.825375,
+          "latency_ms": 3407.8254,
           "input_tokens": 228,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 449.208667,
+          "latency_ms": 449.2087,
           "input_tokens": 221,
           "output_tokens": 8
         }
@@ -6357,20 +6357,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.068458,
+      "deterministic_ms": 0.0685,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3435.415792,
+          "latency_ms": 3435.4158,
           "input_tokens": 233,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 516.229625,
+          "latency_ms": 516.2296,
           "input_tokens": 226,
           "output_tokens": 10
         }
@@ -6391,20 +6391,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.060292,
+      "deterministic_ms": 0.0603,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3480.942875,
+          "latency_ms": 3480.9429,
           "input_tokens": 234,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 455.487291,
+          "latency_ms": 455.4873,
           "input_tokens": 227,
           "output_tokens": 8
         }
@@ -6433,14 +6433,14 @@
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3494.710125,
+          "latency_ms": 3494.7101,
           "input_tokens": 229,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 510.971209,
+          "latency_ms": 510.9712,
           "input_tokens": 222,
           "output_tokens": 8
         }
@@ -6461,20 +6461,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.057083,
+      "deterministic_ms": 0.0571,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3479.827875,
+          "latency_ms": 3479.8279,
           "input_tokens": 233,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 565.072458,
+          "latency_ms": 565.0725,
           "input_tokens": 227,
           "output_tokens": 10
         }
@@ -6495,20 +6495,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.067708,
+      "deterministic_ms": 0.0677,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3424.084084,
+          "latency_ms": 3424.0841,
           "input_tokens": 239,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 499.552709,
+          "latency_ms": 499.5527,
           "input_tokens": 231,
           "output_tokens": 10
         }
@@ -6529,20 +6529,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.050958,
+      "deterministic_ms": 0.051,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3432.917958,
+          "latency_ms": 3432.918,
           "input_tokens": 231,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 506.064792,
+          "latency_ms": 506.0648,
           "input_tokens": 225,
           "output_tokens": 10
         }
@@ -6565,20 +6565,20 @@
         "strength": 0.56,
         "shares_topic": true
       },
-      "deterministic_ms": 0.058792,
+      "deterministic_ms": 0.0588,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3296.32175,
+          "latency_ms": 3296.3218,
           "input_tokens": 232,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 483.393167,
+          "latency_ms": 483.3932,
           "input_tokens": 226,
           "output_tokens": 8
         }
@@ -6601,13 +6601,13 @@
         "strength": 0.56,
         "shares_topic": true
       },
-      "deterministic_ms": 0.053875,
+      "deterministic_ms": 0.0539,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3435.770916,
+          "latency_ms": 3435.7709,
           "input_tokens": 230,
           "output_tokens": 9
         },
@@ -6635,20 +6635,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.050083,
+      "deterministic_ms": 0.0501,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3401.907791,
+          "latency_ms": 3401.9078,
           "input_tokens": 229,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 460.740375,
+          "latency_ms": 460.7404,
           "input_tokens": 222,
           "output_tokens": 8
         }
@@ -6669,13 +6669,13 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.063333,
+      "deterministic_ms": 0.0633,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3466.414667,
+          "latency_ms": 3466.4147,
           "input_tokens": 234,
           "output_tokens": 9
         },
@@ -6703,20 +6703,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.082583,
+      "deterministic_ms": 0.0826,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3406.098208,
+          "latency_ms": 3406.0982,
           "input_tokens": 240,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 431.014125,
+          "latency_ms": 431.0141,
           "input_tokens": 233,
           "output_tokens": 8
         }
@@ -6737,20 +6737,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.066875,
+      "deterministic_ms": 0.0669,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3546.045042,
+          "latency_ms": 3546.045,
           "input_tokens": 235,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 492.820708,
+          "latency_ms": 492.8207,
           "input_tokens": 228,
           "output_tokens": 10
         }
@@ -6771,20 +6771,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.062542,
+      "deterministic_ms": 0.0625,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3510.467417,
+          "latency_ms": 3510.4674,
           "input_tokens": 234,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 431.926333,
+          "latency_ms": 431.9263,
           "input_tokens": 227,
           "output_tokens": 8
         }
@@ -6805,20 +6805,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.055209,
+      "deterministic_ms": 0.0552,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 84056.508542,
+          "latency_ms": 84056.5085,
           "input_tokens": 232,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 505.160833,
+          "latency_ms": 505.1608,
           "input_tokens": 227,
           "output_tokens": 10
         }
@@ -6839,20 +6839,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.068875,
+      "deterministic_ms": 0.0689,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3224.977625,
+          "latency_ms": 3224.9776,
           "input_tokens": 240,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 431.681042,
+          "latency_ms": 431.681,
           "input_tokens": 231,
           "output_tokens": 8
         }
@@ -6873,20 +6873,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.065875,
+      "deterministic_ms": 0.0659,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3246.651542,
+          "latency_ms": 3246.6515,
           "input_tokens": 239,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 494.05825,
+          "latency_ms": 494.0582,
           "input_tokens": 231,
           "output_tokens": 10
         }
@@ -6907,20 +6907,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.062667,
+      "deterministic_ms": 0.0627,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3232.960125,
+          "latency_ms": 3232.9601,
           "input_tokens": 237,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 425.409208,
+          "latency_ms": 425.4092,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -6941,20 +6941,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.056625,
+      "deterministic_ms": 0.0566,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3225.188625,
+          "latency_ms": 3225.1886,
           "input_tokens": 235,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 503.487458,
+          "latency_ms": 503.4875,
           "input_tokens": 228,
           "output_tokens": 10
         }
@@ -6975,20 +6975,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.070541,
+      "deterministic_ms": 0.0705,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3225.43275,
+          "latency_ms": 3225.4327,
           "input_tokens": 235,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 500.791375,
+          "latency_ms": 500.7914,
           "input_tokens": 228,
           "output_tokens": 10
         }
@@ -7009,13 +7009,13 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.056458,
+      "deterministic_ms": 0.0565,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3247.736292,
+          "latency_ms": 3247.7363,
           "input_tokens": 242,
           "output_tokens": 9
         },
@@ -7043,20 +7043,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.076458,
+      "deterministic_ms": 0.0765,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3229.161042,
+          "latency_ms": 3229.161,
           "input_tokens": 244,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 519.158875,
+          "latency_ms": 519.1589,
           "input_tokens": 235,
           "output_tokens": 10
         }
@@ -7077,20 +7077,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.052792,
+      "deterministic_ms": 0.0528,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3216.20125,
+          "latency_ms": 3216.2013,
           "input_tokens": 231,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 455.377791,
+          "latency_ms": 455.3778,
           "input_tokens": 224,
           "output_tokens": 8
         }
@@ -7111,20 +7111,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.070542,
+      "deterministic_ms": 0.0705,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3062.747417,
+          "latency_ms": 3062.7474,
           "input_tokens": 235,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 433.945833,
+          "latency_ms": 433.9458,
           "input_tokens": 228,
           "output_tokens": 8
         }
@@ -7145,20 +7145,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.054125,
+      "deterministic_ms": 0.0541,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3118.902209,
+          "latency_ms": 3118.9022,
           "input_tokens": 233,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 407.427875,
+          "latency_ms": 407.4279,
           "input_tokens": 226,
           "output_tokens": 8
         }
@@ -7179,20 +7179,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.059042,
+      "deterministic_ms": 0.059,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3157.652291,
+          "latency_ms": 3157.6523,
           "input_tokens": 235,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 398.282416,
+          "latency_ms": 398.2824,
           "input_tokens": 228,
           "output_tokens": 8
         }
@@ -7213,20 +7213,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.054084,
+      "deterministic_ms": 0.0541,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3166.919209,
+          "latency_ms": 3166.9192,
           "input_tokens": 233,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 402.72075,
+          "latency_ms": 402.7208,
           "input_tokens": 227,
           "output_tokens": 8
         }
@@ -7247,20 +7247,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.06175,
+      "deterministic_ms": 0.0617,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3378.855833,
+          "latency_ms": 3378.8558,
           "input_tokens": 234,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 419.174458,
+          "latency_ms": 419.1745,
           "input_tokens": 229,
           "output_tokens": 8
         }
@@ -7281,20 +7281,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.059959,
+      "deterministic_ms": 0.06,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3757.617042,
+          "latency_ms": 3757.617,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 443.020458,
+          "latency_ms": 443.0205,
           "input_tokens": 225,
           "output_tokens": 8
         }
@@ -7315,20 +7315,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.071625,
+      "deterministic_ms": 0.0716,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3019.936125,
+          "latency_ms": 3019.9361,
           "input_tokens": 236,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 490.101125,
+          "latency_ms": 490.1011,
           "input_tokens": 229,
           "output_tokens": 8
         }
@@ -7349,20 +7349,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.059083,
+      "deterministic_ms": 0.0591,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3875.21875,
+          "latency_ms": 3875.2188,
           "input_tokens": 233,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 439.996291,
+          "latency_ms": 439.9963,
           "input_tokens": 228,
           "output_tokens": 8
         }
@@ -7383,20 +7383,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.061166,
+      "deterministic_ms": 0.0612,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3370.037792,
+          "latency_ms": 3370.0378,
           "input_tokens": 236,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 434.815875,
+          "latency_ms": 434.8159,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -7417,20 +7417,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.058042,
+      "deterministic_ms": 0.058,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3705.453958,
+          "latency_ms": 3705.454,
           "input_tokens": 232,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 459.796125,
+          "latency_ms": 459.7961,
           "input_tokens": 225,
           "output_tokens": 8
         }
@@ -7451,20 +7451,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.059083,
+      "deterministic_ms": 0.0591,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 2757.629667,
+          "latency_ms": 2757.6297,
           "input_tokens": 233,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 437.536417,
+          "latency_ms": 437.5364,
           "input_tokens": 226,
           "output_tokens": 10
         }
@@ -7485,13 +7485,13 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.058916,
+      "deterministic_ms": 0.0589,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 2659.641708,
+          "latency_ms": 2659.6417,
           "input_tokens": 232,
           "output_tokens": 9
         },
@@ -7519,20 +7519,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.054583,
+      "deterministic_ms": 0.0546,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 4703.331042,
+          "latency_ms": 4703.331,
           "input_tokens": 231,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 500.029917,
+          "latency_ms": 500.0299,
           "input_tokens": 225,
           "output_tokens": 10
         }
@@ -7553,20 +7553,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.055583,
+      "deterministic_ms": 0.0556,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3533.658292,
+          "latency_ms": 3533.6583,
           "input_tokens": 229,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 524.478875,
+          "latency_ms": 524.4789,
           "input_tokens": 222,
           "output_tokens": 10
         }
@@ -7587,20 +7587,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.050041,
+      "deterministic_ms": 0.05,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3555.846541,
+          "latency_ms": 3555.8465,
           "input_tokens": 230,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 488.223875,
+          "latency_ms": 488.2239,
           "input_tokens": 223,
           "output_tokens": 10
         }
@@ -7623,20 +7623,20 @@
         "strength": 0.64,
         "shares_topic": true
       },
-      "deterministic_ms": 0.061042,
+      "deterministic_ms": 0.061,
       "hybrid_route": "llm-low-strength",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3530.538875,
+          "latency_ms": 3530.5389,
           "input_tokens": 233,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 453.296875,
+          "latency_ms": 453.2969,
           "input_tokens": 226,
           "output_tokens": 10
         }
@@ -7657,7 +7657,7 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.053792,
+      "deterministic_ms": 0.0538,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
@@ -7670,7 +7670,7 @@
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 469.737667,
+          "latency_ms": 469.7377,
           "input_tokens": 231,
           "output_tokens": 10
         }
@@ -7693,13 +7693,13 @@
         "strength": 0.72,
         "shares_topic": true
       },
-      "deterministic_ms": 0.056167,
+      "deterministic_ms": 0.0562,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3553.910917,
+          "latency_ms": 3553.9109,
           "input_tokens": 231,
           "output_tokens": 9
         },
@@ -7727,20 +7727,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.061292,
+      "deterministic_ms": 0.0613,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3525.912708,
+          "latency_ms": 3525.9127,
           "input_tokens": 231,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 475.832625,
+          "latency_ms": 475.8326,
           "input_tokens": 224,
           "output_tokens": 10
         }
@@ -7761,13 +7761,13 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.058166,
+      "deterministic_ms": 0.0582,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3628.878625,
+          "latency_ms": 3628.8786,
           "input_tokens": 232,
           "output_tokens": 9
         },
@@ -7795,20 +7795,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.051666,
+      "deterministic_ms": 0.0517,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3547.107791,
+          "latency_ms": 3547.1078,
           "input_tokens": 230,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 484.404917,
+          "latency_ms": 484.4049,
           "input_tokens": 223,
           "output_tokens": 10
         }
@@ -7829,20 +7829,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.059666,
+      "deterministic_ms": 0.0597,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 6823.114625,
+          "latency_ms": 6823.1146,
           "input_tokens": 234,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 488.580333,
+          "latency_ms": 488.5803,
           "input_tokens": 227,
           "output_tokens": 10
         }
@@ -7863,7 +7863,7 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.050792,
+      "deterministic_ms": 0.0508,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
@@ -7876,7 +7876,7 @@
         "qwen2.5:3b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 468.111958,
+          "latency_ms": 468.112,
           "input_tokens": 223,
           "output_tokens": 10
         }
@@ -7897,20 +7897,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.053667,
+      "deterministic_ms": 0.0537,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2886.150417,
+          "latency_ms": 2886.1504,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 402.252708,
+          "latency_ms": 402.2527,
           "input_tokens": 225,
           "output_tokens": 8
         }
@@ -7931,20 +7931,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.061292,
+      "deterministic_ms": 0.0613,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3200.700459,
+          "latency_ms": 3200.7005,
           "input_tokens": 233,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 407.682792,
+          "latency_ms": 407.6828,
           "input_tokens": 228,
           "output_tokens": 8
         }
@@ -7965,20 +7965,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.055542,
+      "deterministic_ms": 0.0555,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3156.168875,
+          "latency_ms": 3156.1689,
           "input_tokens": 230,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 420.475333,
+          "latency_ms": 420.4753,
           "input_tokens": 223,
           "output_tokens": 8
         }
@@ -7999,20 +7999,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.057083,
+      "deterministic_ms": 0.0571,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3453.162125,
+          "latency_ms": 3453.1621,
           "input_tokens": 232,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 438.619125,
+          "latency_ms": 438.6191,
           "input_tokens": 225,
           "output_tokens": 8
         }
@@ -8033,20 +8033,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.05275,
+      "deterministic_ms": 0.0527,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3218.608666,
+          "latency_ms": 3218.6087,
           "input_tokens": 232,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 445.620459,
+          "latency_ms": 445.6205,
           "input_tokens": 224,
           "output_tokens": 8
         }
@@ -8067,20 +8067,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.047084,
+      "deterministic_ms": 0.0471,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3197.460041,
+          "latency_ms": 3197.46,
           "input_tokens": 230,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 415.78975,
+          "latency_ms": 415.7898,
           "input_tokens": 223,
           "output_tokens": 8
         }
@@ -8101,20 +8101,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.091625,
+      "deterministic_ms": 0.0916,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3281.440458,
+          "latency_ms": 3281.4405,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 405.482166,
+          "latency_ms": 405.4822,
           "input_tokens": 232,
           "output_tokens": 8
         }
@@ -8135,13 +8135,13 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.091958,
+      "deterministic_ms": 0.092,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3202.216125,
+          "latency_ms": 3202.2161,
           "input_tokens": 239,
           "output_tokens": 8
         },
@@ -8169,20 +8169,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.084209,
+      "deterministic_ms": 0.0842,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3182.438875,
+          "latency_ms": 3182.4389,
           "input_tokens": 238,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 392.851625,
+          "latency_ms": 392.8516,
           "input_tokens": 231,
           "output_tokens": 8
         }
@@ -8203,20 +8203,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.056083,
+      "deterministic_ms": 0.0561,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3058.657459,
+          "latency_ms": 3058.6575,
           "input_tokens": 231,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 428.753417,
+          "latency_ms": 428.7534,
           "input_tokens": 224,
           "output_tokens": 8
         }
@@ -8237,20 +8237,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.061208,
+      "deterministic_ms": 0.0612,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3301.16775,
+          "latency_ms": 3301.1678,
           "input_tokens": 239,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 474.465708,
+          "latency_ms": 474.4657,
           "input_tokens": 232,
           "output_tokens": 8
         }
@@ -8273,7 +8273,7 @@
         "strength": 0.68,
         "shares_topic": true
       },
-      "deterministic_ms": 0.060625,
+      "deterministic_ms": 0.0606,
       "hybrid_route": "det-edge",
       "llm": {
         "gemma3:12b": {
@@ -8286,7 +8286,7 @@
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 417.803083,
+          "latency_ms": 417.8031,
           "input_tokens": 228,
           "output_tokens": 8
         }
@@ -8307,20 +8307,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.081375,
+      "deterministic_ms": 0.0814,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "contradicts",
           "raw": "{\"verdict\": \"contradicts\"}",
-          "latency_ms": 3338.39375,
+          "latency_ms": 3338.3938,
           "input_tokens": 249,
           "output_tokens": 9
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 405.884958,
+          "latency_ms": 405.885,
           "input_tokens": 242,
           "output_tokens": 8
         }
@@ -8341,20 +8341,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.060125,
+      "deterministic_ms": 0.0601,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3047.37575,
+          "latency_ms": 3047.3758,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 390.203542,
+          "latency_ms": 390.2035,
           "input_tokens": 231,
           "output_tokens": 8
         }
@@ -8375,20 +8375,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.066833,
+      "deterministic_ms": 0.0668,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2943.759334,
+          "latency_ms": 2943.7593,
           "input_tokens": 235,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 400.510833,
+          "latency_ms": 400.5108,
           "input_tokens": 228,
           "output_tokens": 8
         }
@@ -8409,20 +8409,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.074166,
+      "deterministic_ms": 0.0742,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 3013.846084,
+          "latency_ms": 3013.8461,
           "input_tokens": 237,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 392.506708,
+          "latency_ms": 392.5067,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -8443,20 +8443,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.050458,
+      "deterministic_ms": 0.0505,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2865.717375,
+          "latency_ms": 2865.7174,
           "input_tokens": 230,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 395.932958,
+          "latency_ms": 395.933,
           "input_tokens": 223,
           "output_tokens": 8
         }
@@ -8483,14 +8483,14 @@
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2857.465167,
+          "latency_ms": 2857.4652,
           "input_tokens": 240,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 430.207125,
+          "latency_ms": 430.2071,
           "input_tokens": 233,
           "output_tokens": 8
         }
@@ -8511,7 +8511,7 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.05475,
+      "deterministic_ms": 0.0548,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
@@ -8545,20 +8545,20 @@
         "contradicts": false,
         "shares_topic": false
       },
-      "deterministic_ms": 0.059709,
+      "deterministic_ms": 0.0597,
       "hybrid_route": "det-no-candidate",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2896.237709,
+          "latency_ms": 2896.2377,
           "input_tokens": 233,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 410.546875,
+          "latency_ms": 410.5469,
           "input_tokens": 226,
           "output_tokens": 8
         }
@@ -8579,20 +8579,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.073542,
+      "deterministic_ms": 0.0735,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2995.104792,
+          "latency_ms": 2995.1048,
           "input_tokens": 239,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 403.469084,
+          "latency_ms": 403.4691,
           "input_tokens": 230,
           "output_tokens": 8
         }
@@ -8613,20 +8613,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.060333,
+      "deterministic_ms": 0.0603,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2815.490333,
+          "latency_ms": 2815.4903,
           "input_tokens": 241,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 413.175291,
+          "latency_ms": 413.1753,
           "input_tokens": 234,
           "output_tokens": 8
         }
@@ -8647,20 +8647,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.070291,
+      "deterministic_ms": 0.0703,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2884.280375,
+          "latency_ms": 2884.2804,
           "input_tokens": 236,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 410.302833,
+          "latency_ms": 410.3028,
           "input_tokens": 231,
           "output_tokens": 8
         }
@@ -8681,7 +8681,7 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.063667,
+      "deterministic_ms": 0.0637,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
@@ -8694,7 +8694,7 @@
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 405.742083,
+          "latency_ms": 405.7421,
           "input_tokens": 228,
           "output_tokens": 8
         }
@@ -8715,20 +8715,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.076208,
+      "deterministic_ms": 0.0762,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2836.066167,
+          "latency_ms": 2836.0662,
           "input_tokens": 239,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 406.30425,
+          "latency_ms": 406.3043,
           "input_tokens": 231,
           "output_tokens": 8
         }
@@ -8749,20 +8749,20 @@
         "contradicts": false,
         "shares_topic": true
       },
-      "deterministic_ms": 0.072042,
+      "deterministic_ms": 0.072,
       "hybrid_route": "llm-topical-no-edge",
       "llm": {
         "gemma3:12b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 2957.581208,
+          "latency_ms": 2957.5812,
           "input_tokens": 236,
           "output_tokens": 8
         },
         "qwen2.5:3b": {
           "verdict": "compatible",
           "raw": "{\"verdict\": \"compatible\"}",
-          "latency_ms": 410.889875,
+          "latency_ms": 410.8899,
           "input_tokens": 229,
           "output_tokens": 8
         }

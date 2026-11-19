@@ -3,6 +3,7 @@ package brainbench
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -348,5 +349,17 @@ func TestRunReconcile_WarmsEachModelBeforeItsPassAndStopsWhenUnreachable(t *test
 	})
 	if err == nil {
 		t.Error("an unreachable model must stop the run")
+	}
+}
+
+func TestRoundJSONNumbers(t *testing.T) {
+	in := []byte("{\n  \"f1\": 0.47272727,\n  \"ci\": [0.51162790, 1.25],\n  \"ms\": 3185.123456789,\n  \"n\": 151,\n  \"text\": \"limit 0.1234567 rps\",\n  \"tiny\": 0.00000123\n}\n")
+	want := "{\n  \"f1\": 0.4727,\n  \"ci\": [0.5116, 1.25],\n  \"ms\": 3185.1235,\n  \"n\": 151,\n  \"text\": \"limit 0.1234567 rps\",\n  \"tiny\": 0\n}\n"
+	if got := string(RoundJSONNumbers(in)); got != want {
+		t.Fatalf("RoundJSONNumbers:\n%s\nwant\n%s", got, want)
+	}
+	var v map[string]any
+	if err := json.Unmarshal(RoundJSONNumbers(in), &v); err != nil {
+		t.Fatalf("rounded document is not JSON: %v", err)
 	}
 }

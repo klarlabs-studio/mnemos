@@ -1,19 +1,55 @@
 package brainbench
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 )
 
 // WriteJSON writes the machine-readable report.
+// Numbers are rounded to reportDecimals places: a ratio printed at full float64
+// precision is noise past the fourth decimal, and its 16-digit runs pass the
+// Luhn check, so the security gate reads them as card numbers.
 func (r ReconcileReport) WriteJSON(w io.Writer) error {
-	enc := json.NewEncoder(w)
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
 	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+	if err := enc.Encode(r); err != nil {
+		return err
+	}
+	_, err := w.Write(RoundJSONNumbers(buf.Bytes()))
+	return err
+}
+
+const reportDecimals = 4
+
+// longNumber matches a JSON number with more than reportDecimals fractional
+// digits, outside a string: preceded by ": ", "[", "," or indentation.
+var longNumber = regexp.MustCompile(`([:\[,]\s*|\n\s+)(-?\d+\.\d{5,}(?:[eE][-+]?\d+)?)`)
+
+// RoundJSONNumbers rounds every number in an encoded JSON document that has
+// more than reportDecimals fractional digits. String values are untouched: a
+// number inside a string is never preceded by a JSON separator.
+func RoundJSONNumbers(doc []byte) []byte {
+	return longNumber.ReplaceAllFunc(doc, func(m []byte) []byte {
+		sub := longNumber.FindSubmatch(m)
+		v, err := strconv.ParseFloat(string(sub[2]), 64)
+		if err != nil {
+			return m
+		}
+		out := strconv.FormatFloat(v, 'f', reportDecimals, 64)
+		out = strings.TrimRight(strings.TrimRight(out, "0"), ".")
+		if out == "" || out == "-" {
+			out = "0"
+		}
+		return append(append([]byte(nil), sub[1]...), out...)
+	})
 }
 
 func fmtRatio(v *float64) string {
