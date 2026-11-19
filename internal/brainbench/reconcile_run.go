@@ -29,6 +29,11 @@ type ReconcileOptions struct {
 	Seed uint64
 	// Progress, when set, is called after every LLM judgement.
 	Progress func(model string, done, total int)
+	// WarmUp, when set, runs immediately before each model's pass and is not
+	// timed. Running it there rather than up front matters: a local server
+	// that holds one model at a time would otherwise charge the first pair of
+	// every pass after the first with a model load.
+	WarmUp func(ctx context.Context, j NamedJudge) error
 }
 
 // PairOutcome is everything the run decided about one pair.
@@ -187,6 +192,11 @@ func RunReconcile(ctx context.Context, set ReconcileSet, opts ReconcileOptions) 
 	// noise, and sharing makes llm-vs-hybrid a paired comparison. The hybrid
 	// arm's cost counts only the calls it routes.
 	for _, j := range opts.Judges {
+		if opts.WarmUp != nil {
+			if err := opts.WarmUp(ctx, j); err != nil {
+				return ReconcileReport{}, err
+			}
+		}
 		for i := range outcomes {
 			if err := ctx.Err(); err != nil {
 				return ReconcileReport{}, err

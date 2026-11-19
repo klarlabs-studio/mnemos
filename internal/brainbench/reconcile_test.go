@@ -323,3 +323,30 @@ func TestLLMJudge_SendsTheVersionedPromptAndReadsTheReply(t *testing.T) {
 		t.Errorf("failed call judgement = %+v", j)
 	}
 }
+
+func TestRunReconcile_WarmsEachModelBeforeItsPassAndStopsWhenUnreachable(t *testing.T) {
+	set := smallSet(t)
+	a, b := oracleFor(set), oracleFor(set)
+	var order []string
+	warm := func(_ context.Context, j NamedJudge) error {
+		order = append(order, fmt.Sprintf("%s@%d+%d", j.Model, a.calls, b.calls))
+		return nil
+	}
+	if _, err := RunReconcile(context.Background(), set, ReconcileOptions{
+		Judges: []NamedJudge{{Model: "a", Judge: a}, {Model: "b", Judge: b}}, BootstrapIters: 10, WarmUp: warm,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"a@0+0", fmt.Sprintf("b@%d+0", len(set.Pairs))}
+	if strings.Join(order, ",") != strings.Join(want, ",") {
+		t.Errorf("warm-up order = %v, want %v (each model warmed right before its own pass)", order, want)
+	}
+
+	_, err := RunReconcile(context.Background(), set, ReconcileOptions{
+		Judges: []NamedJudge{{Model: "a", Judge: oracleFor(set)}}, BootstrapIters: 10,
+		WarmUp: func(context.Context, NamedJudge) error { return errors.New("unreachable") },
+	})
+	if err == nil {
+		t.Error("an unreachable model must stop the run")
+	}
+}

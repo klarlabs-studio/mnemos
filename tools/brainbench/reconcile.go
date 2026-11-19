@@ -33,23 +33,25 @@ func runReconcile(f reconcileFlags, jsonOut string, human bool) error {
 	for _, model := range splitModels(f.models) {
 		client := llm.NewOpenAIClient(f.baseURL, "", model, string(llm.ProviderOllama)).
 			WithTemperature(0).WithSeed(int(f.seed)) //nolint:gosec // small operator-supplied seed
-		judge := brainbench.NewLLMJudge(client)
-		// One untimed warm-up call loads the model, so the first pair's
-		// latency is not the model load. It doubles as the reachability check:
-		// an unreachable Ollama stops the run rather than scoring every pair as
-		// a failed call.
-		warm := judge.Judge(ctx, "The sky is blue.", "Grass is green.")
+		judges = append(judges, brainbench.NamedJudge{Model: model, Judge: brainbench.NewLLMJudge(client)})
+	}
+	// One untimed warm-up call right before each model's pass loads the model,
+	// so the first pair's latency is not the model load. It doubles as the
+	// reachability check: an unreachable Ollama stops the run rather than
+	// scoring every pair as a failed call.
+	warmUp := func(ctx context.Context, j brainbench.NamedJudge) error {
+		warm := j.Judge.Judge(ctx, "The sky is blue.", "Grass is green.")
 		if warm.Err != "" {
-			return fmt.Errorf("ollama model %s at %s unreachable: %s", model, f.baseURL, warm.Err)
+			return fmt.Errorf("ollama model %s at %s unreachable: %s", j.Model, f.baseURL, warm.Err)
 		}
-		fmt.Fprintf(os.Stderr, "brainbench: %s warm (%.0f ms)\n", model, warm.LatencyMS)
-		judges = append(judges, brainbench.NamedJudge{Model: model, Judge: judge})
+		fmt.Fprintf(os.Stderr, "brainbench: %s warm (%.0f ms)\n", j.Model, warm.LatencyMS)
+		return nil
 	}
 	start := time.Now()
 	report, err := brainbench.RunReconcile(ctx, set, brainbench.ReconcileOptions{
-		Judges: judges, BootstrapIters: f.bootstrap, Seed: f.seed,
+		Judges: judges, BootstrapIters: f.bootstrap, Seed: f.seed, WarmUp: warmUp,
 		Progress: func(model string, done, total int) {
-			if done%25 == 0 || done == total {
+			if done%10 == 0 || done == total {
 				fmt.Fprintf(os.Stderr, "brainbench: %s %d/%d (%s)\n", model, done, total, time.Since(start).Round(time.Second))
 			}
 		},
