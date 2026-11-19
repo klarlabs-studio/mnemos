@@ -88,9 +88,10 @@ func mcpRunEpisodeDependencies(ctx context.Context, input mcpEpisodeDependencies
 		return dependencyListView{}, err
 	}
 	defer closeConn(conn)
-	return runDependencyList(ctx, conn, input.EpisodeID, input.IncludeRemoved, func(runID string) bool {
+	view, err := runDependencyList(ctx, conn, input.EpisodeID, input.IncludeRemoved, func(runID string) bool {
 		return mcpRunAllowed(ctx, runID)
 	})
+	return view, mcpDependencyError(err, input.EpisodeID, "")
 }
 
 func mcpRunDeclareEpisodeDependency(ctx context.Context, actor string, input mcpDeclareEpisodeDependencyInput) (dependencyChangeView, error) {
@@ -99,9 +100,10 @@ func mcpRunDeclareEpisodeDependency(ctx context.Context, actor string, input mcp
 		return dependencyChangeView{}, err
 	}
 	defer closeWriter(gw)
-	return runDependencyDeclare(ctx, gw, input.EpisodeID, input.DependsOn, input.Kind, input.Note, actor, func(runID string) bool {
+	view, err := runDependencyDeclare(ctx, gw, input.EpisodeID, input.DependsOn, input.Kind, input.Note, actor, func(runID string) bool {
 		return mcpRunAllowed(ctx, runID)
 	})
+	return view, mcpDependencyError(err, input.EpisodeID, input.DependsOn)
 }
 
 func mcpRunRemoveEpisodeDependency(ctx context.Context, actor string, input mcpRemoveEpisodeDependencyInput) (dependencyChangeView, error) {
@@ -110,9 +112,10 @@ func mcpRunRemoveEpisodeDependency(ctx context.Context, actor string, input mcpR
 		return dependencyChangeView{}, err
 	}
 	defer closeWriter(gw)
-	return runDependencyRemove(ctx, gw, input.EpisodeID, input.DependsOn, actor, func(runID string) bool {
+	view, err := runDependencyRemove(ctx, gw, input.EpisodeID, input.DependsOn, actor, func(runID string) bool {
 		return mcpRunAllowed(ctx, runID)
 	})
+	return view, mcpDependencyError(err, input.EpisodeID, input.DependsOn)
 }
 
 // --- CLI ---
@@ -233,21 +236,44 @@ func listDependencies(a dependenciesArgs, f Flags) error {
 }
 
 func dependencyCLIError(err error, a dependenciesArgs) error {
-	source := a.declare + a.remove
-	switch {
-	case err == nil:
+	if err == nil {
 		return nil
-	case errors.Is(err, dependency.ErrEventNotFound):
-		return NewUserError("%v", err)
-	case errors.Is(err, dependency.ErrInvalid), errors.Is(err, dependency.ErrEventIDRequired):
-		return NewUserError("%v", err)
-	case errors.Is(err, dependency.ErrExists):
-		return NewUserError("episode %s already depends on %s; remove it first to change its kind or note", a.id, source)
-	case errors.Is(err, dependency.ErrNotFound):
-		return NewUserError("episode %s has no live dependency on %s", a.id, source)
-	default:
-		return NewSystemError(err, "episode dependencies of %s", a.id)
 	}
+	if msg, ok := dependencyRefusal(err, a.id, a.declare+a.remove); ok {
+		return NewUserError("%s", msg)
+	}
+	return NewSystemError(err, "episode dependencies of %s", a.id)
+}
+
+// dependencyRefusal is the caller-facing message for a request the caller
+// can fix, and false for a fault. A conflict reads the same whether the
+// check in front of the governed write caught it or the store refused the
+// write itself, because a concurrent edit landed in between: the governed
+// path keeps the store's sentinel (kernel.ExecuteWithCause).
+func dependencyRefusal(err error, eventID, source string) (string, bool) {
+	switch {
+	case errors.Is(err, dependency.ErrEventNotFound),
+		errors.Is(err, dependency.ErrInvalid), errors.Is(err, dependency.ErrEventIDRequired):
+		return err.Error(), true
+	case errors.Is(err, dependency.ErrExists):
+		return fmt.Sprintf("episode %s already depends on %s; remove it first to change its kind or note", eventID, source), true
+	case errors.Is(err, dependency.ErrNotFound):
+		return fmt.Sprintf("episode %s has no live dependency on %s", eventID, source), true
+	default:
+		return "", false
+	}
+}
+
+// mcpDependencyError returns a refusal as -32602 with its message (#355),
+// and leaves a fault opaque.
+func mcpDependencyError(err error, eventID, source string) error {
+	if err == nil {
+		return nil
+	}
+	if msg, ok := dependencyRefusal(err, strings.TrimSpace(eventID), strings.TrimSpace(source)); ok {
+		return userInputError(errors.New(msg))
+	}
+	return err
 }
 
 func printJSON(v any) error {

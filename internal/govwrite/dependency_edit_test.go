@@ -2,6 +2,7 @@ package govwrite_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -157,5 +158,33 @@ func TestRemoveEventDependency_MissingIsAnError(t *testing.T) {
 	seedDependenceFixture(t, w)
 	if _, err := govwrite.ApplyDependencyRemoval(context.Background(), w.Conn(), "ev_notes", "ev_adv", "x"); err == nil {
 		t.Fatal("removing a dependency that was never recorded succeeded")
+	}
+}
+
+// The governed write itself reports a conflict with its type, not as text:
+// declaring a live pair or removing a removed one straight through the
+// writer, with no check in front of it (the way a concurrent edit reaches
+// it), returns an error matching the store's sentinel.
+func TestDependencyEdits_GovernedConflictsKeepTheirType(t *testing.T) {
+	t.Parallel()
+	w := newWriter(t)
+	ctx := context.Background()
+	seedDependenceFixture(t, w)
+	dep := domain.EventDependency{EventID: "ev_blog", DependsOn: "ev_adv", Kind: domain.DependencyCopies, CreatedBy: "erin"}
+
+	if _, err := w.DeclareEventDependency(ctx, dep); !errors.Is(err, domain.ErrDependencyExists) {
+		t.Errorf("declaring a live pair: err = %v, want ErrDependencyExists", err)
+	}
+	if _, err := w.RemoveEventDependency(ctx, "ev_blog", "ev_adv", "dave"); err != nil {
+		t.Fatalf("RemoveEventDependency: %v", err)
+	}
+	if _, err := w.RemoveEventDependency(ctx, "ev_blog", "ev_adv", "dave"); !errors.Is(err, domain.ErrDependencyNotFound) {
+		t.Errorf("removing a removed pair: err = %v, want ErrDependencyNotFound", err)
+	}
+	if _, err := w.DeclareEventDependency(ctx, dep); err != nil {
+		t.Fatalf("revive: %v", err)
+	}
+	if _, err := w.DeclareEventDependency(ctx, dep); !errors.Is(err, domain.ErrDependencyExists) {
+		t.Errorf("declaring the revived pair: err = %v, want ErrDependencyExists", err)
 	}
 }

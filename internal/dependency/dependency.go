@@ -14,8 +14,11 @@
 //     other runs;
 //   - the kind is one of cites, copies, derived_from and the note is bounded;
 //   - declaring a pair with a live dependency is [ErrExists] and removing a
-//     pair without one is [ErrNotFound], decided here before the governed
-//     write, because the kernel carries an executor's error only as text.
+//     pair without one is [ErrNotFound]. Both are checked here before the
+//     governed write, and the store decides them again inside it: a
+//     concurrent edit that lands in between comes back from the governed
+//     write as the same sentinel (kernel.ExecuteWithCause keeps the
+//     executor's error), so a race is a 409 / 404, never a 500.
 //
 // [Declare], [Remove] and [List] do those checks once for the CLI, MCP, REST,
 // gRPC and the Go library, and [NewChangeReport] / [NewListReport] are the

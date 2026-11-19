@@ -156,7 +156,8 @@ func Build(logger *bolt.Logger, actions []Action, executors map[string]domain.Ac
 		WithBudget(budget)
 
 	for ref, exec := range executors {
-		k.RegisterActionExecutor(ref, exec)
+		// Every executor keeps its error for ExecuteWithCause (cause.go).
+		k.RegisterActionExecutor(ref, causeKeepingExecutor{inner: exec})
 	}
 	if err := k.RegisterPlugin(plugin); err != nil {
 		return nil, fmt.Errorf("kernel: register plugin: %w", err)

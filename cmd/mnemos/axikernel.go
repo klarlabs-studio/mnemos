@@ -322,7 +322,7 @@ func dispatchAxiTool[Out any](ctx context.Context, k *kernel.Governed, _ *sql.DB
 	if err != nil {
 		return zero, fmt.Errorf("encode %s input: %w", mcpName, err)
 	}
-	res, err := k.Execute(ctx, axi.Invocation{
+	res, cause, err := k.ExecuteWithCause(ctx, axi.Invocation{
 		Action: axiActionName(mcpName),
 		Input:  payload,
 	})
@@ -337,6 +337,9 @@ func dispatchAxiTool[Out any](ctx context.Context, k *kernel.Governed, _ *sql.DB
 		// (#355).
 		if msg, ok := userInputMessage(res.Failure.Message); ok {
 			return zero, protocol.NewInvalidParams(msg)
+		}
+		if cause != nil {
+			return zero, fmt.Errorf("%s: %w", res.Failure.Code, cause)
 		}
 		return zero, fmt.Errorf("%s: %s", res.Failure.Code, res.Failure.Message)
 	}

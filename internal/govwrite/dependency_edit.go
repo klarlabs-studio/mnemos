@@ -95,16 +95,16 @@ func (e removeDependencyExecutor) Execute(ctx context.Context, input any, _ axid
 // DeclareEventDependency declares that dep.EventID depends on dep.DependsOn
 // (ADR 0038, editing dependencies) and rescores the dependent episode's
 // beliefs. Signal and CreatedAt are set here; CreatedBy is the actor. A live
-// dependency for the pair is an error wrapping domain.ErrDependencyExists
-// when the store reports it directly (ApplyDependencyDeclaration); through the
-// kernel the cause is carried as text, so callers check first
-// (internal/dependency does).
+// dependency for the pair is an error wrapping domain.ErrDependencyExists,
+// through the kernel as well as directly (ApplyDependencyDeclaration): the
+// dispatch keeps the executor's error (kernel.ExecuteWithCause).
 func (w *Writer) DeclareEventDependency(ctx context.Context, dep domain.EventDependency) (domain.DependencyChange, error) {
 	return dispatch[domain.DependencyChange](ctx, w, actionDeclareDependency, declareDependencyInput{Dependency: dep})
 }
 
 // RemoveEventDependency marks the (eventID, dependsOn) dependency removed by
-// actor and rescores the dependent episode's beliefs.
+// actor and rescores the dependent episode's beliefs. A pair with no live
+// dependency is an error wrapping domain.ErrDependencyNotFound.
 func (w *Writer) RemoveEventDependency(ctx context.Context, eventID, dependsOn, actor string) (domain.DependencyChange, error) {
 	return dispatch[domain.DependencyChange](ctx, w, actionRemoveDependency, removeDependencyInput{
 		EventID: strings.TrimSpace(eventID), DependsOn: strings.TrimSpace(dependsOn), Actor: actor,

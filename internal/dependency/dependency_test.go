@@ -195,3 +195,39 @@ func TestList_LiveRemovedPendingAndRunScope(t *testing.T) {
 		t.Errorf("no id: err = %v", err)
 	}
 }
+
+// A concurrent edit that lands after the check and before the governed write
+// is the same refusal the check gives: the store's sentinel comes back
+// through the kernel with its type, so every surface maps it to 409 / 404.
+func TestDeclareAndRemove_ConcurrentEditIsTheSameRefusal(t *testing.T) {
+	t.Parallel()
+	w := newWriter(t)
+	ctx := context.Background()
+	conn := w.Conn()
+	raceDeclare := func(ctx context.Context, d domain.EventDependency) (domain.DependencyChange, error) {
+		// Another writer declares the pair between the check and this write.
+		other := d
+		other.Signal, other.CreatedAt, other.CreatedBy = domain.SignalDeclared, time.Now().UTC(), "other-writer"
+		if _, err := conn.Dependencies.Declare(ctx, other); err != nil {
+			t.Fatalf("concurrent declaration: %v", err)
+		}
+		return w.DeclareEventDependency(ctx, d)
+	}
+	if _, err := dependency.Declare(ctx, conn.Events, conn.Dependencies, raceDeclare, dependency.DeclareRequest{
+		EventID: "ev_copy", DependsOn: "ev_src", Kind: "copies",
+	}); !errors.Is(err, dependency.ErrExists) {
+		t.Errorf("raced declaration: err = %v, want ErrExists", err)
+	}
+
+	raceRemove := func(ctx context.Context, id, source, actor string) (domain.DependencyChange, error) {
+		if _, err := conn.Dependencies.Remove(ctx, id, source, "other-writer", time.Now().UTC()); err != nil {
+			t.Fatalf("concurrent removal: %v", err)
+		}
+		return w.RemoveEventDependency(ctx, id, source, actor)
+	}
+	if _, err := dependency.Remove(ctx, conn.Events, conn.Dependencies, raceRemove, dependency.RemoveRequest{
+		EventID: "ev_copy", DependsOn: "ev_src",
+	}); !errors.Is(err, dependency.ErrNotFound) {
+		t.Errorf("raced removal: err = %v, want ErrNotFound", err)
+	}
+}

@@ -321,7 +321,7 @@ func (w *Writer) Close() error {
 // in the executor, or a budget breach all surface as an error here.
 func dispatch[Out any](ctx context.Context, w *Writer, action string, input any) (Out, error) {
 	var zero Out
-	res, err := w.kernel.Execute(ctx, axi.Invocation{
+	res, cause, err := w.kernel.ExecuteWithCause(ctx, axi.Invocation{
 		Action: kernel.ActionName(action),
 		Input:  map[string]any{inputPayloadKey: input},
 	})
@@ -329,6 +329,12 @@ func dispatch[Out any](ctx context.Context, w *Writer, action string, input any)
 		return zero, fmt.Errorf("govwrite: %s: %w", action, err)
 	}
 	if res.Failure != nil {
+		// The executor's own error, so a typed sentinel (a conflict raised by
+		// the store inside the write) still matches errors.Is; the text is
+		// the one the kernel recorded.
+		if cause != nil {
+			return zero, fmt.Errorf("govwrite: %s: %s: %w", action, res.Failure.Code, cause)
+		}
 		return zero, fmt.Errorf("govwrite: %s: %s: %s", action, res.Failure.Code, res.Failure.Message)
 	}
 	if res.Result == nil {
