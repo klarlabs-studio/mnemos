@@ -164,7 +164,7 @@ func dispatchWrite[Out any](ctx context.Context, m *memory, action string, input
 		return zero, err
 	}
 
-	res, err := m.wkernel.Execute(ctx, axi.Invocation{
+	res, cause, err := m.wkernel.ExecuteWithCause(ctx, axi.Invocation{
 		Action: kernel.ActionName(action),
 		Input:  map[string]any{inputPayloadKey: input},
 	})
@@ -188,6 +188,11 @@ func dispatchWrite[Out any](ctx context.Context, m *memory, action string, input
 	}
 
 	if res.Failure != nil {
+		// The executor's own error keeps its type (errors.Is matches a
+		// sentinel the store raised inside the write); the text is unchanged.
+		if cause != nil {
+			return zero, fmt.Errorf("mnemos: %s: %s: %w", action, res.Failure.Code, cause)
+		}
 		return zero, fmt.Errorf("mnemos: %s: %s: %s", action, res.Failure.Code, res.Failure.Message)
 	}
 	if res.Result == nil {

@@ -2,6 +2,7 @@ package grpc_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"go.klarlabs.de/mnemos/internal/domain"
@@ -39,11 +40,16 @@ func TestGRPC_EpisodeDependencies(t *testing.T) {
 		t.Fatalf("ListEpisodeDependencies = %+v (%v)", list, err)
 	}
 
-	removed, err := client.RemoveEpisodeDependency(ctx, &mnemosv1.RemoveEpisodeDependencyRequest{EpisodeId: "ev-other", DependsOn: "ev-mine"})
+	if _, err := client.RemoveEpisodeDependency(ctx, &mnemosv1.RemoveEpisodeDependencyRequest{
+		EpisodeId: "ev-other", DependsOn: "ev-mine", Reason: strings.Repeat("x", domain.MaxDependencyRemovalReasonLen+1),
+	}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("over-long reason: err = %v, want InvalidArgument", err)
+	}
+	removed, err := client.RemoveEpisodeDependency(ctx, &mnemosv1.RemoveEpisodeDependencyRequest{EpisodeId: "ev-other", DependsOn: "ev-mine", Reason: "not a repost"})
 	if err != nil {
 		t.Fatalf("RemoveEpisodeDependency: %v", err)
 	}
-	if removed.GetDependency().GetRemovedAt() == nil || removed.GetDependency().GetRemovedBy() != "agent-1" {
+	if removed.GetDependency().GetRemovedAt() == nil || removed.GetDependency().GetRemovedBy() != "agent-1" || removed.GetDependency().GetRemovalReason() != "not a repost" {
 		t.Errorf("removed = %+v", removed.GetDependency())
 	}
 	live, err := conn.Dependencies.ListByEventIDs(context.Background(), []string{"ev-other"})
@@ -51,8 +57,17 @@ func TestGRPC_EpisodeDependencies(t *testing.T) {
 		t.Errorf("live rows after removal = %+v (%v)", live, err)
 	}
 	audit, err := client.ListEpisodeDependencies(ctx, &mnemosv1.ListEpisodeDependenciesRequest{EpisodeId: "ev-mine", IncludeRemoved: true})
-	if err != nil || len(audit.GetDependents()) != 1 || audit.GetDependents()[0].GetRemovedAt() == nil {
+	if err != nil || len(audit.GetDependents()) != 1 || audit.GetDependents()[0].GetRemovedAt() == nil || audit.GetDependents()[0].GetRemovalReason() != "not a repost" {
 		t.Errorf("audit = %+v (%v)", audit, err)
+	}
+
+	// Declared again: the removed interval stays in the audit listing.
+	if _, err := client.DeclareEpisodeDependency(ctx, &mnemosv1.DeclareEpisodeDependencyRequest{EpisodeId: "ev-other", DependsOn: "ev-mine", Kind: "cites"}); err != nil {
+		t.Fatalf("revive: %v", err)
+	}
+	audit, err = client.ListEpisodeDependencies(ctx, &mnemosv1.ListEpisodeDependenciesRequest{EpisodeId: "ev-mine", IncludeRemoved: true})
+	if err != nil || len(audit.GetDependents()) != 2 || audit.GetDependents()[0].GetRemovalReason() != "not a repost" || audit.GetDependents()[1].GetRemovedAt() != nil {
+		t.Errorf("audit after revival = %+v (%v), want the removed interval then the live one", audit, err)
 	}
 }
 

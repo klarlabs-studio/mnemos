@@ -295,9 +295,35 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
   created_by TEXT NOT NULL DEFAULT '<system>',
   removed_at TEXT,
   removed_by TEXT NOT NULL DEFAULT '',
+  removal_reason TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (event_id, depends_on)
 );
 CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
+
+-- event_dependency_history (ADR 0038, editing dependencies): the closed
+-- intervals of a pair's record that a revival superseded. Declaring a removed
+-- pair copies its tombstone here, unchanged, in the same transaction that
+-- overwrites the current row, so [valid_from, valid_to) with who recorded and
+-- who removed it (and why) is never lost. Append-only; recorded-as-of reads
+-- count a dependency at T iff the current row or one of these contains T.
+-- Existing tombstones need no backfill: each is already one closed interval
+-- in event_dependencies and moves here on its first revival. No foreign keys:
+-- deleting an event clears its rows in both directions explicitly.
+CREATE TABLE IF NOT EXISTS event_dependency_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id TEXT NOT NULL,
+  depends_on TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  signal_type TEXT NOT NULL,
+  reference_text TEXT NOT NULL DEFAULT '',
+  valid_from TEXT NOT NULL,
+  recorded_by TEXT NOT NULL DEFAULT '<system>',
+  valid_to TEXT NOT NULL,
+  removed_by TEXT NOT NULL DEFAULT '',
+  removal_reason TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_event_dependency_history_event_id ON event_dependency_history(event_id);
+CREATE INDEX IF NOT EXISTS idx_event_dependency_history_depends_on ON event_dependency_history(depends_on);
 
 -- pending_references (ADR 0038, late citations): a citation in episode
 -- event_id that named no stored episode when it was written, under a

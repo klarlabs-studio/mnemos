@@ -336,7 +336,7 @@ this step the only correction was destroying the episode. Every transport can
 now list, declare and remove dependencies, with the same semantics everywhere.
 
 **Surfaces.** `mnemos dependencies <id>` (`--include-removed`, `--declare <src>
---kind <k> [--note <text>]`, `--remove <src>`), the MCP tools
+--kind <k> [--note <text>]`, `--remove <src> [--reason <text>]`), the MCP tools
 `episode_dependencies` (read), `declare_episode_dependency` and
 `remove_episode_dependency` (`claims:write`, the scope of `retract_episode`),
 REST `GET`/`POST /v1/episodes/{id}/dependencies` and `DELETE
@@ -368,14 +368,56 @@ for audit and for recorded-as-of trust, which counts a dependency at T only
 while it was in force: `created_at <= T` and (`removed_at` unset or after T).
 Destroying an episode still hard-deletes its rows, tombstones included.
 
+**Removal reasons.** A removal may say why: `--reason` on the CLI, `reason`
+on the MCP tool, the `reason` query parameter or a `{"reason"}` body on REST
+(not both), `reason` on the gRPC request, and a `reason` argument on
+`Memory.RemoveEventDependency` and `client.RemoveEventDependency`. It is
+trimmed, bounded like the note (512 characters, `ErrInvalid` / 400 /
+`InvalidArgument` / -32602 above that), stored as
+`event_dependencies.removal_reason` (SQLite schema v39 and every other
+backend) and shown with `removed_at` / `removed_by` in every
+`--include-removed` listing.
+
 **Declaring.** A declared row has signal `declared`, the caller's kind, the
 caller's note as its reference (at most 512 characters, the pending-key bound)
 and the caller as its author. Declaring a pair that has a live row is a
 conflict (REST 409, gRPC `AlreadyExists`, `ErrDependencyExists`), because the
-first justification stands. Declaring a removed pair revives it: the tombstone
-is cleared and kind, signal, reference, `created_at` and `created_by` are
-overwritten with the declaration. Removing a pair with no live row is not found
-(REST 404, gRPC `NotFound`, `ErrDependencyNotFound`).
+first justification stands. Declaring a removed pair revives it (see "Edit
+history"): the tombstone moves into the history and the current row takes the
+declaration's kind, signal, reference, `created_at` and `created_by`. Removing
+a pair with no live row is not found (REST 404, gRPC `NotFound`,
+`ErrDependencyNotFound`).
+
+**Edit history.** *Added 2026-11-19, closing the first two limits this
+section shipped with.* A pair's record is a sequence of intervals of recorded
+time, `[created_at, removed_at)`. The current row in `event_dependencies` is
+the latest; `event_dependency_history` (SQLite schema v39, libSQL through the
+SQLite schema, memory, Postgres in the RLS `scoped` array, MySQL) keeps the
+closed ones a revival superseded: `valid_from`, `recorded_by`, `valid_to`,
+`removed_by`, `removal_reason` and the interval's kind, signal and reference,
+append-only. Reviving copies the tombstone into the history, unchanged, in
+the same transaction that overwrites the current row; both statements are
+conditional on the stored row being removed, so a declaration racing a
+revival copies nothing and gets the conflict (Postgres re-checks the
+condition after the row lock, MySQL locks the row first). Nothing else
+writes the history: detection's `Append` still ignores a stored pair, and
+the live reads, the trust aggregates and retraction never read it.
+
+The WithRemoved reads return every interval, the current row and the
+history, so a pair removed and declared again appears once per time it was
+in force. That is what a recorded-as-of read needs: `recorded.TrustInputAt`
+counts a dependency at T iff some interval contains T (`LiveAt` on each), so
+the time between the original recording and the removal keeps its
+dependency after a revival, and the removal itself stays on record. The
+`--include-removed` listings show the same intervals.
+
+*Backfill.* None is needed. An existing tombstone is already exactly one
+closed interval, in `event_dependencies`; it reads with an empty reason (none
+was asked for when it was made) and moves into the history on its first
+revival. A live row is the open interval it always was.
+
+*Destruction.* Deleting an episode hard-deletes its history rows in both
+directions with its current rows, as before.
 
 **What an edit changes.** Trust counts a dependent evidence episode as a
 repeat, so only the beliefs the dependent episode evidences can change. Each
@@ -394,22 +436,32 @@ un-retraction would then restore beliefs nobody recorded as withdrawn by it.
 `source_retracted` tells the caller instead: un-retracting and retracting the
 source again applies the dependencies stored by then, on the record.
 
+**Concurrent edits.** `internal/dependency` reads the pair before the
+governed write to answer 409 / 404 cheaply, and the store decides the same
+question again inside the write (the upsert affects no row, or the update
+finds no live row). Two concurrent edits of the same pair can both pass the
+read; the second is then refused by the store. That refusal used to surface
+as an internal error, because axi carries an executor's error only as
+`FailureReason{Code, Message}` text. `kernel.Build` now wraps every executor
+so the error it returns is kept in a per-call slot on the context, and
+`Governed.ExecuteWithCause` hands it back next to the result; every governed
+dispatch (`govwrite`, the library's `dispatchWrite`, MCP's `dispatchAxiTool`)
+wraps that cause with `%w`. The kernel's failure record and audit text are
+unchanged. `ErrDependencyExists` and `ErrDependencyNotFound` therefore reach
+every transport with their type, and a race is the same 409 /
+`AlreadyExists` / 404 / `NotFound` (and -32602 on MCP) the read would have
+given. The race tests force the interleaving on each transport by committing
+another writer's edit between the read and the write.
+
 **Limits.**
 
-- *A revival rewrites history.* Reviving overwrites `created_at`, so a
-  recorded-as-of read between the original recording and the removal no
-  longer sees the dependency. Keeping every interval would need a history
-  table; one row per pair was kept because the revival is rare and the
-  current state is what retraction and trust read.
 - *A tombstone is per pair.* When the citation also resolves to a different
   episode carrying the same key (a mirror of the source), that is a different
   pair and is recorded.
-- *Conflicts are decided before the governed write.* The kernel carries an
-  executor's error only as text, so `internal/dependency` reads the pair first
-  to answer 409 / 404. Two concurrent edits of the same pair can both pass
-  that check; the store still refuses the second (the upsert affects no row,
-  or the update finds no live row), which then surfaces as an internal error
-  rather than a conflict.
+- *The history records hand edits only.* Intervals start at a recording
+  (detection or a declaration) and end at a hand removal; nothing else closes
+  one. Destroying an episode removes its history with it, by design: a
+  destroyed episode has no recorded past to rewind to.
 - *A failed rescore leaves the row written.* The rescore runs after the row
   is stored; if it fails, the edit reports an error and a retry of the same
   edit is a conflict. `mnemos recompute-trust` repairs the scores.

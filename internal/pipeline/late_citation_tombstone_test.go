@@ -33,7 +33,7 @@ func TestRecordEventDependencies_DoesNotResurrectARemovedLateDependency(t *testi
 			if err != nil || len(live) != 1 || live[0].DependsOn != "t_adv" {
 				t.Fatalf("late dependency = %+v (%v), want t_url -> t_adv", live, err)
 			}
-			if _, err := conn.Dependencies.Remove(ctx, "t_url", "t_adv", "reviewer", time.Now().UTC()); err != nil {
+			if _, err := conn.Dependencies.Remove(ctx, "t_url", "t_adv", "reviewer", "", time.Now().UTC()); err != nil {
 				t.Fatalf("remove: %v", err)
 			}
 

@@ -67,7 +67,7 @@ func (r EventDependencyRepository) Declare(_ context.Context, d domain.EventDepe
 	}
 	d.CreatedAt = d.CreatedAt.UTC()
 	d.CreatedBy = actorOr(d.CreatedBy)
-	d.RemovedAt, d.RemovedBy = nil, ""
+	d.RemovedAt, d.RemovedBy, d.RemovalReason = nil, "", ""
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
 	for i, cur := range r.state.dependencies {
@@ -77,6 +77,8 @@ func (r EventDependencyRepository) Declare(_ context.Context, d domain.EventDepe
 		if cur.Live() {
 			return domain.EventDependency{}, fmt.Errorf("%w: %s -> %s", domain.ErrDependencyExists, d.EventID, d.DependsOn)
 		}
+		// The tombstone is a closed interval of the pair's record: keep it.
+		r.state.dependencyHistory = append(r.state.dependencyHistory, cur)
 		r.state.dependencies[i] = d
 		return d, nil
 	}
@@ -85,7 +87,7 @@ func (r EventDependencyRepository) Declare(_ context.Context, d domain.EventDepe
 }
 
 // Remove implements [ports.EventDependencyRepository.Remove].
-func (r EventDependencyRepository) Remove(_ context.Context, eventID, dependsOn, removedBy string, at time.Time) (domain.EventDependency, error) {
+func (r EventDependencyRepository) Remove(_ context.Context, eventID, dependsOn, removedBy, reason string, at time.Time) (domain.EventDependency, error) {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
 	for i, cur := range r.state.dependencies {
@@ -93,7 +95,7 @@ func (r EventDependencyRepository) Remove(_ context.Context, eventID, dependsOn,
 			continue
 		}
 		removed := at.UTC()
-		cur.RemovedAt, cur.RemovedBy = &removed, actorOr(removedBy)
+		cur.RemovedAt, cur.RemovedBy, cur.RemovalReason = &removed, actorOr(removedBy), reason
 		r.state.dependencies[i] = cur
 		return cur, nil
 	}
@@ -113,6 +115,13 @@ func (r EventDependencyRepository) matching(ids []string, key func(domain.EventD
 			out = append(out, d)
 		}
 	}
+	if withRemoved {
+		for _, d := range r.state.dependencyHistory {
+			if want[key(d)] {
+				out = append(out, d)
+			}
+		}
+	}
 	return out
 }
 
@@ -126,4 +135,11 @@ func (s *state) dropDependenciesLocked(drop func(domain.EventDependency) bool) {
 		}
 	}
 	s.dependencies = kept
+	history := s.dependencyHistory[:0]
+	for _, d := range s.dependencyHistory {
+		if !drop(d) {
+			history = append(history, d)
+		}
+	}
+	s.dependencyHistory = history
 }

@@ -751,7 +751,7 @@ func handleMCP(args []string) {
 		})
 
 	srv.Tool("remove_episode_dependency").
-		Description("Remove a wrong source dependency between two episodes. The row is kept with who removed it and when, so detecting the same citation again does not bring it back; declare_episode_dependency revives it. The dependent episode's beliefs are rescored. Nothing is un-retracted: source_retracted says whether the source is retracted.").
+		Description("Remove a wrong source dependency between two episodes, optionally saying why (reason). The row is kept with who removed it, when and why, so detecting the same citation again does not bring it back; declare_episode_dependency revives it and keeps this removal in the edit history. The dependent episode's beliefs are rescored. Nothing is un-retracted: source_retracted says whether the source is retracted.").
 		OutputSchema(dependencyChangeView{}).
 		Handler(func(ctx context.Context, input mcpRemoveEpisodeDependencyInput) (dependencyChangeView, error) {
 			return mcpRunRemoveEpisodeDependency(ctx, mcpActorFor(ctx, mcpActor), input)

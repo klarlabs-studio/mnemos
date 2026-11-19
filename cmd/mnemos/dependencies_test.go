@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
+
+	"go.klarlabs.de/mcp/protocol"
 
 	"go.klarlabs.de/mnemos/client"
 	"go.klarlabs.de/mnemos/internal/domain"
@@ -80,7 +84,7 @@ func TestREST_EpisodeDependencies_ShareTheCLIReports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
 	}
-	if _, err := runDependencyRemove(context.Background(), gw, "ev-copy", "ev-src", "operator", nil); err == nil {
+	if _, err := runDependencyRemove(context.Background(), gw, "ev-copy", "ev-src", "", "operator", nil); err == nil {
 		t.Error("CLI removal of an already removed dependency succeeded")
 	}
 	revived, err := runDependencyDeclare(context.Background(), gw, "ev-copy", "ev-src", "cites", "", "operator", nil)
@@ -181,11 +185,11 @@ func TestClient_EventDependencies_AgainstServe(t *testing.T) {
 	if at, err := client.ParseTime(list.DependsOn[0].CreatedAt); err != nil || !at.Equal(stored[0].CreatedAt) {
 		t.Errorf("client created_at %q differs from stored %v (%v)", list.DependsOn[0].CreatedAt, stored[0].CreatedAt, err)
 	}
-	removed, err := writer.RemoveEventDependency(ctx, "ev-copy", "ev-src")
+	removed, err := writer.RemoveEventDependency(ctx, "ev-copy", "ev-src", "")
 	if err != nil || removed.Dependency.RemovedAt == "" {
 		t.Fatalf("RemoveEventDependency = %+v (%v)", removed, err)
 	}
-	if _, err := writer.RemoveEventDependency(ctx, "ev-copy", "ev-src"); !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
+	if _, err := writer.RemoveEventDependency(ctx, "ev-copy", "ev-src", ""); !errors.As(err, &apiErr) || apiErr.Status != http.StatusNotFound {
 		t.Errorf("second removal: err = %v, want 404", err)
 	}
 	if audit, err := reader.EventDependencies(ctx, "ev-copy", true); err != nil || len(audit.DependsOn) != 1 || audit.DependsOn[0].RemovedAt == "" {
@@ -240,6 +244,7 @@ func TestParseDependenciesArgs(t *testing.T) {
 		{[]string{"ev", "--include-removed"}, dependenciesArgs{id: "ev", includeRemoved: true}},
 		{[]string{"ev", "--declare", "src", "--kind=cites", "--note", "why"}, dependenciesArgs{id: "ev", declare: "src", kind: "cites", note: "why"}},
 		{[]string{"--remove=src", "ev"}, dependenciesArgs{id: "ev", remove: "src"}},
+		{[]string{"ev", "--remove", "src", "--reason", "not a copy"}, dependenciesArgs{id: "ev", remove: "src", reason: "not a copy"}},
 	}
 	for _, tc := range ok {
 		got, err := parseDependenciesArgs(tc.args)
@@ -250,9 +255,143 @@ func TestParseDependenciesArgs(t *testing.T) {
 	for _, bad := range [][]string{
 		{}, {"ev", "other"}, {"ev", "--declare", "src"}, {"ev", "--declare", "a", "--remove", "b", "--kind", "cites"},
 		{"ev", "--kind", "cites"}, {"ev", "--remove", "src", "--include-removed"}, {"ev", "--declare"}, {"ev", "--bogus"},
+		{"ev", "--reason", "why"}, {"ev", "--declare", "src", "--kind", "cites", "--reason", "why"},
 	} {
 		if _, err := parseDependenciesArgs(bad); err == nil {
 			t.Errorf("%v: accepted", bad)
 		}
+	}
+}
+
+// A removal carries an optional reason on every daemon surface, the
+// include_removed listing shows it, and a revival keeps the removed interval:
+// the listing then has one entry per interval, the removal included.
+func TestEpisodeDependencies_RemovalReasonAndHistory(t *testing.T) {
+	f := newRunScopeFixture(t)
+	f.seedRun(t, "run-a", "ev-src", "cl-src")
+	f.seedRun(t, "run-a", "ev-copy", "cl-copy")
+	f.seedRun(t, "run-a", "ev-third", "cl-third")
+	tok := f.openToken(t, []string{domain.ScopeClaimsWrite})
+	ctx := context.Background()
+	declare := func(episode, source string) {
+		t.Helper()
+		resp := f.declareDependency(t, episode, tok, map[string]string{"depends_on": source, "kind": "copies"})
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("declare %s -> %s: status = %d", episode, source, resp.StatusCode)
+		}
+	}
+	remove := func(path string, body any) *http.Response {
+		t.Helper()
+		var reader *bytes.Reader
+		if body != nil {
+			raw, _ := json.Marshal(body)
+			reader = bytes.NewReader(raw)
+		} else {
+			reader = bytes.NewReader(nil)
+		}
+		req, err := http.NewRequest(http.MethodDelete, f.srv.URL+path, reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	declare("ev-copy", "ev-src")
+	long := strings.Repeat("é", domain.MaxDependencyRemovalReasonLen+1)
+	for _, tc := range []struct {
+		name, path string
+		body       any
+	}{
+		{"an over-long reason", "/v1/episodes/ev-copy/dependencies/ev-src", map[string]string{"reason": long}},
+		{"a reason in both places", "/v1/episodes/ev-copy/dependencies/ev-src?reason=a", map[string]string{"reason": "b"}},
+		{"an unknown body field", "/v1/episodes/ev-copy/dependencies/ev-src", map[string]string{"why": "x"}},
+	} {
+		resp := remove(tc.path, tc.body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("remove with %s: status = %d, want 400", tc.name, resp.StatusCode)
+		}
+	}
+	resp := remove("/v1/episodes/ev-copy/dependencies/ev-src", map[string]string{"reason": "it only quotes the title"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("remove with a body reason: status = %d", resp.StatusCode)
+	}
+	if got := decodeBody[dependencyChangeView](t, resp); got.Dependency.RemovalReason != "it only quotes the title" {
+		t.Errorf("removed = %+v, want the reason", got.Dependency)
+	}
+
+	// Declared again, then removed with a query reason: two intervals.
+	declare("ev-copy", "ev-src")
+	resp = remove("/v1/episodes/ev-copy/dependencies/ev-src?reason=wrong+again", nil)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("remove with a query reason: status = %d", resp.StatusCode)
+	}
+	audit := decodeBody[dependencyListView](t, f.do(t, http.MethodGet, "/v1/episodes/ev-copy/dependencies?include_removed=true", tok))
+	var reasons []string
+	for _, d := range audit.DependsOn {
+		reasons = append(reasons, d.RemovalReason)
+	}
+	if !reflect.DeepEqual(reasons, []string{"it only quotes the title", "wrong again"}) {
+		t.Errorf("audit reasons = %q, want both removals, oldest first", reasons)
+	}
+	viaCLI, err := runDependencyList(ctx, f.conn, "ev-copy", true, nil)
+	if err != nil || !reflect.DeepEqual(audit, viaCLI) {
+		t.Errorf("REST audit %+v differs from the CLI audit %+v (%v)", audit, viaCLI, err)
+	}
+
+	// The Go client sends the reason in the body.
+	writer := client.New(f.srv.URL, client.WithToken(tok))
+	declare("ev-third", "ev-src")
+	got, err := writer.RemoveEventDependency(ctx, "ev-third", "ev-src", "a coincidence")
+	if err != nil || got.Dependency.RemovalReason != "a coincidence" {
+		t.Errorf("client removal = %+v (%v)", got, err)
+	}
+	var apiErr *client.APIError
+	declare("ev-third", "ev-src")
+	if _, err := writer.RemoveEventDependency(ctx, "ev-third", "ev-src", long); !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+		t.Errorf("client removal with an over-long reason: err = %v, want 400", err)
+	}
+	list, err := writer.EventDependencies(ctx, "ev-third", true)
+	if err != nil || len(list.DependsOn) != 2 || list.DependsOn[0].RemovalReason != "a coincidence" || list.DependsOn[1].RemovedAt != "" {
+		t.Errorf("client audit = %+v (%v), want the removed interval and the live one", list, err)
+	}
+}
+
+// The MCP tool and the CLI take the reason too, and an over-long one is the
+// caller's to fix (-32602).
+func TestEpisodeDependencies_MCPAndCLIRemovalReason(t *testing.T) {
+	setIsolatedDB(t)
+	ctx := context.Background()
+	conn, err := openConn(ctx)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { closeConn(conn) })
+	f := runScopeFixture{conn: conn}
+	f.seedRun(t, "run-a", "ev-src", "cl-src")
+	f.seedRun(t, "run-a", "ev-copy", "cl-copy")
+	if _, err := mcpRunDeclareEpisodeDependency(ctx, "agent-1", mcpDeclareEpisodeDependencyInput{EpisodeID: "ev-copy", DependsOn: "ev-src", Kind: "cites"}); err != nil {
+		t.Fatalf("declare: %v", err)
+	}
+	var pe *protocol.Error
+	if _, err := mcpRunRemoveEpisodeDependency(ctx, "agent-2", mcpRemoveEpisodeDependencyInput{
+		EpisodeID: "ev-copy", DependsOn: "ev-src", Reason: strings.Repeat("x", domain.MaxDependencyRemovalReasonLen+1),
+	}); !errors.As(err, &pe) || pe.Code != protocol.CodeInvalidParams {
+		t.Errorf("over-long reason: err = %v, want -32602", err)
+	}
+	removed, err := mcpRunRemoveEpisodeDependency(ctx, "agent-2", mcpRemoveEpisodeDependencyInput{EpisodeID: "ev-copy", DependsOn: "ev-src", Reason: "  not a citation  "})
+	if err != nil || removed.Dependency.RemovalReason != "not a citation" {
+		t.Fatalf("remove_episode_dependency = %+v (%v)", removed, err)
+	}
+	listMCP, err := mcpRunEpisodeDependencies(ctx, mcpEpisodeDependenciesInput{EpisodeID: "ev-copy", IncludeRemoved: true})
+	if err != nil || len(listMCP.DependsOn) != 1 || listMCP.DependsOn[0].RemovalReason != "not a citation" {
+		t.Errorf("episode_dependencies with removed = %+v (%v)", listMCP, err)
 	}
 }

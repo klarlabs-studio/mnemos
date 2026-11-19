@@ -103,9 +103,9 @@ func TestRemove_ValidatesBeforeWriting(t *testing.T) {
 	ctx := context.Background()
 	conn := w.Conn()
 	called := 0
-	spy := func(ctx context.Context, id, source, actor string) (domain.DependencyChange, error) {
+	spy := func(ctx context.Context, id, source, actor, reason string) (domain.DependencyChange, error) {
 		called++
-		return w.RemoveEventDependency(ctx, id, source, actor)
+		return w.RemoveEventDependency(ctx, id, source, actor, reason)
 	}
 	cases := []struct {
 		name string
@@ -116,6 +116,8 @@ func TestRemove_ValidatesBeforeWriting(t *testing.T) {
 		{"no source", dependency.RemoveRequest{EventID: "ev_copy"}, dependency.ErrInvalid},
 		{"unknown episode", dependency.RemoveRequest{EventID: "ev_missing", DependsOn: "ev_src"}, dependency.ErrEventNotFound},
 		{"never declared", dependency.RemoveRequest{EventID: "ev_copy", DependsOn: "ev_src"}, dependency.ErrNotFound},
+		{"long reason", dependency.RemoveRequest{EventID: "ev_copy", DependsOn: "ev_src",
+			Reason: strings.Repeat("é", domain.MaxDependencyRemovalReasonLen+1)}, dependency.ErrInvalid},
 	}
 	for _, tc := range cases {
 		if _, err := dependency.Remove(ctx, conn.Events, conn.Dependencies, spy, tc.req); !errors.Is(err, tc.want) {
@@ -133,12 +135,15 @@ func TestRemove_ValidatesBeforeWriting(t *testing.T) {
 	}); !errors.Is(err, dependency.ErrEventNotFound) {
 		t.Errorf("out of scope: err = %v, want ErrEventNotFound", err)
 	}
-	change, err := dependency.Remove(ctx, conn.Events, conn.Dependencies, spy, dependency.RemoveRequest{EventID: "ev_copy", DependsOn: "ev_src", Actor: "bob"})
+	change, err := dependency.Remove(ctx, conn.Events, conn.Dependencies, spy, dependency.RemoveRequest{EventID: "ev_copy", DependsOn: "ev_src", Actor: "bob", Reason: "  a coincidence  "})
 	if err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if change.Dependency.RemovedAt == nil || change.Dependency.RemovedBy != "bob" {
+	if change.Dependency.RemovedAt == nil || change.Dependency.RemovedBy != "bob" || change.Dependency.RemovalReason != "a coincidence" {
 		t.Errorf("removed = %+v", change.Dependency)
+	}
+	if v := dependency.NewChangeReport(change).Dependency; v.RemovalReason != "a coincidence" {
+		t.Errorf("report = %+v, want the reason", v)
 	}
 	if _, err := dependency.Remove(ctx, conn.Events, conn.Dependencies, spy, dependency.RemoveRequest{EventID: "ev_copy", DependsOn: "ev_src"}); !errors.Is(err, dependency.ErrNotFound) {
 		t.Errorf("removing again: err = %v, want ErrNotFound", err)
@@ -158,7 +163,7 @@ func TestList_LiveRemovedPendingAndRunScope(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := w.RemoveEventDependency(ctx, "ev_copy", "ev_src", "bob"); err != nil {
+	if _, err := w.RemoveEventDependency(ctx, "ev_copy", "ev_src", "bob", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := conn.Dependencies.AppendPending(ctx, []domain.PendingReference{{EventID: "ev_src", LookupKey: "named:vendor advisory", CreatedAt: time.Now().UTC()}}); err != nil {
@@ -193,5 +198,41 @@ func TestList_LiveRemovedPendingAndRunScope(t *testing.T) {
 	}
 	if _, err := dependency.List(ctx, conn.Events, conn.Dependencies, dependency.ListRequest{EventID: ""}); !errors.Is(err, dependency.ErrEventIDRequired) {
 		t.Errorf("no id: err = %v", err)
+	}
+}
+
+// A concurrent edit that lands after the check and before the governed write
+// is the same refusal the check gives: the store's sentinel comes back
+// through the kernel with its type, so every surface maps it to 409 / 404.
+func TestDeclareAndRemove_ConcurrentEditIsTheSameRefusal(t *testing.T) {
+	t.Parallel()
+	w := newWriter(t)
+	ctx := context.Background()
+	conn := w.Conn()
+	raceDeclare := func(ctx context.Context, d domain.EventDependency) (domain.DependencyChange, error) {
+		// Another writer declares the pair between the check and this write.
+		other := d
+		other.Signal, other.CreatedAt, other.CreatedBy = domain.SignalDeclared, time.Now().UTC(), "other-writer"
+		if _, err := conn.Dependencies.Declare(ctx, other); err != nil {
+			t.Fatalf("concurrent declaration: %v", err)
+		}
+		return w.DeclareEventDependency(ctx, d)
+	}
+	if _, err := dependency.Declare(ctx, conn.Events, conn.Dependencies, raceDeclare, dependency.DeclareRequest{
+		EventID: "ev_copy", DependsOn: "ev_src", Kind: "copies",
+	}); !errors.Is(err, dependency.ErrExists) {
+		t.Errorf("raced declaration: err = %v, want ErrExists", err)
+	}
+
+	raceRemove := func(ctx context.Context, id, source, actor, reason string) (domain.DependencyChange, error) {
+		if _, err := conn.Dependencies.Remove(ctx, id, source, "other-writer", "", time.Now().UTC()); err != nil {
+			t.Fatalf("concurrent removal: %v", err)
+		}
+		return w.RemoveEventDependency(ctx, id, source, actor, reason)
+	}
+	if _, err := dependency.Remove(ctx, conn.Events, conn.Dependencies, raceRemove, dependency.RemoveRequest{
+		EventID: "ev_copy", DependsOn: "ev_src",
+	}); !errors.Is(err, dependency.ErrNotFound) {
+		t.Errorf("raced removal: err = %v, want ErrNotFound", err)
 	}
 }

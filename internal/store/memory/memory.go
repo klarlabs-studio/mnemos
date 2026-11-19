@@ -169,6 +169,7 @@ type state struct {
 	globalSchemas     map[string]domain.GlobalSchema        // id -> promoted global (neocortex) schema
 	journalEntries    []domain.JournalEntry                 // append-only cognitive journal (ADR 0018), insertion order
 	dependencies      []domain.EventDependency              // source dependence between episodes (ADR 0038), insertion order
+	dependencyHistory []domain.EventDependency              // closed intervals a revival superseded, append-only
 	pendingRefs       map[[2]string]domain.PendingReference // late citations (ADR 0038): (event_id, lookup_key) -> row
 }
 
@@ -236,6 +237,7 @@ func (s *state) clear() {
 	s.closedEvidence = nil
 	s.closedRels = nil
 	s.dependencies = nil
+	s.dependencyHistory = nil
 	s.pendingRefs = nil
 	s.trustInputHistory = map[string][]domain.TrustInputChange{}
 	s.relationships = map[string]storedRelationship{}

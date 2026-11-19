@@ -6635,7 +6635,8 @@ func (x *RelinkedBelief) GetTrustAfter() float64 {
 
 // EpisodeDependency is one source dependency (ADR 0038): episode_id cites,
 // copies or derives from depends_on. signal is metadata, link, named_source or
-// declared; removed_at is set on one removed by hand.
+// declared; removed_at is set on one removed by hand, with removal_reason. A
+// listing with include_removed has one entry per interval of a pair.
 type EpisodeDependency struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EpisodeId     string                 `protobuf:"bytes,1,opt,name=episode_id,json=episodeId,proto3" json:"episode_id,omitempty"`
@@ -6647,6 +6648,7 @@ type EpisodeDependency struct {
 	CreatedBy     string                 `protobuf:"bytes,7,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	RemovedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
 	RemovedBy     string                 `protobuf:"bytes,9,opt,name=removed_by,json=removedBy,proto3" json:"removed_by,omitempty"`
+	RemovalReason string                 `protobuf:"bytes,10,opt,name=removal_reason,json=removalReason,proto3" json:"removal_reason,omitempty"` // why it was removed, if given
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6740,6 +6742,13 @@ func (x *EpisodeDependency) GetRemovedAt() *timestamppb.Timestamp {
 func (x *EpisodeDependency) GetRemovedBy() string {
 	if x != nil {
 		return x.RemovedBy
+	}
+	return ""
+}
+
+func (x *EpisodeDependency) GetRemovalReason() string {
+	if x != nil {
+		return x.RemovalReason
 	}
 	return ""
 }
@@ -6988,6 +6997,7 @@ type RemoveEpisodeDependencyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EpisodeId     string                 `protobuf:"bytes,1,opt,name=episode_id,json=episodeId,proto3" json:"episode_id,omitempty"`
 	DependsOn     string                 `protobuf:"bytes,2,opt,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"` // optional, at most 512 characters
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7032,6 +7042,13 @@ func (x *RemoveEpisodeDependencyRequest) GetEpisodeId() string {
 func (x *RemoveEpisodeDependencyRequest) GetDependsOn() string {
 	if x != nil {
 		return x.DependsOn
+	}
+	return ""
+}
+
+func (x *RemoveEpisodeDependencyRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
 	}
 	return ""
 }
@@ -12057,7 +12074,7 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12!\n" +
 	"\ftrust_before\x18\x03 \x01(\x01R\vtrustBefore\x12\x1f\n" +
 	"\vtrust_after\x18\x04 \x01(\x01R\n" +
-	"trustAfter\"\xcf\x02\n" +
+	"trustAfter\"\xf6\x02\n" +
 	"\x11EpisodeDependency\x12\x1d\n" +
 	"\n" +
 	"episode_id\x18\x01 \x01(\tR\tepisodeId\x12\x1d\n" +
@@ -12073,7 +12090,9 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\n" +
 	"removed_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tremovedAt\x12\x1d\n" +
 	"\n" +
-	"removed_by\x18\t \x01(\tR\tremovedBy\"k\n" +
+	"removed_by\x18\t \x01(\tR\tremovedBy\x12%\n" +
+	"\x0eremoval_reason\x18\n" +
+	" \x01(\tR\rremovalReason\"k\n" +
 	"\x0fPendingCitation\x12\x1d\n" +
 	"\n" +
 	"lookup_key\x18\x01 \x01(\tR\tlookupKey\x129\n" +
@@ -12098,12 +12117,13 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\n" +
 	"depends_on\x18\x02 \x01(\tR\tdependsOn\x12\x12\n" +
 	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04note\x18\x04 \x01(\tR\x04note\"^\n" +
+	"\x04note\x18\x04 \x01(\tR\x04note\"v\n" +
 	"\x1eRemoveEpisodeDependencyRequest\x12\x1d\n" +
 	"\n" +
 	"episode_id\x18\x01 \x01(\tR\tepisodeId\x12\x1d\n" +
 	"\n" +
-	"depends_on\x18\x02 \x01(\tR\tdependsOn\"\xad\x01\n" +
+	"depends_on\x18\x02 \x01(\tR\tdependsOn\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xad\x01\n" +
 	"\x17EpisodeDependencyChange\x12<\n" +
 	"\n" +
 	"dependency\x18\x01 \x01(\v2\x1c.mnemos.v1.EpisodeDependencyR\n" +

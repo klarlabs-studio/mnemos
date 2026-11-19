@@ -12,15 +12,16 @@ import (
 // RFC 3339; parse them with [ParseTime]. RemovedAt is set on a dependency
 // removed by hand. The JSON keys are the server's brain-native wire names.
 type EventDependency struct {
-	EventID   string `json:"episode_id"`
-	DependsOn string `json:"depends_on"`
-	Kind      string `json:"kind"`
-	Signal    string `json:"signal"`
-	Reference string `json:"reference"`
-	CreatedAt string `json:"created_at"`
-	CreatedBy string `json:"created_by"`
-	RemovedAt string `json:"removed_at,omitempty"`
-	RemovedBy string `json:"removed_by,omitempty"`
+	EventID       string `json:"episode_id"`
+	DependsOn     string `json:"depends_on"`
+	Kind          string `json:"kind"`
+	Signal        string `json:"signal"`
+	Reference     string `json:"reference"`
+	CreatedAt     string `json:"created_at"`
+	CreatedBy     string `json:"created_by"`
+	RemovedAt     string `json:"removed_at,omitempty"`
+	RemovedBy     string `json:"removed_by,omitempty"`
+	RemovalReason string `json:"removal_reason,omitempty"`
 }
 
 // PendingCitation is a citation that named no stored episode yet.
@@ -83,12 +84,17 @@ func (c *Client) DeclareEventDependency(ctx context.Context, eventID, dependsOn,
 }
 
 // RemoveEventDependency removes eventID's dependency on dependsOn, keeping it
-// as a tombstone detection cannot undo. DELETE
-// /v1/episodes/{id}/dependencies/{depends_on}; needs claims:write. A pair with
-// no live dependency is Status 404. A disabled client returns an empty change.
-func (c *Client) RemoveEventDependency(ctx context.Context, eventID, dependsOn string) (*EventDependencyChange, error) {
+// as a tombstone detection cannot undo, with reason (optional, at most 512
+// characters). DELETE /v1/episodes/{id}/dependencies/{depends_on}; needs
+// claims:write. A pair with no live dependency is Status 404, an over-long
+// reason 400. A disabled client returns an empty change.
+func (c *Client) RemoveEventDependency(ctx context.Context, eventID, dependsOn, reason string) (*EventDependencyChange, error) {
+	var body any
+	if reason != "" {
+		body = map[string]string{"reason": reason}
+	}
 	var out EventDependencyChange
-	if err := c.do(ctx, http.MethodDelete, "/v1/episodes/"+url.PathEscape(eventID)+"/dependencies/"+url.PathEscape(dependsOn), nil, &out); err != nil {
+	if err := c.do(ctx, http.MethodDelete, "/v1/episodes/"+url.PathEscape(eventID)+"/dependencies/"+url.PathEscape(dependsOn), body, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

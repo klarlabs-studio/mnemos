@@ -107,6 +107,7 @@ func (r EventRepository) DeleteAll(_ context.Context) error {
 	r.state.eventOrder = nil
 	r.state.closedEvidence = nil
 	r.state.dependencies = nil
+	r.state.dependencyHistory = nil
 	r.state.pendingRefs = nil
 	return nil
 }
