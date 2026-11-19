@@ -169,12 +169,13 @@ const listClaimTrustInputs = `-- name: ListClaimTrustInputs :many
 SELECT
   c.id              AS claim_id,
   c.confidence      AS confidence,
-  -- ADR 0038: an evidence episode that depends on another evidence episode of
-  -- the same claim adds no distinct source (it still counts toward the total).
+  -- ADR 0038: an evidence episode that depends (live, not removed) on another
+  -- evidence episode of the same claim adds no distinct source (it still
+  -- counts toward the total).
   COUNT(DISTINCT CASE WHEN NOT EXISTS (
     SELECT 1 FROM event_dependencies d
     JOIN claim_evidence ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
-    WHERE d.event_id = ce.event_id
+    WHERE d.event_id = ce.event_id AND d.removed_at IS NULL
   ) THEN e.created_by END) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
   CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
@@ -241,12 +242,13 @@ const listClaimTrustInputsForClaims = `-- name: ListClaimTrustInputsForClaims :m
 SELECT
   c.id              AS claim_id,
   c.confidence      AS confidence,
-  -- ADR 0038: an evidence episode that depends on another evidence episode of
-  -- the same claim adds no distinct source (it still counts toward the total).
+  -- ADR 0038: an evidence episode that depends (live, not removed) on another
+  -- evidence episode of the same claim adds no distinct source (it still
+  -- counts toward the total).
   COUNT(DISTINCT CASE WHEN NOT EXISTS (
     SELECT 1 FROM event_dependencies d
     JOIN claim_evidence ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
-    WHERE d.event_id = ce.event_id
+    WHERE d.event_id = ce.event_id AND d.removed_at IS NULL
   ) THEN e.created_by END) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
   CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,

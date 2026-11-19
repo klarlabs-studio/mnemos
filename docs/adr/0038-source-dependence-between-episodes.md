@@ -10,7 +10,9 @@
   (`store.Conn.Dependencies`), `ports.EventSourceLister.ListBySourceInputIDs`,
   `internal/provenance`; amends `pipeline.PersistArtifacts`, the governed
   episode writes, `RetractEvent` / `UnretractEvent`, the retraction impact
-  report on every transport, and every backend's trust inputs
+  report on every transport, and every backend's trust inputs. Editing
+  dependencies (2026-11-19) adds `removed_at` / `removed_by` (SQLite schema
+  v38), `internal/dependency` and the list / declare / remove surfaces
 
 ## Context
 
@@ -99,8 +101,9 @@ the one paragraph it sits in.
 `kind` (`cites` | `copies` | `derived_from`), `signal` (`metadata` | `link` |
 `named_source`), `reference` (the exact text that justified it, so a reader can
 check it), `created_at`, `created_by`. The key is `(episode_id, depends_on)`. A
-repeat write is ignored, so the first justification recorded stands, and like
-events the rows are append-only. They are stored in `event_dependencies` on
+repeat write is ignored, so the first justification recorded stands. Rows are
+never edited by detection; a person can remove or declare one (see "Editing
+dependencies"), and a removal is a tombstone, not a delete. They are stored in `event_dependencies` on
 SQLite (schema v36), libSQL (through SQLite), memory, Postgres (added to the
 RLS `scoped` list) and MySQL. Destroying an event (`DeleteByID`, `DeleteAll`)
 removes its rows in both directions. That is a deletion, not a retraction.
@@ -321,6 +324,92 @@ leaves the excess pending.
 - A retraction pays one dependency read per closure level and one per
   evidence episode it judges. Trust aggregation gains a correlated
   `NOT EXISTS` per evidence link, served by the dependency primary key.
-- The rows are append-only. A mistaken dependency is corrected by deleting
-  the episode (destruction) or, for retraction purposes, by un-retracting. No
-  surface edits dependencies in this step.
+- A mistaken dependency is removed, and a missed one declared, from every
+  transport (see "Editing dependencies" below). Removal keeps the row, so
+  nothing detection does can undo it.
+
+## Editing dependencies
+
+*Added 2026-11-19.* Detection is deterministic and conservative: it misses a
+copy nobody cited and can record a citation that was only a mention. Until
+this step the only correction was destroying the episode. Every transport can
+now list, declare and remove dependencies, with the same semantics everywhere.
+
+**Surfaces.** `mnemos dependencies <id>` (`--include-removed`, `--declare <src>
+--kind <k> [--note <text>]`, `--remove <src>`), the MCP tools
+`episode_dependencies` (read), `declare_episode_dependency` and
+`remove_episode_dependency` (`claims:write`, the scope of `retract_episode`),
+REST `GET`/`POST /v1/episodes/{id}/dependencies` and `DELETE
+/v1/episodes/{id}/dependencies/{depends_on}`, gRPC `ListEpisodeDependencies`,
+`DeclareEpisodeDependency` and `RemoveEpisodeDependency`, and
+`Memory.EventDependencies` / `DeclareEventDependency` /
+`RemoveEventDependency` with the matching client methods. Every one calls
+`internal/dependency` (`List`, `Declare`, `Remove`), which checks the ids, that
+both episodes exist and are in the caller's runs (an episode outside them reads
+as not found), the kind and the note, and renders one wire form. The writes are
+governed (`govwrite.Writer.DeclareEventDependency` /
+`RemoveEventDependency` on the daemon surfaces, `ApplyDependencyDeclaration` /
+`ApplyDependencyRemoval` inside the library kernel) and audited like every
+other governed write. A run-scoped listing leaves out rows whose other episode
+is outside the caller's runs.
+
+**Removal is a tombstone.** `event_dependencies` gains `removed_at` and
+`removed_by` (SQLite schema v38, libSQL, memory, Postgres, MySQL). Removing
+sets them; it never deletes the row. `Append` ignores a pair that is stored,
+removed or not, so neither detection running again over the citing document
+nor late-citation resolution can bring back a dependency a person removed.
+Deleting the row instead would have let the next re-ingest of the same text
+silently undo the correction. Every read that means "the live dependencies"
+filters `removed_at IS NULL`: `ListByEventIDs`, `ListDependents`, the trust
+aggregate's correlated `NOT EXISTS` on every backend and the memory trust
+path, and through them the retraction closure and the independence check.
+`ListByEventIDsWithRemoved` / `ListDependentsWithRemoved` keep the tombstones
+for audit and for recorded-as-of trust, which counts a dependency at T only
+while it was in force: `created_at <= T` and (`removed_at` unset or after T).
+Destroying an episode still hard-deletes its rows, tombstones included.
+
+**Declaring.** A declared row has signal `declared`, the caller's kind, the
+caller's note as its reference (at most 512 characters, the pending-key bound)
+and the caller as its author. Declaring a pair that has a live row is a
+conflict (REST 409, gRPC `AlreadyExists`, `ErrDependencyExists`), because the
+first justification stands. Declaring a removed pair revives it: the tombstone
+is cleared and kind, signal, reference, `created_at` and `created_by` are
+overwritten with the declaration. Removing a pair with no live row is not found
+(REST 404, gRPC `NotFound`, `ErrDependencyNotFound`).
+
+**What an edit changes.** Trust counts a dependent evidence episode as a
+repeat, so only the beliefs the dependent episode evidences can change. Each
+edit rescores exactly those with the scoped scorer
+(`pipeline.RescoreBeliefsOfEpisodes`, the same rescore late citations use) and
+returns them, with the stored row and `source_retracted`: whether the source
+episode is retracted now.
+
+**No automatic re-retraction.** An edit never runs or undoes a retraction. If
+the source is retracted, removing a dependency does not restore the beliefs
+the retraction withdrew through it, and declaring one does not withdraw the
+dependent episode's beliefs. Doing either automatically would make a
+bookkeeping correction a silent status change on beliefs, outside the
+retraction record (ADR 0037) that says who withdrew what and why, and a later
+un-retraction would then restore beliefs nobody recorded as withdrawn by it.
+`source_retracted` tells the caller instead: un-retracting and retracting the
+source again applies the dependencies stored by then, on the record.
+
+**Limits.**
+
+- *A revival rewrites history.* Reviving overwrites `created_at`, so a
+  recorded-as-of read between the original recording and the removal no
+  longer sees the dependency. Keeping every interval would need a history
+  table; one row per pair was kept because the revival is rare and the
+  current state is what retraction and trust read.
+- *A tombstone is per pair.* When the citation also resolves to a different
+  episode carrying the same key (a mirror of the source), that is a different
+  pair and is recorded.
+- *Conflicts are decided before the governed write.* The kernel carries an
+  executor's error only as text, so `internal/dependency` reads the pair first
+  to answer 409 / 404. Two concurrent edits of the same pair can both pass
+  that check; the store still refuses the second (the upsert affects no row,
+  or the update finds no live row), which then surfaces as an internal error
+  rather than a conflict.
+- *A failed rescore leaves the row written.* The rescore runs after the row
+  is stored; if it fails, the edit reports an error and a retry of the same
+  edit is a conflict. `mnemos recompute-trust` repairs the scores.

@@ -182,6 +182,14 @@ func writeRPCs() []writeRPC {
 			_, err := c.UnretractEpisode(ctx, &mnemosv1.UnretractEpisodeRequest{EpisodeId: "ev-scope", Reason: "r"})
 			return err
 		}},
+		{"DeclareEpisodeDependency", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.DeclareEpisodeDependency(ctx, &mnemosv1.DeclareEpisodeDependencyRequest{EpisodeId: "ev-scope", DependsOn: "ev-other", Kind: "cites"})
+			return err
+		}},
+		{"RemoveEpisodeDependency", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
+			_, err := c.RemoveEpisodeDependency(ctx, &mnemosv1.RemoveEpisodeDependencyRequest{EpisodeId: "ev-scope", DependsOn: "ev-other"})
+			return err
+		}},
 		{"OpenIncident", domain.ScopeClaimsWrite, func(ctx context.Context, c mnemosv1.MnemosServiceClient) error {
 			_, err := c.OpenIncident(ctx, &mnemosv1.OpenIncidentRequest{Title: "scope probe"})
 			return err

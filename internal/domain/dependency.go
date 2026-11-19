@@ -41,11 +41,28 @@ const (
 	// SignalNamedSource means the phrase after a citation marker names the
 	// source's source_input_id.
 	SignalNamedSource DependencySignal = "named_source"
+	// SignalDeclared means a person or agent declared the dependency by hand
+	// (ADR 0038, editing dependencies); Reference holds their note.
+	SignalDeclared DependencySignal = "declared"
 )
 
+// MaxDependencyReferenceLen is the longest note, in characters, a hand-declared
+// dependency may carry: the same bound as a pending citation's lookup key.
+const MaxDependencyReferenceLen = 512
+
+// ErrDependencyExists is returned when a dependency is declared for a pair of
+// episodes that already has a live one.
+var ErrDependencyExists = errors.New("episode dependency already exists")
+
+// ErrDependencyNotFound is returned when a dependency to remove is not stored
+// or was already removed.
+var ErrDependencyNotFound = errors.New("episode dependency not found")
+
 // EventDependency records that EventID depends on DependsOn (ADR 0038).
-// Rows are append-only and keyed by (EventID, DependsOn); the first recorded
-// justification stands.
+// Rows are keyed by (EventID, DependsOn); the first recorded justification
+// stands. A removed dependency is a tombstone (RemovedAt set), not a deleted
+// row, so automatic detection cannot bring back what a person removed; only a
+// declaration revives it.
 type EventDependency struct {
 	EventID   string           `json:"episode_id"`
 	DependsOn string           `json:"depends_on"`
@@ -56,6 +73,22 @@ type EventDependency struct {
 	Reference string    `json:"reference"`
 	CreatedAt time.Time `json:"created_at"`
 	CreatedBy string    `json:"created_by"`
+	// RemovedAt is when the dependency was removed, nil while it is live.
+	RemovedAt *time.Time `json:"removed_at,omitempty"`
+	// RemovedBy is who removed it, empty while it is live.
+	RemovedBy string `json:"removed_by,omitempty"`
+}
+
+// Live reports whether the dependency has not been removed.
+func (d EventDependency) Live() bool { return d.RemovedAt == nil }
+
+// LiveAt reports whether the dependency was in force at t: recorded by t and
+// not removed by then.
+func (d EventDependency) LiveAt(t time.Time) bool {
+	if d.CreatedAt.After(t) {
+		return false
+	}
+	return d.RemovedAt == nil || d.RemovedAt.After(t)
 }
 
 // Validate checks that the dependency names two different episodes and a
@@ -73,9 +106,9 @@ func (d EventDependency) Validate() error {
 		return fmt.Errorf("event dependency kind %q is not one of cites, copies, derived_from", d.Kind)
 	}
 	switch d.Signal {
-	case SignalMetadata, SignalLink, SignalNamedSource:
+	case SignalMetadata, SignalLink, SignalNamedSource, SignalDeclared:
 	default:
-		return fmt.Errorf("event dependency signal %q is not one of metadata, link, named_source", d.Signal)
+		return fmt.Errorf("event dependency signal %q is not one of metadata, link, named_source, declared", d.Signal)
 	}
 	return nil
 }
@@ -144,4 +177,16 @@ func SortPendingReferences(refs []PendingReference) {
 		}
 		return a.LookupKey < b.LookupKey
 	})
+}
+
+// DependencyChange is what declaring or removing a dependency did (ADR 0038,
+// editing dependencies): the stored row, the beliefs evidenced by the
+// dependent episode that were rescored, and whether the source episode is
+// retracted now. Neither edit runs or undoes a retraction; SourceRetracted
+// tells the caller that re-running retraction on the source would now reach a
+// different set of beliefs.
+type DependencyChange struct {
+	Dependency      EventDependency `json:"dependency"`
+	RescoredBeliefs []string        `json:"rescored_beliefs"`
+	SourceRetracted bool            `json:"source_retracted"`
 }

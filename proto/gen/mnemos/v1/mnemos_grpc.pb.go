@@ -57,6 +57,9 @@ const (
 	MnemosService_SetBeliefLifecycle_FullMethodName       = "/mnemos.v1.MnemosService/SetBeliefLifecycle"
 	MnemosService_RetractEpisode_FullMethodName           = "/mnemos.v1.MnemosService/RetractEpisode"
 	MnemosService_UnretractEpisode_FullMethodName         = "/mnemos.v1.MnemosService/UnretractEpisode"
+	MnemosService_ListEpisodeDependencies_FullMethodName  = "/mnemos.v1.MnemosService/ListEpisodeDependencies"
+	MnemosService_DeclareEpisodeDependency_FullMethodName = "/mnemos.v1.MnemosService/DeclareEpisodeDependency"
+	MnemosService_RemoveEpisodeDependency_FullMethodName  = "/mnemos.v1.MnemosService/RemoveEpisodeDependency"
 	MnemosService_Classify_FullMethodName                 = "/mnemos.v1.MnemosService/Classify"
 	MnemosService_GetDecision_FullMethodName              = "/mnemos.v1.MnemosService/GetDecision"
 	MnemosService_Recall_FullMethodName                   = "/mnemos.v1.MnemosService/Recall"
@@ -203,6 +206,28 @@ type MnemosServiceClient interface {
 	// FAILED_PRECONDITION. Repeating it writes nothing and returns the stored
 	// record with already_unretracted set.
 	UnretractEpisode(ctx context.Context, in *UnretractEpisodeRequest, opts ...grpc.CallOption) (*UnretractEpisodeResponse, error)
+	// ListEpisodeDependencies lists an episode's source dependencies (ADR
+	// 0038): what it cites, copies or derives from, what depends on it, and its
+	// citations that named no stored episode yet. include_removed also returns
+	// dependencies removed by hand. The same read as REST GET
+	// /v1/episodes/{id}/dependencies and the episode_dependencies MCP tool. An
+	// unknown episode, or one outside the token's runs, is NOT_FOUND.
+	ListEpisodeDependencies(ctx context.Context, in *ListEpisodeDependenciesRequest, opts ...grpc.CallOption) (*ListEpisodeDependenciesResponse, error)
+	// DeclareEpisodeDependency records by hand that an episode depends on
+	// another and rescores the dependent episode's beliefs; it never retracts
+	// anything (source_retracted reports the source's state). A removed
+	// dependency is revived. The same operation as REST POST
+	// /v1/episodes/{id}/dependencies and the declare_episode_dependency MCP
+	// tool. Requires claims:write; an unknown episode is NOT_FOUND, a bad kind,
+	// note or pair INVALID_ARGUMENT, a live dependency ALREADY_EXISTS.
+	DeclareEpisodeDependency(ctx context.Context, in *DeclareEpisodeDependencyRequest, opts ...grpc.CallOption) (*EpisodeDependencyChange, error)
+	// RemoveEpisodeDependency marks a dependency removed (kept as a tombstone,
+	// so detection cannot re-add it) and rescores the dependent episode's
+	// beliefs; it never un-retracts anything. The same operation as REST
+	// DELETE /v1/episodes/{id}/dependencies/{depends_on} and the
+	// remove_episode_dependency MCP tool. Requires claims:write; a pair with no
+	// live dependency is NOT_FOUND.
+	RemoveEpisodeDependency(ctx context.Context, in *RemoveEpisodeDependencyRequest, opts ...grpc.CallOption) (*EpisodeDependencyChange, error)
 	// Classify reports whether a candidate statement fits established knowledge or is novel.
 	Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error)
 	// GetDecision returns a single recorded decision by id.
@@ -678,6 +703,36 @@ func (c *mnemosServiceClient) UnretractEpisode(ctx context.Context, in *Unretrac
 	return out, nil
 }
 
+func (c *mnemosServiceClient) ListEpisodeDependencies(ctx context.Context, in *ListEpisodeDependenciesRequest, opts ...grpc.CallOption) (*ListEpisodeDependenciesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListEpisodeDependenciesResponse)
+	err := c.cc.Invoke(ctx, MnemosService_ListEpisodeDependencies_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) DeclareEpisodeDependency(ctx context.Context, in *DeclareEpisodeDependencyRequest, opts ...grpc.CallOption) (*EpisodeDependencyChange, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EpisodeDependencyChange)
+	err := c.cc.Invoke(ctx, MnemosService_DeclareEpisodeDependency_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *mnemosServiceClient) RemoveEpisodeDependency(ctx context.Context, in *RemoveEpisodeDependencyRequest, opts ...grpc.CallOption) (*EpisodeDependencyChange, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EpisodeDependencyChange)
+	err := c.cc.Invoke(ctx, MnemosService_RemoveEpisodeDependency_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *mnemosServiceClient) Classify(ctx context.Context, in *ClassifyRequest, opts ...grpc.CallOption) (*ClassifyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ClassifyResponse)
@@ -1074,6 +1129,28 @@ type MnemosServiceServer interface {
 	// FAILED_PRECONDITION. Repeating it writes nothing and returns the stored
 	// record with already_unretracted set.
 	UnretractEpisode(context.Context, *UnretractEpisodeRequest) (*UnretractEpisodeResponse, error)
+	// ListEpisodeDependencies lists an episode's source dependencies (ADR
+	// 0038): what it cites, copies or derives from, what depends on it, and its
+	// citations that named no stored episode yet. include_removed also returns
+	// dependencies removed by hand. The same read as REST GET
+	// /v1/episodes/{id}/dependencies and the episode_dependencies MCP tool. An
+	// unknown episode, or one outside the token's runs, is NOT_FOUND.
+	ListEpisodeDependencies(context.Context, *ListEpisodeDependenciesRequest) (*ListEpisodeDependenciesResponse, error)
+	// DeclareEpisodeDependency records by hand that an episode depends on
+	// another and rescores the dependent episode's beliefs; it never retracts
+	// anything (source_retracted reports the source's state). A removed
+	// dependency is revived. The same operation as REST POST
+	// /v1/episodes/{id}/dependencies and the declare_episode_dependency MCP
+	// tool. Requires claims:write; an unknown episode is NOT_FOUND, a bad kind,
+	// note or pair INVALID_ARGUMENT, a live dependency ALREADY_EXISTS.
+	DeclareEpisodeDependency(context.Context, *DeclareEpisodeDependencyRequest) (*EpisodeDependencyChange, error)
+	// RemoveEpisodeDependency marks a dependency removed (kept as a tombstone,
+	// so detection cannot re-add it) and rescores the dependent episode's
+	// beliefs; it never un-retracts anything. The same operation as REST
+	// DELETE /v1/episodes/{id}/dependencies/{depends_on} and the
+	// remove_episode_dependency MCP tool. Requires claims:write; a pair with no
+	// live dependency is NOT_FOUND.
+	RemoveEpisodeDependency(context.Context, *RemoveEpisodeDependencyRequest) (*EpisodeDependencyChange, error)
 	// Classify reports whether a candidate statement fits established knowledge or is novel.
 	Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error)
 	// GetDecision returns a single recorded decision by id.
@@ -1282,6 +1359,15 @@ func (UnimplementedMnemosServiceServer) RetractEpisode(context.Context, *Retract
 }
 func (UnimplementedMnemosServiceServer) UnretractEpisode(context.Context, *UnretractEpisodeRequest) (*UnretractEpisodeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UnretractEpisode not implemented")
+}
+func (UnimplementedMnemosServiceServer) ListEpisodeDependencies(context.Context, *ListEpisodeDependenciesRequest) (*ListEpisodeDependenciesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListEpisodeDependencies not implemented")
+}
+func (UnimplementedMnemosServiceServer) DeclareEpisodeDependency(context.Context, *DeclareEpisodeDependencyRequest) (*EpisodeDependencyChange, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeclareEpisodeDependency not implemented")
+}
+func (UnimplementedMnemosServiceServer) RemoveEpisodeDependency(context.Context, *RemoveEpisodeDependencyRequest) (*EpisodeDependencyChange, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveEpisodeDependency not implemented")
 }
 func (UnimplementedMnemosServiceServer) Classify(context.Context, *ClassifyRequest) (*ClassifyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Classify not implemented")
@@ -2072,6 +2158,60 @@ func _MnemosService_UnretractEpisode_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_ListEpisodeDependencies_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListEpisodeDependenciesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).ListEpisodeDependencies(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_ListEpisodeDependencies_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).ListEpisodeDependencies(ctx, req.(*ListEpisodeDependenciesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_DeclareEpisodeDependency_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeclareEpisodeDependencyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).DeclareEpisodeDependency(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_DeclareEpisodeDependency_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).DeclareEpisodeDependency(ctx, req.(*DeclareEpisodeDependencyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MnemosService_RemoveEpisodeDependency_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveEpisodeDependencyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).RemoveEpisodeDependency(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_RemoveEpisodeDependency_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).RemoveEpisodeDependency(ctx, req.(*RemoveEpisodeDependencyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MnemosService_Classify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ClassifyRequest)
 	if err := dec(in); err != nil {
@@ -2734,6 +2874,18 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnretractEpisode",
 			Handler:    _MnemosService_UnretractEpisode_Handler,
+		},
+		{
+			MethodName: "ListEpisodeDependencies",
+			Handler:    _MnemosService_ListEpisodeDependencies_Handler,
+		},
+		{
+			MethodName: "DeclareEpisodeDependency",
+			Handler:    _MnemosService_DeclareEpisodeDependency_Handler,
+		},
+		{
+			MethodName: "RemoveEpisodeDependency",
+			Handler:    _MnemosService_RemoveEpisodeDependency_Handler,
 		},
 		{
 			MethodName: "Classify",

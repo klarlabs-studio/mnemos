@@ -708,7 +708,7 @@ func (r ClaimRepository) trustInputsSQL(where string) string {
 SELECT c.id, c.confidence,
        COUNT(DISTINCT CASE WHEN NOT EXISTS (
          SELECT 1 FROM %s d JOIN %s ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
-         WHERE d.event_id = ce.event_id
+         WHERE d.event_id = ce.event_id AND d.removed_at IS NULL
        ) THEN e.created_by END),
        COUNT(DISTINCT ce.event_id),
        MAX(e.timestamp),

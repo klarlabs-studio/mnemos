@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -218,6 +219,16 @@ func restSurface() ([]string, error) {
 			var out []string
 			for _, s := range subs {
 				out = append(out, "/v1/episodes/{id}/"+s)
+			}
+			// The one three-segment route: the dispatcher hands parts[2] to the
+			// dependencies handler as depends_on. Checked against the source so
+			// the binding fails here if the dispatcher stops serving it.
+			src, err := os.ReadFile("serve_retract.go")
+			if err != nil {
+				return nil, err
+			}
+			if strings.Contains(string(src), "dependsOn = parts[2]") {
+				out = append(out, "/v1/episodes/{id}/dependencies/{depends_on}")
 			}
 			return out, nil
 		},

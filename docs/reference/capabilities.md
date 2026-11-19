@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-77 capabilities, 0 acknowledged gaps.
+80 capabilities, 0 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -25,6 +25,9 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`episode.append`](#episodeappend) | write | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | [`episode.retract`](#episoderetract) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`episode.unretract`](#episodeunretract) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`episode.dependencies`](#episodedependencies) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`episode.dependency.declare`](#episodedependencydeclare) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`episode.dependency.remove`](#episodedependencyremove) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`episode.list`](#episodelist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`timeline.query`](#timelinequery) | read | ✓ | ✓ | ✓ | ✓ | — | ✓ | ✓ |
 | [`timeline.signals`](#timelinesignals) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
@@ -190,6 +193,54 @@ Clear an episode's retraction: restore the beliefs it deprecated that nothing ch
 | client | `UnretractEvent` |
 
 > Every binding and `mnemos unretract-event` go through internal/retraction.Unretract (id, existence, run-scope and was-it-ever-retracted checks) and govwrite's one un-retraction: Writer.UnretractEvent on the daemon surfaces, ApplyUnretraction inside the library's governed kernel. REST, MCP and the CLI return the same retraction.UnretractionReport. A never-retracted episode is REST 409 / gRPC FailedPrecondition.
+
+### episode.dependencies
+
+List an episode's source dependencies: what it cites, copies or derives from, what depends on it, its unresolved citations (ADR 0038) (read).
+
+| Transport | Binding |
+|---|---|
+| go | `EventDependencies` |
+| rest | `GET /v1/episodes/{id}/dependencies` |
+| grpc | `ListEpisodeDependencies` |
+| mcp | `episode_dependencies` |
+| mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| client | `EventDependencies` |
+
+> Every binding and `mnemos dependencies <id>` go through internal/dependency.List (id, existence and run-scope checks; a run-scoped caller sees only rows whose other episode is in its runs). include_removed adds dependencies removed by hand. REST, MCP and the CLI return the same dependency.ListReport.
+
+### episode.dependency.declare
+
+Declare that one episode cites, copies or derives from another, rescoring the dependent episode's beliefs (ADR 0038) (write).
+
+| Transport | Binding |
+|---|---|
+| go | `DeclareEventDependency` |
+| rest | `POST /v1/episodes/{id}/dependencies` |
+| grpc | `DeclareEpisodeDependency` |
+| mcp | `declare_episode_dependency` |
+| mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| client | `DeclareEventDependency` |
+
+> Every binding and `mnemos dependencies <id> --declare` go through internal/dependency.Declare and govwrite's one declaration (Writer.DeclareEventDependency on the daemon surfaces, ApplyDependencyDeclaration in the library kernel). Never retracts: the result reports source_retracted. A removed dependency is revived; a live one is REST 409 / gRPC AlreadyExists.
+
+### episode.dependency.remove
+
+Remove an episode dependency (kept as a tombstone detection cannot undo), rescoring the dependent episode's beliefs (ADR 0038) (write).
+
+| Transport | Binding |
+|---|---|
+| go | `RemoveEventDependency` |
+| rest | `DELETE /v1/episodes/{id}/dependencies/{depends_on}` |
+| grpc | `RemoveEpisodeDependency` |
+| mcp | `remove_episode_dependency` |
+| mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| client | `RemoveEventDependency` |
+
+> Every binding and `mnemos dependencies <id> --remove` go through internal/dependency.Remove and govwrite's one removal (Writer.RemoveEventDependency, ApplyDependencyRemoval). Never un-retracts: the result reports source_retracted. A pair with no live dependency is REST 404 / gRPC NotFound.
 
 ### episode.list
 

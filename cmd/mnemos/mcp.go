@@ -736,6 +736,27 @@ func handleMCP(args []string) {
 			return mcpRunUnretractEpisode(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
+	srv.Tool("episode_dependencies").
+		Description("List an episode's source dependencies: the episodes it cites, copies or derives from (depends_on), the episodes that depend on it (dependents), and its citations that named no stored episode yet. A dependent episode is not independent evidence: trust counts it as a repeat and retracting its source reaches it. include_removed also lists dependencies removed by hand.").
+		OutputSchema(dependencyListView{}).
+		Handler(func(ctx context.Context, input mcpEpisodeDependenciesInput) (dependencyListView, error) {
+			return mcpRunEpisodeDependencies(ctx, input)
+		})
+
+	srv.Tool("declare_episode_dependency").
+		Description("Declare that an episode cites, copies or derives from another one when detection missed it. The dependent episode's beliefs are rescored (it stops counting as an independent source). Nothing is retracted: source_retracted says whether the source is retracted, in which case retracting it again would now reach the dependent episode's beliefs. Revives a dependency that was removed; refused when the pair already has a live one.").
+		OutputSchema(dependencyChangeView{}).
+		Handler(func(ctx context.Context, input mcpDeclareEpisodeDependencyInput) (dependencyChangeView, error) {
+			return mcpRunDeclareEpisodeDependency(ctx, mcpActorFor(ctx, mcpActor), input)
+		})
+
+	srv.Tool("remove_episode_dependency").
+		Description("Remove a wrong source dependency between two episodes. The row is kept with who removed it and when, so detecting the same citation again does not bring it back; declare_episode_dependency revives it. The dependent episode's beliefs are rescored. Nothing is un-retracted: source_retracted says whether the source is retracted.").
+		OutputSchema(dependencyChangeView{}).
+		Handler(func(ctx context.Context, input mcpRemoveEpisodeDependencyInput) (dependencyChangeView, error) {
+			return mcpRunRemoveEpisodeDependency(ctx, mcpActorFor(ctx, mcpActor), input)
+		})
+
 	srv.Tool("update").
 		Description("Rewrite a claim's text (and optionally its confidence) when the agent's understanding refines. The reason is recorded in the status history.").
 		OutputSchema(mcpUpdateOutput{}).

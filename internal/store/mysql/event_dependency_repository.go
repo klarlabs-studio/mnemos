@@ -3,7 +3,11 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"time"
+
+	driver "github.com/go-sql-driver/mysql"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -35,23 +39,125 @@ func (r EventDependencyRepository) Append(ctx context.Context, deps []domain.Eve
 
 // ListByEventIDs implements [ports.EventDependencyRepository.ListByEventIDs].
 func (r EventDependencyRepository) ListByEventIDs(ctx context.Context, ids []string) ([]domain.EventDependency, error) {
-	return r.list(ctx, "event_id", ids)
+	return r.list(ctx, "event_id", ids, false)
 }
 
 // ListDependents implements [ports.EventDependencyRepository.ListDependents].
 func (r EventDependencyRepository) ListDependents(ctx context.Context, ids []string) ([]domain.EventDependency, error) {
-	return r.list(ctx, "depends_on", ids)
+	return r.list(ctx, "depends_on", ids, false)
 }
 
-func (r EventDependencyRepository) list(ctx context.Context, column string, ids []string) ([]domain.EventDependency, error) {
+// ListByEventIDsWithRemoved implements [ports.EventDependencyRepository.ListByEventIDsWithRemoved].
+func (r EventDependencyRepository) ListByEventIDsWithRemoved(ctx context.Context, ids []string) ([]domain.EventDependency, error) {
+	return r.list(ctx, "event_id", ids, true)
+}
+
+// ListDependentsWithRemoved implements [ports.EventDependencyRepository.ListDependentsWithRemoved].
+func (r EventDependencyRepository) ListDependentsWithRemoved(ctx context.Context, ids []string) ([]domain.EventDependency, error) {
+	return r.list(ctx, "depends_on", ids, true)
+}
+
+// mysqlDuplicateEntry is MySQL's ER_DUP_ENTRY.
+const mysqlDuplicateEntry = 1062
+
+// Declare implements [ports.EventDependencyRepository.Declare]. MySQL's
+// upsert has no conditional "leave a live row alone" form (its assignments
+// see each other's results, left to right), so the pair is locked and read in
+// a transaction: a missing row is inserted, a removed one revived, and a live
+// one is ErrDependencyExists. A concurrent insert of the same pair surfaces as
+// a duplicate entry, which is the same conflict.
+func (r EventDependencyRepository) Declare(ctx context.Context, d domain.EventDependency) (domain.EventDependency, error) {
+	if err := d.Validate(); err != nil {
+		return domain.EventDependency{}, fmt.Errorf("invalid event dependency: %w", err)
+	}
+	exists := fmt.Errorf("%w: %s -> %s", domain.ErrDependencyExists, d.EventID, d.DependsOn)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.EventDependency{}, fmt.Errorf("begin declare tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var removed sql.NullTime
+	err = tx.QueryRowContext(ctx,
+		`SELECT removed_at FROM event_dependencies WHERE event_id = ? AND depends_on = ? FOR UPDATE`, d.EventID, d.DependsOn,
+	).Scan(&removed)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO event_dependencies (event_id, depends_on, kind, signal_type, reference_text, created_at, created_by, removed_at, removed_by)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, '')`,
+			d.EventID, d.DependsOn, string(d.Kind), string(d.Signal), d.Reference, d.CreatedAt.UTC(), actorOr(d.CreatedBy),
+		); err != nil {
+			var myErr *driver.MySQLError
+			if errors.As(err, &myErr) && myErr.Number == mysqlDuplicateEntry {
+				return domain.EventDependency{}, exists
+			}
+			return domain.EventDependency{}, fmt.Errorf("declare event dependency %s -> %s: %w", d.EventID, d.DependsOn, err)
+		}
+	case err != nil:
+		return domain.EventDependency{}, fmt.Errorf("read event dependency %s -> %s: %w", d.EventID, d.DependsOn, err)
+	case !removed.Valid:
+		return domain.EventDependency{}, exists
+	default:
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE event_dependencies SET kind = ?, signal_type = ?, reference_text = ?, created_at = ?, created_by = ?, removed_at = NULL, removed_by = ''
+			 WHERE event_id = ? AND depends_on = ?`,
+			string(d.Kind), string(d.Signal), d.Reference, d.CreatedAt.UTC(), actorOr(d.CreatedBy), d.EventID, d.DependsOn,
+		); err != nil {
+			return domain.EventDependency{}, fmt.Errorf("revive event dependency %s -> %s: %w", d.EventID, d.DependsOn, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.EventDependency{}, fmt.Errorf("commit declare tx: %w", err)
+	}
+	return r.get(ctx, d.EventID, d.DependsOn)
+}
+
+// Remove implements [ports.EventDependencyRepository.Remove].
+func (r EventDependencyRepository) Remove(ctx context.Context, eventID, dependsOn, removedBy string, at time.Time) (domain.EventDependency, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE event_dependencies SET removed_at = ?, removed_by = ? WHERE event_id = ? AND depends_on = ? AND removed_at IS NULL`,
+		at.UTC(), actorOr(removedBy), eventID, dependsOn,
+	)
+	if err != nil {
+		return domain.EventDependency{}, fmt.Errorf("remove event dependency %s -> %s: %w", eventID, dependsOn, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return domain.EventDependency{}, fmt.Errorf("remove event dependency %s -> %s: %w", eventID, dependsOn, err)
+	}
+	if n == 0 {
+		return domain.EventDependency{}, fmt.Errorf("%w: %s -> %s", domain.ErrDependencyNotFound, eventID, dependsOn)
+	}
+	return r.get(ctx, eventID, dependsOn)
+}
+
+// get reads back one stored row, live or removed.
+func (r EventDependencyRepository) get(ctx context.Context, eventID, dependsOn string) (domain.EventDependency, error) {
+	rows, err := r.ListByEventIDsWithRemoved(ctx, []string{eventID})
+	if err != nil {
+		return domain.EventDependency{}, err
+	}
+	for _, d := range rows {
+		if d.DependsOn == dependsOn {
+			return d, nil
+		}
+	}
+	return domain.EventDependency{}, fmt.Errorf("%w: %s -> %s", domain.ErrDependencyNotFound, eventID, dependsOn)
+}
+
+func (r EventDependencyRepository) list(ctx context.Context, column string, ids []string, withRemoved bool) ([]domain.EventDependency, error) {
 	out := make([]domain.EventDependency, 0)
 	if len(ids) == 0 {
 		return out, nil
 	}
+	live := " AND removed_at IS NULL"
+	if withRemoved {
+		live = ""
+	}
 	placeholders, args := inPlaceholders(ids)
-	//nolint:gosec // G202: column is one of two literals, placeholders are literal "?" tokens
-	rows, err := r.db.QueryContext(ctx, `SELECT event_id, depends_on, kind, signal_type, reference_text, created_at, created_by
-FROM event_dependencies WHERE `+column+` IN (`+placeholders+`) ORDER BY created_at, event_id, depends_on`, args...)
+	//nolint:gosec // G202: column and live are literals, placeholders are literal "?" tokens
+	rows, err := r.db.QueryContext(ctx, `SELECT event_id, depends_on, kind, signal_type, reference_text, created_at, created_by, removed_at, removed_by
+FROM event_dependencies WHERE `+column+` IN (`+placeholders+`)`+live+` ORDER BY created_at, event_id, depends_on`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list event dependencies: %w", err)
 	}
@@ -60,12 +166,17 @@ FROM event_dependencies WHERE `+column+` IN (`+placeholders+`) ORDER BY created_
 		var (
 			d            domain.EventDependency
 			kind, signal string
+			removed      sql.NullTime
 		)
-		if err := rows.Scan(&d.EventID, &d.DependsOn, &kind, &signal, &d.Reference, &d.CreatedAt, &d.CreatedBy); err != nil {
+		if err := rows.Scan(&d.EventID, &d.DependsOn, &kind, &signal, &d.Reference, &d.CreatedAt, &d.CreatedBy, &removed, &d.RemovedBy); err != nil {
 			return nil, fmt.Errorf("scan event dependency: %w", err)
 		}
 		d.Kind, d.Signal = domain.DependencyKind(kind), domain.DependencySignal(signal)
 		d.CreatedAt = d.CreatedAt.UTC()
+		if removed.Valid {
+			at := removed.Time.UTC()
+			d.RemovedAt = &at
+		}
 		out = append(out, d)
 	}
 	if err := rows.Err(); err != nil {

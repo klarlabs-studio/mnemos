@@ -73,6 +73,33 @@ var Registry = []Capability{
 		Notes: "Every binding and `mnemos unretract-event` go through internal/retraction.Unretract (id, existence, run-scope and was-it-ever-retracted checks) and govwrite's one un-retraction: Writer.UnretractEvent on the daemon surfaces, ApplyUnretraction inside the library's governed kernel. REST, MCP and the CLI return the same retraction.UnretractionReport. A never-retracted episode is REST 409 / gRPC FailedPrecondition.",
 	},
 	{
+		ID: "episode.dependencies", Effect: Read,
+		Summary: "List an episode's source dependencies: what it cites, copies or derives from, what depends on it, its unresolved citations (ADR 0038)",
+		On: map[Transport]Binding{
+			Go: Has("EventDependencies"), REST: Has("GET /v1/episodes/{id}/dependencies"), GRPC: Has("ListEpisodeDependencies"),
+			MCP: Has("episode_dependencies"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("EventDependencies"),
+		},
+		Notes: "Every binding and `mnemos dependencies <id>` go through internal/dependency.List (id, existence and run-scope checks; a run-scoped caller sees only rows whose other episode is in its runs). include_removed adds dependencies removed by hand. REST, MCP and the CLI return the same dependency.ListReport.",
+	},
+	{
+		ID: "episode.dependency.declare", Effect: Write,
+		Summary: "Declare that one episode cites, copies or derives from another, rescoring the dependent episode's beliefs (ADR 0038)",
+		On: map[Transport]Binding{
+			Go: Has("DeclareEventDependency"), REST: Has("POST /v1/episodes/{id}/dependencies"), GRPC: Has("DeclareEpisodeDependency"),
+			MCP: Has("declare_episode_dependency"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("DeclareEventDependency"),
+		},
+		Notes: "Every binding and `mnemos dependencies <id> --declare` go through internal/dependency.Declare and govwrite's one declaration (Writer.DeclareEventDependency on the daemon surfaces, ApplyDependencyDeclaration in the library kernel). Never retracts: the result reports source_retracted. A removed dependency is revived; a live one is REST 409 / gRPC AlreadyExists.",
+	},
+	{
+		ID: "episode.dependency.remove", Effect: Write,
+		Summary: "Remove an episode dependency (kept as a tombstone detection cannot undo), rescoring the dependent episode's beliefs (ADR 0038)",
+		On: map[Transport]Binding{
+			Go: Has("RemoveEventDependency"), REST: Has("DELETE /v1/episodes/{id}/dependencies/{depends_on}"), GRPC: Has("RemoveEpisodeDependency"),
+			MCP: Has("remove_episode_dependency"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("RemoveEventDependency"),
+		},
+		Notes: "Every binding and `mnemos dependencies <id> --remove` go through internal/dependency.Remove and govwrite's one removal (Writer.RemoveEventDependency, ApplyDependencyRemoval). Never un-retracts: the result reports source_retracted. A pair with no live dependency is REST 404 / gRPC NotFound.",
+	},
+	{
 		ID: "episode.list", Effect: Read,
 		Summary: "List stored episodes",
 		On: map[Transport]Binding{

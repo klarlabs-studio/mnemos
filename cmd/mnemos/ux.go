@@ -140,7 +140,7 @@ var commands = []string{
 	"resolve", "trust", "verify", "reconsolidate",
 	"user", "token", "agent", "repo-tenant",
 	"registry", "push", "pull",
-	"reset", "delete-claim", "delete-event", "retract-event", "unretract-event", "reembed", "recompute-trust", "recompute-contested",
+	"reset", "delete-claim", "delete-event", "retract-event", "unretract-event", "dependencies", "reembed", "recompute-trust", "recompute-contested",
 	"recompute-half-life", "classify-durability", "prune", "dedup", "consolidate",
 	"sync-docs", "rebuild", "workspace", "float-back", "global", "hook",
 }

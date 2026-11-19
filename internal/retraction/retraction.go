@@ -70,6 +70,13 @@ func Run(ctx context.Context, events ports.EventRepository, retract RetractFunc,
 	return retract(ctx, id, domain.ChangeNote{Reason: strings.TrimSpace(req.Reason), ChangedBy: req.Actor})
 }
 
+// CheckEvent reports ErrEventNotFound unless id exists and runAllowed (when
+// set) covers its run. It is the existence and run-scope check every
+// episode-addressed write shares (retraction, dependency edits).
+func CheckEvent(ctx context.Context, events ports.EventRepository, id string, runAllowed func(string) bool) error {
+	return checkEvent(ctx, events, id, runAllowed)
+}
+
 // checkEvent reports ErrEventNotFound unless id exists and runAllowed (when
 // set) covers its run.
 func checkEvent(ctx context.Context, events ports.EventRepository, id string, runAllowed func(string) bool) error {

@@ -247,6 +247,8 @@ func main() {
 		handleRetractEvent(args, flags)
 	case "unretract-event":
 		handleUnretractEvent(args, flags)
+	case "dependencies":
+		handleDependencies(args, flags)
 	case "reembed":
 		handleReembed(args, flags)
 	case "recompute-trust":
@@ -1512,6 +1514,9 @@ func printUsage() {
 	fmt.Println("    [--json]                           left without evidence, rescores the rest, reports the impact")
 	fmt.Println("  unretract-event <id> [--reason <text>] Clear a retraction (recorded); restores the beliefs it")
 	fmt.Println("    [--json]                           deprecated that nothing changed since, relinks the rest")
+	fmt.Println("  dependencies <id> [--include-removed] List what an episode cites/copies/derives from, and its dependents")
+	fmt.Println("    --declare <src> --kind <k> [--note] Declare a dependency by hand (cites|copies|derived_from); rescores")
+	fmt.Println("    --remove <src>                     Remove one (kept as a tombstone detection cannot undo); rescores")
 	fmt.Println("  reembed [--force] [--dry-run]        (Re)generate claim + event embeddings under the current embed config")
 	fmt.Println("  recompute-trust [--all]              Rebuild trust_score for every claim under the current policy")
 	fmt.Println("  recompute-trust --stale [--dry-run]  Rescore only claims an older trust model scored, in verified,")

@@ -30,12 +30,21 @@ ON CONFLICT (event_id, lookup_key) DO NOTHING`, qualify(r.ns, "pending_reference
 
 // ListPendingByKeys implements [ports.EventDependencyRepository.ListPendingByKeys].
 func (r EventDependencyRepository) ListPendingByKeys(ctx context.Context, keys []string) ([]domain.PendingReference, error) {
+	return r.listPending(ctx, "lookup_key", keys)
+}
+
+// ListPendingByEventIDs implements [ports.EventDependencyRepository.ListPendingByEventIDs].
+func (r EventDependencyRepository) ListPendingByEventIDs(ctx context.Context, ids []string) ([]domain.PendingReference, error) {
+	return r.listPending(ctx, "event_id", ids)
+}
+
+func (r EventDependencyRepository) listPending(ctx context.Context, column string, values []string) ([]domain.PendingReference, error) {
 	out := make([]domain.PendingReference, 0)
-	if len(keys) == 0 {
+	if len(values) == 0 {
 		return out, nil
 	}
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT event_id, lookup_key, created_at FROM %s WHERE lookup_key = ANY($1)`, qualify(r.ns, "pending_references")), pgArray(keys))
+SELECT event_id, lookup_key, created_at FROM %s WHERE %s = ANY($1)`, qualify(r.ns, "pending_references"), column), pgArray(values))
 	if err != nil {
 		return nil, fmt.Errorf("list pending references: %w", err)
 	}

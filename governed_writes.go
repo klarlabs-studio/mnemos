@@ -20,6 +20,8 @@ import (
 //	actionSetClaimLifecycle -> mnemos-set-claim-lifecycle  (write-local, idempotent)
 //	actionRetractEvent      -> mnemos-retract-event        (write-local, idempotent; see retract.go)
 //	actionUnretractEvent    -> mnemos-unretract-event      (write-local, idempotent; see unretract.go)
+//	actionDeclareDependency -> mnemos-declare-event-dependency (write-local; see dependencies.go)
+//	actionRemoveDependency  -> mnemos-remove-event-dependency  (write-local; see dependencies.go)
 //	actionOpenIncident      -> mnemos-open-incident        (write-local, idempotent on incident id; see incidents.go)
 //	actionResolveIncident   -> mnemos-resolve-incident     (write-local, idempotent; see incidents.go)
 //	set_expectation, observe_expectation, reconcile_expectations (write-local, idempotent; see expectations.go)
@@ -56,6 +58,10 @@ func writeActions() []kernel.Action {
 			Description: "Withdraw an event as evidence, retract or rescore its dependent claims, and report the impact (ADR 0037)."},
 		{Name: actionUnretractEvent, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Clear an event's retraction: restore the claims it deprecated that nothing changed since, relink the ones it rescored (ADR 0037 §8)."},
+		{Name: actionDeclareDependency, Effect: axidomain.EffectWriteLocal, Idempotent: false,
+			Description: "Declare that one event cites, copies or derives from another and rescore the dependent event's claims (ADR 0038)."},
+		{Name: actionRemoveDependency, Effect: axidomain.EffectWriteLocal, Idempotent: false,
+			Description: "Remove an event dependency (kept as a tombstone) and rescore the dependent event's claims (ADR 0038)."},
 		{Name: actionOpenIncident, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Open (upsert) an incident record; see incidents.go."},
 		{Name: actionResolveIncident, Effect: axidomain.EffectWriteLocal, Idempotent: true,
@@ -82,6 +88,8 @@ func buildWriteKernel(m *memory, budget axi.Budget, evidenceLogPath string) (*ke
 		kernel.ExecutorRef(actionSetClaimLifecycle):     setClaimLifecycleExecutor{m: m},
 		kernel.ExecutorRef(actionRetractEvent):          retractEventExecutor{m: m},
 		kernel.ExecutorRef(actionUnretractEvent):        unretractEventExecutor{m: m},
+		kernel.ExecutorRef(actionDeclareDependency):     declareDependencyExecutor{m: m},
+		kernel.ExecutorRef(actionRemoveDependency):      removeDependencyExecutor{m: m},
 		kernel.ExecutorRef(actionOpenIncident):          openIncidentExecutor{m: m},
 		kernel.ExecutorRef(actionResolveIncident):       resolveIncidentExecutor{m: m},
 		kernel.ExecutorRef(actionSetExpectation):        setExpectationExecutor{m: m},

@@ -284,6 +284,114 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /v1/episodes/{id}/dependencies:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string }, description: "The episode id." }
+    get:
+      summary: List an episode's source dependencies (ADR 0038)
+      description: |
+        What the episode cites, copies or derives from (`depends_on`), the
+        episodes that depend on it (`dependents`), and its citations that named
+        no stored episode yet (`pending_citations`). Live dependencies only,
+        unless `include_removed=true`, which adds the ones removed by hand with
+        `removed_at` / `removed_by`. The same document as `mnemos dependencies
+        --json` and the `episode_dependencies` MCP tool. A run-scoped token
+        sees only episodes of its runs: another run's episode is a `404`, and
+        rows whose other episode is outside its runs are left out.
+      parameters:
+        - { name: include_removed, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: The episode's dependencies
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EpisodeDependencies" }
+        "400":
+          description: Invalid include_removed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Episode not found (or outside the token's runs)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    post:
+      summary: Declare that the episode depends on another (ADR 0038)
+      description: |
+        Records by hand that the episode cites, copies or derives from
+        `depends_on` (signal `declared`) and rescores the beliefs the episode
+        evidences: a dependent episode is not counted as an independent
+        source. Nothing is retracted; `source_retracted` says whether the
+        source is retracted, in which case retracting or un-retracting it again
+        would now reach a different set of beliefs. A dependency on the same
+        source that was removed is revived with this justification.
+
+        Requires the `claims:write` scope. Both episodes must exist and, for a
+        run-scoped token, be in its runs (`404` otherwise). A pair that already
+        has a live dependency is a `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [depends_on, kind]
+              properties:
+                depends_on: { type: string, description: "The source episode id." }
+                kind: { type: string, enum: [cites, copies, derived_from] }
+                note: { type: string, maxLength: 512, description: "Why; stored as the dependency's reference." }
+      responses:
+        "201":
+          description: The declaration (the same document as `mnemos dependencies --declare --json` and `declare_episode_dependency`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EpisodeDependencyChange" }
+        "400":
+          description: Invalid body, kind, note, or an episode depending on itself
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Either episode not found (or outside the token's runs)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The pair already has a live dependency
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/episodes/{id}/dependencies/{depends_on}:
+    delete:
+      summary: Remove an episode dependency (ADR 0038)
+      description: |
+        Marks the dependency removed (who, when). The row is kept, so detecting
+        the same citation again does not bring it back; only a declaration
+        revives it. The beliefs the episode evidences are rescored. Nothing is
+        un-retracted; `source_retracted` reports the source's state.
+
+        Requires the `claims:write` scope. A pair with no live dependency, or
+        an episode outside the token's runs, is a `404`.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: "The dependent episode id." }
+        - { name: depends_on, in: path, required: true, schema: { type: string }, description: "The source episode id." }
+      responses:
+        "200":
+          description: The removal (the same document as `mnemos dependencies --remove --json` and `remove_episode_dependency`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EpisodeDependencyChange" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No live dependency for the pair, or an episode not found (or outside the token's runs)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /v1/beliefs:
     get:
       summary: List beliefs
@@ -1857,6 +1965,37 @@ components:
                   trust_before: { type: number, format: double }
                   trust_after: { type: number, format: double }
             uncertainty: { type: array, items: { type: string } }
+    EpisodeDependency:
+      type: object
+      properties:
+        episode_id: { type: string, description: "The dependent episode." }
+        depends_on: { type: string, description: "The source episode." }
+        kind: { type: string, enum: [cites, copies, derived_from] }
+        signal: { type: string, enum: [metadata, link, named_source, declared] }
+        reference: { type: string, description: "The text or note that justified it." }
+        created_at: { type: string, format: date-time }
+        created_by: { type: string }
+        removed_at: { type: string, format: date-time, description: "Set on a dependency removed by hand." }
+        removed_by: { type: string }
+    EpisodeDependencies:
+      type: object
+      properties:
+        episode_id: { type: string }
+        depends_on: { type: array, items: { $ref: "#/components/schemas/EpisodeDependency" } }
+        dependents: { type: array, items: { $ref: "#/components/schemas/EpisodeDependency" } }
+        pending_citations:
+          type: array
+          items:
+            type: object
+            properties:
+              lookup_key: { type: string }
+              created_at: { type: string, format: date-time }
+    EpisodeDependencyChange:
+      type: object
+      properties:
+        dependency: { $ref: "#/components/schemas/EpisodeDependency" }
+        rescored_beliefs: { type: array, items: { type: string }, description: "Beliefs of the dependent episode whose trust was recomputed." }
+        source_retracted: { type: boolean, description: "Whether the source episode is retracted now. The edit itself never retracts or un-retracts." }
     BeliefEvidence:
       type: object
       description: One belief→episode evidence link.

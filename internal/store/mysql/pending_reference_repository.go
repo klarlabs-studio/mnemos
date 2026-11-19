@@ -27,13 +27,22 @@ func (r EventDependencyRepository) AppendPending(ctx context.Context, refs []dom
 
 // ListPendingByKeys implements [ports.EventDependencyRepository.ListPendingByKeys].
 func (r EventDependencyRepository) ListPendingByKeys(ctx context.Context, keys []string) ([]domain.PendingReference, error) {
+	return r.listPending(ctx, "lookup_key", keys)
+}
+
+// ListPendingByEventIDs implements [ports.EventDependencyRepository.ListPendingByEventIDs].
+func (r EventDependencyRepository) ListPendingByEventIDs(ctx context.Context, ids []string) ([]domain.PendingReference, error) {
+	return r.listPending(ctx, "event_id", ids)
+}
+
+func (r EventDependencyRepository) listPending(ctx context.Context, column string, values []string) ([]domain.PendingReference, error) {
 	out := make([]domain.PendingReference, 0)
-	if len(keys) == 0 {
+	if len(values) == 0 {
 		return out, nil
 	}
-	placeholders, args := inPlaceholders(keys)
-	//nolint:gosec // G202: placeholders are literal "?" tokens
-	rows, err := r.db.QueryContext(ctx, `SELECT event_id, lookup_key, created_at FROM pending_references WHERE lookup_key IN (`+placeholders+`)`, args...)
+	placeholders, args := inPlaceholders(values)
+	//nolint:gosec // G202: column is one of two literals, placeholders are literal "?" tokens
+	rows, err := r.db.QueryContext(ctx, `SELECT event_id, lookup_key, created_at FROM pending_references WHERE `+column+` IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list pending references: %w", err)
 	}

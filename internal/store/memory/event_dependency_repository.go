@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
 )
@@ -41,15 +42,65 @@ func (r EventDependencyRepository) Append(_ context.Context, deps []domain.Event
 
 // ListByEventIDs implements [ports.EventDependencyRepository.ListByEventIDs].
 func (r EventDependencyRepository) ListByEventIDs(_ context.Context, ids []string) ([]domain.EventDependency, error) {
-	return r.matching(ids, func(d domain.EventDependency) string { return d.EventID }), nil
+	return r.matching(ids, func(d domain.EventDependency) string { return d.EventID }, false), nil
 }
 
 // ListDependents implements [ports.EventDependencyRepository.ListDependents].
 func (r EventDependencyRepository) ListDependents(_ context.Context, ids []string) ([]domain.EventDependency, error) {
-	return r.matching(ids, func(d domain.EventDependency) string { return d.DependsOn }), nil
+	return r.matching(ids, func(d domain.EventDependency) string { return d.DependsOn }, false), nil
 }
 
-func (r EventDependencyRepository) matching(ids []string, key func(domain.EventDependency) string) []domain.EventDependency {
+// ListByEventIDsWithRemoved implements [ports.EventDependencyRepository.ListByEventIDsWithRemoved].
+func (r EventDependencyRepository) ListByEventIDsWithRemoved(_ context.Context, ids []string) ([]domain.EventDependency, error) {
+	return r.matching(ids, func(d domain.EventDependency) string { return d.EventID }, true), nil
+}
+
+// ListDependentsWithRemoved implements [ports.EventDependencyRepository.ListDependentsWithRemoved].
+func (r EventDependencyRepository) ListDependentsWithRemoved(_ context.Context, ids []string) ([]domain.EventDependency, error) {
+	return r.matching(ids, func(d domain.EventDependency) string { return d.DependsOn }, true), nil
+}
+
+// Declare implements [ports.EventDependencyRepository.Declare].
+func (r EventDependencyRepository) Declare(_ context.Context, d domain.EventDependency) (domain.EventDependency, error) {
+	if err := d.Validate(); err != nil {
+		return domain.EventDependency{}, fmt.Errorf("invalid event dependency: %w", err)
+	}
+	d.CreatedAt = d.CreatedAt.UTC()
+	d.CreatedBy = actorOr(d.CreatedBy)
+	d.RemovedAt, d.RemovedBy = nil, ""
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	for i, cur := range r.state.dependencies {
+		if cur.EventID != d.EventID || cur.DependsOn != d.DependsOn {
+			continue
+		}
+		if cur.Live() {
+			return domain.EventDependency{}, fmt.Errorf("%w: %s -> %s", domain.ErrDependencyExists, d.EventID, d.DependsOn)
+		}
+		r.state.dependencies[i] = d
+		return d, nil
+	}
+	r.state.dependencies = append(r.state.dependencies, d)
+	return d, nil
+}
+
+// Remove implements [ports.EventDependencyRepository.Remove].
+func (r EventDependencyRepository) Remove(_ context.Context, eventID, dependsOn, removedBy string, at time.Time) (domain.EventDependency, error) {
+	r.state.mu.Lock()
+	defer r.state.mu.Unlock()
+	for i, cur := range r.state.dependencies {
+		if cur.EventID != eventID || cur.DependsOn != dependsOn || !cur.Live() {
+			continue
+		}
+		removed := at.UTC()
+		cur.RemovedAt, cur.RemovedBy = &removed, actorOr(removedBy)
+		r.state.dependencies[i] = cur
+		return cur, nil
+	}
+	return domain.EventDependency{}, fmt.Errorf("%w: %s -> %s", domain.ErrDependencyNotFound, eventID, dependsOn)
+}
+
+func (r EventDependencyRepository) matching(ids []string, key func(domain.EventDependency) string, withRemoved bool) []domain.EventDependency {
 	want := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		want[id] = true
@@ -58,7 +109,7 @@ func (r EventDependencyRepository) matching(ids []string, key func(domain.EventD
 	defer r.state.mu.RUnlock()
 	out := make([]domain.EventDependency, 0)
 	for _, d := range r.state.dependencies {
-		if want[key(d)] {
+		if want[key(d)] && (withRemoved || d.Live()) {
 			out = append(out, d)
 		}
 	}
