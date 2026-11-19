@@ -114,6 +114,14 @@ notable changes.
 
 ### Fixed
 
+- Retracting an episode now reaches beliefs whose evidence depends on it through a cycle of
+  episode dependencies (ADR 0038, found by ADR 0043). The independence check memoised the
+  "independent" answer a cycle cut gave part-way through a walk, so with A depending on B and
+  the retracted R, and B depending back on A, a belief resting only on B could be kept,
+  depending on evaluation order. Cycles became possible once dependencies could be declared
+  by hand. The check is now a breadth-first reachability search that caches only answers it
+  has proven, and reads dependencies one level at a time.
+
 - The numeric contradiction detector no longer treats two counts about different scopes as
   one quantity (ADR 0044, `relate/v6`). "The main branch has 12 failing tests" and "The
   release branch has 3 failing tests" no longer contradict. Two numeric claims are about

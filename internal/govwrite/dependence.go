@@ -22,15 +22,14 @@ import (
 type independence struct {
 	conn      *store.Conn
 	retracted map[string]bool // event id -> retracted now (seeded with overrides)
-	tainted   map[string]bool // event id -> depends on a retracted episode
-	visiting  map[string]bool
+	tainted   map[string]bool // event id -> depends on a retracted episode (proven answers only)
 }
 
 // newIndependence returns an independence check. overrides fixes the
 // retraction state of the named events, for the retraction being applied
 // (true) or the one being cleared (false).
 func newIndependence(conn *store.Conn, overrides map[string]bool) *independence {
-	x := &independence{conn: conn, retracted: map[string]bool{}, tainted: map[string]bool{}, visiting: map[string]bool{}}
+	x := &independence{conn: conn, retracted: map[string]bool{}, tainted: map[string]bool{}}
 	for id, v := range overrides {
 		x.retracted[id] = v
 	}
@@ -59,40 +58,58 @@ func (x *independence) isRetracted(ctx context.Context, eventID string) (bool, e
 	return v, nil
 }
 
-// dependsOnRetracted walks eventID's dependencies (outgoing, transitively).
-// A cycle is cut where it closes: an episode on the current path is not
-// counted as depending on anything through itself.
+// dependsOnRetracted reports whether eventID reaches a retracted episode
+// through its dependencies (outgoing, transitively, cycles included).
+//
+// It is a breadth-first reachability search, one dependency read per level,
+// and it memoises only answers it has proven: "tainted" for eventID when a
+// retracted episode is reached, and "independent" for every episode the
+// search saw when none is, since everything those episodes reach was seen
+// too. A depth-first walk that cuts cycles cannot memoise its intermediate
+// answers this way: an episode cut off by the cycle looks independent before
+// the rest of the cycle has been explored, and serving that answer later is
+// what kept a belief resting on a copy of a retracted source (ADR 0043).
 func (x *independence) dependsOnRetracted(ctx context.Context, eventID string) (bool, error) {
 	if v, ok := x.tainted[eventID]; ok {
 		return v, nil
 	}
-	if x.conn.Dependencies == nil || x.visiting[eventID] {
+	if x.conn.Dependencies == nil {
 		return false, nil
 	}
-	x.visiting[eventID] = true
-	defer delete(x.visiting, eventID)
-	deps, err := x.conn.Dependencies.ListByEventIDs(ctx, []string{eventID})
-	if err != nil {
-		return false, fmt.Errorf("dependencies of %s: %w", eventID, err)
-	}
-	result := false
-	for _, d := range deps {
-		dead, err := x.isRetracted(ctx, d.DependsOn)
+	seen := map[string]bool{eventID: true}
+	frontier := []string{eventID}
+	for len(frontier) > 0 {
+		deps, err := x.conn.Dependencies.ListByEventIDs(ctx, frontier)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("dependencies of %v: %w", frontier, err)
 		}
-		if !dead {
-			if dead, err = x.dependsOnRetracted(ctx, d.DependsOn); err != nil {
+		var next []string
+		for _, d := range deps {
+			target := d.DependsOn
+			dead, err := x.isRetracted(ctx, target)
+			if err != nil {
 				return false, err
 			}
+			if dead || x.tainted[target] {
+				x.tainted[eventID] = true
+				return true, nil
+			}
+			if seen[target] {
+				continue
+			}
+			seen[target] = true
+			if _, known := x.tainted[target]; known {
+				// Proven independent: nothing it reaches is retracted.
+				continue
+			}
+			next = append(next, target)
 		}
-		if dead {
-			result = true
-			break
-		}
+		frontier = next
 	}
-	x.tainted[eventID] = result
-	return result, nil
+	for id := range seen {
+		x.tainted[id] = false
+	}
+	return false, nil
 }
 
 // liveIndependentEvidence counts, per belief, its evidence links that count
