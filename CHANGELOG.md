@@ -10,6 +10,21 @@ notable changes.
 
 ### Added
 
+- Episode dependencies can be listed, declared and removed from every transport (ADR 0038,
+  editing dependencies): `mnemos dependencies <id>` (`--include-removed`, `--declare <src>
+  --kind cites|copies|derived_from [--note]`, `--remove <src>`), the `episode_dependencies`,
+  `declare_episode_dependency` and `remove_episode_dependency` MCP tools, REST
+  `GET`/`POST /v1/episodes/{id}/dependencies` and `DELETE
+  /v1/episodes/{id}/dependencies/{depends_on}`, gRPC `ListEpisodeDependencies` /
+  `DeclareEpisodeDependency` / `RemoveEpisodeDependency`, and the matching `Memory` and
+  `client` methods. Removal is a tombstone (`removed_at` / `removed_by` on
+  `event_dependencies`, SQLite schema v38, libSQL, memory, Postgres, MySQL), so neither
+  detection nor late-citation resolution re-adds a dependency a person removed; declaring
+  the pair again revives it. Each edit rescores the dependent episode's beliefs and reports
+  whether the source is retracted; it never retracts or un-retracts anything. Live reads,
+  trust on every backend and retraction ignore removed rows; recorded-as-of trust counts a
+  dependency only while it was in force.
+
 - A citation of a source the brain has not stored yet is no longer forgotten (ADR 0038,
   late citations). Detection keeps it as a pending reference under canonical lookup keys
   (new `pending_references` table on SQLite schema v37, libSQL, memory, Postgres with RLS,
