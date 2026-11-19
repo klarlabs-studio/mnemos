@@ -1437,6 +1437,12 @@ type appendEventsRequest struct {
 type appendResponse struct {
 	Accepted int `json:"accepted"`
 	Skipped  int `json:"skipped"`
+	// Folded and Remapped are set by POST /v1/beliefs (ADR 0041): Folded
+	// counts the new ids stored as redirects to a belief the brain already
+	// held; Remapped maps every incoming id whose writes landed on another
+	// claim (a folded id or a stored merge redirect) to that claim.
+	Folded   int               `json:"folded,omitempty"`
+	Remapped map[string]string `json:"remapped,omitempty"`
 }
 
 const maxRequestBytes = 5 * 1024 * 1024 // 5 MB; bigger payloads should chunk
@@ -1839,33 +1845,36 @@ func appendClaimsHandler(conn *store.Conn, gw *govwrite.Writer, w http.ResponseW
 	// per-claim CreatedBy authorship is already stamped on each claim above.
 	// Passing the zero value meant no status_history row at all, so anything
 	// arriving over REST had no provenance in `mnemos audit who`.
-	if _, err := gw.Claims(ctx, claims, govwrite.ClaimReason{
+	//
+	// The write is id-addressed (ADR 0041): a claim id stored as a merge
+	// redirect is never rewritten, and a new id restating a belief a live claim
+	// already holds becomes a redirect to it. Either way its evidence lands on
+	// the live claim, and the response reports where each id went.
+	links := make([]domain.ClaimEvidence, 0, len(req.Evidence))
+	for _, e := range req.Evidence {
+		links = append(links, domain.ClaimEvidence{ClaimID: e.ClaimID, EventID: e.EventID})
+	}
+	res, err := gw.Beliefs(ctx, claims, links, govwrite.ClaimReason{
 		Reason:    "api: POST /v1/beliefs",
 		ChangedBy: actor,
-	}); err != nil {
+	})
+	if err != nil {
 		writeInternalError(w, "upsert claims", err)
 		return
 	}
 	// valid_to has its own governed write (the upsert never touches it), so a
-	// re-append cannot reopen a closed belief by omitting the field.
+	// re-append cannot reopen a closed belief by omitting the field. A claim
+	// that resolved to another was not written, so it has nothing to close.
 	for _, c := range closes {
+		if _, remapped := res.Remapped[c.id]; remapped {
+			continue
+		}
 		if err := gw.SetValidity(ctx, c.id, c.at, govwrite.ClaimReason{Reason: "api: POST /v1/beliefs valid_to", ChangedBy: actor}); err != nil {
 			writeInternalError(w, "set valid_to", err)
 			return
 		}
 	}
-
-	if len(req.Evidence) > 0 {
-		links := make([]domain.ClaimEvidence, 0, len(req.Evidence))
-		for _, e := range req.Evidence {
-			links = append(links, domain.ClaimEvidence{ClaimID: e.ClaimID, EventID: e.EventID})
-		}
-		if _, err := gw.EvidenceLinks(ctx, links); err != nil {
-			writeInternalError(w, "upsert evidence", err)
-			return
-		}
-	}
-	writeJSON(w, http.StatusCreated, appendResponse{Accepted: len(claims)})
+	writeJSON(w, http.StatusCreated, appendResponse{Accepted: res.Accepted, Folded: res.Folded, Remapped: res.Remapped})
 }
 
 type appendRelationshipsRequest struct {

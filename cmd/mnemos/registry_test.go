@@ -181,7 +181,7 @@ func TestPushPull_RoundTripsAllResources(t *testing.T) {
 	if n, _ := persistPulledEvents(ctx, wrapTestWriter(t, pullConn), pulledEvents); n != 1 {
 		t.Errorf("inserted events = %d, want 1", n)
 	}
-	if n, _ := persistPulledClaims(ctx, wrapTestWriter(t, pullConn), pulledClaims, pulledEvidence); n != 2 {
+	if n, _, _ := persistPulledClaims(ctx, wrapTestWriter(t, pullConn), pulledClaims, pulledEvidence); n != 2 {
 		t.Errorf("inserted claims = %d, want 2", n)
 	}
 	if n, _ := persistPulledRelationships(ctx, wrapTestWriter(t, pullConn), pulledRels); n != 1 {

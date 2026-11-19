@@ -432,6 +432,12 @@ message AppendEmbeddingsRequest {
 message AppendResponse {
   int32 accepted = 1;
   int32 skipped  = 2;
+  // Set by AppendBeliefs (ADR 0041). folded counts the new belief ids stored
+  // as redirects to a belief the brain already held; remapped maps every
+  // incoming belief id whose writes landed on another belief (a folded id or
+  // a stored merge redirect) to that belief's id.
+  int32 folded = 3;
+  map<string, string> remapped = 4;
 }
 
 // ---------------------------------------------------------------------------

@@ -435,7 +435,13 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       summary: Upsert a batch of beliefs
-      description: Requires the `claims:write` scope.
+      description: |
+        Requires the `claims:write` scope. The write is id-addressed
+        (ADR 0041): a belief id this brain stores as a merge redirect is never
+        rewritten, and its evidence lands on the live belief the redirect
+        resolves to. A new id whose text, scope and audience match a live
+        belief is stored as a redirect to it, with its evidence folded there.
+        The response's `remapped` reports where each such id went.
       requestBody:
         required: true
         content:
@@ -2091,6 +2097,20 @@ components:
       properties:
         accepted: { type: integer }
         skipped: { type: integer }
+        folded:
+          type: integer
+          description: |
+            POST /v1/beliefs only (ADR 0041). New belief ids stored as
+            redirects because a live belief with the same text, scope and
+            audience was already held. Omitted when zero.
+        remapped:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            POST /v1/beliefs only (ADR 0041). Maps each sent belief id whose
+            writes landed on another belief, a folded id or one this brain had
+            merged away, to that belief's id. Associations and embeddings sent
+            later for the old id resolve the same way. Omitted when empty.
       required: [accepted]
     Metrics:
       type: object

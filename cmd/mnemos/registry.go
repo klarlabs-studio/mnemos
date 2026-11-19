@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -209,7 +210,7 @@ func handlePush(args []string, _ Flags) {
 		exitWithMnemosError(false, NewSystemError(err, "push events"))
 		return
 	}
-	pushedClaims, err := pushBatched(ctx, client, regURL+"/v1/beliefs", token, "beliefs", batchToAny(claimsToBatches(claims, evidence)))
+	pushedClaims, err := pushBatchedAcks(ctx, client, regURL+"/v1/beliefs", token, "beliefs", batchToAny(claimsToBatches(claims, evidence)))
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "push claims"))
 		return
@@ -232,7 +233,8 @@ func handlePush(args []string, _ Flags) {
 
 	fmt.Printf("pushed to %s\n", regURL)
 	fmt.Printf("  events:        %d\n", pushedEvents)
-	fmt.Printf("  claims:        %d\n", pushedClaims)
+	fmt.Printf("  claims:        %d\n", pushedClaims.Accepted)
+	fmt.Printf("  folded:        %d (already held by the registry; stored as redirects)\n", pushedClaims.Folded)
 	fmt.Printf("  relationships: %d\n", pushedRels)
 	fmt.Printf("  embeddings:    %d\n", pushedEmbeddings)
 }
@@ -282,7 +284,7 @@ func handlePull(args []string, _ Flags) {
 		exitWithMnemosError(false, NewSystemError(err, "persist events"))
 		return
 	}
-	insertedClaims, err := persistPulledClaims(ctx, gw, claims, evidence)
+	insertedClaims, foldedClaims, err := persistPulledClaims(ctx, gw, claims, evidence)
 	if err != nil {
 		exitWithMnemosError(false, NewSystemError(err, "persist claims"))
 		return
@@ -306,6 +308,7 @@ func handlePull(args []string, _ Flags) {
 	fmt.Printf("pulled from %s\n", regURL)
 	fmt.Printf("  events:        %d\n", insertedEvents)
 	fmt.Printf("  claims:        %d\n", insertedClaims)
+	fmt.Printf("  folded:        %d (already held here; stored as redirects)\n", foldedClaims)
 	fmt.Printf("  relationships: %d\n", insertedRels)
 	fmt.Printf("  embeddings:    %d\n", insertedEmbeddings)
 }
@@ -455,15 +458,23 @@ func batchToAny(in []map[string]any) []map[string]any {
 }
 
 func pushBatched(ctx context.Context, client *http.Client, endpoint, token, resource string, batches []map[string]any) (int, error) {
-	totalAccepted := 0
+	totals, err := pushBatchedAcks(ctx, client, endpoint, token, resource, batches)
+	return totals.Accepted, err
+}
+
+// pushBatchedAcks posts each batch and sums the server's acknowledgements:
+// accepted rows, and for beliefs the ids folded onto a belief the registry
+// already held (ADR 0041).
+func pushBatchedAcks(ctx context.Context, client *http.Client, endpoint, token, resource string, batches []map[string]any) (appendResponse, error) {
+	var totals appendResponse
 	for i, body := range batches {
 		buf, err := json.Marshal(body)
 		if err != nil {
-			return totalAccepted, fmt.Errorf("encode %s batch %d: %w", resource, i, err)
+			return totals, fmt.Errorf("encode %s batch %d: %w", resource, i, err)
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(buf)) //nolint:gosec // G704: endpoint is operator-supplied via env/config, not user-supplied input
 		if err != nil {
-			return totalAccepted, fmt.Errorf("build %s request: %w", resource, err)
+			return totals, fmt.Errorf("build %s request: %w", resource, err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 		if token != "" {
@@ -471,19 +482,21 @@ func pushBatched(ctx context.Context, client *http.Client, endpoint, token, reso
 		}
 		resp, err := client.Do(req) //nolint:gosec // G704: same operator-supplied endpoint as request
 		if err != nil {
-			return totalAccepted, fmt.Errorf("post %s batch %d: %w", resource, i, err)
+			return totals, fmt.Errorf("post %s batch %d: %w", resource, i, err)
 		}
 		respBody, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		if resp.StatusCode/100 != 2 {
-			return totalAccepted, fmt.Errorf("%s batch %d: server returned %d: %s", resource, i, resp.StatusCode, strings.TrimSpace(string(respBody)))
+			return totals, fmt.Errorf("%s batch %d: server returned %d: %s", resource, i, resp.StatusCode, strings.TrimSpace(string(respBody)))
 		}
 		var ack appendResponse
 		if err := json.Unmarshal(respBody, &ack); err == nil {
-			totalAccepted += ack.Accepted
+			totals.Accepted += ack.Accepted
+			totals.Skipped += ack.Skipped
+			totals.Folded += ack.Folded
 		}
 	}
-	return totalAccepted, nil
+	return totals, nil
 }
 
 func pullEvents(ctx context.Context, client *http.Client, regURL, token string) ([]eventDTO, error) {
@@ -617,18 +630,19 @@ func persistPulledEvents(ctx context.Context, gw *govwrite.Writer, events []even
 
 // persistPulledClaims is the analogous backend-agnostic path for
 // claims and their evidence links. As above, the "inserted" count
-// is the CountAll delta — Upsert collapses duplicates silently.
-func persistPulledClaims(ctx context.Context, gw *govwrite.Writer, claims []claimDTO, evidence []claimEvidenceItem) (int, error) {
+// is the CountAll delta — Upsert collapses duplicates silently. folded
+// counts the pulled ids stored as redirects to a belief this brain held.
+func persistPulledClaims(ctx context.Context, gw *govwrite.Writer, claims []claimDTO, evidence []claimEvidenceItem) (inserted, folded int, err error) {
 	conn := gw.Conn()
 	before, err := conn.Claims.CountAll(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("count claims before pull: %w", err)
+		return 0, 0, fmt.Errorf("count claims before pull: %w", err)
 	}
 	domClaims := make([]domain.Claim, 0, len(claims))
 	for _, c := range claims {
 		ts, err := time.Parse(time.RFC3339, c.CreatedAt)
 		if err != nil {
-			return 0, fmt.Errorf("parse claim created_at %s: %w", c.ID, err)
+			return 0, 0, fmt.Errorf("parse claim created_at %s: %w", c.ID, err)
 		}
 		domClaims = append(domClaims, domain.Claim{
 			ID:         c.ID,
@@ -644,24 +658,68 @@ func persistPulledClaims(ctx context.Context, gw *govwrite.Writer, claims []clai
 	// claim landed with no status_history row at all. `mnemos audit who` and
 	// the trust narrative then show no provenance for anything pulled: the
 	// read succeeds, the trail is simply absent.
-	if _, err := gw.Claims(ctx, domClaims, govwrite.ClaimReason{
-		Reason:    "federation: registry pull",
-		ChangedBy: "registry",
-	}); err != nil {
-		return 0, fmt.Errorf("upsert claims: %w", err)
-	}
-	links := make([]domain.ClaimEvidence, 0, len(evidence))
-	for _, e := range evidence {
-		links = append(links, domain.ClaimEvidence{ClaimID: e.ClaimID, EventID: e.EventID})
-	}
-	if _, err := gw.EvidenceLinks(ctx, links); err != nil {
-		return 0, fmt.Errorf("upsert claim evidence: %w", err)
+	//
+	// The write is id-addressed (ADR 0041): a registry id this brain already
+	// merged away follows its redirect instead of coming back active, and a
+	// registry id restating a belief this brain holds under its own id becomes
+	// a redirect to it. Written in batches so each resolution reads a bounded
+	// set of ids.
+	for _, batch := range pulledBeliefBatches(domClaims, evidence) {
+		res, err := gw.Beliefs(ctx, batch.claims, batch.links, govwrite.ClaimReason{
+			Reason:    "federation: registry pull",
+			ChangedBy: "registry",
+		})
+		if err != nil {
+			return 0, folded, fmt.Errorf("upsert claims: %w", err)
+		}
+		folded += res.Folded
 	}
 	after, err := conn.Claims.CountAll(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("count claims after pull: %w", err)
+		return 0, folded, fmt.Errorf("count claims after pull: %w", err)
 	}
-	return int(after - before), nil
+	return int(after - before), folded, nil
+}
+
+// beliefBatch is one pulled write: claims with the evidence that names them.
+type beliefBatch struct {
+	claims []domain.Claim
+	links  []domain.ClaimEvidence
+}
+
+// pulledBeliefBatches splits pulled claims into pushBatchSize batches, each
+// carrying the evidence of its claims. Evidence naming no pulled claim goes in
+// the last batch, as it did when everything was written at once.
+func pulledBeliefBatches(claims []domain.Claim, evidence []claimEvidenceItem) []beliefBatch {
+	byClaim := make(map[string][]domain.ClaimEvidence, len(claims))
+	for _, e := range evidence {
+		byClaim[e.ClaimID] = append(byClaim[e.ClaimID], domain.ClaimEvidence{ClaimID: e.ClaimID, EventID: e.EventID})
+	}
+	var out []beliefBatch
+	for i := 0; i < len(claims); i += pushBatchSize {
+		end := min(i+pushBatchSize, len(claims))
+		b := beliefBatch{claims: claims[i:end]}
+		for _, c := range b.claims {
+			b.links = append(b.links, byClaim[c.ID]...)
+			delete(byClaim, c.ID)
+		}
+		out = append(out, b)
+	}
+	if len(byClaim) > 0 {
+		if len(out) == 0 {
+			out = append(out, beliefBatch{})
+		}
+		last := &out[len(out)-1]
+		ids := make([]string, 0, len(byClaim))
+		for id := range byClaim {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			last.links = append(last.links, byClaim[id]...)
+		}
+	}
+	return out
 }
 
 // stampPullProvenance mutates each pulled event so its metadata records
