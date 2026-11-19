@@ -137,6 +137,9 @@ edge per 3,000 claims.
 - **Scope is still invisible.** Two counts of the same noun about different
   scopes (branches, sessions, repositories) are read as one quantity. The
   numeric detector's alignment rules limit this, but they do not remove it.
+  ADR 0044 (`relate/v6`) adds a scope check to the numeric detector: a
+  qualifier swapped in place, a differing environment, or a differing label
+  number ("Sprint 14") now marks two numbers as being about different scopes.
 - **Manner only.** Other ways a statement is replaced, such as a new owner, a
   new tool, or a changed policy with no antonym or number, still need an
   explicit edge or the semantic path (#444).

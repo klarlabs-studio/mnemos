@@ -24,7 +24,11 @@ import (
 //	relate/v5  supersession readings: spelled-out cardinals reach the numeric
 //	           detector, and the frame detector reads an exclusive manner swap
 //	           after an identical subject and predicate
-const ModelVersion = "relate/v5"
+//	relate/v6  scope-aware numeric contradictions (ADR 0044): two numeric
+//	           claims whose qualifiers are swapped in place, whose environments
+//	           differ, or whose label numbers ("Sprint 14") differ are about
+//	           different scopes and no longer contradict
+const ModelVersion = "relate/v6"
 
 // CausalLLMVersion is stamped on causal edges the LLM detector infers.
 const CausalLLMVersion = "relate-llm-causal/v1"
