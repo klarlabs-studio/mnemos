@@ -406,6 +406,14 @@ type ListEmbeddingsResponse struct {
 type AppendResponse struct {
 	Accepted int `json:"accepted"`
 	Skipped  int `json:"skipped"`
+	// Folded and Remapped are set by POST /v1/beliefs (ADR 0041). Folded
+	// counts the new ids the server stored as redirects to a belief it already
+	// held. Remapped maps every sent id whose writes landed on another belief
+	// (a folded id or one the server had merged away) to that belief's id;
+	// associations and embeddings sent later for the old id resolve the same
+	// way.
+	Folded   int               `json:"folded,omitempty"`
+	Remapped map[string]string `json:"remapped,omitempty"`
 }
 
 // AppendClaimsBody is the request body for POST /v1/claims. Evidence is

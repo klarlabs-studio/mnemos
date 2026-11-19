@@ -1322,9 +1322,15 @@ func (x *AppendEmbeddingsRequest) GetEmbeddings() []*Embedding {
 }
 
 type AppendResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Accepted      int32                  `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
-	Skipped       int32                  `protobuf:"varint,2,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Accepted int32                  `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	Skipped  int32                  `protobuf:"varint,2,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	// Set by AppendBeliefs (ADR 0041). folded counts the new belief ids stored
+	// as redirects to a belief the brain already held; remapped maps every
+	// incoming belief id whose writes landed on another belief (a folded id or
+	// a stored merge redirect) to that belief's id.
+	Folded        int32             `protobuf:"varint,3,opt,name=folded,proto3" json:"folded,omitempty"`
+	Remapped      map[string]string `protobuf:"bytes,4,rep,name=remapped,proto3" json:"remapped,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1371,6 +1377,20 @@ func (x *AppendResponse) GetSkipped() int32 {
 		return x.Skipped
 	}
 	return 0
+}
+
+func (x *AppendResponse) GetFolded() int32 {
+	if x != nil {
+		return x.Folded
+	}
+	return 0
+}
+
+func (x *AppendResponse) GetRemapped() map[string]string {
+	if x != nil {
+		return x.Remapped
+	}
+	return nil
 }
 
 type MetricsRequest struct {
@@ -11562,10 +11582,15 @@ const file_mnemos_v1_mnemos_proto_rawDesc = "" +
 	"\x17AppendEmbeddingsRequest\x124\n" +
 	"\n" +
 	"embeddings\x18\x01 \x03(\v2\x14.mnemos.v1.EmbeddingR\n" +
-	"embeddings\"F\n" +
+	"embeddings\"\xe0\x01\n" +
 	"\x0eAppendResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\x05R\baccepted\x12\x18\n" +
-	"\askipped\x18\x02 \x01(\x05R\askipped\"\x10\n" +
+	"\askipped\x18\x02 \x01(\x05R\askipped\x12\x16\n" +
+	"\x06folded\x18\x03 \x01(\x05R\x06folded\x12C\n" +
+	"\bremapped\x18\x04 \x03(\v2'.mnemos.v1.AppendResponse.RemappedEntryR\bremapped\x1a;\n" +
+	"\rRemappedEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x10\n" +
 	"\x0eMetricsRequest\"\xee\x01\n" +
 	"\x0fMetricsResponse\x12\x12\n" +
 	"\x04runs\x18\x01 \x01(\x03R\x04runs\x12\x1a\n" +
@@ -12538,7 +12563,7 @@ func file_mnemos_v1_mnemos_proto_rawDescGZIP() []byte {
 	return file_mnemos_v1_mnemos_proto_rawDescData
 }
 
-var file_mnemos_v1_mnemos_proto_msgTypes = make([]protoimpl.MessageInfo, 179)
+var file_mnemos_v1_mnemos_proto_msgTypes = make([]protoimpl.MessageInfo, 180)
 var file_mnemos_v1_mnemos_proto_goTypes = []any{
 	(*Pagination)(nil),                      // 0: mnemos.v1.Pagination
 	(*HealthRequest)(nil),                   // 1: mnemos.v1.HealthRequest
@@ -12714,298 +12739,300 @@ var file_mnemos_v1_mnemos_proto_goTypes = []any{
 	(*BeliefVersion)(nil),                   // 171: mnemos.v1.BeliefVersion
 	(*BeliefHistoryResponse)(nil),           // 172: mnemos.v1.BeliefHistoryResponse
 	nil,                                     // 173: mnemos.v1.Episode.MetadataEntry
-	nil,                                     // 174: mnemos.v1.Action.MetadataEntry
-	nil,                                     // 175: mnemos.v1.Outcome.MetricsEntry
-	nil,                                     // 176: mnemos.v1.TimelineEpisode.MetadataEntry
-	nil,                                     // 177: mnemos.v1.Passage.MetadataEntry
-	nil,                                     // 178: mnemos.v1.BrainHealthResponse.EstimatesEntry
-	(*timestamppb.Timestamp)(nil),           // 179: google.protobuf.Timestamp
+	nil,                                     // 174: mnemos.v1.AppendResponse.RemappedEntry
+	nil,                                     // 175: mnemos.v1.Action.MetadataEntry
+	nil,                                     // 176: mnemos.v1.Outcome.MetricsEntry
+	nil,                                     // 177: mnemos.v1.TimelineEpisode.MetadataEntry
+	nil,                                     // 178: mnemos.v1.Passage.MetadataEntry
+	nil,                                     // 179: mnemos.v1.BrainHealthResponse.EstimatesEntry
+	(*timestamppb.Timestamp)(nil),           // 180: google.protobuf.Timestamp
 }
 var file_mnemos_v1_mnemos_proto_depIdxs = []int32{
-	179, // 0: mnemos.v1.Episode.timestamp:type_name -> google.protobuf.Timestamp
+	180, // 0: mnemos.v1.Episode.timestamp:type_name -> google.protobuf.Timestamp
 	173, // 1: mnemos.v1.Episode.metadata:type_name -> mnemos.v1.Episode.MetadataEntry
-	179, // 2: mnemos.v1.Episode.ingested_at:type_name -> google.protobuf.Timestamp
+	180, // 2: mnemos.v1.Episode.ingested_at:type_name -> google.protobuf.Timestamp
 	0,   // 3: mnemos.v1.ListEpisodesRequest.pagination:type_name -> mnemos.v1.Pagination
 	3,   // 4: mnemos.v1.ListEpisodesResponse.episodes:type_name -> mnemos.v1.Episode
 	3,   // 5: mnemos.v1.AppendEpisodesRequest.episodes:type_name -> mnemos.v1.Episode
-	179, // 6: mnemos.v1.Belief.created_at:type_name -> google.protobuf.Timestamp
-	179, // 7: mnemos.v1.Belief.valid_from:type_name -> google.protobuf.Timestamp
-	179, // 8: mnemos.v1.Belief.valid_to:type_name -> google.protobuf.Timestamp
+	180, // 6: mnemos.v1.Belief.created_at:type_name -> google.protobuf.Timestamp
+	180, // 7: mnemos.v1.Belief.valid_from:type_name -> google.protobuf.Timestamp
+	180, // 8: mnemos.v1.Belief.valid_to:type_name -> google.protobuf.Timestamp
 	0,   // 9: mnemos.v1.ListBeliefsRequest.pagination:type_name -> mnemos.v1.Pagination
-	179, // 10: mnemos.v1.ListBeliefsRequest.as_of:type_name -> google.protobuf.Timestamp
-	179, // 11: mnemos.v1.ListBeliefsRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
+	180, // 10: mnemos.v1.ListBeliefsRequest.as_of:type_name -> google.protobuf.Timestamp
+	180, // 11: mnemos.v1.ListBeliefsRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
 	7,   // 12: mnemos.v1.ListBeliefsResponse.beliefs:type_name -> mnemos.v1.Belief
 	8,   // 13: mnemos.v1.ListBeliefsResponse.evidence:type_name -> mnemos.v1.BeliefEvidence
 	7,   // 14: mnemos.v1.AppendBeliefsRequest.beliefs:type_name -> mnemos.v1.Belief
 	8,   // 15: mnemos.v1.AppendBeliefsRequest.evidence:type_name -> mnemos.v1.BeliefEvidence
-	179, // 16: mnemos.v1.Association.created_at:type_name -> google.protobuf.Timestamp
+	180, // 16: mnemos.v1.Association.created_at:type_name -> google.protobuf.Timestamp
 	0,   // 17: mnemos.v1.ListAssociationsRequest.pagination:type_name -> mnemos.v1.Pagination
 	12,  // 18: mnemos.v1.ListAssociationsResponse.associations:type_name -> mnemos.v1.Association
 	12,  // 19: mnemos.v1.AppendAssociationsRequest.associations:type_name -> mnemos.v1.Association
 	0,   // 20: mnemos.v1.ListEmbeddingsRequest.pagination:type_name -> mnemos.v1.Pagination
 	16,  // 21: mnemos.v1.ListEmbeddingsResponse.embeddings:type_name -> mnemos.v1.Embedding
 	16,  // 22: mnemos.v1.AppendEmbeddingsRequest.embeddings:type_name -> mnemos.v1.Embedding
-	179, // 23: mnemos.v1.Action.at:type_name -> google.protobuf.Timestamp
-	174, // 24: mnemos.v1.Action.metadata:type_name -> mnemos.v1.Action.MetadataEntry
-	179, // 25: mnemos.v1.Action.created_at:type_name -> google.protobuf.Timestamp
-	0,   // 26: mnemos.v1.ListActionsRequest.pagination:type_name -> mnemos.v1.Pagination
-	23,  // 27: mnemos.v1.ListActionsResponse.actions:type_name -> mnemos.v1.Action
-	23,  // 28: mnemos.v1.AppendActionsRequest.actions:type_name -> mnemos.v1.Action
-	175, // 29: mnemos.v1.Outcome.metrics:type_name -> mnemos.v1.Outcome.MetricsEntry
-	179, // 30: mnemos.v1.Outcome.observed_at:type_name -> google.protobuf.Timestamp
-	179, // 31: mnemos.v1.Outcome.created_at:type_name -> google.protobuf.Timestamp
-	0,   // 32: mnemos.v1.ListOutcomesRequest.pagination:type_name -> mnemos.v1.Pagination
-	27,  // 33: mnemos.v1.ListOutcomesResponse.outcomes:type_name -> mnemos.v1.Outcome
-	27,  // 34: mnemos.v1.AppendOutcomesRequest.outcomes:type_name -> mnemos.v1.Outcome
-	31,  // 35: mnemos.v1.Schema.context:type_name -> mnemos.v1.Context
-	179, // 36: mnemos.v1.Schema.derived_at:type_name -> google.protobuf.Timestamp
-	179, // 37: mnemos.v1.Schema.last_verified:type_name -> google.protobuf.Timestamp
-	0,   // 38: mnemos.v1.ListSchemasRequest.pagination:type_name -> mnemos.v1.Pagination
-	32,  // 39: mnemos.v1.ListSchemasResponse.schemas:type_name -> mnemos.v1.Schema
-	32,  // 40: mnemos.v1.AppendSchemasRequest.schemas:type_name -> mnemos.v1.Schema
-	31,  // 41: mnemos.v1.Decision.context:type_name -> mnemos.v1.Context
-	179, // 42: mnemos.v1.Decision.chosen_at:type_name -> google.protobuf.Timestamp
-	179, // 43: mnemos.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
-	0,   // 44: mnemos.v1.ListDecisionsRequest.pagination:type_name -> mnemos.v1.Pagination
-	36,  // 45: mnemos.v1.ListDecisionsResponse.decisions:type_name -> mnemos.v1.Decision
-	36,  // 46: mnemos.v1.AppendDecisionsRequest.decisions:type_name -> mnemos.v1.Decision
-	31,  // 47: mnemos.v1.Reflex.context:type_name -> mnemos.v1.Context
-	40,  // 48: mnemos.v1.Reflex.steps:type_name -> mnemos.v1.ReflexStep
-	179, // 49: mnemos.v1.Reflex.derived_at:type_name -> google.protobuf.Timestamp
-	179, // 50: mnemos.v1.Reflex.last_verified:type_name -> google.protobuf.Timestamp
-	0,   // 51: mnemos.v1.ListReflexesRequest.pagination:type_name -> mnemos.v1.Pagination
-	41,  // 52: mnemos.v1.ListReflexesResponse.reflexes:type_name -> mnemos.v1.Reflex
-	41,  // 53: mnemos.v1.AppendReflexesRequest.reflexes:type_name -> mnemos.v1.Reflex
-	31,  // 54: mnemos.v1.GlobalSchema.context:type_name -> mnemos.v1.Context
-	179, // 55: mnemos.v1.GlobalSchema.promoted_at:type_name -> google.protobuf.Timestamp
-	0,   // 56: mnemos.v1.ListGlobalSchemasRequest.pagination:type_name -> mnemos.v1.Pagination
-	45,  // 57: mnemos.v1.ListGlobalSchemasResponse.global_schemas:type_name -> mnemos.v1.GlobalSchema
-	179, // 58: mnemos.v1.Incident.opened_at:type_name -> google.protobuf.Timestamp
-	179, // 59: mnemos.v1.Incident.resolved_at:type_name -> google.protobuf.Timestamp
-	0,   // 60: mnemos.v1.ListIncidentsRequest.pagination:type_name -> mnemos.v1.Pagination
-	48,  // 61: mnemos.v1.ListIncidentsResponse.incidents:type_name -> mnemos.v1.Incident
-	55,  // 62: mnemos.v1.BeliefProvenance.signals:type_name -> mnemos.v1.ProvenanceSignal
-	48,  // 63: mnemos.v1.WhyWereWeWrongResponse.incident:type_name -> mnemos.v1.Incident
-	56,  // 64: mnemos.v1.WhyWereWeWrongResponse.root_belief:type_name -> mnemos.v1.BeliefProvenance
-	36,  // 65: mnemos.v1.WhyWereWeWrongResponse.affected_decisions:type_name -> mnemos.v1.Decision
-	179, // 66: mnemos.v1.EntityAssociation.created_at:type_name -> google.protobuf.Timestamp
-	0,   // 67: mnemos.v1.ListEntityAssociationsRequest.pagination:type_name -> mnemos.v1.Pagination
-	58,  // 68: mnemos.v1.ListEntityAssociationsResponse.edges:type_name -> mnemos.v1.EntityAssociation
-	58,  // 69: mnemos.v1.AppendEntityAssociationsRequest.edges:type_name -> mnemos.v1.EntityAssociation
-	63,  // 70: mnemos.v1.WhoKnowsResponse.experts:type_name -> mnemos.v1.Expert
-	66,  // 71: mnemos.v1.KnowledgeGapsResponse.gaps:type_name -> mnemos.v1.Gap
-	69,  // 72: mnemos.v1.CalibrationResponse.buckets:type_name -> mnemos.v1.CalibrationBucket
-	70,  // 73: mnemos.v1.CalibrationResponse.sources:type_name -> mnemos.v1.CalibrationSource
-	179, // 74: mnemos.v1.Hypercorrection.detected_at:type_name -> google.protobuf.Timestamp
-	73,  // 75: mnemos.v1.HypercorrectionsResponse.hypercorrections:type_name -> mnemos.v1.Hypercorrection
-	76,  // 76: mnemos.v1.RecombinationsResponse.recombinations:type_name -> mnemos.v1.Recombination
-	79,  // 77: mnemos.v1.AnalogousBeliefsResponse.analogous:type_name -> mnemos.v1.Analogy
-	179, // 78: mnemos.v1.BeliefDetail.valid_from:type_name -> google.protobuf.Timestamp
-	179, // 79: mnemos.v1.BeliefDetail.valid_until:type_name -> google.protobuf.Timestamp
-	179, // 80: mnemos.v1.BeliefDetail.recorded_at:type_name -> google.protobuf.Timestamp
-	179, // 81: mnemos.v1.RetractEpisodeResponse.retracted_at:type_name -> google.protobuf.Timestamp
-	87,  // 82: mnemos.v1.RetractEpisodeResponse.impact:type_name -> mnemos.v1.RetractionImpact
-	90,  // 83: mnemos.v1.RetractionImpact.rescored_beliefs:type_name -> mnemos.v1.RescoredBelief
-	91,  // 84: mnemos.v1.RetractionImpact.decisions:type_name -> mnemos.v1.RetractionDecisionExposure
-	88,  // 85: mnemos.v1.RetractionImpact.dependent_episodes:type_name -> mnemos.v1.EpisodeDependencyHop
-	89,  // 86: mnemos.v1.RetractionImpact.belief_paths:type_name -> mnemos.v1.RetractionBeliefPath
-	179, // 87: mnemos.v1.UnretractEpisodeResponse.unretracted_at:type_name -> google.protobuf.Timestamp
-	179, // 88: mnemos.v1.UnretractEpisodeResponse.retracted_at:type_name -> google.protobuf.Timestamp
-	94,  // 89: mnemos.v1.UnretractEpisodeResponse.impact:type_name -> mnemos.v1.UnretractionImpact
-	95,  // 90: mnemos.v1.UnretractionImpact.restored_beliefs:type_name -> mnemos.v1.RestoredBelief
-	96,  // 91: mnemos.v1.UnretractionImpact.skipped_beliefs:type_name -> mnemos.v1.SkippedBelief
-	97,  // 92: mnemos.v1.UnretractionImpact.relinked_beliefs:type_name -> mnemos.v1.RelinkedBelief
-	179, // 93: mnemos.v1.EpisodeDependency.created_at:type_name -> google.protobuf.Timestamp
-	179, // 94: mnemos.v1.EpisodeDependency.removed_at:type_name -> google.protobuf.Timestamp
-	179, // 95: mnemos.v1.PendingCitation.created_at:type_name -> google.protobuf.Timestamp
-	98,  // 96: mnemos.v1.ListEpisodeDependenciesResponse.depends_on:type_name -> mnemos.v1.EpisodeDependency
-	98,  // 97: mnemos.v1.ListEpisodeDependenciesResponse.dependents:type_name -> mnemos.v1.EpisodeDependency
-	99,  // 98: mnemos.v1.ListEpisodeDependenciesResponse.pending_citations:type_name -> mnemos.v1.PendingCitation
-	98,  // 99: mnemos.v1.EpisodeDependencyChange.dependency:type_name -> mnemos.v1.EpisodeDependency
-	109, // 100: mnemos.v1.RecallResponse.results:type_name -> mnemos.v1.RecallResult
-	110, // 101: mnemos.v1.RecallResponse.sufficiency:type_name -> mnemos.v1.RecallSufficiency
-	111, // 102: mnemos.v1.RecallResponse.effort:type_name -> mnemos.v1.RecallEffort
-	112, // 103: mnemos.v1.RecallResponse.conflicts:type_name -> mnemos.v1.RecallConflict
-	179, // 104: mnemos.v1.MemoryBlock.updated_at:type_name -> google.protobuf.Timestamp
-	114, // 105: mnemos.v1.GetBlocksResponse.blocks:type_name -> mnemos.v1.MemoryBlock
-	179, // 106: mnemos.v1.TimelineEpisode.at:type_name -> google.protobuf.Timestamp
-	176, // 107: mnemos.v1.TimelineEpisode.metadata:type_name -> mnemos.v1.TimelineEpisode.MetadataEntry
-	179, // 108: mnemos.v1.TimelineRequest.from:type_name -> google.protobuf.Timestamp
-	179, // 109: mnemos.v1.TimelineRequest.to:type_name -> google.protobuf.Timestamp
-	121, // 110: mnemos.v1.TimelineResponse.episodes:type_name -> mnemos.v1.TimelineEpisode
-	179, // 111: mnemos.v1.MemorySignal.detected_at:type_name -> google.protobuf.Timestamp
-	179, // 112: mnemos.v1.MemorySignal.window_start:type_name -> google.protobuf.Timestamp
-	179, // 113: mnemos.v1.MemorySignal.window_end:type_name -> google.protobuf.Timestamp
-	124, // 114: mnemos.v1.SignalsResponse.signals:type_name -> mnemos.v1.MemorySignal
-	179, // 115: mnemos.v1.SearchRequest.as_of:type_name -> google.protobuf.Timestamp
-	179, // 116: mnemos.v1.SearchRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
-	31,  // 117: mnemos.v1.SearchRequest.scope:type_name -> mnemos.v1.Context
-	130, // 118: mnemos.v1.SearchResponse.beliefs:type_name -> mnemos.v1.SearchBelief
-	12,  // 119: mnemos.v1.SearchResponse.dissonances:type_name -> mnemos.v1.Association
-	131, // 120: mnemos.v1.SearchResponse.verdicts:type_name -> mnemos.v1.SearchVerdict
-	179, // 121: mnemos.v1.Passage.at:type_name -> google.protobuf.Timestamp
-	177, // 122: mnemos.v1.Passage.metadata:type_name -> mnemos.v1.Passage.MetadataEntry
-	134, // 123: mnemos.v1.PassagesResponse.passages:type_name -> mnemos.v1.Passage
-	139, // 124: mnemos.v1.PredictiveErrorResponse.levels:type_name -> mnemos.v1.PredictiveErrorLevel
-	142, // 125: mnemos.v1.BrainHealthResponse.vitals:type_name -> mnemos.v1.Vital
-	143, // 126: mnemos.v1.BrainHealthResponse.pathologies:type_name -> mnemos.v1.Pathology
-	178, // 127: mnemos.v1.BrainHealthResponse.estimates:type_name -> mnemos.v1.BrainHealthResponse.EstimatesEntry
-	179, // 128: mnemos.v1.BrainHealthResponse.at:type_name -> google.protobuf.Timestamp
-	179, // 129: mnemos.v1.Expectation.horizon:type_name -> google.protobuf.Timestamp
-	179, // 130: mnemos.v1.Expectation.created_at:type_name -> google.protobuf.Timestamp
-	179, // 131: mnemos.v1.SetExpectationRequest.horizon:type_name -> google.protobuf.Timestamp
-	151, // 132: mnemos.v1.ReconcileExpectationsResponse.reconciliations:type_name -> mnemos.v1.Reconciliation
-	179, // 133: mnemos.v1.RememberFactRequest.valid_from:type_name -> google.protobuf.Timestamp
-	179, // 134: mnemos.v1.ScanBeliefsRequest.valid_from:type_name -> google.protobuf.Timestamp
-	179, // 135: mnemos.v1.ScanBeliefsRequest.valid_until:type_name -> google.protobuf.Timestamp
-	82,  // 136: mnemos.v1.ScanBeliefsResponse.beliefs:type_name -> mnemos.v1.BeliefDetail
-	179, // 137: mnemos.v1.VerifyBeliefResponse.verified_at:type_name -> google.protobuf.Timestamp
-	179, // 138: mnemos.v1.BeliefVersion.written_at:type_name -> google.protobuf.Timestamp
-	171, // 139: mnemos.v1.BeliefHistoryResponse.versions:type_name -> mnemos.v1.BeliefVersion
-	144, // 140: mnemos.v1.BrainHealthResponse.EstimatesEntry.value:type_name -> mnemos.v1.VitalEstimate
-	1,   // 141: mnemos.v1.MnemosService.Health:input_type -> mnemos.v1.HealthRequest
-	4,   // 142: mnemos.v1.MnemosService.ListEpisodes:input_type -> mnemos.v1.ListEpisodesRequest
-	6,   // 143: mnemos.v1.MnemosService.AppendEpisodes:input_type -> mnemos.v1.AppendEpisodesRequest
-	9,   // 144: mnemos.v1.MnemosService.ListBeliefs:input_type -> mnemos.v1.ListBeliefsRequest
-	11,  // 145: mnemos.v1.MnemosService.AppendBeliefs:input_type -> mnemos.v1.AppendBeliefsRequest
-	13,  // 146: mnemos.v1.MnemosService.ListAssociations:input_type -> mnemos.v1.ListAssociationsRequest
-	15,  // 147: mnemos.v1.MnemosService.AppendAssociations:input_type -> mnemos.v1.AppendAssociationsRequest
-	17,  // 148: mnemos.v1.MnemosService.ListEmbeddings:input_type -> mnemos.v1.ListEmbeddingsRequest
-	19,  // 149: mnemos.v1.MnemosService.AppendEmbeddings:input_type -> mnemos.v1.AppendEmbeddingsRequest
-	21,  // 150: mnemos.v1.MnemosService.Metrics:input_type -> mnemos.v1.MetricsRequest
-	24,  // 151: mnemos.v1.MnemosService.ListActions:input_type -> mnemos.v1.ListActionsRequest
-	26,  // 152: mnemos.v1.MnemosService.AppendActions:input_type -> mnemos.v1.AppendActionsRequest
-	28,  // 153: mnemos.v1.MnemosService.ListOutcomes:input_type -> mnemos.v1.ListOutcomesRequest
-	30,  // 154: mnemos.v1.MnemosService.AppendOutcomes:input_type -> mnemos.v1.AppendOutcomesRequest
-	33,  // 155: mnemos.v1.MnemosService.ListSchemas:input_type -> mnemos.v1.ListSchemasRequest
-	35,  // 156: mnemos.v1.MnemosService.AppendSchemas:input_type -> mnemos.v1.AppendSchemasRequest
-	37,  // 157: mnemos.v1.MnemosService.ListDecisions:input_type -> mnemos.v1.ListDecisionsRequest
-	39,  // 158: mnemos.v1.MnemosService.AppendDecisions:input_type -> mnemos.v1.AppendDecisionsRequest
-	42,  // 159: mnemos.v1.MnemosService.ListReflexes:input_type -> mnemos.v1.ListReflexesRequest
-	44,  // 160: mnemos.v1.MnemosService.AppendReflexes:input_type -> mnemos.v1.AppendReflexesRequest
-	46,  // 161: mnemos.v1.MnemosService.ListGlobalSchemas:input_type -> mnemos.v1.ListGlobalSchemasRequest
-	49,  // 162: mnemos.v1.MnemosService.OpenIncident:input_type -> mnemos.v1.OpenIncidentRequest
-	50,  // 163: mnemos.v1.MnemosService.ListIncidents:input_type -> mnemos.v1.ListIncidentsRequest
-	52,  // 164: mnemos.v1.MnemosService.GetIncident:input_type -> mnemos.v1.GetIncidentRequest
-	53,  // 165: mnemos.v1.MnemosService.ResolveIncident:input_type -> mnemos.v1.ResolveIncidentRequest
-	54,  // 166: mnemos.v1.MnemosService.WhyWereWeWrong:input_type -> mnemos.v1.WhyWereWeWrongRequest
-	59,  // 167: mnemos.v1.MnemosService.ListEntityAssociations:input_type -> mnemos.v1.ListEntityAssociationsRequest
-	61,  // 168: mnemos.v1.MnemosService.AppendEntityAssociations:input_type -> mnemos.v1.AppendEntityAssociationsRequest
-	62,  // 169: mnemos.v1.MnemosService.WhoKnows:input_type -> mnemos.v1.WhoKnowsRequest
-	65,  // 170: mnemos.v1.MnemosService.KnowledgeGaps:input_type -> mnemos.v1.KnowledgeGapsRequest
-	68,  // 171: mnemos.v1.MnemosService.Calibration:input_type -> mnemos.v1.CalibrationRequest
-	72,  // 172: mnemos.v1.MnemosService.Hypercorrections:input_type -> mnemos.v1.HypercorrectionsRequest
-	75,  // 173: mnemos.v1.MnemosService.Recombinations:input_type -> mnemos.v1.RecombinationsRequest
-	78,  // 174: mnemos.v1.MnemosService.AnalogousBeliefs:input_type -> mnemos.v1.AnalogousBeliefsRequest
-	81,  // 175: mnemos.v1.MnemosService.GetBelief:input_type -> mnemos.v1.GetBeliefRequest
-	83,  // 176: mnemos.v1.MnemosService.SetBeliefLifecycle:input_type -> mnemos.v1.SetBeliefLifecycleRequest
-	85,  // 177: mnemos.v1.MnemosService.RetractEpisode:input_type -> mnemos.v1.RetractEpisodeRequest
-	92,  // 178: mnemos.v1.MnemosService.UnretractEpisode:input_type -> mnemos.v1.UnretractEpisodeRequest
-	100, // 179: mnemos.v1.MnemosService.ListEpisodeDependencies:input_type -> mnemos.v1.ListEpisodeDependenciesRequest
-	102, // 180: mnemos.v1.MnemosService.DeclareEpisodeDependency:input_type -> mnemos.v1.DeclareEpisodeDependencyRequest
-	103, // 181: mnemos.v1.MnemosService.RemoveEpisodeDependency:input_type -> mnemos.v1.RemoveEpisodeDependencyRequest
-	105, // 182: mnemos.v1.MnemosService.Classify:input_type -> mnemos.v1.ClassifyRequest
-	107, // 183: mnemos.v1.MnemosService.GetDecision:input_type -> mnemos.v1.GetDecisionRequest
-	108, // 184: mnemos.v1.MnemosService.Recall:input_type -> mnemos.v1.RecallRequest
-	115, // 185: mnemos.v1.MnemosService.GetBlocks:input_type -> mnemos.v1.GetBlocksRequest
-	117, // 186: mnemos.v1.MnemosService.SetBlock:input_type -> mnemos.v1.SetBlockRequest
-	119, // 187: mnemos.v1.MnemosService.Synthesize:input_type -> mnemos.v1.SynthesizeRequest
-	122, // 188: mnemos.v1.MnemosService.Timeline:input_type -> mnemos.v1.TimelineRequest
-	125, // 189: mnemos.v1.MnemosService.Signals:input_type -> mnemos.v1.SignalsRequest
-	127, // 190: mnemos.v1.MnemosService.ProcessText:input_type -> mnemos.v1.ProcessTextRequest
-	129, // 191: mnemos.v1.MnemosService.Search:input_type -> mnemos.v1.SearchRequest
-	133, // 192: mnemos.v1.MnemosService.Passages:input_type -> mnemos.v1.PassagesRequest
-	136, // 193: mnemos.v1.MnemosService.ContextBlock:input_type -> mnemos.v1.ContextBlockRequest
-	138, // 194: mnemos.v1.MnemosService.PredictiveError:input_type -> mnemos.v1.PredictiveErrorRequest
-	141, // 195: mnemos.v1.MnemosService.BrainHealth:input_type -> mnemos.v1.BrainHealthRequest
-	147, // 196: mnemos.v1.MnemosService.SetExpectation:input_type -> mnemos.v1.SetExpectationRequest
-	148, // 197: mnemos.v1.MnemosService.GetExpectation:input_type -> mnemos.v1.GetExpectationRequest
-	149, // 198: mnemos.v1.MnemosService.RecordObservation:input_type -> mnemos.v1.RecordObservationRequest
-	150, // 199: mnemos.v1.MnemosService.ReconcileExpectations:input_type -> mnemos.v1.ReconcileExpectationsRequest
-	153, // 200: mnemos.v1.MnemosService.RememberFact:input_type -> mnemos.v1.RememberFactRequest
-	155, // 201: mnemos.v1.MnemosService.ScanBeliefs:input_type -> mnemos.v1.ScanBeliefsRequest
-	157, // 202: mnemos.v1.MnemosService.DeprecateBelief:input_type -> mnemos.v1.DeprecateBeliefRequest
-	160, // 203: mnemos.v1.MnemosService.UpdateBelief:input_type -> mnemos.v1.UpdateBeliefRequest
-	162, // 204: mnemos.v1.MnemosService.ResolveDissonance:input_type -> mnemos.v1.ResolveDissonanceRequest
-	158, // 205: mnemos.v1.MnemosService.EscalateBelief:input_type -> mnemos.v1.EscalateBeliefRequest
-	165, // 206: mnemos.v1.MnemosService.VerifyBelief:input_type -> mnemos.v1.VerifyBeliefRequest
-	167, // 207: mnemos.v1.MnemosService.RecordBeliefFeedback:input_type -> mnemos.v1.RecordBeliefFeedbackRequest
-	169, // 208: mnemos.v1.MnemosService.BeliefProvenance:input_type -> mnemos.v1.BeliefProvenanceRequest
-	170, // 209: mnemos.v1.MnemosService.BeliefHistory:input_type -> mnemos.v1.BeliefHistoryRequest
-	2,   // 210: mnemos.v1.MnemosService.Health:output_type -> mnemos.v1.HealthResponse
-	5,   // 211: mnemos.v1.MnemosService.ListEpisodes:output_type -> mnemos.v1.ListEpisodesResponse
-	20,  // 212: mnemos.v1.MnemosService.AppendEpisodes:output_type -> mnemos.v1.AppendResponse
-	10,  // 213: mnemos.v1.MnemosService.ListBeliefs:output_type -> mnemos.v1.ListBeliefsResponse
-	20,  // 214: mnemos.v1.MnemosService.AppendBeliefs:output_type -> mnemos.v1.AppendResponse
-	14,  // 215: mnemos.v1.MnemosService.ListAssociations:output_type -> mnemos.v1.ListAssociationsResponse
-	20,  // 216: mnemos.v1.MnemosService.AppendAssociations:output_type -> mnemos.v1.AppendResponse
-	18,  // 217: mnemos.v1.MnemosService.ListEmbeddings:output_type -> mnemos.v1.ListEmbeddingsResponse
-	20,  // 218: mnemos.v1.MnemosService.AppendEmbeddings:output_type -> mnemos.v1.AppendResponse
-	22,  // 219: mnemos.v1.MnemosService.Metrics:output_type -> mnemos.v1.MetricsResponse
-	25,  // 220: mnemos.v1.MnemosService.ListActions:output_type -> mnemos.v1.ListActionsResponse
-	20,  // 221: mnemos.v1.MnemosService.AppendActions:output_type -> mnemos.v1.AppendResponse
-	29,  // 222: mnemos.v1.MnemosService.ListOutcomes:output_type -> mnemos.v1.ListOutcomesResponse
-	20,  // 223: mnemos.v1.MnemosService.AppendOutcomes:output_type -> mnemos.v1.AppendResponse
-	34,  // 224: mnemos.v1.MnemosService.ListSchemas:output_type -> mnemos.v1.ListSchemasResponse
-	20,  // 225: mnemos.v1.MnemosService.AppendSchemas:output_type -> mnemos.v1.AppendResponse
-	38,  // 226: mnemos.v1.MnemosService.ListDecisions:output_type -> mnemos.v1.ListDecisionsResponse
-	20,  // 227: mnemos.v1.MnemosService.AppendDecisions:output_type -> mnemos.v1.AppendResponse
-	43,  // 228: mnemos.v1.MnemosService.ListReflexes:output_type -> mnemos.v1.ListReflexesResponse
-	20,  // 229: mnemos.v1.MnemosService.AppendReflexes:output_type -> mnemos.v1.AppendResponse
-	47,  // 230: mnemos.v1.MnemosService.ListGlobalSchemas:output_type -> mnemos.v1.ListGlobalSchemasResponse
-	48,  // 231: mnemos.v1.MnemosService.OpenIncident:output_type -> mnemos.v1.Incident
-	51,  // 232: mnemos.v1.MnemosService.ListIncidents:output_type -> mnemos.v1.ListIncidentsResponse
-	48,  // 233: mnemos.v1.MnemosService.GetIncident:output_type -> mnemos.v1.Incident
-	48,  // 234: mnemos.v1.MnemosService.ResolveIncident:output_type -> mnemos.v1.Incident
-	57,  // 235: mnemos.v1.MnemosService.WhyWereWeWrong:output_type -> mnemos.v1.WhyWereWeWrongResponse
-	60,  // 236: mnemos.v1.MnemosService.ListEntityAssociations:output_type -> mnemos.v1.ListEntityAssociationsResponse
-	20,  // 237: mnemos.v1.MnemosService.AppendEntityAssociations:output_type -> mnemos.v1.AppendResponse
-	64,  // 238: mnemos.v1.MnemosService.WhoKnows:output_type -> mnemos.v1.WhoKnowsResponse
-	67,  // 239: mnemos.v1.MnemosService.KnowledgeGaps:output_type -> mnemos.v1.KnowledgeGapsResponse
-	71,  // 240: mnemos.v1.MnemosService.Calibration:output_type -> mnemos.v1.CalibrationResponse
-	74,  // 241: mnemos.v1.MnemosService.Hypercorrections:output_type -> mnemos.v1.HypercorrectionsResponse
-	77,  // 242: mnemos.v1.MnemosService.Recombinations:output_type -> mnemos.v1.RecombinationsResponse
-	80,  // 243: mnemos.v1.MnemosService.AnalogousBeliefs:output_type -> mnemos.v1.AnalogousBeliefsResponse
-	82,  // 244: mnemos.v1.MnemosService.GetBelief:output_type -> mnemos.v1.BeliefDetail
-	84,  // 245: mnemos.v1.MnemosService.SetBeliefLifecycle:output_type -> mnemos.v1.SetBeliefLifecycleResponse
-	86,  // 246: mnemos.v1.MnemosService.RetractEpisode:output_type -> mnemos.v1.RetractEpisodeResponse
-	93,  // 247: mnemos.v1.MnemosService.UnretractEpisode:output_type -> mnemos.v1.UnretractEpisodeResponse
-	101, // 248: mnemos.v1.MnemosService.ListEpisodeDependencies:output_type -> mnemos.v1.ListEpisodeDependenciesResponse
-	104, // 249: mnemos.v1.MnemosService.DeclareEpisodeDependency:output_type -> mnemos.v1.EpisodeDependencyChange
-	104, // 250: mnemos.v1.MnemosService.RemoveEpisodeDependency:output_type -> mnemos.v1.EpisodeDependencyChange
-	106, // 251: mnemos.v1.MnemosService.Classify:output_type -> mnemos.v1.ClassifyResponse
-	36,  // 252: mnemos.v1.MnemosService.GetDecision:output_type -> mnemos.v1.Decision
-	113, // 253: mnemos.v1.MnemosService.Recall:output_type -> mnemos.v1.RecallResponse
-	116, // 254: mnemos.v1.MnemosService.GetBlocks:output_type -> mnemos.v1.GetBlocksResponse
-	118, // 255: mnemos.v1.MnemosService.SetBlock:output_type -> mnemos.v1.SetBlockResponse
-	120, // 256: mnemos.v1.MnemosService.Synthesize:output_type -> mnemos.v1.SynthesizeResponse
-	123, // 257: mnemos.v1.MnemosService.Timeline:output_type -> mnemos.v1.TimelineResponse
-	126, // 258: mnemos.v1.MnemosService.Signals:output_type -> mnemos.v1.SignalsResponse
-	128, // 259: mnemos.v1.MnemosService.ProcessText:output_type -> mnemos.v1.ProcessTextResponse
-	132, // 260: mnemos.v1.MnemosService.Search:output_type -> mnemos.v1.SearchResponse
-	135, // 261: mnemos.v1.MnemosService.Passages:output_type -> mnemos.v1.PassagesResponse
-	137, // 262: mnemos.v1.MnemosService.ContextBlock:output_type -> mnemos.v1.ContextBlockResponse
-	140, // 263: mnemos.v1.MnemosService.PredictiveError:output_type -> mnemos.v1.PredictiveErrorResponse
-	145, // 264: mnemos.v1.MnemosService.BrainHealth:output_type -> mnemos.v1.BrainHealthResponse
-	146, // 265: mnemos.v1.MnemosService.SetExpectation:output_type -> mnemos.v1.Expectation
-	146, // 266: mnemos.v1.MnemosService.GetExpectation:output_type -> mnemos.v1.Expectation
-	146, // 267: mnemos.v1.MnemosService.RecordObservation:output_type -> mnemos.v1.Expectation
-	152, // 268: mnemos.v1.MnemosService.ReconcileExpectations:output_type -> mnemos.v1.ReconcileExpectationsResponse
-	154, // 269: mnemos.v1.MnemosService.RememberFact:output_type -> mnemos.v1.RememberFactResponse
-	156, // 270: mnemos.v1.MnemosService.ScanBeliefs:output_type -> mnemos.v1.ScanBeliefsResponse
-	159, // 271: mnemos.v1.MnemosService.DeprecateBelief:output_type -> mnemos.v1.BeliefStatusChange
-	161, // 272: mnemos.v1.MnemosService.UpdateBelief:output_type -> mnemos.v1.BeliefRevision
-	163, // 273: mnemos.v1.MnemosService.ResolveDissonance:output_type -> mnemos.v1.ResolveDissonanceResponse
-	164, // 274: mnemos.v1.MnemosService.EscalateBelief:output_type -> mnemos.v1.BeliefEscalation
-	166, // 275: mnemos.v1.MnemosService.VerifyBelief:output_type -> mnemos.v1.VerifyBeliefResponse
-	168, // 276: mnemos.v1.MnemosService.RecordBeliefFeedback:output_type -> mnemos.v1.BeliefFeedback
-	56,  // 277: mnemos.v1.MnemosService.BeliefProvenance:output_type -> mnemos.v1.BeliefProvenance
-	172, // 278: mnemos.v1.MnemosService.BeliefHistory:output_type -> mnemos.v1.BeliefHistoryResponse
-	210, // [210:279] is the sub-list for method output_type
-	141, // [141:210] is the sub-list for method input_type
-	141, // [141:141] is the sub-list for extension type_name
-	141, // [141:141] is the sub-list for extension extendee
-	0,   // [0:141] is the sub-list for field type_name
+	174, // 23: mnemos.v1.AppendResponse.remapped:type_name -> mnemos.v1.AppendResponse.RemappedEntry
+	180, // 24: mnemos.v1.Action.at:type_name -> google.protobuf.Timestamp
+	175, // 25: mnemos.v1.Action.metadata:type_name -> mnemos.v1.Action.MetadataEntry
+	180, // 26: mnemos.v1.Action.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 27: mnemos.v1.ListActionsRequest.pagination:type_name -> mnemos.v1.Pagination
+	23,  // 28: mnemos.v1.ListActionsResponse.actions:type_name -> mnemos.v1.Action
+	23,  // 29: mnemos.v1.AppendActionsRequest.actions:type_name -> mnemos.v1.Action
+	176, // 30: mnemos.v1.Outcome.metrics:type_name -> mnemos.v1.Outcome.MetricsEntry
+	180, // 31: mnemos.v1.Outcome.observed_at:type_name -> google.protobuf.Timestamp
+	180, // 32: mnemos.v1.Outcome.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 33: mnemos.v1.ListOutcomesRequest.pagination:type_name -> mnemos.v1.Pagination
+	27,  // 34: mnemos.v1.ListOutcomesResponse.outcomes:type_name -> mnemos.v1.Outcome
+	27,  // 35: mnemos.v1.AppendOutcomesRequest.outcomes:type_name -> mnemos.v1.Outcome
+	31,  // 36: mnemos.v1.Schema.context:type_name -> mnemos.v1.Context
+	180, // 37: mnemos.v1.Schema.derived_at:type_name -> google.protobuf.Timestamp
+	180, // 38: mnemos.v1.Schema.last_verified:type_name -> google.protobuf.Timestamp
+	0,   // 39: mnemos.v1.ListSchemasRequest.pagination:type_name -> mnemos.v1.Pagination
+	32,  // 40: mnemos.v1.ListSchemasResponse.schemas:type_name -> mnemos.v1.Schema
+	32,  // 41: mnemos.v1.AppendSchemasRequest.schemas:type_name -> mnemos.v1.Schema
+	31,  // 42: mnemos.v1.Decision.context:type_name -> mnemos.v1.Context
+	180, // 43: mnemos.v1.Decision.chosen_at:type_name -> google.protobuf.Timestamp
+	180, // 44: mnemos.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 45: mnemos.v1.ListDecisionsRequest.pagination:type_name -> mnemos.v1.Pagination
+	36,  // 46: mnemos.v1.ListDecisionsResponse.decisions:type_name -> mnemos.v1.Decision
+	36,  // 47: mnemos.v1.AppendDecisionsRequest.decisions:type_name -> mnemos.v1.Decision
+	31,  // 48: mnemos.v1.Reflex.context:type_name -> mnemos.v1.Context
+	40,  // 49: mnemos.v1.Reflex.steps:type_name -> mnemos.v1.ReflexStep
+	180, // 50: mnemos.v1.Reflex.derived_at:type_name -> google.protobuf.Timestamp
+	180, // 51: mnemos.v1.Reflex.last_verified:type_name -> google.protobuf.Timestamp
+	0,   // 52: mnemos.v1.ListReflexesRequest.pagination:type_name -> mnemos.v1.Pagination
+	41,  // 53: mnemos.v1.ListReflexesResponse.reflexes:type_name -> mnemos.v1.Reflex
+	41,  // 54: mnemos.v1.AppendReflexesRequest.reflexes:type_name -> mnemos.v1.Reflex
+	31,  // 55: mnemos.v1.GlobalSchema.context:type_name -> mnemos.v1.Context
+	180, // 56: mnemos.v1.GlobalSchema.promoted_at:type_name -> google.protobuf.Timestamp
+	0,   // 57: mnemos.v1.ListGlobalSchemasRequest.pagination:type_name -> mnemos.v1.Pagination
+	45,  // 58: mnemos.v1.ListGlobalSchemasResponse.global_schemas:type_name -> mnemos.v1.GlobalSchema
+	180, // 59: mnemos.v1.Incident.opened_at:type_name -> google.protobuf.Timestamp
+	180, // 60: mnemos.v1.Incident.resolved_at:type_name -> google.protobuf.Timestamp
+	0,   // 61: mnemos.v1.ListIncidentsRequest.pagination:type_name -> mnemos.v1.Pagination
+	48,  // 62: mnemos.v1.ListIncidentsResponse.incidents:type_name -> mnemos.v1.Incident
+	55,  // 63: mnemos.v1.BeliefProvenance.signals:type_name -> mnemos.v1.ProvenanceSignal
+	48,  // 64: mnemos.v1.WhyWereWeWrongResponse.incident:type_name -> mnemos.v1.Incident
+	56,  // 65: mnemos.v1.WhyWereWeWrongResponse.root_belief:type_name -> mnemos.v1.BeliefProvenance
+	36,  // 66: mnemos.v1.WhyWereWeWrongResponse.affected_decisions:type_name -> mnemos.v1.Decision
+	180, // 67: mnemos.v1.EntityAssociation.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 68: mnemos.v1.ListEntityAssociationsRequest.pagination:type_name -> mnemos.v1.Pagination
+	58,  // 69: mnemos.v1.ListEntityAssociationsResponse.edges:type_name -> mnemos.v1.EntityAssociation
+	58,  // 70: mnemos.v1.AppendEntityAssociationsRequest.edges:type_name -> mnemos.v1.EntityAssociation
+	63,  // 71: mnemos.v1.WhoKnowsResponse.experts:type_name -> mnemos.v1.Expert
+	66,  // 72: mnemos.v1.KnowledgeGapsResponse.gaps:type_name -> mnemos.v1.Gap
+	69,  // 73: mnemos.v1.CalibrationResponse.buckets:type_name -> mnemos.v1.CalibrationBucket
+	70,  // 74: mnemos.v1.CalibrationResponse.sources:type_name -> mnemos.v1.CalibrationSource
+	180, // 75: mnemos.v1.Hypercorrection.detected_at:type_name -> google.protobuf.Timestamp
+	73,  // 76: mnemos.v1.HypercorrectionsResponse.hypercorrections:type_name -> mnemos.v1.Hypercorrection
+	76,  // 77: mnemos.v1.RecombinationsResponse.recombinations:type_name -> mnemos.v1.Recombination
+	79,  // 78: mnemos.v1.AnalogousBeliefsResponse.analogous:type_name -> mnemos.v1.Analogy
+	180, // 79: mnemos.v1.BeliefDetail.valid_from:type_name -> google.protobuf.Timestamp
+	180, // 80: mnemos.v1.BeliefDetail.valid_until:type_name -> google.protobuf.Timestamp
+	180, // 81: mnemos.v1.BeliefDetail.recorded_at:type_name -> google.protobuf.Timestamp
+	180, // 82: mnemos.v1.RetractEpisodeResponse.retracted_at:type_name -> google.protobuf.Timestamp
+	87,  // 83: mnemos.v1.RetractEpisodeResponse.impact:type_name -> mnemos.v1.RetractionImpact
+	90,  // 84: mnemos.v1.RetractionImpact.rescored_beliefs:type_name -> mnemos.v1.RescoredBelief
+	91,  // 85: mnemos.v1.RetractionImpact.decisions:type_name -> mnemos.v1.RetractionDecisionExposure
+	88,  // 86: mnemos.v1.RetractionImpact.dependent_episodes:type_name -> mnemos.v1.EpisodeDependencyHop
+	89,  // 87: mnemos.v1.RetractionImpact.belief_paths:type_name -> mnemos.v1.RetractionBeliefPath
+	180, // 88: mnemos.v1.UnretractEpisodeResponse.unretracted_at:type_name -> google.protobuf.Timestamp
+	180, // 89: mnemos.v1.UnretractEpisodeResponse.retracted_at:type_name -> google.protobuf.Timestamp
+	94,  // 90: mnemos.v1.UnretractEpisodeResponse.impact:type_name -> mnemos.v1.UnretractionImpact
+	95,  // 91: mnemos.v1.UnretractionImpact.restored_beliefs:type_name -> mnemos.v1.RestoredBelief
+	96,  // 92: mnemos.v1.UnretractionImpact.skipped_beliefs:type_name -> mnemos.v1.SkippedBelief
+	97,  // 93: mnemos.v1.UnretractionImpact.relinked_beliefs:type_name -> mnemos.v1.RelinkedBelief
+	180, // 94: mnemos.v1.EpisodeDependency.created_at:type_name -> google.protobuf.Timestamp
+	180, // 95: mnemos.v1.EpisodeDependency.removed_at:type_name -> google.protobuf.Timestamp
+	180, // 96: mnemos.v1.PendingCitation.created_at:type_name -> google.protobuf.Timestamp
+	98,  // 97: mnemos.v1.ListEpisodeDependenciesResponse.depends_on:type_name -> mnemos.v1.EpisodeDependency
+	98,  // 98: mnemos.v1.ListEpisodeDependenciesResponse.dependents:type_name -> mnemos.v1.EpisodeDependency
+	99,  // 99: mnemos.v1.ListEpisodeDependenciesResponse.pending_citations:type_name -> mnemos.v1.PendingCitation
+	98,  // 100: mnemos.v1.EpisodeDependencyChange.dependency:type_name -> mnemos.v1.EpisodeDependency
+	109, // 101: mnemos.v1.RecallResponse.results:type_name -> mnemos.v1.RecallResult
+	110, // 102: mnemos.v1.RecallResponse.sufficiency:type_name -> mnemos.v1.RecallSufficiency
+	111, // 103: mnemos.v1.RecallResponse.effort:type_name -> mnemos.v1.RecallEffort
+	112, // 104: mnemos.v1.RecallResponse.conflicts:type_name -> mnemos.v1.RecallConflict
+	180, // 105: mnemos.v1.MemoryBlock.updated_at:type_name -> google.protobuf.Timestamp
+	114, // 106: mnemos.v1.GetBlocksResponse.blocks:type_name -> mnemos.v1.MemoryBlock
+	180, // 107: mnemos.v1.TimelineEpisode.at:type_name -> google.protobuf.Timestamp
+	177, // 108: mnemos.v1.TimelineEpisode.metadata:type_name -> mnemos.v1.TimelineEpisode.MetadataEntry
+	180, // 109: mnemos.v1.TimelineRequest.from:type_name -> google.protobuf.Timestamp
+	180, // 110: mnemos.v1.TimelineRequest.to:type_name -> google.protobuf.Timestamp
+	121, // 111: mnemos.v1.TimelineResponse.episodes:type_name -> mnemos.v1.TimelineEpisode
+	180, // 112: mnemos.v1.MemorySignal.detected_at:type_name -> google.protobuf.Timestamp
+	180, // 113: mnemos.v1.MemorySignal.window_start:type_name -> google.protobuf.Timestamp
+	180, // 114: mnemos.v1.MemorySignal.window_end:type_name -> google.protobuf.Timestamp
+	124, // 115: mnemos.v1.SignalsResponse.signals:type_name -> mnemos.v1.MemorySignal
+	180, // 116: mnemos.v1.SearchRequest.as_of:type_name -> google.protobuf.Timestamp
+	180, // 117: mnemos.v1.SearchRequest.recorded_as_of:type_name -> google.protobuf.Timestamp
+	31,  // 118: mnemos.v1.SearchRequest.scope:type_name -> mnemos.v1.Context
+	130, // 119: mnemos.v1.SearchResponse.beliefs:type_name -> mnemos.v1.SearchBelief
+	12,  // 120: mnemos.v1.SearchResponse.dissonances:type_name -> mnemos.v1.Association
+	131, // 121: mnemos.v1.SearchResponse.verdicts:type_name -> mnemos.v1.SearchVerdict
+	180, // 122: mnemos.v1.Passage.at:type_name -> google.protobuf.Timestamp
+	178, // 123: mnemos.v1.Passage.metadata:type_name -> mnemos.v1.Passage.MetadataEntry
+	134, // 124: mnemos.v1.PassagesResponse.passages:type_name -> mnemos.v1.Passage
+	139, // 125: mnemos.v1.PredictiveErrorResponse.levels:type_name -> mnemos.v1.PredictiveErrorLevel
+	142, // 126: mnemos.v1.BrainHealthResponse.vitals:type_name -> mnemos.v1.Vital
+	143, // 127: mnemos.v1.BrainHealthResponse.pathologies:type_name -> mnemos.v1.Pathology
+	179, // 128: mnemos.v1.BrainHealthResponse.estimates:type_name -> mnemos.v1.BrainHealthResponse.EstimatesEntry
+	180, // 129: mnemos.v1.BrainHealthResponse.at:type_name -> google.protobuf.Timestamp
+	180, // 130: mnemos.v1.Expectation.horizon:type_name -> google.protobuf.Timestamp
+	180, // 131: mnemos.v1.Expectation.created_at:type_name -> google.protobuf.Timestamp
+	180, // 132: mnemos.v1.SetExpectationRequest.horizon:type_name -> google.protobuf.Timestamp
+	151, // 133: mnemos.v1.ReconcileExpectationsResponse.reconciliations:type_name -> mnemos.v1.Reconciliation
+	180, // 134: mnemos.v1.RememberFactRequest.valid_from:type_name -> google.protobuf.Timestamp
+	180, // 135: mnemos.v1.ScanBeliefsRequest.valid_from:type_name -> google.protobuf.Timestamp
+	180, // 136: mnemos.v1.ScanBeliefsRequest.valid_until:type_name -> google.protobuf.Timestamp
+	82,  // 137: mnemos.v1.ScanBeliefsResponse.beliefs:type_name -> mnemos.v1.BeliefDetail
+	180, // 138: mnemos.v1.VerifyBeliefResponse.verified_at:type_name -> google.protobuf.Timestamp
+	180, // 139: mnemos.v1.BeliefVersion.written_at:type_name -> google.protobuf.Timestamp
+	171, // 140: mnemos.v1.BeliefHistoryResponse.versions:type_name -> mnemos.v1.BeliefVersion
+	144, // 141: mnemos.v1.BrainHealthResponse.EstimatesEntry.value:type_name -> mnemos.v1.VitalEstimate
+	1,   // 142: mnemos.v1.MnemosService.Health:input_type -> mnemos.v1.HealthRequest
+	4,   // 143: mnemos.v1.MnemosService.ListEpisodes:input_type -> mnemos.v1.ListEpisodesRequest
+	6,   // 144: mnemos.v1.MnemosService.AppendEpisodes:input_type -> mnemos.v1.AppendEpisodesRequest
+	9,   // 145: mnemos.v1.MnemosService.ListBeliefs:input_type -> mnemos.v1.ListBeliefsRequest
+	11,  // 146: mnemos.v1.MnemosService.AppendBeliefs:input_type -> mnemos.v1.AppendBeliefsRequest
+	13,  // 147: mnemos.v1.MnemosService.ListAssociations:input_type -> mnemos.v1.ListAssociationsRequest
+	15,  // 148: mnemos.v1.MnemosService.AppendAssociations:input_type -> mnemos.v1.AppendAssociationsRequest
+	17,  // 149: mnemos.v1.MnemosService.ListEmbeddings:input_type -> mnemos.v1.ListEmbeddingsRequest
+	19,  // 150: mnemos.v1.MnemosService.AppendEmbeddings:input_type -> mnemos.v1.AppendEmbeddingsRequest
+	21,  // 151: mnemos.v1.MnemosService.Metrics:input_type -> mnemos.v1.MetricsRequest
+	24,  // 152: mnemos.v1.MnemosService.ListActions:input_type -> mnemos.v1.ListActionsRequest
+	26,  // 153: mnemos.v1.MnemosService.AppendActions:input_type -> mnemos.v1.AppendActionsRequest
+	28,  // 154: mnemos.v1.MnemosService.ListOutcomes:input_type -> mnemos.v1.ListOutcomesRequest
+	30,  // 155: mnemos.v1.MnemosService.AppendOutcomes:input_type -> mnemos.v1.AppendOutcomesRequest
+	33,  // 156: mnemos.v1.MnemosService.ListSchemas:input_type -> mnemos.v1.ListSchemasRequest
+	35,  // 157: mnemos.v1.MnemosService.AppendSchemas:input_type -> mnemos.v1.AppendSchemasRequest
+	37,  // 158: mnemos.v1.MnemosService.ListDecisions:input_type -> mnemos.v1.ListDecisionsRequest
+	39,  // 159: mnemos.v1.MnemosService.AppendDecisions:input_type -> mnemos.v1.AppendDecisionsRequest
+	42,  // 160: mnemos.v1.MnemosService.ListReflexes:input_type -> mnemos.v1.ListReflexesRequest
+	44,  // 161: mnemos.v1.MnemosService.AppendReflexes:input_type -> mnemos.v1.AppendReflexesRequest
+	46,  // 162: mnemos.v1.MnemosService.ListGlobalSchemas:input_type -> mnemos.v1.ListGlobalSchemasRequest
+	49,  // 163: mnemos.v1.MnemosService.OpenIncident:input_type -> mnemos.v1.OpenIncidentRequest
+	50,  // 164: mnemos.v1.MnemosService.ListIncidents:input_type -> mnemos.v1.ListIncidentsRequest
+	52,  // 165: mnemos.v1.MnemosService.GetIncident:input_type -> mnemos.v1.GetIncidentRequest
+	53,  // 166: mnemos.v1.MnemosService.ResolveIncident:input_type -> mnemos.v1.ResolveIncidentRequest
+	54,  // 167: mnemos.v1.MnemosService.WhyWereWeWrong:input_type -> mnemos.v1.WhyWereWeWrongRequest
+	59,  // 168: mnemos.v1.MnemosService.ListEntityAssociations:input_type -> mnemos.v1.ListEntityAssociationsRequest
+	61,  // 169: mnemos.v1.MnemosService.AppendEntityAssociations:input_type -> mnemos.v1.AppendEntityAssociationsRequest
+	62,  // 170: mnemos.v1.MnemosService.WhoKnows:input_type -> mnemos.v1.WhoKnowsRequest
+	65,  // 171: mnemos.v1.MnemosService.KnowledgeGaps:input_type -> mnemos.v1.KnowledgeGapsRequest
+	68,  // 172: mnemos.v1.MnemosService.Calibration:input_type -> mnemos.v1.CalibrationRequest
+	72,  // 173: mnemos.v1.MnemosService.Hypercorrections:input_type -> mnemos.v1.HypercorrectionsRequest
+	75,  // 174: mnemos.v1.MnemosService.Recombinations:input_type -> mnemos.v1.RecombinationsRequest
+	78,  // 175: mnemos.v1.MnemosService.AnalogousBeliefs:input_type -> mnemos.v1.AnalogousBeliefsRequest
+	81,  // 176: mnemos.v1.MnemosService.GetBelief:input_type -> mnemos.v1.GetBeliefRequest
+	83,  // 177: mnemos.v1.MnemosService.SetBeliefLifecycle:input_type -> mnemos.v1.SetBeliefLifecycleRequest
+	85,  // 178: mnemos.v1.MnemosService.RetractEpisode:input_type -> mnemos.v1.RetractEpisodeRequest
+	92,  // 179: mnemos.v1.MnemosService.UnretractEpisode:input_type -> mnemos.v1.UnretractEpisodeRequest
+	100, // 180: mnemos.v1.MnemosService.ListEpisodeDependencies:input_type -> mnemos.v1.ListEpisodeDependenciesRequest
+	102, // 181: mnemos.v1.MnemosService.DeclareEpisodeDependency:input_type -> mnemos.v1.DeclareEpisodeDependencyRequest
+	103, // 182: mnemos.v1.MnemosService.RemoveEpisodeDependency:input_type -> mnemos.v1.RemoveEpisodeDependencyRequest
+	105, // 183: mnemos.v1.MnemosService.Classify:input_type -> mnemos.v1.ClassifyRequest
+	107, // 184: mnemos.v1.MnemosService.GetDecision:input_type -> mnemos.v1.GetDecisionRequest
+	108, // 185: mnemos.v1.MnemosService.Recall:input_type -> mnemos.v1.RecallRequest
+	115, // 186: mnemos.v1.MnemosService.GetBlocks:input_type -> mnemos.v1.GetBlocksRequest
+	117, // 187: mnemos.v1.MnemosService.SetBlock:input_type -> mnemos.v1.SetBlockRequest
+	119, // 188: mnemos.v1.MnemosService.Synthesize:input_type -> mnemos.v1.SynthesizeRequest
+	122, // 189: mnemos.v1.MnemosService.Timeline:input_type -> mnemos.v1.TimelineRequest
+	125, // 190: mnemos.v1.MnemosService.Signals:input_type -> mnemos.v1.SignalsRequest
+	127, // 191: mnemos.v1.MnemosService.ProcessText:input_type -> mnemos.v1.ProcessTextRequest
+	129, // 192: mnemos.v1.MnemosService.Search:input_type -> mnemos.v1.SearchRequest
+	133, // 193: mnemos.v1.MnemosService.Passages:input_type -> mnemos.v1.PassagesRequest
+	136, // 194: mnemos.v1.MnemosService.ContextBlock:input_type -> mnemos.v1.ContextBlockRequest
+	138, // 195: mnemos.v1.MnemosService.PredictiveError:input_type -> mnemos.v1.PredictiveErrorRequest
+	141, // 196: mnemos.v1.MnemosService.BrainHealth:input_type -> mnemos.v1.BrainHealthRequest
+	147, // 197: mnemos.v1.MnemosService.SetExpectation:input_type -> mnemos.v1.SetExpectationRequest
+	148, // 198: mnemos.v1.MnemosService.GetExpectation:input_type -> mnemos.v1.GetExpectationRequest
+	149, // 199: mnemos.v1.MnemosService.RecordObservation:input_type -> mnemos.v1.RecordObservationRequest
+	150, // 200: mnemos.v1.MnemosService.ReconcileExpectations:input_type -> mnemos.v1.ReconcileExpectationsRequest
+	153, // 201: mnemos.v1.MnemosService.RememberFact:input_type -> mnemos.v1.RememberFactRequest
+	155, // 202: mnemos.v1.MnemosService.ScanBeliefs:input_type -> mnemos.v1.ScanBeliefsRequest
+	157, // 203: mnemos.v1.MnemosService.DeprecateBelief:input_type -> mnemos.v1.DeprecateBeliefRequest
+	160, // 204: mnemos.v1.MnemosService.UpdateBelief:input_type -> mnemos.v1.UpdateBeliefRequest
+	162, // 205: mnemos.v1.MnemosService.ResolveDissonance:input_type -> mnemos.v1.ResolveDissonanceRequest
+	158, // 206: mnemos.v1.MnemosService.EscalateBelief:input_type -> mnemos.v1.EscalateBeliefRequest
+	165, // 207: mnemos.v1.MnemosService.VerifyBelief:input_type -> mnemos.v1.VerifyBeliefRequest
+	167, // 208: mnemos.v1.MnemosService.RecordBeliefFeedback:input_type -> mnemos.v1.RecordBeliefFeedbackRequest
+	169, // 209: mnemos.v1.MnemosService.BeliefProvenance:input_type -> mnemos.v1.BeliefProvenanceRequest
+	170, // 210: mnemos.v1.MnemosService.BeliefHistory:input_type -> mnemos.v1.BeliefHistoryRequest
+	2,   // 211: mnemos.v1.MnemosService.Health:output_type -> mnemos.v1.HealthResponse
+	5,   // 212: mnemos.v1.MnemosService.ListEpisodes:output_type -> mnemos.v1.ListEpisodesResponse
+	20,  // 213: mnemos.v1.MnemosService.AppendEpisodes:output_type -> mnemos.v1.AppendResponse
+	10,  // 214: mnemos.v1.MnemosService.ListBeliefs:output_type -> mnemos.v1.ListBeliefsResponse
+	20,  // 215: mnemos.v1.MnemosService.AppendBeliefs:output_type -> mnemos.v1.AppendResponse
+	14,  // 216: mnemos.v1.MnemosService.ListAssociations:output_type -> mnemos.v1.ListAssociationsResponse
+	20,  // 217: mnemos.v1.MnemosService.AppendAssociations:output_type -> mnemos.v1.AppendResponse
+	18,  // 218: mnemos.v1.MnemosService.ListEmbeddings:output_type -> mnemos.v1.ListEmbeddingsResponse
+	20,  // 219: mnemos.v1.MnemosService.AppendEmbeddings:output_type -> mnemos.v1.AppendResponse
+	22,  // 220: mnemos.v1.MnemosService.Metrics:output_type -> mnemos.v1.MetricsResponse
+	25,  // 221: mnemos.v1.MnemosService.ListActions:output_type -> mnemos.v1.ListActionsResponse
+	20,  // 222: mnemos.v1.MnemosService.AppendActions:output_type -> mnemos.v1.AppendResponse
+	29,  // 223: mnemos.v1.MnemosService.ListOutcomes:output_type -> mnemos.v1.ListOutcomesResponse
+	20,  // 224: mnemos.v1.MnemosService.AppendOutcomes:output_type -> mnemos.v1.AppendResponse
+	34,  // 225: mnemos.v1.MnemosService.ListSchemas:output_type -> mnemos.v1.ListSchemasResponse
+	20,  // 226: mnemos.v1.MnemosService.AppendSchemas:output_type -> mnemos.v1.AppendResponse
+	38,  // 227: mnemos.v1.MnemosService.ListDecisions:output_type -> mnemos.v1.ListDecisionsResponse
+	20,  // 228: mnemos.v1.MnemosService.AppendDecisions:output_type -> mnemos.v1.AppendResponse
+	43,  // 229: mnemos.v1.MnemosService.ListReflexes:output_type -> mnemos.v1.ListReflexesResponse
+	20,  // 230: mnemos.v1.MnemosService.AppendReflexes:output_type -> mnemos.v1.AppendResponse
+	47,  // 231: mnemos.v1.MnemosService.ListGlobalSchemas:output_type -> mnemos.v1.ListGlobalSchemasResponse
+	48,  // 232: mnemos.v1.MnemosService.OpenIncident:output_type -> mnemos.v1.Incident
+	51,  // 233: mnemos.v1.MnemosService.ListIncidents:output_type -> mnemos.v1.ListIncidentsResponse
+	48,  // 234: mnemos.v1.MnemosService.GetIncident:output_type -> mnemos.v1.Incident
+	48,  // 235: mnemos.v1.MnemosService.ResolveIncident:output_type -> mnemos.v1.Incident
+	57,  // 236: mnemos.v1.MnemosService.WhyWereWeWrong:output_type -> mnemos.v1.WhyWereWeWrongResponse
+	60,  // 237: mnemos.v1.MnemosService.ListEntityAssociations:output_type -> mnemos.v1.ListEntityAssociationsResponse
+	20,  // 238: mnemos.v1.MnemosService.AppendEntityAssociations:output_type -> mnemos.v1.AppendResponse
+	64,  // 239: mnemos.v1.MnemosService.WhoKnows:output_type -> mnemos.v1.WhoKnowsResponse
+	67,  // 240: mnemos.v1.MnemosService.KnowledgeGaps:output_type -> mnemos.v1.KnowledgeGapsResponse
+	71,  // 241: mnemos.v1.MnemosService.Calibration:output_type -> mnemos.v1.CalibrationResponse
+	74,  // 242: mnemos.v1.MnemosService.Hypercorrections:output_type -> mnemos.v1.HypercorrectionsResponse
+	77,  // 243: mnemos.v1.MnemosService.Recombinations:output_type -> mnemos.v1.RecombinationsResponse
+	80,  // 244: mnemos.v1.MnemosService.AnalogousBeliefs:output_type -> mnemos.v1.AnalogousBeliefsResponse
+	82,  // 245: mnemos.v1.MnemosService.GetBelief:output_type -> mnemos.v1.BeliefDetail
+	84,  // 246: mnemos.v1.MnemosService.SetBeliefLifecycle:output_type -> mnemos.v1.SetBeliefLifecycleResponse
+	86,  // 247: mnemos.v1.MnemosService.RetractEpisode:output_type -> mnemos.v1.RetractEpisodeResponse
+	93,  // 248: mnemos.v1.MnemosService.UnretractEpisode:output_type -> mnemos.v1.UnretractEpisodeResponse
+	101, // 249: mnemos.v1.MnemosService.ListEpisodeDependencies:output_type -> mnemos.v1.ListEpisodeDependenciesResponse
+	104, // 250: mnemos.v1.MnemosService.DeclareEpisodeDependency:output_type -> mnemos.v1.EpisodeDependencyChange
+	104, // 251: mnemos.v1.MnemosService.RemoveEpisodeDependency:output_type -> mnemos.v1.EpisodeDependencyChange
+	106, // 252: mnemos.v1.MnemosService.Classify:output_type -> mnemos.v1.ClassifyResponse
+	36,  // 253: mnemos.v1.MnemosService.GetDecision:output_type -> mnemos.v1.Decision
+	113, // 254: mnemos.v1.MnemosService.Recall:output_type -> mnemos.v1.RecallResponse
+	116, // 255: mnemos.v1.MnemosService.GetBlocks:output_type -> mnemos.v1.GetBlocksResponse
+	118, // 256: mnemos.v1.MnemosService.SetBlock:output_type -> mnemos.v1.SetBlockResponse
+	120, // 257: mnemos.v1.MnemosService.Synthesize:output_type -> mnemos.v1.SynthesizeResponse
+	123, // 258: mnemos.v1.MnemosService.Timeline:output_type -> mnemos.v1.TimelineResponse
+	126, // 259: mnemos.v1.MnemosService.Signals:output_type -> mnemos.v1.SignalsResponse
+	128, // 260: mnemos.v1.MnemosService.ProcessText:output_type -> mnemos.v1.ProcessTextResponse
+	132, // 261: mnemos.v1.MnemosService.Search:output_type -> mnemos.v1.SearchResponse
+	135, // 262: mnemos.v1.MnemosService.Passages:output_type -> mnemos.v1.PassagesResponse
+	137, // 263: mnemos.v1.MnemosService.ContextBlock:output_type -> mnemos.v1.ContextBlockResponse
+	140, // 264: mnemos.v1.MnemosService.PredictiveError:output_type -> mnemos.v1.PredictiveErrorResponse
+	145, // 265: mnemos.v1.MnemosService.BrainHealth:output_type -> mnemos.v1.BrainHealthResponse
+	146, // 266: mnemos.v1.MnemosService.SetExpectation:output_type -> mnemos.v1.Expectation
+	146, // 267: mnemos.v1.MnemosService.GetExpectation:output_type -> mnemos.v1.Expectation
+	146, // 268: mnemos.v1.MnemosService.RecordObservation:output_type -> mnemos.v1.Expectation
+	152, // 269: mnemos.v1.MnemosService.ReconcileExpectations:output_type -> mnemos.v1.ReconcileExpectationsResponse
+	154, // 270: mnemos.v1.MnemosService.RememberFact:output_type -> mnemos.v1.RememberFactResponse
+	156, // 271: mnemos.v1.MnemosService.ScanBeliefs:output_type -> mnemos.v1.ScanBeliefsResponse
+	159, // 272: mnemos.v1.MnemosService.DeprecateBelief:output_type -> mnemos.v1.BeliefStatusChange
+	161, // 273: mnemos.v1.MnemosService.UpdateBelief:output_type -> mnemos.v1.BeliefRevision
+	163, // 274: mnemos.v1.MnemosService.ResolveDissonance:output_type -> mnemos.v1.ResolveDissonanceResponse
+	164, // 275: mnemos.v1.MnemosService.EscalateBelief:output_type -> mnemos.v1.BeliefEscalation
+	166, // 276: mnemos.v1.MnemosService.VerifyBelief:output_type -> mnemos.v1.VerifyBeliefResponse
+	168, // 277: mnemos.v1.MnemosService.RecordBeliefFeedback:output_type -> mnemos.v1.BeliefFeedback
+	56,  // 278: mnemos.v1.MnemosService.BeliefProvenance:output_type -> mnemos.v1.BeliefProvenance
+	172, // 279: mnemos.v1.MnemosService.BeliefHistory:output_type -> mnemos.v1.BeliefHistoryResponse
+	211, // [211:280] is the sub-list for method output_type
+	142, // [142:211] is the sub-list for method input_type
+	142, // [142:142] is the sub-list for extension type_name
+	142, // [142:142] is the sub-list for extension extendee
+	0,   // [0:142] is the sub-list for field type_name
 }
 
 func init() { file_mnemos_v1_mnemos_proto_init() }
@@ -13020,7 +13047,7 @@ func file_mnemos_v1_mnemos_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mnemos_v1_mnemos_proto_rawDesc), len(file_mnemos_v1_mnemos_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   179,
+			NumMessages:   180,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

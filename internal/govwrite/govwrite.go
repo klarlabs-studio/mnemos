@@ -57,6 +57,7 @@ const Source = "mnemos.daemon"
 const (
 	actionWriteEvents        = "write_events"
 	actionWriteClaims        = "write_claims"
+	actionWriteBeliefs       = "write_beliefs"
 	actionWriteEvidenceLinks = "write_evidence_links"
 	actionWriteRelationships = "write_relationships"
 	actionWriteEmbedding     = "write_embedding"
@@ -124,6 +125,8 @@ func actions() []kernel.Action {
 			Description: "Append pre-built events with caller-supplied ids and structured fields."},
 		{Name: actionWriteClaims, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Upsert pre-built claims, optionally with an audit reason and changed-by."},
+		{Name: actionWriteBeliefs, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Write an id-addressed belief batch and its evidence: writes to a merge redirect follow it, and a new id restating a held belief becomes a redirect to it (ADR 0041)."},
 		{Name: actionWriteEvidenceLinks, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Upsert claim→event evidence links."},
 		{Name: actionWriteRelationships, Effect: axidomain.EffectWriteLocal, Idempotent: true,
@@ -193,6 +196,7 @@ func executors(conn *store.Conn) map[string]axidomain.ActionExecutor {
 	return map[string]axidomain.ActionExecutor{
 		kernel.ExecutorRef(actionWriteEvents):           eventsExecutor{conn: conn},
 		kernel.ExecutorRef(actionWriteClaims):           claimsExecutor{conn: conn},
+		kernel.ExecutorRef(actionWriteBeliefs):          beliefsExecutor{conn: conn},
 		kernel.ExecutorRef(actionWriteEvidenceLinks):    evidenceLinksExecutor{conn: conn},
 		kernel.ExecutorRef(actionWriteRelationships):    relationshipsExecutor{conn: conn},
 		kernel.ExecutorRef(actionPruneRelationships):    pruneRelationshipsExecutor{conn: conn},

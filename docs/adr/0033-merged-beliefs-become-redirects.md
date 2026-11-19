@@ -87,6 +87,13 @@ the loser's edges, so an edge would not survive it.
 
 ## Not done here
 
+- **Writes addressed by id.** The upsert keeps `merged_into` but takes `status`
+  from the write. So REST `POST /v1/beliefs`, gRPC `AppendBeliefs` and registry
+  pull, which send a merged id back as `active`, revived the redirect. They
+  also attached that id's evidence, associations and embedding to the retired
+  row. [ADR 0041](0041-id-addressed-writes-follow-redirects.md) makes those
+  writes follow the redirect. It also stores a new id that restates a held
+  belief as a redirect to that belief.
 - **Unmerge.** The merge does not yet record which evidence links moved, so it
   cannot be reversed mechanically. A follow-up adds that record and an `unmerge`
   operation.

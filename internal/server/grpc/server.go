@@ -893,31 +893,39 @@ func (s *Server) AppendBeliefs(ctx context.Context, req *mnemosv1.AppendBeliefsR
 
 	// Same attribution as the REST and CLI write paths; the zero value left
 	// gRPC-written claims with no status_history row.
-	if _, err := s.writerFor(ctx).Claims(ctx, claims, govwrite.ClaimReason{
+	//
+	// Id-addressed, like POST /v1/beliefs (ADR 0041): a belief id stored as a
+	// merge redirect is never rewritten, and a new id restating a belief a live
+	// belief already holds becomes a redirect to it. Either way its evidence
+	// lands on the live belief, and the response reports where each id went.
+	links := make([]domain.ClaimEvidence, 0, len(req.Evidence))
+	for _, e := range req.Evidence {
+		links = append(links, domain.ClaimEvidence{ClaimID: e.BeliefId, EventID: e.EpisodeId})
+	}
+	res, err := s.writerFor(ctx).Beliefs(ctx, claims, links, govwrite.ClaimReason{
 		Reason:    "grpc: AppendBeliefs",
 		ChangedBy: actor,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, "upsert beliefs: %v", err)
 	}
 	// valid_to has its own governed write (the upsert never touches it), so a
 	// re-append cannot reopen a closed belief by omitting the field. Same as
-	// POST /v1/beliefs.
+	// POST /v1/beliefs. A belief that resolved to another was not written, so
+	// it has nothing to close.
 	for _, c := range closes {
+		if _, remapped := res.Remapped[c.id]; remapped {
+			continue
+		}
 		if err := s.writerFor(ctx).SetValidity(ctx, c.id, c.at, govwrite.ClaimReason{Reason: "grpc: AppendBeliefs valid_to", ChangedBy: actor}); err != nil {
 			return nil, status.Errorf(codes.Internal, "set valid_to: %v", err)
 		}
 	}
-
-	if len(req.Evidence) > 0 {
-		links := make([]domain.ClaimEvidence, 0, len(req.Evidence))
-		for _, e := range req.Evidence {
-			links = append(links, domain.ClaimEvidence{ClaimID: e.BeliefId, EventID: e.EpisodeId})
-		}
-		if _, err := s.writerFor(ctx).EvidenceLinks(ctx, links); err != nil {
-			return nil, status.Errorf(codes.Internal, "upsert evidence: %v", err)
-		}
-	}
-	return &mnemosv1.AppendResponse{Accepted: int32(len(claims))}, nil
+	return &mnemosv1.AppendResponse{
+		Accepted: int32(res.Accepted),
+		Folded:   int32(res.Folded),
+		Remapped: res.Remapped,
+	}, nil
 }
 
 // beliefClose is a valid_to to apply after the upsert.

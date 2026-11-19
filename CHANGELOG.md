@@ -81,6 +81,19 @@ notable changes.
 
 ### Fixed
 
+- Writes that address beliefs by id no longer revive merged beliefs or duplicate
+  a belief another brain already pushed (ADR 0041). These are REST `POST
+  /v1/beliefs` (registry push), gRPC `AppendBeliefs` and registry pull.
+  Previously, a merge redirect sent back as `active` came back active with
+  `merged_into` still set, and its evidence, associations and embedding attached
+  to the retired row. Now the redirect is left as it is, its evidence moves to
+  the live belief at the end of the chain, associations addressed to it are
+  re-pointed, and its embedding is dropped. A new id whose text, scope and
+  audience match a live belief is stored as a redirect to it, so the same belief
+  pushed from two brains stays one belief. The REST and gRPC responses report
+  `folded` and `remapped` (incoming id → held id), as does the Go client's
+  `AppendResponse`. `mnemos push` and `mnemos pull` print the folded count.
+
 - Consolidate no longer runs the quadratic near-duplicate scan without a bound
   (#387, #466). `ConsolidateOptions.DedupeScanBudget` caps it (default 5 minutes,
   negative for unlimited); a scan that runs out keeps the duplicates it found and
