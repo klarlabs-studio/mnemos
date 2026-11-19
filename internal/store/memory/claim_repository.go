@@ -819,6 +819,9 @@ func (r ClaimRepository) trustInputLocked(id string, c storedClaim) domain.Trust
 	evidence := r.state.evidence[id]
 	dependent := map[string]bool{}
 	for _, d := range r.state.dependencies {
+		if !d.Live() {
+			continue
+		}
 		if _, cites := evidence[d.DependsOn]; cites {
 			dependent[d.EventID] = true
 		}

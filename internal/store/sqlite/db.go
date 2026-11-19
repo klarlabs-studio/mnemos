@@ -308,9 +308,10 @@ CREATE INDEX IF NOT EXISTS idx_closed_relationships_to ON closed_relationships(t
 -- event_dependencies (ADR 0038): source dependence between episodes. A row
 -- says episode event_id cites, copies or derives from depends_on, which
 -- deterministic signal found it (signal_type) and the exact text that
--- justified it (reference_text). Append-only; the first justification for a
--- pair stands. No foreign keys: deleting an event clears its rows in both
--- directions explicitly.
+-- justified it (reference_text). The first justification for a pair stands.
+-- Removing a dependency by hand sets removed_at/removed_by (a tombstone, so
+-- detection cannot re-add it); live reads filter removed_at IS NULL. No foreign
+-- keys: deleting an event clears its rows in both directions explicitly.
 CREATE TABLE IF NOT EXISTS event_dependencies (
 	event_id TEXT NOT NULL,
 	depends_on TEXT NOT NULL,
@@ -319,6 +320,8 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
 	reference_text TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL,
 	created_by TEXT NOT NULL DEFAULT '<system>',
+	removed_at TEXT,
+	removed_by TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY (event_id, depends_on)
 );
 CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
@@ -798,7 +801,10 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // v37 (ADR 0038, late citations) adds pending_references and its lookup_key
 // index (CREATE TABLE/INDEX IF NOT EXISTS, run on every open): citations whose
 // source was not stored yet, resolved when that source is written.
-const currentSchemaVersion = 37
+// v38 (ADR 0038, editing dependencies) adds event_dependencies.removed_at and
+// removed_by: removing a dependency by hand leaves a tombstone. Paired with
+// the expectedColumns entries below.
+const currentSchemaVersion = 38
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -925,6 +931,10 @@ var expectedColumns = []addMissingColumn{
 	// the rule lives in code that can be read and tested, not in a one-shot
 	// UPDATE.
 	{"claim_evidence", "created_at", "TEXT NOT NULL DEFAULT ''"},
+	// v38 - dependency tombstones (ADR 0038, editing dependencies). NULL
+	// removed_at is a live dependency, so every existing row stays live.
+	{"event_dependencies", "removed_at", "TEXT"},
+	{"event_dependencies", "removed_by", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for

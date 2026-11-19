@@ -323,10 +323,10 @@ CREATE INDEX IF NOT EXISTS idx_closed_relationships_to   ON closed_relationships
 
 -- event_dependencies (ADR 0038): source dependence between episodes. A row
 -- says episode event_id cites, copies or derives from depends_on, which
--- deterministic signal found it and the exact text that justified it.
--- Append-only; the first justification for a pair stands. No foreign keys:
--- deleting an event clears its rows in both directions explicitly. In the RLS
--- scoped array below.
+-- deterministic signal found it and the exact text that justified it. The
+-- first justification for a pair stands; a removal is a tombstone (removed_at).
+-- No foreign keys: deleting an event clears its rows in both directions
+-- explicitly. In the RLS scoped array below.
 CREATE TABLE IF NOT EXISTS event_dependencies (
   event_id       text        NOT NULL,
   depends_on     text        NOT NULL,
@@ -335,9 +335,15 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
   reference_text text        NOT NULL DEFAULT '',
   created_at     timestamptz NOT NULL,
   created_by     text        NOT NULL DEFAULT '<system>',
+  removed_at     timestamptz NULL,
+  removed_by     text        NOT NULL DEFAULT '',
   PRIMARY KEY (event_id, depends_on)
 );
 CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
+-- Dependency tombstones (ADR 0038, editing dependencies): a hand-removed
+-- dependency keeps its row with removed_at set, so detection cannot re-add it.
+ALTER TABLE event_dependencies ADD COLUMN IF NOT EXISTS removed_at timestamptz NULL;
+ALTER TABLE event_dependencies ADD COLUMN IF NOT EXISTS removed_by text NOT NULL DEFAULT '';
 
 -- pending_references (ADR 0038, late citations): a citation in episode
 -- event_id that named no stored episode when it was written, under a

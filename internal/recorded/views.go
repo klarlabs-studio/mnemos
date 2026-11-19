@@ -73,7 +73,8 @@ type Claims struct {
 	Events ports.EventRepository
 	// Dependencies, when set, is source dependence between episodes (ADR
 	// 0038): trust at At does not count a dependent evidence episode as a
-	// distinct source when its dependency was recorded by At. Leave it unset
+	// distinct source when its dependency was recorded by At and not removed
+	// by At. Leave it unset
 	// only on a store that has none, or reconstructed trust overstates
 	// corroboration that the live score does not.
 	Dependencies ports.EventDependencyRepository
@@ -183,7 +184,8 @@ func (r Claims) trustAt(ctx context.Context, claims []domain.Claim, ids []string
 	}
 	var deps []domain.EventDependency
 	if r.Dependencies != nil && len(eventIDs) > 0 {
-		if deps, err = r.Dependencies.ListByEventIDs(ctx, eventIDs); err != nil {
+		// Removed dependencies too: one removed after At was in force at At.
+		if deps, err = r.Dependencies.ListByEventIDsWithRemoved(ctx, eventIDs); err != nil {
 			return fmt.Errorf("episode dependencies for trust: %w", err)
 		}
 	}

@@ -32,20 +32,29 @@ func (r EventDependencyRepository) AppendPending(_ context.Context, refs []domai
 
 // ListPendingByKeys implements [ports.EventDependencyRepository.ListPendingByKeys].
 func (r EventDependencyRepository) ListPendingByKeys(_ context.Context, keys []string) ([]domain.PendingReference, error) {
-	want := make(map[string]bool, len(keys))
-	for _, k := range keys {
-		want[k] = true
+	return r.pendingMatching(keys, func(p domain.PendingReference) string { return p.LookupKey }), nil
+}
+
+// ListPendingByEventIDs implements [ports.EventDependencyRepository.ListPendingByEventIDs].
+func (r EventDependencyRepository) ListPendingByEventIDs(_ context.Context, ids []string) ([]domain.PendingReference, error) {
+	return r.pendingMatching(ids, func(p domain.PendingReference) string { return p.EventID }), nil
+}
+
+func (r EventDependencyRepository) pendingMatching(values []string, field func(domain.PendingReference) string) []domain.PendingReference {
+	want := make(map[string]bool, len(values))
+	for _, v := range values {
+		want[v] = true
 	}
 	r.state.mu.RLock()
 	defer r.state.mu.RUnlock()
 	out := make([]domain.PendingReference, 0)
 	for _, p := range r.state.pendingRefs {
-		if want[p.LookupKey] {
+		if want[field(p)] {
 			out = append(out, p)
 		}
 	}
 	domain.SortPendingReferences(out)
-	return out, nil
+	return out
 }
 
 // DeletePending implements [ports.EventDependencyRepository.DeletePending].

@@ -793,18 +793,33 @@ type JournalRepository interface {
 }
 
 // EventDependencyRepository stores source dependence between episodes (ADR
-// 0038): which episode cites, copies or derives from which. Rows are
-// append-only; a repeat of (EventID, DependsOn) is ignored. Every shipped
-// backend implements it.
+// 0038): which episode cites, copies or derives from which. A repeat of
+// (EventID, DependsOn) is ignored by Append. Removal is a tombstone
+// (RemovedAt set), so a removed pair is still "stored" for Append and stays
+// removed until Declare revives it. Every shipped backend implements it.
 type EventDependencyRepository interface {
 	// Append records dependencies, ignoring any whose (EventID, DependsOn)
-	// is already stored.
+	// is already stored, live or removed.
 	Append(ctx context.Context, deps []domain.EventDependency) error
-	// ListByEventIDs returns what the given episodes depend on (outgoing).
+	// ListByEventIDs returns what the given episodes depend on (outgoing),
+	// live rows only.
 	ListByEventIDs(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
-	// ListDependents returns the dependencies ON the given episodes
+	// ListDependents returns the live dependencies ON the given episodes
 	// (incoming): the episodes that depend on them.
 	ListDependents(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
+	// ListByEventIDsWithRemoved is ListByEventIDs plus removed rows (RemovedAt
+	// set), for recorded-as-of reads and audit.
+	ListByEventIDsWithRemoved(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
+	// ListDependentsWithRemoved is ListDependents plus removed rows.
+	ListDependentsWithRemoved(ctx context.Context, eventIDs []string) ([]domain.EventDependency, error)
+	// Declare stores a hand-declared dependency and returns the stored row.
+	// A live row for the pair is domain.ErrDependencyExists; a removed one is
+	// revived: RemovedAt/RemovedBy cleared, every other field overwritten.
+	Declare(ctx context.Context, dep domain.EventDependency) (domain.EventDependency, error)
+	// Remove marks the live (eventID, dependsOn) row removed by removedBy at
+	// at and returns it. A missing or already removed row is
+	// domain.ErrDependencyNotFound.
+	Remove(ctx context.Context, eventID, dependsOn, removedBy string, at time.Time) (domain.EventDependency, error)
 
 	// AppendPending records citations that named no stored episode yet
 	// (ADR 0038, late citations), ignoring any (EventID, LookupKey) already
@@ -813,6 +828,9 @@ type EventDependencyRepository interface {
 	// ListPendingByKeys returns the pending citations whose lookup key is one
 	// of keys, oldest first. No keys returns none.
 	ListPendingByKeys(ctx context.Context, keys []string) ([]domain.PendingReference, error)
+	// ListPendingByEventIDs returns the pending citations of the given
+	// episodes, oldest first. No ids returns none.
+	ListPendingByEventIDs(ctx context.Context, eventIDs []string) ([]domain.PendingReference, error)
 	// DeletePending removes the given (EventID, LookupKey) rows; CreatedAt is
 	// ignored and a row that is not stored is not an error.
 	DeletePending(ctx context.Context, refs []domain.PendingReference) error

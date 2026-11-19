@@ -233,13 +233,15 @@ type Event struct {
 }
 
 type EventDependency struct {
-	EventID       string `json:"event_id"`
-	DependsOn     string `json:"depends_on"`
-	Kind          string `json:"kind"`
-	SignalType    string `json:"signal_type"`
-	ReferenceText string `json:"reference_text"`
-	CreatedAt     string `json:"created_at"`
-	CreatedBy     string `json:"created_by"`
+	EventID       string         `json:"event_id"`
+	DependsOn     string         `json:"depends_on"`
+	Kind          string         `json:"kind"`
+	SignalType    string         `json:"signal_type"`
+	ReferenceText string         `json:"reference_text"`
+	CreatedAt     string         `json:"created_at"`
+	CreatedBy     string         `json:"created_by"`
+	RemovedAt     sql.NullString `json:"removed_at"`
+	RemovedBy     string         `json:"removed_by"`
 }
 
 type Lesson struct {

@@ -20,7 +20,8 @@ import (
 //	                T, graded by independence exactly as the stores grade them
 //	                (domain.EffectiveEvidenceCount over distinct authors; an
 //	                episode whose dependency on another of the claim's evidence
-//	                episodes was recorded by T adds no author, ADR 0038 §3)
+//	                episodes was recorded by T and not removed by T adds no
+//	                author, ADR 0038 §3)
 //	latest evidence the freshest such episode's timestamp
 //	credit          the claim's credit history (CreditAt)
 //	confidence,     the claim's trust-input history (StoredInputsAt): the
@@ -105,8 +106,9 @@ func StoredInputsAt(c domain.Claim, history []domain.TrustInputChange, t time.Ti
 // credit c's credit history, oldest first, and inputs its trust-input history
 // (StoredInputsAt). It is pure.
 //
-// deps are source dependencies between episodes (ADR 0038); only those
-// recorded at or before t, between two of c's evidence episodes at t, count.
+// deps are source dependencies between episodes (ADR 0038), removed ones
+// included; only those in force at t (recorded at or before t and not removed
+// by t), between two of c's evidence episodes at t, count.
 func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[string]domain.Event, deps []domain.EventDependency, credit []domain.CreditChange, inputs []domain.TrustInputChange, t time.Time) domain.TrustInput {
 	counted := map[string]bool{}
 	var latest time.Time
@@ -125,7 +127,7 @@ func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[strin
 	}
 	dependent := map[string]bool{}
 	for _, d := range deps {
-		if counted[d.EventID] && counted[d.DependsOn] && !d.CreatedAt.After(t) {
+		if counted[d.EventID] && counted[d.DependsOn] && d.LiveAt(t) {
 			dependent[d.EventID] = true
 		}
 	}

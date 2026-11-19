@@ -281,9 +281,10 @@ CREATE INDEX IF NOT EXISTS idx_closed_relationships_to ON closed_relationships(t
 -- event_dependencies (ADR 0038): source dependence between episodes. A row
 -- says episode event_id cites, copies or derives from depends_on, which
 -- deterministic signal found it (signal_type) and the exact text that
--- justified it (reference_text). Append-only; the first justification for a
--- pair stands. No foreign keys: deleting an event clears its rows in both
--- directions explicitly.
+-- justified it (reference_text). The first justification for a pair stands.
+-- Removing a dependency by hand sets removed_at/removed_by (a tombstone, so
+-- detection cannot re-add it); live reads filter removed_at IS NULL. No foreign
+-- keys: deleting an event clears its rows in both directions explicitly.
 CREATE TABLE IF NOT EXISTS event_dependencies (
   event_id TEXT NOT NULL,
   depends_on TEXT NOT NULL,
@@ -292,6 +293,8 @@ CREATE TABLE IF NOT EXISTS event_dependencies (
   reference_text TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   created_by TEXT NOT NULL DEFAULT '<system>',
+  removed_at TEXT,
+  removed_by TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (event_id, depends_on)
 );
 CREATE INDEX IF NOT EXISTS idx_event_dependencies_depends_on ON event_dependencies(depends_on);
