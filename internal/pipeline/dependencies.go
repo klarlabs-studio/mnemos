@@ -242,27 +242,48 @@ func rescoreDependentBeliefs(ctx context.Context, conn *store.Conn, deps []domai
 			citing = append(citing, d.EventID)
 		}
 	}
-	claims, err := conn.Claims.ListByEventIDs(ctx, citing)
+	if _, err := RescoreBeliefsOfEpisodes(ctx, conn, citing); err != nil {
+		return fmt.Errorf("late citing episodes: %w", err)
+	}
+	return nil
+}
+
+// RescoreBeliefsOfEpisodes rescores the trust of every belief the given
+// episodes evidence and returns their ids, sorted. A change to an episode's
+// dependencies (a late citation, or a declared or removed dependency, ADR
+// 0038) can only change the trust of the dependent episode's beliefs, so this
+// is the rescore every such change runs. It uses the scoped scorer, falling
+// back to a full rescore on a backend without one.
+func RescoreBeliefsOfEpisodes(ctx context.Context, conn *store.Conn, eventIDs []string) ([]string, error) {
+	ids := []string{}
+	if conn == nil || len(eventIDs) == 0 {
+		return ids, nil
+	}
+	claims, err := conn.Claims.ListByEventIDs(ctx, eventIDs)
 	if err != nil {
-		return fmt.Errorf("list beliefs of late citing episodes: %w", err)
+		return nil, fmt.Errorf("list beliefs of episodes: %w", err)
 	}
-	if len(claims) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(claims))
+	seen := map[string]bool{}
 	for _, c := range claims {
-		ids = append(ids, c.ID)
+		if !seen[c.ID] {
+			seen[c.ID] = true
+			ids = append(ids, c.ID)
+		}
 	}
+	if len(ids) == 0 {
+		return ids, nil
+	}
+	sort.Strings(ids)
 	if scoped, ok := conn.Claims.(ports.ScopedTrustScorer); ok {
 		if _, err := scoped.RecomputeTrustForClaims(ctx, ids, defaultTrustScorer()); err != nil {
-			return fmt.Errorf("rescore beliefs of late citing episodes: %w", err)
+			return nil, fmt.Errorf("rescore beliefs of episodes: %w", err)
 		}
-		return nil
+		return ids, nil
 	}
 	if scorer, ok := conn.Claims.(ports.TrustScorer); ok {
 		if _, err := scorer.RecomputeTrust(ctx, defaultTrustScorer()); err != nil {
-			return fmt.Errorf("rescore beliefs of late citing episodes: %w", err)
+			return nil, fmt.Errorf("rescore beliefs of episodes: %w", err)
 		}
 	}
-	return nil
+	return ids, nil
 }
