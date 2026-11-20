@@ -2,10 +2,12 @@ package govwrite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/retraction"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -46,6 +48,35 @@ func (x *independence) counts(ctx context.Context, eventID string) (bool, error)
 	return !tainted, err
 }
 
+// prefetch loads the retraction state of every id not known yet in one
+// batched journal read, so evaluating an episode set costs a query per batch
+// rather than one per episode (ADR 0043).
+func (x *independence) prefetch(ctx context.Context, eventIDs []string) error {
+	var missing []string
+	seen := map[string]bool{}
+	for _, id := range eventIDs {
+		if _, known := x.retracted[id]; !known && !seen[id] {
+			seen[id] = true
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	if x.conn == nil {
+		return errors.New("this backend has no journal to record retractions in")
+	}
+	histories, err := retraction.LoadHistories(ctx, x.conn.Journal, missing)
+	if err != nil {
+		return err
+	}
+	for _, id := range missing {
+		_, active := histories[id].Active()
+		x.retracted[id] = active
+	}
+	return nil
+}
+
 func (x *independence) isRetracted(ctx context.Context, eventID string) (bool, error) {
 	if v, ok := x.retracted[eventID]; ok {
 		return v, nil
@@ -82,6 +113,13 @@ func (x *independence) dependsOnRetracted(ctx context.Context, eventID string) (
 		deps, err := x.conn.Dependencies.ListByEventIDs(ctx, frontier)
 		if err != nil {
 			return false, fmt.Errorf("dependencies of %v: %w", frontier, err)
+		}
+		targets := make([]string, len(deps))
+		for i, d := range deps {
+			targets[i] = d.DependsOn
+		}
+		if err := x.prefetch(ctx, targets); err != nil {
+			return false, err
 		}
 		var next []string
 		for _, d := range deps {
@@ -126,6 +164,13 @@ func liveIndependentEvidence(ctx context.Context, conn *store.Conn, claims []dom
 	links, err := conn.Claims.ListEvidenceByClaimIDs(ctx, ids)
 	if err != nil {
 		return nil, fmt.Errorf("list evidence of dependent beliefs: %w", err)
+	}
+	events := make([]string, len(links))
+	for i, l := range links {
+		events[i] = l.EventID
+	}
+	if err := x.prefetch(ctx, events); err != nil {
+		return nil, err
 	}
 	for _, l := range links {
 		ok, err := x.counts(ctx, l.EventID)
