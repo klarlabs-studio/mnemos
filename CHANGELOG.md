@@ -122,6 +122,14 @@ notable changes.
   `ports.RelationshipTypePager`. Ties on `created_at` now order by id, descending. A
   run-scoped listing still filters in Go, but reads only the contradicts edges.
 
+- Retraction and un-retraction read episode retraction state in batches instead of one
+  journal query per episode (ADR 0043). The independence check loads the history of every
+  evidence episode up front, and of each level of the dependency search, through the new
+  optional `ports.JournalSubjectsLister` (implemented on SQLite, Postgres, MySQL and memory;
+  at most 500 ids per query). The experiment measured the per-episode path at ~470 ms
+  (median) per retraction on Postgres at 100k beliefs, against under 1 ms for a single
+  query.
+
 - Retracting an episode now reaches beliefs whose evidence depends on it through a cycle of
   episode dependencies (ADR 0038, found by ADR 0043). The independence check memoised the
   "independent" answer a cycle cut gave part-way through a walk, so with A depending on B and

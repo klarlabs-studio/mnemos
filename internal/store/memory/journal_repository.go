@@ -65,6 +65,27 @@ func (r JournalRepository) ListBySubject(_ context.Context, subjectID string, li
 	}), nil
 }
 
+// ListBySubjects implements ports.JournalSubjectsLister.
+func (r JournalRepository) ListBySubjects(_ context.Context, subjectIDs, kinds []string) ([]domain.JournalEntry, error) {
+	subjects := make(map[string]bool, len(subjectIDs))
+	for _, id := range subjectIDs {
+		subjects[id] = true
+	}
+	wanted := make(map[string]bool, len(kinds))
+	for _, k := range kinds {
+		wanted[k] = true
+	}
+	r.state.mu.RLock()
+	defer r.state.mu.RUnlock()
+	out := make([]domain.JournalEntry, 0)
+	for _, e := range r.state.journalEntries {
+		if subjects[e.SubjectID] && wanted[e.Kind] {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
 // recentMatching walks the append-ordered log newest-first, returning up to limit
 // entries that match. Caller holds the lock.
 func (r JournalRepository) recentMatching(limit int, match func(domain.JournalEntry) bool) []domain.JournalEntry {

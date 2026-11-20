@@ -9,6 +9,7 @@ import (
 
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/retraction"
 
 	_ "go.klarlabs.de/mnemos/internal/store/sqlite"
@@ -122,5 +123,55 @@ func TestUnretract_ValidatesBeforeUnretracting(t *testing.T) {
 	again, err := retraction.Unretract(ctx, conn.Events, conn.Journal, spy, retraction.Request{EventID: "ev_1"})
 	if err != nil || !again.AlreadyUnretracted {
 		t.Errorf("repeat: %+v, %v; want the stored record with AlreadyUnretracted", again, err)
+	}
+}
+
+// unbatchedJournal hides ports.JournalSubjectsLister, forcing LoadHistories
+// onto its per-event fallback.
+type unbatchedJournal struct{ ports.JournalRepository }
+
+// LoadHistories agrees with LoadHistory for every event, batched or not:
+// retracted, retracted then restored, and never retracted.
+func TestLoadHistories_MatchesLoadHistory(t *testing.T) {
+	t.Parallel()
+	w := newWriter(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if _, err := w.Events(ctx, []domain.Event{
+		{ID: "ev_2", RunID: "run-a", Content: "c2", SchemaVersion: "1.0", SourceInputID: "s2", Timestamp: now, IngestedAt: now, CreatedBy: "x"},
+		{ID: "ev_3", RunID: "run-a", Content: "c3", SchemaVersion: "1.0", SourceInputID: "s3", Timestamp: now, IngestedAt: now, CreatedBy: "x"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	note := domain.ChangeNote{Reason: "r", ChangedBy: "x"}
+	for _, id := range []string{"ev_1", "ev_2"} {
+		if _, err := w.RetractEvent(ctx, id, note); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := w.UnretractEvent(ctx, "ev_2", note); err != nil {
+		t.Fatal(err)
+	}
+	ids := []string{"ev_1", "ev_2", "ev_3"}
+	journal := w.Conn().Journal
+	if _, ok := journal.(ports.JournalSubjectsLister); !ok {
+		t.Fatal("sqlite journal does not batch; the batched path is untested")
+	}
+	for name, j := range map[string]ports.JournalRepository{"batched": journal, "per-event": unbatchedJournal{journal}} {
+		got, err := retraction.LoadHistories(ctx, j, ids)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, id := range ids {
+			want, err := retraction.LoadHistory(ctx, journal, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, gotActive := got[id].Active()
+			_, wantActive := want.Active()
+			if gotActive != wantActive || len(got[id].Retractions) != len(want.Retractions) || len(got[id].Unretractions) != len(want.Unretractions) {
+				t.Errorf("%s: %s = %+v, want %+v", name, id, got[id], want)
+			}
+		}
 	}
 }

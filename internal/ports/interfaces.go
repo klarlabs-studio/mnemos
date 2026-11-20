@@ -802,6 +802,14 @@ type JournalRepository interface {
 	ListBySubject(ctx context.Context, subjectID string, limit int) ([]domain.JournalEntry, error)
 }
 
+// JournalSubjectsLister is the optional capability to read every entry of
+// the given kinds for many subjects in one query, oldest first. Retraction
+// reads the history of each episode it evaluates; one query per episode cost
+// ~0.5 s per retraction on Postgres at 100k beliefs (ADR 0043).
+type JournalSubjectsLister interface {
+	ListBySubjects(ctx context.Context, subjectIDs, kinds []string) ([]domain.JournalEntry, error)
+}
+
 // EventDependencyRepository stores source dependence between episodes (ADR
 // 0038): which episode cites, copies or derives from which. A repeat of
 // (EventID, DependsOn) is ignored by Append. Removal is a tombstone

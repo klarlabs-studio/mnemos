@@ -153,6 +153,52 @@ func LoadHistory(ctx context.Context, journal ports.JournalRepository, eventID s
 	return domain.RetractionHistory{}, nil
 }
 
+// historyBatch bounds the ids in one ListBySubjects query, well under every
+// backend's bind-parameter limit.
+const historyBatch = 500
+
+// LoadHistories is [LoadHistory] for many events: one journal query per
+// historyBatch ids where the backend implements
+// [ports.JournalSubjectsLister], one per event otherwise. Every requested id
+// is in the result; an event never retracted has an empty history.
+func LoadHistories(ctx context.Context, journal ports.JournalRepository, eventIDs []string) (map[string]domain.RetractionHistory, error) {
+	if journal == nil {
+		return nil, errors.New("this backend has no journal to record retractions in")
+	}
+	out := make(map[string]domain.RetractionHistory, len(eventIDs))
+	lister, batched := journal.(ports.JournalSubjectsLister)
+	if !batched {
+		for _, id := range eventIDs {
+			h, err := LoadHistory(ctx, journal, id)
+			if err != nil {
+				return nil, err
+			}
+			out[id] = h
+		}
+		return out, nil
+	}
+	kinds := []string{domain.JournalKindEventRetraction, domain.JournalKindEventUnretraction}
+	for start := 0; start < len(eventIDs); start += historyBatch {
+		chunk := eventIDs[start:min(len(eventIDs), start+historyBatch)]
+		entries, err := lister.ListBySubjects(ctx, chunk, kinds)
+		if err != nil {
+			return nil, fmt.Errorf("read retraction histories: %w", err)
+		}
+		folded, err := domain.FoldRetractionHistory(entries)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range chunk {
+			if h := folded[id]; h != nil {
+				out[id] = *h
+			} else {
+				out[id] = domain.RetractionHistory{}
+			}
+		}
+	}
+	return out, nil
+}
+
 // UnretractFunc performs the governed un-retraction:
 // govwrite.Writer.UnretractEvent on the daemon surfaces and the library's own
 // governed dispatch in the root package.

@@ -80,6 +80,22 @@ func (r JournalRepository) ListBySubject(ctx context.Context, subjectID string, 
 	return scanJournalRows(rows)
 }
 
+// ListBySubjects implements ports.JournalSubjectsLister.
+func (r JournalRepository) ListBySubjects(ctx context.Context, subjectIDs, kinds []string) ([]domain.JournalEntry, error) {
+	if len(subjectIDs) == 0 || len(kinds) == 0 {
+		return []domain.JournalEntry{}, nil
+	}
+	args := append(anyArgs(subjectIDs), anyArgs(kinds)...)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, at, run_id, kind, subject_id, data FROM cognitive_journal
+		WHERE subject_id IN (`+placeholders(len(subjectIDs))+`) AND kind IN (`+placeholders(len(kinds))+`)
+		ORDER BY at ASC, id ASC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list journal by subjects: %w", err)
+	}
+	defer closeRows(rows)
+	return scanJournalRows(rows)
+}
+
 func scanJournalRows(rows *sql.Rows) ([]domain.JournalEntry, error) {
 	out := make([]domain.JournalEntry, 0)
 	for rows.Next() {
