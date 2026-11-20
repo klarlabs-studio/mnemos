@@ -232,6 +232,42 @@ func (r RelationshipRepository) ListAll(ctx context.Context) ([]domain.Relations
 	return out, nil
 }
 
+// PageByType implements ports.RelationshipTypePager from
+// idx_relationships_type_created.
+func (r RelationshipRepository) PageByType(ctx context.Context, relType domain.RelationshipType, limit, offset int) ([]domain.Relationship, int, error) {
+	var total int
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM relationships WHERE type = ?`, string(relType)).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count relationships of type %s: %w", relType, err)
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, derived_by
+		 FROM relationships
+		 WHERE type = ?
+		 ORDER BY created_at DESC, id DESC
+		 LIMIT ? OFFSET ?`, string(relType), limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("page relationships of type %s: %w", relType, err)
+	}
+	defer closeRows(rows)
+	out := make([]domain.Relationship, 0, limit)
+	for rows.Next() {
+		var id, typ, from, to, createdStr, createdBy, derivedBy string
+		if err := rows.Scan(&id, &typ, &from, &to, &createdStr, &createdBy, &derivedBy); err != nil {
+			return nil, 0, fmt.Errorf("scan relationship row: %w", err)
+		}
+		t, err := time.Parse(time.RFC3339Nano, createdStr)
+		if err != nil {
+			return nil, 0, fmt.Errorf("parse relationship created_at: %w", err)
+		}
+		out = append(out, domain.Relationship{ID: id, Type: domain.RelationshipType(typ), FromClaimID: from, ToClaimID: to,
+			CreatedAt: t, CreatedBy: createdBy, DerivedBy: derivedBy})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate relationship rows: %w", err)
+	}
+	return out, total, nil
+}
+
 // ListByType implements ports.RelationshipTypeLister. The type prefix of
 // idx_relationships_unique_edge serves the filter.
 func (r RelationshipRepository) ListByType(ctx context.Context, relType domain.RelationshipType) ([]domain.Relationship, error) {

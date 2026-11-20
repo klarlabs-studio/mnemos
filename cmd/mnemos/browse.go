@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -192,51 +193,21 @@ func listCandidateClaims(ctx context.Context, conn *store.Conn, runID string) ([
 	return deduped, nil
 }
 
-// listContradictionPairs assembles every contradicts edge with the
-// surrounding claim text using ports — Relationships.ListAll +
-// Claims.ListByIDs for the hop, then in-memory pagination.
+// listContradictionPairs pages the contradicts edges, newest first
+// (created_at descending, id descending on ties), with the surrounding claim
+// text. Without a run it reads one page through ports.RelationshipTypePager,
+// an indexed query; it used to decode every association in the brain to
+// page 50 contradictions (ADR 0043).
 //
 // A non-empty runID keeps only edges whose BOTH endpoints belong to that run.
 // Requiring both is deliberate: the pair is hydrated with each claim's text,
 // so admitting an edge with one foot outside the run would hand the caller the
 // text of a claim it is not scoped to read.
 func listContradictionPairs(ctx context.Context, conn *store.Conn, runID string, limit, offset int) ([]mcpContradictionPair, int, error) {
-	allRels, err := conn.Relationships.ListAll(ctx)
+	page, total, err := pageContradictions(ctx, conn, runID, limit, offset)
 	if err != nil {
-		return nil, 0, fmt.Errorf("list relationships: %w", err)
+		return nil, 0, err
 	}
-	var runClaims map[string]struct{}
-	if runID != "" {
-		scoped, err := listCandidateClaims(ctx, conn, runID)
-		if err != nil {
-			return nil, 0, err
-		}
-		runClaims = make(map[string]struct{}, len(scoped))
-		for _, c := range scoped {
-			runClaims[c.ID] = struct{}{}
-		}
-	}
-	contradictions := make([]domain.Relationship, 0)
-	for _, r := range allRels {
-		if string(r.Type) != "contradicts" {
-			continue
-		}
-		if runClaims != nil {
-			if _, ok := runClaims[r.FromClaimID]; !ok {
-				continue
-			}
-			if _, ok := runClaims[r.ToClaimID]; !ok {
-				continue
-			}
-		}
-		contradictions = append(contradictions, r)
-	}
-	// most-recent-first
-	for i, j := 0, len(contradictions)-1; i < j; i, j = i+1, j-1 {
-		contradictions[i], contradictions[j] = contradictions[j], contradictions[i]
-	}
-	total := len(contradictions)
-	page := paginate(contradictions, limit, offset)
 
 	// Resolve claim text for the page only — saves materialising
 	// every claim row when the operator only asked for one screen.
@@ -271,6 +242,62 @@ func listContradictionPairs(ctx context.Context, conn *store.Conn, runID string,
 		})
 	}
 	return pairs, total, nil
+}
+
+// pageContradictions returns one page of contradicts edges in
+// listContradictionPairs' order, and how many there are in all.
+func pageContradictions(ctx context.Context, conn *store.Conn, runID string, limit, offset int) ([]domain.Relationship, int, error) {
+	if pager, ok := conn.Relationships.(ports.RelationshipTypePager); ok && runID == "" {
+		page, total, err := pager.PageByType(ctx, domain.RelationshipTypeContradicts, limit, offset)
+		if err != nil {
+			return nil, 0, fmt.Errorf("page contradictions: %w", err)
+		}
+		return page, total, nil
+	}
+	var rels []domain.Relationship
+	var err error
+	if lister, ok := conn.Relationships.(ports.RelationshipTypeLister); ok {
+		rels, err = lister.ListByType(ctx, domain.RelationshipTypeContradicts)
+	} else {
+		rels, err = conn.Relationships.ListAll(ctx)
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("list relationships: %w", err)
+	}
+	var runClaims map[string]struct{}
+	if runID != "" {
+		scoped, err := listCandidateClaims(ctx, conn, runID)
+		if err != nil {
+			return nil, 0, err
+		}
+		runClaims = make(map[string]struct{}, len(scoped))
+		for _, c := range scoped {
+			runClaims[c.ID] = struct{}{}
+		}
+	}
+	contradictions := make([]domain.Relationship, 0)
+	for _, r := range rels {
+		if r.Type != domain.RelationshipTypeContradicts {
+			continue
+		}
+		if runClaims != nil {
+			if _, ok := runClaims[r.FromClaimID]; !ok {
+				continue
+			}
+			if _, ok := runClaims[r.ToClaimID]; !ok {
+				continue
+			}
+		}
+		contradictions = append(contradictions, r)
+	}
+	sort.SliceStable(contradictions, func(i, j int) bool {
+		a, b := contradictions[i], contradictions[j]
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.After(b.CreatedAt)
+		}
+		return a.ID > b.ID
+	})
+	return paginate(contradictions, limit, offset), len(contradictions), nil
 }
 
 func normalizePagination(limit, offset int) (int, int) {

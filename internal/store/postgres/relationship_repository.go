@@ -219,6 +219,28 @@ FROM %s ORDER BY created_at ASC`, qualify(r.ns, "relationships")))
 	return collectRelationshipRows(rows)
 }
 
+// PageByType implements ports.RelationshipTypePager from
+// idx_relationships_type_created.
+func (r RelationshipRepository) PageByType(ctx context.Context, relType domain.RelationshipType, limit, offset int) ([]domain.Relationship, int, error) {
+	var total int
+	if err := r.db.QueryRowContext(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE type = $1`, qualify(r.ns, "relationships")), string(relType)).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count relationships of type %s: %w", relType, err)
+	}
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
+SELECT id, type, from_claim_id, to_claim_id, created_at, created_by, strength, derived_by
+FROM %s WHERE type = $1
+ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3`, qualify(r.ns, "relationships")), string(relType), limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("page relationships of type %s: %w", relType, err)
+	}
+	defer func() { _ = rows.Close() }()
+	out, err := collectRelationshipRows(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return out, total, nil
+}
+
 // ListByClaimIDs satisfies the corresponding ports method.
 func (r RelationshipRepository) ListByClaimIDs(ctx context.Context, claimIDs []string) ([]domain.Relationship, error) {
 	if len(claimIDs) == 0 {

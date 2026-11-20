@@ -212,6 +212,9 @@ CREATE TABLE IF NOT EXISTS relationships (
   CONSTRAINT fk_relationships_from FOREIGN KEY (from_claim_id) REFERENCES claims(id),
   CONSTRAINT fk_relationships_to   FOREIGN KEY (to_claim_id)   REFERENCES claims(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- list_dissonances pages one type newest first (RelationshipTypePager, ADR 0043).
+-- CREATE INDEX has no IF NOT EXISTS here; a re-run's 1061 is tolerated.
+CREATE INDEX idx_relationships_type_created ON relationships (type, created_at, id);
 -- Columns added after the table first shipped, so existing databases gain
 -- them too. strength (ADR 0015) was missing this ALTER: a MySQL brain created
 -- before it never got the column.

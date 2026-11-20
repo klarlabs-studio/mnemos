@@ -114,6 +114,14 @@ notable changes.
 
 ### Fixed
 
+- `list_dissonances` (MCP, and the browse surfaces that share it) reads one page of
+  contradictions from an index instead of decoding every association in the brain (ADR 0043).
+  At 100k beliefs the old path took ~0.45–0.66 s per page; the indexed read measured
+  ~1.3 ms. Every backend gains `idx_relationships_type_created` on
+  `relationships(type, created_at, id)` and implements the new optional
+  `ports.RelationshipTypePager`. Ties on `created_at` now order by id, descending. A
+  run-scoped listing still filters in Go, but reads only the contradicts edges.
+
 - Retracting an episode now reaches beliefs whose evidence depends on it through a cycle of
   episode dependencies (ADR 0038, found by ADR 0043). The independence check memoised the
   "independent" answer a cycle cut gave part-way through a walk, so with A depending on B and

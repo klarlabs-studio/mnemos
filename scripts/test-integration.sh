@@ -87,9 +87,11 @@ for i in $(seq 1 120); do
 done
 
 echo "running integration tests…"
+# -timeout matches the test step in .warden.yaml: the cross-backend suite in
+# ./internal/store/ ran past Go's 10m default on a loaded machine.
 TEST_POSTGRES_DSN="${PG_DSN}" \
 TEST_MYSQL_DSN="${MY_DSN}" \
-  go test -race -count=1 ./internal/store/postgres/ ./internal/store/mysql/ ./internal/store/ ./internal/govwrite/
+  go test -race -count=1 -timeout 30m ./internal/store/postgres/ ./internal/store/mysql/ ./internal/store/ ./internal/govwrite/
 # ./internal/store/ holds the cross-backend suites (trust invariance,
 # DeleteByIDs, ...): without a live Postgres and MySQL they run on memory and
 # SQLite only, which is how they ran everywhere before this line.
