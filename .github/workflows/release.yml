@@ -67,15 +67,15 @@ jobs:
       # Homebrew tap token, so every binary it executes is verified against a
       # hash committed here. The hashes are nox's own published checksums
       # (checksums.txt, whose cosign bundle verifies against
-      # Nox-HQ/nox/.github/workflows/release.yml@refs/tags/v1.30.1), cross-
+      # Nox-HQ/nox/.github/workflows/release.yml@refs/tags/v1.63.0), cross-
       # checked against independently downloaded archives. To bump: download
       # checksums.txt for the new tag, `cosign verify-blob` its bundle, copy the
       # two linux lines here.
       - name: Install nox (sha256-verified)
         env:
-          NOX_VERSION: 1.30.1
-          NOX_SHA256_LINUX_AMD64: e90114e9f37b038af6d2e7f603c5f40684d7a3120f4f377b8a5741aba1b031da
-          NOX_SHA256_LINUX_ARM64: 6aaec64374a5594471226fd3cb48d8475abad3679ed01a6d0036209cbaf998fb
+          NOX_VERSION: 1.63.0
+          NOX_SHA256_LINUX_AMD64: 58c4f348675d2d965e6577bb5d040d387eea82e2d0a4baeb288721f1b0d1b453
+          NOX_SHA256_LINUX_ARM64: af6a4d6eb95dd0bb33f10fceac65470e0b25eea873da4b5f2bb59c5cb171527d
         run: |
           set -euo pipefail
           # No "already on PATH" shortcut: a pre-installed nox is unverified.
