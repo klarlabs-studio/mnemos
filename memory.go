@@ -1137,6 +1137,11 @@ type BrainHealth struct {
 	Estimates map[string]VitalEstimate `json:"estimates,omitempty"`
 	// At is when the report was computed.
 	At time.Time `json:"at"`
+	// ModelVersion names the health model the report was graded under: the
+	// vitals' definitions and thresholds ([HealthModelVersion]). A journal
+	// series of snapshots can then tell a change of rules from a change of the
+	// brain (#389). Empty in snapshots written before it existed.
+	ModelVersion string `json:"model_version,omitempty"`
 }
 
 // SignalQuery selects which temporal signals [Memory.Signals] returns.

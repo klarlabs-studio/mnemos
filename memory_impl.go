@@ -2369,6 +2369,31 @@ func (m *memory) liveBeliefCount(ctx context.Context, h *healthCorpus) (int, err
 	return n, nil
 }
 
+// HealthModelVersion identifies the rules a [BrainHealth] report is graded
+// under. Bump it whenever a vital's definition or any threshold below
+// changes: a snapshot series that crosses a bump compares two rule sets, not
+// one brain at two times. TestHealthModelVersion_PinsThresholds fails when a
+// threshold moves without a bump.
+const HealthModelVersion = "health/v1"
+
+// healthThresholds lists every grading threshold by name, for the version pin.
+func healthThresholds() map[string]float64 {
+	return map[string]float64{
+		"free_energy.warn": healthFreeEnergyWarn, "free_energy.crit": healthFreeEnergyCrit,
+		"calibration.warn": healthCalibrationWarn, "calibration.crit": healthCalibrationCrit,
+		"dissonance.warn": healthDissonanceWarn, "dissonance.crit": healthDissonanceCrit,
+		"low_trust.warn": healthLowTrustWarn, "low_trust.crit": healthLowTrustCrit,
+		"low_trust.floor": healthLowTrustFloor,
+		"staleness.warn":  healthStalenessWarn, "staleness.crit": healthStalenessCrit,
+		"staleness.horizon_days": healthStalenessHorizonDays,
+		"skill_coverage.warn":    healthSkillCoverageWarn, "skill_coverage.crit": healthSkillCoverageCrit,
+		"trust_decay.warn": healthTrustDecayWarn, "trust_decay.crit": healthTrustDecayCrit,
+		"trust_decay.horizon_days": healthTrustDecayHorizonDays,
+		"trust_decay.min_expected": healthTrustDecayMinExpected,
+		"stale_expectations.crit":  healthStaleExpectationCrit,
+	}
+}
+
 // Brain-health thresholds (ADR 0019, ADR 0032). The rate vitals are "higher is
 // worse" values in [0,1]; trust_decay is a ratio against the steady-state rate
 // (1.0 = normal flow). One direction suffices for both: value >= crit →
@@ -2590,6 +2615,14 @@ func (m *memory) Calibration(ctx context.Context) (Calibration, error) {
 }
 
 // calibrationIn is Calibration over a health computation's shared snapshot.
+//
+// Its population is every adjudicated belief, retired ones included, unlike
+// the other vitals' live-belief population (#389). That is deliberate: a
+// refuted belief is usually deprecated or valid-time-closed because it was
+// refuted, so restricting calibration to live beliefs would drop exactly the
+// confidently-wrong verdicts and grade a brain better the more of its mistakes
+// it had cleaned up. TestCalibration_CountsBeliefsRetiredAfterTheirVerdict
+// pins it.
 func (m *memory) calibrationIn(ctx context.Context, h *healthCorpus) (Calibration, error) {
 	validates, err := m.conn.EntityRels.ListByKind(ctx, string(domain.RelationshipTypeValidates))
 	if err != nil {

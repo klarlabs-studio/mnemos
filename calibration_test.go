@@ -181,3 +181,37 @@ func TestCalibration_EmptyIsZero(t *testing.T) {
 		t.Fatalf("empty store must yield a zero Calibration, got %+v", cal)
 	}
 }
+
+// #389 asked whether calibration should drop deprecated and valid-time-closed
+// beliefs, as the other vitals do. It must not: a refuted belief is usually
+// retired BECAUSE it was refuted, so dropping retired beliefs would drop the
+// confidently-wrong cases calibration exists to count, and a brain would look
+// better calibrated the more of its mistakes it cleaned up.
+func TestCalibration_CountsBeliefsRetiredAfterTheirVerdict(t *testing.T) {
+	m := calibMem(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	retired := func(id string, mutate func(*domain.Claim)) {
+		c := domain.Claim{ID: id, Text: "claim " + id, Type: domain.ClaimTypeFact, Confidence: 0.9,
+			Status: domain.ClaimStatusActive, CreatedAt: now.Add(-time.Hour), ValidFrom: now.Add(-time.Hour)}
+		mutate(&c)
+		if err := m.conn.Claims.Upsert(ctx, []domain.Claim{c}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+		adjudicate(t, m, "e-"+id, id, false, now.Add(-30*time.Minute))
+	}
+	retired("wrong-deprecated", func(c *domain.Claim) { c.Status = domain.ClaimStatusDeprecated })
+	retired("wrong-closed", func(c *domain.Claim) { c.ValidTo = now })
+
+	cal, err := m.Calibration(ctx)
+	if err != nil {
+		t.Fatalf("Calibration: %v", err)
+	}
+	if cal.Samples != 2 {
+		t.Fatalf("Samples = %d, want 2: retired beliefs dropped their refutations", cal.Samples)
+	}
+	if !approx(cal.ECE, 0.9, 1e-9) {
+		t.Errorf("ECE = %.4f, want 0.9 (stated 0.9, never right)", cal.ECE)
+	}
+}
