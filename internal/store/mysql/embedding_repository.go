@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -106,7 +106,7 @@ ON DUPLICATE KEY UPDATE
   dimensions = VALUES(dimensions),
   created_at = VALUES(created_at)`,
 		entityID, entityType, blob, model, len(vector),
-		time.Now().UTC(), actorOr(createdBy),
+		clock.Now().UTC(), actorOr(createdBy),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert embedding: %w", err)

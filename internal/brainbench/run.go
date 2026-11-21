@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/clock"
 )
 
 // Activity is what the process REPORTED doing — the ConsolidateResult counters.
@@ -160,7 +161,22 @@ func Run(ctx context.Context, sc Scenario, workDir string) (ScenarioResult, erro
 
 // run is Run with the retraction under test injectable, so a test can prove
 // the retraction track reports a retraction that destroys knowledge.
+//
+// The whole scenario — seed, warmup, treatment and every measurement — runs on
+// one simulated clock (see clock.go), so two runs of a scenario produce the
+// same instants and therefore the same numbers.
 func run(ctx context.Context, sc Scenario, workDir string, retract retractFunc) (ScenarioResult, error) {
+	var res ScenarioResult
+	err := withSimulatedClock(func(sim *clock.Simulated) error {
+		var err error
+		res, err = runScenario(ctx, sc, workDir, retract, sim)
+		return err
+	})
+	return res, err
+}
+
+// runScenario is run's body, on the simulated clock sim.
+func runScenario(ctx context.Context, sc Scenario, workDir string, retract retractFunc, sim *clock.Simulated) (ScenarioResult, error) {
 	started := time.Now()
 	res := ScenarioResult{
 		ID:          sc.ID,
@@ -175,7 +191,7 @@ func run(ctx context.Context, sc Scenario, workDir string, retract retractFunc) 
 	}
 
 	seedPath := filepath.Join(dir, "seed.db")
-	seedStats, err := Seed(ctx, "sqlite://"+seedPath, sc)
+	seedStats, err := Seed(ctx, "sqlite://"+seedPath, sc, sim)
 	if err != nil {
 		return res, err
 	}

@@ -8,6 +8,7 @@ import (
 	axidomain "go.klarlabs.de/axi/domain"
 
 	"go.klarlabs.de/mnemos/internal/beliefops"
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/kernel"
 )
@@ -268,7 +269,7 @@ func (m *memory) VerifyClaim(ctx context.Context, claimID string) (time.Time, er
 	if err := beliefops.Require(ctx, m.conn, claimID); err != nil {
 		return time.Time{}, fmt.Errorf("mnemos: VerifyClaim: %w", err)
 	}
-	out, err := dispatchWrite[beliefops.Verification](ctx, m, actionVerifyClaim, verifyClaimInput{ClaimID: claimID, At: time.Now()})
+	out, err := dispatchWrite[beliefops.Verification](ctx, m, actionVerifyClaim, verifyClaimInput{ClaimID: claimID, At: clock.Now()})
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -285,7 +286,7 @@ func (m *memory) RecordFeedback(ctx context.Context, claimID string, helpful boo
 	}
 	out, err := dispatchWrite[beliefops.FeedbackResult](ctx, m, actionRecordFeedback, recordFeedbackInput{
 		Req: beliefops.FeedbackRequest{ClaimID: claimID, Helpful: helpful, Note: note, Actor: m.actorID},
-		At:  time.Now(),
+		At:  clock.Now(),
 	})
 	if err != nil {
 		return FeedbackResult{}, err

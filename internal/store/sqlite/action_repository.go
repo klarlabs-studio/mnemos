@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store/sqlite/sqlcgen"
 )
@@ -38,7 +39,7 @@ func (r ActionRepository) Append(ctx context.Context, action domain.Action) erro
 	}
 	createdAt := action.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	return r.q.CreateAction(ctx, sqlcgen.CreateActionParams{
 		ID:           action.ID,

@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -32,7 +32,7 @@ func (r OutcomeRepository) Append(ctx context.Context, outcome domain.Outcome) e
 	}
 	createdAt := outcome.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	_, err = r.db.ExecContext(ctx, `
 INSERT IGNORE INTO outcomes (id, action_id, result, metrics_json, notes, observed_at, source, created_by, created_at)

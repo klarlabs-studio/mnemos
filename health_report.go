@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -122,7 +123,7 @@ func (t *beliefTally) assess(c domain.Claim, in domain.TrustInput, hasInputs boo
 
 // exactBrainHealth computes every vital over every belief.
 func (m *memory) exactBrainHealth(ctx context.Context) (BrainHealth, error) {
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	// One snapshot for every vital and check below (healthCorpus).
 	h := m.newHealthCorpus()
 	claims, err := h.Claims(ctx)
@@ -185,7 +186,7 @@ func (m *memory) exactBrainHealth(ctx context.Context) (BrainHealth, error) {
 // of live beliefs and computes everything else exactly, through the store's
 // counts. When the sample covers every live belief it is the exact report.
 func (m *memory) sampledBrainHealth(ctx context.Context, s ports.HealthSampler, live int) (BrainHealth, error) {
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	h := m.newHealthCorpus()
 	h.liveCount = live
 	h.sampler = s

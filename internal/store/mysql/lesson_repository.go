@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -275,7 +276,7 @@ func (r LessonRepository) snapshotIfExists(ctx context.Context, lessonID string)
 	_, err = r.db.ExecContext(ctx, `
 INSERT INTO lesson_versions (lesson_id, payload_json, valid_from, valid_to)
 VALUES (?, CAST(? AS JSON), ?, ?)`,
-		lessonID, string(payload), current.DerivedAt.UTC(), time.Now().UTC(),
+		lessonID, string(payload), current.DerivedAt.UTC(), clock.Now().UTC(),
 	)
 	return err
 }

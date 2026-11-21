@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store/sqlite/sqlcgen"
@@ -220,7 +221,7 @@ func (r PlaybookRepository) snapshotIfExists(ctx context.Context, playbookID str
 	if err != nil {
 		return fmt.Errorf("marshal playbook snapshot: %w", err)
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := clock.Now().UTC().Format(time.RFC3339Nano)
 	_, err = r.db.ExecContext(ctx, `
 INSERT INTO playbook_versions (playbook_id, payload_json, valid_from, valid_to)
 VALUES (?, ?, ?, ?)`,

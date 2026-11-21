@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -63,7 +64,7 @@ func (m *memory) RecordAction(ctx context.Context, item ActionItem) (string, err
 	}
 	at := item.At
 	if at.IsZero() {
-		at = time.Now().UTC()
+		at = clock.Now().UTC()
 	}
 	if err := m.conn.Actions.Append(ctx, domain.Action{
 		ID:        id,
@@ -73,7 +74,7 @@ func (m *memory) RecordAction(ctx context.Context, item ActionItem) (string, err
 		At:        at,
 		Metadata:  item.Metadata,
 		CreatedBy: item.Actor,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: clock.Now().UTC(),
 	}); err != nil {
 		return "", fmt.Errorf("mnemos: RecordAction: %w", err)
 	}
@@ -94,7 +95,7 @@ func (m *memory) RecordActionOutcome(ctx context.Context, item OutcomeItem) erro
 	}
 	at := item.At
 	if at.IsZero() {
-		at = time.Now().UTC()
+		at = clock.Now().UTC()
 	}
 	result := domain.OutcomeResult(item.Result)
 	if result == "" {
@@ -108,6 +109,6 @@ func (m *memory) RecordActionOutcome(ctx context.Context, item OutcomeItem) erro
 		Notes:      item.Notes,
 		ObservedAt: at,
 		Source:     "push",
-		CreatedAt:  time.Now().UTC(),
+		CreatedAt:  clock.Now().UTC(),
 	})
 }

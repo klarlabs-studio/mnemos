@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store/sqlite/sqlcgen"
@@ -294,7 +295,7 @@ func (r LessonRepository) snapshotIfExists(ctx context.Context, lessonID string)
 	if err != nil {
 		return fmt.Errorf("marshal lesson snapshot: %w", err)
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := clock.Now().UTC().Format(time.RFC3339Nano)
 	_, err = r.db.ExecContext(ctx, `
 INSERT INTO lesson_versions (lesson_id, payload_json, valid_from, valid_to)
 VALUES (?, ?, ?, ?)`,

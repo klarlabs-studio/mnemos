@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -64,7 +65,7 @@ func (r BlockRepository) Upsert(ctx context.Context, block domain.WorkingMemoryB
 	}
 	updatedAt := block.UpdatedAt
 	if updatedAt.IsZero() {
-		updatedAt = time.Now().UTC()
+		updatedAt = clock.Now().UTC()
 	}
 	_, err := r.db.ExecContext(ctx, fmt.Sprintf(`
 INSERT INTO %s (owner, label, content, updated_at)

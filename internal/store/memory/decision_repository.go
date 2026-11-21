@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -24,7 +25,7 @@ func (r DecisionRepository) Append(_ context.Context, decision domain.Decision) 
 	defer r.state.mu.Unlock()
 	createdAt := decision.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	stored := storedDecision{
 		ID:              decision.ID,

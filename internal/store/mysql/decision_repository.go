@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -32,7 +32,7 @@ func (r DecisionRepository) Append(ctx context.Context, decision domain.Decision
 	}
 	createdAt := decision.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	_, err = r.db.ExecContext(ctx, `
 INSERT INTO decisions (id, statement, plan, reasoning, risk_level, alternatives_json, outcome_id, chosen_at, created_by, created_at, refuted_beliefs_json, failed_outcome_id)

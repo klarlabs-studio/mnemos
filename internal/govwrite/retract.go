@@ -11,6 +11,7 @@ import (
 
 	axidomain "go.klarlabs.de/axi/domain"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/retraction"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -55,7 +56,7 @@ func (e retractEventExecutor) Execute(ctx context.Context, input any, _ axidomai
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("retract_event: unexpected input %T", input)
 	}
-	rep, err := retractEvent(ctx, e.conn, in.EventID, in.Note, time.Now().UTC())
+	rep, err := retractEvent(ctx, e.conn, in.EventID, in.Note, clock.Now().UTC())
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("retract event %s: %w", in.EventID, err)
 	}
@@ -92,7 +93,7 @@ func ApplyRetraction(ctx context.Context, conn *store.Conn, eventID string, note
 	if eventID == "" {
 		return domain.EventRetraction{}, errors.New("retract event: event id is required")
 	}
-	return retractEvent(ctx, conn, eventID, note, time.Now().UTC())
+	return retractEvent(ctx, conn, eventID, note, clock.Now().UTC())
 }
 
 // LookupRetraction returns eventID's retraction in force now, and false when

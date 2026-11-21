@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -69,7 +70,7 @@ func (e Engine) BuildContextBlock(ctx context.Context, opts ContextBlockOptions)
 	// valid time has closed was superseded, and an archived one was forgotten: either is history, and the
 	// block lists it under "Active claims", so it does not belong here. Recall
 	// already drops it unless the caller asks for history.
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	active := keepClaims(recallPopulation(claims), func(c domain.Claim) bool { return c.IsValidAt(now) && !c.IsArchived() })
 
 	// Honour the Query filter. This field was declared, documented ("empty
@@ -123,7 +124,7 @@ func (e Engine) BuildContextBlock(ctx context.Context, opts ContextBlockOptions)
 func formatEmpty(runID string) string {
 	return fmt.Sprintf(
 		"# Memory context (run %s)\n## Active claims (0)\n## Contradictions (0)\n## Footer\nGenerated %s. claims=0 contradictions=0\n",
-		runID, time.Now().UTC().Format(time.RFC3339),
+		runID, clock.Now().UTC().Format(time.RFC3339),
 	)
 }
 
@@ -151,7 +152,7 @@ func formatContextBlock(opts ContextBlockOptions, claims []domain.Claim, contrad
 	}
 
 	fmt.Fprintf(&b, "## Footer\nGenerated %s. claims=%d contradictions=%d\n",
-		time.Now().UTC().Format(time.RFC3339), len(claims), len(contradictions))
+		clock.Now().UTC().Format(time.RFC3339), len(claims), len(contradictions))
 
 	return b.String()
 }

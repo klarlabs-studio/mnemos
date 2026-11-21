@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -48,7 +49,7 @@ type Engine struct {
 // NewEngine returns an Engine with default clock and ID generation.
 func NewEngine() Engine {
 	return Engine{
-		now:    time.Now,
+		now:    clock.Now,
 		nextID: newRelationshipID,
 	}
 }

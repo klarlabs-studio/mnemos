@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -113,7 +114,7 @@ func (r ClaimRepository) versionedTrustInputWrite(ctx context.Context, claimID s
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("claim %s: %w", claimID, sql.ErrNoRows)
 	}
-	if err := r.recordTrustInputChange(ctx, tx, claimID, prior, time.Now().UTC()); err != nil {
+	if err := r.recordTrustInputChange(ctx, tx, claimID, prior, clock.Now().UTC()); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

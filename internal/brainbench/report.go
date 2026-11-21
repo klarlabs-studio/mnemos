@@ -74,8 +74,10 @@ func DefaultConfig() Config {
 			"control untreated, treatment consolidated, third untreated arm measures the noise floor; " +
 			"raw-retrieval baselines over the seed's event texts are scored on the same questions " +
 			"and compared with the control arm, outside the A/B verdict",
-		Clock: "corpus scenarios: one wall-clock anchor, back-dated by age_days; " +
-			"timeline scenarios: phases written on the real store clock, milliseconds apart",
+		Clock: "simulated (internal/clock): every scenario starts at " + simEpoch.Format(time.RFC3339) +
+			" and each clock read advances it " + simTick.String() + ", so stamps and trust freshness are " +
+			"identical across runs; corpus scenarios back-date by age_days from that anchor; " +
+			"timeline phases are clock advances milliseconds apart",
 	}
 }
 
@@ -137,9 +139,9 @@ func Limitations() []string {
 			"SQLite file dominated by schema and history tables, the baselines' an in-memory index; " +
 			"embedding is the free stub, so a real provider's ingest and query cost is absent; and " +
 			"nothing here says how either side's cost grows with corpus size.",
-		"Timeline phases are milliseconds apart on the wall clock, not days. Valid-time freshness and " +
-			"decay see no age difference between phases, and a wall-clock step backwards during a run " +
-			"would misorder them (TestRun_TimelinePhasesAreOrderedOnTheWriteClock guards the order). " +
+		"Timeline phases are milliseconds apart on the simulated clock, not days. Valid-time freshness " +
+			"and decay see no age difference between phases " +
+			"(TestRun_TimelinePhasesAreOrderedOnTheWriteClock guards the order). " +
 			"Trust is current on a recorded-as-of read (ADR 0036 §3) and merges are not rewound.",
 	}
 }

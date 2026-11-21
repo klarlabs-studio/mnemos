@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/llm"
@@ -466,7 +467,7 @@ func (e Engine) reconsolidateRecalled(ctx context.Context, opts AnswerOptions, a
 	if !opts.Reconsolidate || len(ans.Claims) == 0 {
 		return nil
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	n := len(ans.Claims)
 	if n > hebbianCoactivationTopN {
 		n = hebbianCoactivationTopN
@@ -840,7 +841,7 @@ func (e Engine) answerWithEvents(ctx context.Context, question string, allEvents
 	// valid-time, recorded-time). Factored into admitClaims so hop expansion
 	// below can run the IDENTICAL gate — it used to append its results raw,
 	// which made `forget` and every one of these filters escapable with hops≥1.
-	nowUTC := time.Now().UTC()
+	nowUTC := clock.Now().UTC()
 	claims = admitClaims(claims, opts, nowUTC)
 
 	// Re-rank claims by semantic similarity when embeddings are available. When
@@ -2485,7 +2486,7 @@ func (e Engine) WhyTrustClaim(ctx context.Context, claimID string) (domain.Prove
 	}
 	c := claims[0]
 
-	nowUTC := time.Now().UTC()
+	nowUTC := clock.Now().UTC()
 	if c.LastExecuted.IsZero() {
 		c.LastExecuted = trust.EffectiveExecutionTime(c.LastExecuted, c.LastVerified, c.ValidFrom, c.CreatedAt)
 	}
@@ -2546,7 +2547,7 @@ func (e Engine) ComputeMemoryQuality(ctx context.Context) (MemoryQualityMetrics,
 
 	var trustSum, confSum, citSum float64
 	staleCount, contestedCount := 0, 0
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	const staleHorizonDays = 90.0 // a currently-valid belief unverified this long is stale
 	for _, c := range claims {
 		trustSum += c.TrustScore

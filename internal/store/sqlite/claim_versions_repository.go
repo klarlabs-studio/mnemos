@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -31,7 +32,7 @@ func (r ClaimVersionRepository) Append(ctx context.Context, v domain.ClaimVersio
 	}
 	writtenAt := v.WrittenAt
 	if writtenAt.IsZero() {
-		writtenAt = time.Now().UTC()
+		writtenAt = clock.Now().UTC()
 	}
 	writtenBy := v.WrittenBy
 	if writtenBy == "" {

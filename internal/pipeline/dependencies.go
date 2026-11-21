@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/provenance"
@@ -52,7 +53,7 @@ func RecordEventDependencies(ctx context.Context, conn *store.Conn, events []dom
 		ports.EventRepository
 		ports.EventSourceLister
 	}{conn.Events, lister}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	found, err := provenance.DetectAll(ctx, lookup, events, now, domain.SystemUser)
 	if err != nil {
 		return fmt.Errorf("detect episode dependencies: %w", err)

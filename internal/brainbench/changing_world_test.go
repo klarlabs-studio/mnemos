@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -161,18 +162,22 @@ func TestRun_AnnouncedAndLateChangesSeparateTheTimeAxes(t *testing.T) {
 // announced phase outrun its reservation, seeding must fail rather than start
 // the phase before the previous one ended.
 func TestPhaseStart_ReservationOverrunIsAnError(t *testing.T) {
-	reserved := map[string]time.Time{"mar": time.Now().UTC().Add(-time.Second)}
-	if _, err := phaseStart("mar", reserved); err == nil || !strings.Contains(err.Error(), "reserved") {
-		t.Fatalf("err = %v, want a reservation overrun", err)
-	}
-	at := time.Now().UTC().Add(20 * time.Millisecond)
-	start, err := phaseStart("apr", map[string]time.Time{"apr": at})
-	if err != nil || !start.Equal(at) {
-		t.Fatalf("start = %v, %v; want the reserved %v", start, err, at)
-	}
-	if time.Now().Before(at) {
-		t.Fatal("phaseStart returned before its reserved instant")
-	}
+	_ = withSimulatedClock(func(sim *clock.Simulated) error {
+		s := &seeder{sim: sim}
+		reserved := map[string]time.Time{"mar": clock.Now().UTC().Add(-time.Second)}
+		if _, err := s.phaseStart("mar", reserved); err == nil || !strings.Contains(err.Error(), "reserved") {
+			t.Fatalf("err = %v, want a reservation overrun", err)
+		}
+		at := clock.Now().UTC().Add(20 * time.Millisecond)
+		start, err := s.phaseStart("apr", map[string]time.Time{"apr": at})
+		if err != nil || !start.Equal(at) {
+			t.Fatalf("start = %v, %v; want the reserved %v", start, err, at)
+		}
+		if clock.Now().Before(at) {
+			t.Fatal("phaseStart returned before its reserved instant")
+		}
+		return nil
+	})
 }
 
 // TestScoreClasses_StrictRulePerClass: each class is scored by the strict rule

@@ -142,6 +142,24 @@ notable changes.
   corruption. On a synthetic brain with 50k beliefs and 600k edges the count fell from
   ~0.8 s to ~0.19 s warm. With 235k beliefs, 3M edges and 500 dangling edges (a busy
   machine, so noisy) the median fell from 22.8 s to 4.5 s, and both forms counted 500.
+- brainbench is reproducible across runs (#396). Two runs at the same commit now produce
+  the same report apart from `generated_at`, `duration_ms` and the cost report's
+  wall-clock latencies; before, noisy_capture's `answer_mrr` moved between 0.55 and 0.383
+  and `mean_trust` in the 8th decimal. Two causes, both removed at the root rather than
+  rounded away. (1) Trust and every stored stamp were evaluated on the wall clock, so
+  claims that should score identically were rescored microseconds apart and that
+  freshness decay decided their ranking order. A new `internal/clock` seam now supplies
+  every instant the library and the store backends read as data (stamps, trust freshness,
+  as-of "now"); production gets `time.Now`, and each brainbench scenario runs on a
+  simulated clock from a fixed epoch, one microsecond per read. Timeline phases become
+  clock advances instead of sleeps. (2) The seeder kept the extractor's random claim and
+  relationship ids, and the order of equally-scored candidates follows claim ids, so the
+  tail of every ablation ranking differed between seeds; it now derives them from the
+  scenario, document and position, as it already did for event ids.
+  `TestRun_IsReproducibleAcrossRuns` and `TestRunAblation_IsReproducibleAcrossRuns` pin it.
+  Durations and deadlines still read the real clock; `cmd/` and the server layers still
+  call `time.Now` directly.
+
 - `list_dissonances` (MCP, and the browse surfaces that share it) reads one page of
   contradictions from an index instead of decoding every association in the brain (ADR 0043).
   At 100k beliefs the old path took ~0.45–0.66 s per page; the indexed read measured

@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"maps"
 	"strings"
-	"time"
 
 	axidomain "go.klarlabs.de/axi/domain"
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
@@ -259,7 +259,7 @@ func (e rememberClaimExecutor) Execute(ctx context.Context, input any, _ axidoma
 		Type:       claimType,
 		Confidence: confidence,
 		Status:     domain.ClaimStatusActive,
-		CreatedAt:  time.Now().UTC(),
+		CreatedAt:  clock.Now().UTC(),
 		CreatedBy:  createdBy,
 		ValidFrom:  item.ValidFrom,
 		ValidTo:    item.ValidUntil,
@@ -462,7 +462,7 @@ func (e rememberEventExecutor) Execute(ctx context.Context, input any, _ axidoma
 		SourceInputID: "inline:" + id, // synthetic origin for direct API calls
 		Timestamp:     ev.At.UTC(),
 		Metadata:      meta,
-		IngestedAt:    time.Now().UTC(),
+		IngestedAt:    clock.Now().UTC(),
 		CreatedBy:     m.actorID,
 	}
 	if err := m.conn.Events.Append(ctx, stored); err != nil {
@@ -515,7 +515,7 @@ func (e recordDecisionExecutor) Execute(ctx context.Context, input any, _ axidom
 	}
 	chosenAt := d.ChosenAt
 	if chosenAt.IsZero() {
-		chosenAt = time.Now().UTC()
+		chosenAt = clock.Now().UTC()
 	}
 	risk := domain.RiskLevel(strings.TrimSpace(d.RiskLevel))
 	if risk == "" {
@@ -532,7 +532,7 @@ func (e recordDecisionExecutor) Execute(ctx context.Context, input any, _ axidom
 		OutcomeID:    strings.TrimSpace(d.OutcomeID),
 		ChosenAt:     chosenAt.UTC(),
 		CreatedBy:    m.actorID,
-		CreatedAt:    time.Now().UTC(),
+		CreatedAt:    clock.Now().UTC(),
 	}
 	if err := dom.Validate(); err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("record_decision: %w", err)

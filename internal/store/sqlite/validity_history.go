@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -69,7 +70,7 @@ func (r ClaimRepository) unarchiveChunk(ctx context.Context, ids []string, note 
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	for _, a := range found {
 		if _, err := tx.ExecContext(ctx, `UPDATE claims SET archived_at = '' WHERE id = ?`, a.id); err != nil {
 			return 0, fmt.Errorf("unarchive %s: %w", a.id, err)
@@ -117,7 +118,7 @@ func (r ClaimRepository) changeValidity(ctx context.Context, claimID string, fie
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE claims SET %s = ? WHERE id = ?`, field), stored, claimID); err != nil {
 		return fmt.Errorf("set %s of %s: %w", field, claimID, err)
 	}
-	if err := insertValidityChange(ctx, tx, claimID, field, from.String, toText, time.Now().UTC(), note); err != nil {
+	if err := insertValidityChange(ctx, tx, claimID, field, from.String, toText, clock.Now().UTC(), note); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

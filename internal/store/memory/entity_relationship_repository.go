@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -37,7 +37,7 @@ func (r EntityRelationshipRepository) Upsert(_ context.Context, edges []domain.E
 		}
 		createdAt := e.CreatedAt
 		if createdAt.IsZero() {
-			createdAt = time.Now().UTC()
+			createdAt = clock.Now().UTC()
 		}
 		stored := domain.EntityRelationship{
 			ID: e.ID, Kind: e.Kind,

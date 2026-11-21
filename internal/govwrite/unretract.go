@@ -11,6 +11,7 @@ import (
 
 	axidomain "go.klarlabs.de/axi/domain"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/retraction"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -51,7 +52,7 @@ func (e unretractEventExecutor) Execute(ctx context.Context, input any, _ axidom
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("unretract_event: unexpected input %T", input)
 	}
-	rep, err := unretractEvent(ctx, e.conn, in.EventID, in.Note, time.Now().UTC())
+	rep, err := unretractEvent(ctx, e.conn, in.EventID, in.Note, clock.Now().UTC())
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("unretract event %s: %w", in.EventID, err)
 	}
@@ -87,7 +88,7 @@ func ApplyUnretraction(ctx context.Context, conn *store.Conn, eventID string, no
 	if eventID == "" {
 		return domain.EventUnretraction{}, errors.New("unretract event: event id is required")
 	}
-	return unretractEvent(ctx, conn, eventID, note, time.Now().UTC())
+	return unretractEvent(ctx, conn, eventID, note, clock.Now().UTC())
 }
 
 func unretractEvent(ctx context.Context, conn *store.Conn, eventID string, note domain.ChangeNote, now time.Time) (domain.EventUnretraction, error) {

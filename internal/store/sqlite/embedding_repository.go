@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -98,7 +99,7 @@ func (r EmbeddingRepository) Upsert(ctx context.Context, entityID, entityType st
 		Vector:     blob,
 		Model:      model,
 		Dimensions: int64(len(vector)),
-		CreatedAt:  time.Now().UTC().Format(time.RFC3339Nano),
+		CreatedAt:  clock.Now().UTC().Format(time.RFC3339Nano),
 		CreatedBy:  actorOr(createdBy),
 	})
 }

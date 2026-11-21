@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/pipeline"
@@ -58,7 +61,13 @@ type SeedStats struct {
 // No LLM and no network: extraction is rule-based and embeddings come from the
 // deterministic stub. The report says so; results here say nothing about the
 // LLM extraction path.
-func Seed(ctx context.Context, dsn string, sc Scenario) (SeedStats, error) {
+//
+// sim is the simulated clock the caller installed (see clock.go); a timeline
+// advances it across phase boundaries instead of sleeping.
+func Seed(ctx context.Context, dsn string, sc Scenario, sim *clock.Simulated) (SeedStats, error) {
+	if sim == nil {
+		return SeedStats{}, fmt.Errorf("brainbench: seed needs the scenario's simulated clock")
+	}
 	conn, err := store.Open(ctx, dsn)
 	if err != nil {
 		return SeedStats{}, fmt.Errorf("brainbench: open seed store: %w", err)
@@ -70,16 +79,14 @@ func Seed(ctx context.Context, dsn string, sc Scenario) (SeedStats, error) {
 			"the dedupe stage of consolidation would be unmeasurable", dsn)
 	}
 
-	s := seeder{conn: conn, scenario: sc.ID, engine: extract.NewEngine(), relator: relate.NewEngine()}
+	s := seeder{conn: conn, scenario: sc.ID, engine: extract.NewEngine(), relator: relate.NewEngine(), sim: sim}
 	if len(sc.Timeline) > 0 {
 		return s.timeline(ctx, sc.Timeline)
 	}
 
-	// A single wall-clock anchor for the whole seed. Deriving each document's
-	// timestamp from a per-document time.Now() would make two arms seeded in
-	// separate runs differ by milliseconds for no reason; anchoring once keeps
-	// the seed a pure function of the scenario plus one instant.
-	now := time.Now().UTC()
+	// A single anchor for the whole seed, read from the simulated clock, so
+	// the seed is a pure function of the scenario.
+	now := clock.Now().UTC()
 	for _, doc := range sc.Corpus {
 		// IngestedAt is the transaction time and is genuinely "now" even for
 		// a back-dated document — back-dating models a fact observed long
@@ -97,6 +104,7 @@ type seeder struct {
 	scenario string
 	engine   extract.Engine
 	relator  relate.Engine
+	sim      *clock.Simulated
 	stats    SeedStats
 }
 
@@ -125,6 +133,7 @@ func (s *seeder) ingest(ctx context.Context, docID, source, text string, observe
 	if err != nil {
 		return fmt.Errorf("brainbench: extract %s/%s: %w", s.scenario, docID, err)
 	}
+	renameClaims(s.scenario, docID, claims, links)
 
 	existing, err := s.conn.Claims.ListAll(ctx)
 	if err != nil {
@@ -146,6 +155,7 @@ func (s *seeder) ingest(ctx context.Context, docID, source, text string, observe
 		}
 		rels = append(rels, inc...)
 	}
+	renameRelationships(s.scenario, docID, rels)
 
 	// Stamp a single attributed actor so nothing in the seeded brain is
 	// attributed to the ambient OS user — that would make the seed depend on
@@ -190,4 +200,46 @@ const SeedActor = "brainbench"
 func deterministicEventID(scenarioID, docID string) string {
 	sum := sha256.Sum256([]byte(scenarioID + "\x00" + docID))
 	return "ev_bb_" + hex.EncodeToString(sum[:8])
+}
+
+// renameClaims replaces the extractor's random claim ids with ids derived from
+// the scenario, the document and the claim's position in the extraction, and
+// repoints the evidence links to match.
+//
+// The same reason as deterministicEventID, and it is not cosmetic: where two
+// candidates score identically, ranking keeps their candidate order, and that
+// order follows claim ids (query's candidate gathering sorts the BM25 hits by
+// id; ListByIDs reads through the primary key). With the extractor's random
+// ids, the id is a stable tie-break within one brain but not across two seeds
+// of it, so the tail of every ranked list the retrieval ablation packs into a
+// token budget differed from run to run.
+// It runs before ingest dedupe, so a restatement still folds onto the stored
+// claim exactly as in production.
+func renameClaims(scenarioID, docID string, claims []domain.Claim, links []domain.ClaimEvidence) {
+	renamed := make(map[string]string, len(claims))
+	for i := range claims {
+		id := deterministicID("cl_bb_", scenarioID, docID, strconv.Itoa(i))
+		renamed[claims[i].ID] = id
+		claims[i].ID = id
+	}
+	for i := range links {
+		if id, ok := renamed[links[i].ClaimID]; ok {
+			links[i].ClaimID = id
+		}
+	}
+}
+
+// renameRelationships gives the document's detected relationships ids derived
+// from their endpoints and type, which are themselves deterministic.
+func renameRelationships(scenarioID, docID string, rels []domain.Relationship) {
+	for i := range rels {
+		rels[i].ID = deterministicID("rl_bb_", scenarioID, docID,
+			string(rels[i].Type), rels[i].FromClaimID, rels[i].ToClaimID)
+	}
+}
+
+// deterministicID hashes parts into a prefixed id.
+func deterministicID(prefix string, parts ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return prefix + hex.EncodeToString(sum[:8])
 }

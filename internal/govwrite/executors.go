@@ -8,6 +8,7 @@ import (
 	axidomain "go.klarlabs.de/axi/domain"
 
 	"go.klarlabs.de/mnemos/internal/autoedge"
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -733,7 +734,7 @@ func (e dropRelationshipsExecutor) Execute(ctx context.Context, input any, _ axi
 		}
 	}
 
-	closedAt := time.Now().UTC()
+	closedAt := clock.Now().UTC()
 	var dropped int64
 	retainedEdges := map[[3]string]struct{}{}
 	for _, claimID := range affected {

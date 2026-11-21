@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -26,7 +27,7 @@ type Normalizer struct {
 // NewNormalizer returns a Normalizer with default clock and ID generation.
 func NewNormalizer() Normalizer {
 	return Normalizer{
-		now:    time.Now,
+		now:    clock.Now,
 		nextID: newEventID,
 	}
 }

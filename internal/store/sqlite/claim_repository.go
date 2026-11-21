@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store/sqlite/sqlcgen"
 )
@@ -68,7 +69,7 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 	defer rollbackTx(tx)
 
 	qtx := r.q.WithTx(tx)
-	writtenAt := time.Now().UTC()
+	writtenAt := clock.Now().UTC()
 	now := writtenAt.Format(time.RFC3339Nano)
 	existed := make(map[string]bool, len(claims))
 
@@ -223,7 +224,7 @@ func (r ClaimRepository) UpsertEvidence(ctx context.Context, links []domain.Clai
 	defer rollbackTx(tx)
 
 	qtx := r.q.WithTx(tx)
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 
 	for _, link := range links {
 		if err := link.Validate(); err != nil {
@@ -449,7 +450,7 @@ func (r ClaimRepository) SetLifecycle(ctx context.Context, claimID string, lifec
 // CASE branch keeps the column's prior value).
 func (r ClaimRepository) MarkVerified(ctx context.Context, claimID string, verifiedAt time.Time, halfLifeDays float64) error {
 	if verifiedAt.IsZero() {
-		verifiedAt = time.Now().UTC()
+		verifiedAt = clock.Now().UTC()
 	}
 	return r.versionedTrustInputWrite(ctx, claimID, func(q *sqlcgen.Queries) error {
 		return q.MarkClaimVerified(ctx, sqlcgen.MarkClaimVerifiedParams{
@@ -477,7 +478,7 @@ func (r ClaimRepository) versionedTrustInputWrite(ctx context.Context, claimID s
 	if err := write(r.q.WithTx(tx)); err != nil {
 		return err
 	}
-	if err := recordTrustInputChange(ctx, tx, claimID, prior, time.Now().UTC()); err != nil {
+	if err := recordTrustInputChange(ctx, tx, claimID, prior, clock.Now().UTC()); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -489,7 +490,7 @@ func (r ClaimRepository) versionedTrustInputWrite(ctx context.Context, claimID s
 // MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed].
 func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error {
 	if confirmedAt.IsZero() {
-		confirmedAt = time.Now().UTC()
+		confirmedAt = clock.Now().UTC()
 	}
 	return r.versionedTrustInputWrite(ctx, claimID, func(q *sqlcgen.Queries) error {
 		return q.MarkClaimConfirmed(ctx, sqlcgen.MarkClaimConfirmedParams{
@@ -704,7 +705,7 @@ func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, 
 		encodeConfidenceComponents(components), trustScore, claimID); err != nil {
 		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
 	}
-	if err := recordTrustInputChange(ctx, tx, claimID, prior, time.Now().UTC()); err != nil {
+	if err := recordTrustInputChange(ctx, tx, claimID, prior, clock.Now().UTC()); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -780,7 +781,7 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 		return fmt.Errorf("begin repoint evidence tx: %w", err)
 	}
 	defer rollbackTx(tx)
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := clock.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx,
 		`INSERT OR IGNORE INTO closed_claim_evidence (claim_id, event_id, created_at, closed_at, closed_by, reason)
 		 SELECT claim_id, event_id, created_at, ?, ?, ? FROM claim_evidence WHERE claim_id = ?`,

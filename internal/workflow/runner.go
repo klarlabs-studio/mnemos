@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/statekit"
 )
@@ -53,7 +54,7 @@ func NewRunner(store jobStore) Runner {
 		Store:      store,
 		Timeout:    10 * time.Second,
 		MaxRetries: 2,
-		now:        time.Now,
+		now:        clock.Now,
 		nextID:     newJobID,
 		logger:     bolt.New(bolt.NewJSONHandler(os.Stderr)),
 	}
