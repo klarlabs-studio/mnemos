@@ -398,6 +398,20 @@ CREATE TABLE IF NOT EXISTS event_dependency_history (
   KEY idx_event_dependency_history_depends_on (depends_on)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- recall_exposures (ADR 0048): recall showed belief claim_id to agent session
+-- session_id at exposed_at. An evidence episode of that session for that
+-- belief, timestamped at or after the exposure, is recall-seeded and adds no
+-- distinct source to the trust aggregate. One row per (session, belief); the
+-- first exposure is kept. session_id compares byte-for-byte (utf8mb4_bin), as
+-- the trust aggregate compares it with the episode's session. No foreign keys.
+CREATE TABLE IF NOT EXISTS recall_exposures (
+  session_id VARCHAR(190) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  claim_id   VARCHAR(190) NOT NULL,
+  exposed_at DATETIME(6)  NOT NULL,
+  PRIMARY KEY (session_id, claim_id),
+  KEY idx_recall_exposures_claim_id (claim_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- pending_references (ADR 0038, late citations): a citation in episode
 -- event_id that named no stored episode when it was written, under a
 -- canonical lookup_key a later source would carry. Writing an episode with

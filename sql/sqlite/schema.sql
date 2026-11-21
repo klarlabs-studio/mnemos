@@ -330,6 +330,20 @@ CREATE TABLE IF NOT EXISTS event_dependency_history (
 CREATE INDEX IF NOT EXISTS idx_event_dependency_history_event_id ON event_dependency_history(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_dependency_history_depends_on ON event_dependency_history(depends_on);
 
+-- recall_exposures (ADR 0048): recall showed belief claim_id to agent session
+-- session_id at exposed_at (the recall hook injected it into that session's
+-- context). An evidence episode of that session for that belief, timestamped
+-- at or after the exposure, is recall-seeded and adds no distinct source to
+-- the trust aggregate. One row per (session, belief); the first exposure is
+-- kept. No foreign keys: an exposure of a deleted belief matches nothing.
+CREATE TABLE IF NOT EXISTS recall_exposures (
+  session_id TEXT NOT NULL,
+  claim_id TEXT NOT NULL,
+  exposed_at TEXT NOT NULL,
+  PRIMARY KEY (session_id, claim_id)
+);
+CREATE INDEX IF NOT EXISTS idx_recall_exposures_claim_id ON recall_exposures(claim_id);
+
 -- pending_references (ADR 0038, late citations): a citation in episode
 -- event_id that named no stored episode when it was written, under a
 -- canonical lookup_key a later source would carry. Writing an episode with
