@@ -66,10 +66,12 @@ func TestTrustInputAt(t *testing.T) {
 		ConfidenceComponents: map[string]float64{domain.CreditAppliedComponentKey: 0.1},
 	}
 	events := map[string]domain.Event{
-		"e-mon":       {ID: "e-mon", CreatedBy: "alice", Timestamp: mon, IngestedAt: mon},
-		"e-mon-bob":   {ID: "e-mon-bob", CreatedBy: "bob", Timestamp: mon.Add(time.Hour), IngestedAt: mon.Add(time.Hour)},
-		"e-mon-later": {ID: "e-mon-later", CreatedBy: "carol", Timestamp: mon, IngestedAt: mon},
-		"e-thu":       {ID: "e-thu", CreatedBy: "dave", Timestamp: thu, IngestedAt: thu},
+		// Four distinct origins (texts, ADR 0046), one of them ingested by a
+		// second principal: the principal plays no part.
+		"e-mon":       {ID: "e-mon", CreatedBy: "alice", Content: "monday", Timestamp: mon, IngestedAt: mon},
+		"e-mon-bob":   {ID: "e-mon-bob", CreatedBy: "bob", Content: "monday, later", Timestamp: mon.Add(time.Hour), IngestedAt: mon.Add(time.Hour)},
+		"e-mon-later": {ID: "e-mon-later", CreatedBy: "alice", Content: "monday, linked thursday", Timestamp: mon, IngestedAt: mon},
+		"e-thu":       {ID: "e-thu", CreatedBy: "alice", Content: "thursday", Timestamp: thu, IngestedAt: thu},
 	}
 	links := []domain.ClaimEvidence{
 		{ClaimID: "c", EventID: "e-mon", CreatedAt: mon},

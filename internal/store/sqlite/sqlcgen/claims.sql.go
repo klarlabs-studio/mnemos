@@ -169,6 +169,11 @@ const listClaimTrustInputs = `-- name: ListClaimTrustInputs :many
 SELECT
   c.id              AS claim_id,
   c.confidence      AS confidence,
+  -- ADR 0046: a distinct source is a distinct evidence ORIGIN. This COALESCE
+  -- restates domain.EvidenceOrigin (internal/domain/corroboration.go), which
+  -- is the definition: the file path, else the session, else the text with
+  -- spaces trimmed and ASCII lower-cased. Never created_by, never
+  -- source_input_id.
   -- ADR 0038: an evidence episode that depends (live, not removed) on another
   -- evidence episode of the same claim adds no distinct source (it still
   -- counts toward the total).
@@ -176,7 +181,12 @@ SELECT
     SELECT 1 FROM event_dependencies d
     JOIN claim_evidence ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
     WHERE d.event_id = ce.event_id AND d.removed_at IS NULL
-  ) THEN e.created_by END) AS distinct_sources,
+  ) THEN COALESCE(
+    'path:' || NULLIF(json_extract(e.metadata_json, '$.input_source_path'), ''),
+    'session:' || NULLIF(json_extract(e.metadata_json, '$.session_id'), ''),
+    'session:' || NULLIF(json_extract(e.metadata_json, '$.input_session_id'), ''),
+    'content:' || lower(trim(e.content))
+  ) END) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
   CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
   c.last_confirmed  AS last_confirmed,
@@ -200,7 +210,7 @@ type ListClaimTrustInputsRow struct {
 }
 
 // Inputs to recompute trust_score for every claim (ADR 0026 trust.At):
-// confidence, the count of DISTINCT evidence-event authors and of total events
+// confidence, the count of DISTINCT evidence origins and of total events
 // (so corroboration can be graded by independence - an echo-chamber guard), the
 // most-recent evidence timestamp, and the claim's own last_confirmed,
 // half_life_days and confidence_components (which carries applied credit).
@@ -242,6 +252,11 @@ const listClaimTrustInputsForClaims = `-- name: ListClaimTrustInputsForClaims :m
 SELECT
   c.id              AS claim_id,
   c.confidence      AS confidence,
+  -- ADR 0046: a distinct source is a distinct evidence ORIGIN. This COALESCE
+  -- restates domain.EvidenceOrigin (internal/domain/corroboration.go), which
+  -- is the definition: the file path, else the session, else the text with
+  -- spaces trimmed and ASCII lower-cased. Never created_by, never
+  -- source_input_id.
   -- ADR 0038: an evidence episode that depends (live, not removed) on another
   -- evidence episode of the same claim adds no distinct source (it still
   -- counts toward the total).
@@ -249,7 +264,12 @@ SELECT
     SELECT 1 FROM event_dependencies d
     JOIN claim_evidence ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
     WHERE d.event_id = ce.event_id AND d.removed_at IS NULL
-  ) THEN e.created_by END) AS distinct_sources,
+  ) THEN COALESCE(
+    'path:' || NULLIF(json_extract(e.metadata_json, '$.input_source_path'), ''),
+    'session:' || NULLIF(json_extract(e.metadata_json, '$.session_id'), ''),
+    'session:' || NULLIF(json_extract(e.metadata_json, '$.input_session_id'), ''),
+    'content:' || lower(trim(e.content))
+  ) END) AS distinct_sources,
   COUNT(DISTINCT ce.event_id)  AS total_events,
   CAST(COALESCE(MAX(e.timestamp), '') AS TEXT) AS latest_evidence_at,
   c.last_confirmed  AS last_confirmed,

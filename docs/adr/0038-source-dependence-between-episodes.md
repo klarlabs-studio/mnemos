@@ -135,7 +135,7 @@ An evidence episode `E` of a belief is **independent of** a source `S` unless
   with none is retracted. The paths are followed in full.
 - **Trust (ADR 0026).** A dependent evidence episode adds no distinct source.
   When an evidence episode depends directly on another evidence episode *of the
-  same belief*, its author is not counted as a distinct source. The episode
+  same belief*, its source (its author; its origin since ADR 0046) is not counted as a distinct source. The episode
   still counts toward the total, so it weighs as a repeat
   (`domain.EvidenceRepeatWeight`). The rule is one hop and inside the belief's
   own evidence on every backend (SQL `NOT EXISTS`, memory, and the
