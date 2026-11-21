@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -44,7 +44,7 @@ func AppendSchemas(ctx context.Context, actions ports.ActionRepository, write Sc
 	if err != nil {
 		return 0, err
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	prepared := make([]domain.Lesson, len(lessons))
 	for i, l := range lessons {
 		if l.DerivedAt.IsZero() {
@@ -85,7 +85,7 @@ func AppendReflexes(ctx context.Context, schemas ports.LessonRepository, write R
 	if err != nil {
 		return 0, err
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	prepared := make([]domain.Playbook, len(playbooks))
 	for i, p := range playbooks {
 		if p.DerivedAt.IsZero() {

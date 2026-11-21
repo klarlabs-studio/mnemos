@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -49,7 +49,7 @@ func (r EntityRepository) FindOrCreate(_ context.Context, name string, etype dom
 		Name:           name,
 		NormalizedName: norm,
 		Type:           etype,
-		CreatedAt:      time.Now().UTC(),
+		CreatedAt:      clock.Now().UTC(),
 		CreatedBy:      actorOr(createdBy),
 	}
 	r.state.entities[id] = stored

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"go.klarlabs.de/mnemos/internal/clock"
 )
 
 // Info returns this Memory's runtime configuration. See [Info].
@@ -85,7 +87,7 @@ func (m *memory) RememberClaimWithEvidenceDetailed(ctx context.Context, text str
 		return RememberedClaim{}, errors.New("mnemos: RememberClaimWithEvidence: text is required")
 	}
 	if validFrom.IsZero() {
-		validFrom = time.Now().UTC()
+		validFrom = clock.Now().UTC()
 	}
 
 	eventIDs := make([]string, 0, len(evidence))

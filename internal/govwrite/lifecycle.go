@@ -8,6 +8,7 @@ import (
 
 	axidomain "go.klarlabs.de/axi/domain"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -433,7 +434,7 @@ func rescoreKept(ctx context.Context, conn *store.Conn, claimIDs []string) error
 	if !ok {
 		return nil
 	}
-	if _, err := scorer.RecomputeTrustForClaims(ctx, claimIDs, trust.Scorer(time.Now().UTC())); err != nil {
+	if _, err := scorer.RecomputeTrustForClaims(ctx, claimIDs, trust.Scorer(clock.Now().UTC())); err != nil {
 		return fmt.Errorf("rescore claims that kept evidence: %w", err)
 	}
 	return nil

@@ -7,6 +7,7 @@ import (
 
 	axidomain "go.klarlabs.de/axi/domain"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/govwrite"
 )
@@ -34,7 +35,7 @@ type observeExpectationInput struct {
 func (m *memory) Expect(ctx context.Context, claimID string, predicted, tolerance float64, horizon time.Time) error {
 	exp, err := govwrite.CheckExpectation(ctx, m.conn, govwrite.ExpectationRequest{
 		ClaimID: claimID, Predicted: predicted, Tolerance: tolerance, Horizon: horizon,
-	}, time.Now().UTC())
+	}, clock.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("mnemos: Expect: %w", err)
 	}
@@ -116,7 +117,7 @@ type reconcileExpectationsExecutor struct{ m *memory }
 
 // Execute closes observed expectations and records the verdict counts.
 func (e reconcileExpectationsExecutor) Execute(ctx context.Context, _ any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
-	recs, err := govwrite.ApplyReconcileExpectations(ctx, e.m.conn, time.Now().UTC())
+	recs, err := govwrite.ApplyReconcileExpectations(ctx, e.m.conn, clock.Now().UTC())
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, err
 	}

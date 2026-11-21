@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/query"
@@ -93,7 +94,7 @@ func Open(ctx context.Context, repo ports.IncidentRepository, write WriteFunc, r
 		DecisionIDs:      req.DecisionIDs,
 		OutcomeIDs:       req.OutcomeIDs,
 		TimelineEventIDs: req.TimelineEventIDs,
-		OpenedAt:         time.Now().UTC(),
+		OpenedAt:         clock.Now().UTC(),
 		CreatedBy:        req.Actor,
 	}
 	if err := inc.Validate(); err != nil {
@@ -173,7 +174,7 @@ func Resolve(ctx context.Context, repo ports.IncidentRepository, resolve Resolve
 	if err != nil {
 		return domain.Incident{}, err
 	}
-	if err := resolve(ctx, inc.ID, time.Now().UTC()); err != nil {
+	if err := resolve(ctx, inc.ID, clock.Now().UTC()); err != nil {
 		return domain.Incident{}, fmt.Errorf("resolve incident %s: %w", inc.ID, err)
 	}
 	return Get(ctx, repo, inc.ID)

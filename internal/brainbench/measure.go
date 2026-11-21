@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/extract"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -311,7 +311,7 @@ func measureIdentityTrustDecay(ctx context.Context, conn *store.Conn, claims []d
 	if err != nil {
 		return Metric{}, fmt.Errorf("brainbench: list trust inputs: %w", err)
 	}
-	return identityTrustDecay(claims, inputs, ids, time.Now().UTC()), nil
+	return identityTrustDecay(claims, inputs, ids, clock.Now().UTC()), nil
 }
 
 // dbSize sums the SQLite main file and its sidecars. Ignoring -wal would make

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -92,7 +93,7 @@ func signalWeights(isTest bool) (base, authority, citation, recency, liveness fl
 func BuildReport(in CredibilityInputs) (score float64, signals []domain.ProvenanceSignal, rationale, prose string) {
 	now := in.Now
 	if now.IsZero() {
-		now = time.Now().UTC()
+		now = clock.Now().UTC()
 	}
 
 	base := clamp01(in.CurrentTrust)

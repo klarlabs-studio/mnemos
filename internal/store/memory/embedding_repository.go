@@ -3,8 +3,8 @@ package memory
 import (
 	"context"
 	"sort"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -29,7 +29,7 @@ func (r EmbeddingRepository) Upsert(_ context.Context, entityID, entityType stri
 		Vector:     copyFloat32Slice(vector),
 		Model:      model,
 		Dimensions: len(vector),
-		CreatedAt:  time.Now().UTC(),
+		CreatedAt:  clock.Now().UTC(),
 		CreatedBy:  actorOr(createdBy),
 	}
 	return nil

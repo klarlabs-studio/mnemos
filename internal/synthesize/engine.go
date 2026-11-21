@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -92,7 +93,7 @@ func (o Options) withDefaults() Options {
 		o.HalfLifeDays = 90
 	}
 	if o.Now == nil {
-		o.Now = func() time.Time { return time.Now().UTC() }
+		o.Now = func() time.Time { return clock.Now().UTC() }
 	}
 	if o.Source == "" {
 		o.Source = "synthesize"

@@ -16,8 +16,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -29,7 +29,7 @@ func OnOutcomeAppended(ctx context.Context, edges ports.EntityRelationshipReposi
 	if outcome.ActionID == "" {
 		return nil
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	id1, err := newEdgeID()
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func OnDecisionOutcomeAttached(
 	default:
 		return nil
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	emitted := make([]domain.EntityRelationship, 0, len(beliefs))
 	for _, belief := range beliefs {
 		id, err := newEdgeID()

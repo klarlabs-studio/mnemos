@@ -73,6 +73,7 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [ADR 0042: Deterministic vs LLM reconciliation (experiment)](adr/0042-deterministic-vs-llm-reconciliation.md)
 - [ADR 0043: Relational vs graph representation](adr/0043-relational-vs-graph-representation.md)
 - [ADR 0044: Scope-aware numeric contradictions](adr/0044-scope-aware-numeric-contradictions.md)
+- [ADR 0045: A clock seam for reproducible experiments](adr/0045-clock-seam-for-reproducible-experiments.md)
 
 ## Working notes
 

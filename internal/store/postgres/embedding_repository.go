@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/ports"
@@ -223,7 +223,7 @@ ON CONFLICT (entity_id, entity_type) DO UPDATE SET
   created_at = EXCLUDED.created_at,
   embedding = EXCLUDED.embedding`, qualify(r.ns, "embeddings")),
 			entityID, entityType, blob, model, len(vector),
-			time.Now().UTC(), actorOr(createdBy), formatVector(vector),
+			clock.Now().UTC(), actorOr(createdBy), formatVector(vector),
 		)
 		if err != nil {
 			return fmt.Errorf("upsert embedding (pgvector): %w", err)
@@ -239,7 +239,7 @@ ON CONFLICT (entity_id, entity_type) DO UPDATE SET
   dimensions = EXCLUDED.dimensions,
   created_at = EXCLUDED.created_at`, qualify(r.ns, "embeddings")),
 		entityID, entityType, blob, model, len(vector),
-		time.Now().UTC(), actorOr(createdBy),
+		clock.Now().UTC(), actorOr(createdBy),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert embedding: %w", err)

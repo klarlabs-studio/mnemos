@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/query"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -370,14 +371,29 @@ func componentEffects(rep AblationReport) []ComponentEffect {
 }
 
 // ablateScenario seeds and warms one brain, then answers every question under
-// every policy on its own copy. It fills ranked[policy][questionKey].
+// every policy on its own copy. It fills ranked[policy][questionKey]. Like a
+// paired run, the whole scenario runs on one simulated clock (clock.go).
 func ablateScenario(ctx context.Context, sc Scenario, workDir string, policies []AblationPolicy, ranked []map[string][]string) ([]AblationQuestion, []string, error) {
+	var (
+		qs    []AblationQuestion
+		drift []string
+	)
+	err := withSimulatedClock(func(sim *clock.Simulated) error {
+		var err error
+		qs, drift, err = ablateScenarioOn(ctx, sc, workDir, policies, ranked, sim)
+		return err
+	})
+	return qs, drift, err
+}
+
+// ablateScenarioOn is ablateScenario's body, on the simulated clock sim.
+func ablateScenarioOn(ctx context.Context, sc Scenario, workDir string, policies []AblationPolicy, ranked []map[string][]string, sim *clock.Simulated) ([]AblationQuestion, []string, error) {
 	dir := filepath.Join(workDir, "ablation", sc.ID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("brainbench: ablation work dir: %w", err)
 	}
 	seedPath := filepath.Join(dir, "seed.db")
-	stats, err := Seed(ctx, "sqlite://"+seedPath, sc)
+	stats, err := Seed(ctx, "sqlite://"+seedPath, sc, sim)
 	if err != nil {
 		return nil, nil, err
 	}

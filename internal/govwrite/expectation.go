@@ -9,6 +9,7 @@ import (
 
 	axidomain "go.klarlabs.de/axi/domain"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store"
 )
@@ -115,7 +116,7 @@ func CheckObservation(ctx context.Context, conn *store.Conn, claimID string) err
 // SetExpectation attaches (or replaces) a belief's expectation and returns it
 // as stored.
 func (w *Writer) SetExpectation(ctx context.Context, req ExpectationRequest) (domain.Expectation, error) {
-	exp, err := CheckExpectation(ctx, w.conn, req, time.Now().UTC())
+	exp, err := CheckExpectation(ctx, w.conn, req, clock.Now().UTC())
 	if err != nil {
 		return domain.Expectation{}, err
 	}
@@ -267,7 +268,7 @@ type reconcileExpectationsExecutor struct{ conn *store.Conn }
 
 // Execute closes observed expectations and records the verdict counts.
 func (e reconcileExpectationsExecutor) Execute(ctx context.Context, _ any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
-	recs, err := ApplyReconcileExpectations(ctx, e.conn, time.Now().UTC())
+	recs, err := ApplyReconcileExpectations(ctx, e.conn, clock.Now().UTC())
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, err
 	}

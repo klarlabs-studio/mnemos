@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -25,7 +25,7 @@ func (r EntityRelationshipRepository) Upsert(ctx context.Context, edges []domain
 		}
 		createdAt := e.CreatedAt
 		if createdAt.IsZero() {
-			createdAt = time.Now().UTC()
+			createdAt = clock.Now().UTC()
 		}
 		if _, err := r.db.ExecContext(ctx, fmt.Sprintf(`
 INSERT INTO %s (id, kind, from_id, from_type, to_id, to_type, created_at, created_by)

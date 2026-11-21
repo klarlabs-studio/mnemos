@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -29,7 +29,7 @@ func (r ExpectationRepository) Upsert(ctx context.Context, exp domain.Expectatio
 	}
 	createdAt := exp.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	_, err := r.db.ExecContext(ctx, fmt.Sprintf(`
 INSERT INTO %s (claim_id, predicted, tolerance, horizon, observed, has_observation, resolved, created_at)

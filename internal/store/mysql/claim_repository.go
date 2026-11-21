@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -125,7 +126,7 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	upsert := claimUpsertSQL
 	historyInsert := `
 INSERT INTO claim_status_history (claim_id, from_status, to_status, changed_at, reason, changed_by)
@@ -214,7 +215,7 @@ func (r ClaimRepository) UpsertEvidence(ctx context.Context, links []domain.Clai
 
 	// INSERT IGNORE keeps the original created_at: a link is recorded once.
 	stmt := `INSERT IGNORE INTO claim_evidence (claim_id, event_id, created_at) VALUES (?, ?, ?)`
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	for _, link := range links {
 		if err := link.Validate(); err != nil {
 			return fmt.Errorf("invalid claim evidence: %w", err)
@@ -313,7 +314,7 @@ func (r ClaimRepository) RepointEvidence(ctx context.Context, fromClaimID, toCla
 	defer func() { _ = tx.Rollback() }()
 	// The loser's links are closed (ADR 0036 §8); the winner gains each
 	// episode as a link recorded now.
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := clock.Now().UTC().Truncate(time.Microsecond)
 	if _, err := tx.ExecContext(ctx, `
 INSERT IGNORE INTO closed_claim_evidence (claim_id, event_id, created_at, closed_at, closed_by, reason)
 SELECT claim_id, event_id, created_at, ?, ?, ? FROM claim_evidence WHERE claim_id = ?`,
@@ -545,7 +546,7 @@ FROM claim_status_history WHERE claim_id = ? ORDER BY id ASC`, claimID)
 // non-zero value.
 func (r ClaimRepository) MarkVerified(ctx context.Context, claimID string, verifiedAt time.Time, halfLifeDays float64) error {
 	if verifiedAt.IsZero() {
-		verifiedAt = time.Now().UTC()
+		verifiedAt = clock.Now().UTC()
 	}
 	return r.versionedTrustInputWrite(ctx, claimID, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `
@@ -570,7 +571,7 @@ WHERE id = ?`, verifiedAt.UTC(), halfLifeDays, halfLifeDays, claimID)
 // would otherwise read as a missing claim.
 func (r ClaimRepository) MarkConfirmed(ctx context.Context, claimID string, confirmedAt time.Time) error {
 	if confirmedAt.IsZero() {
-		confirmedAt = time.Now().UTC()
+		confirmedAt = clock.Now().UTC()
 	}
 	return r.versionedTrustInputWrite(ctx, claimID, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE claims SET last_confirmed = ? WHERE id = ?`, confirmedAt.UTC(), claimID); err != nil {
@@ -607,7 +608,7 @@ func (r ClaimRepository) ApplyBeliefCredit(ctx context.Context, claimID string, 
 		encodeConfidenceComponents(components), trustScore, claimID); err != nil {
 		return fmt.Errorf("apply belief credit for %s: %w", claimID, err)
 	}
-	if err := recordTrustInputChange(ctx, tx, claimID, prior, time.Now().UTC()); err != nil {
+	if err := recordTrustInputChange(ctx, tx, claimID, prior, clock.Now().UTC()); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

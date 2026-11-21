@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -27,7 +27,7 @@ func (r ActionRepository) Append(ctx context.Context, action domain.Action) erro
 	}
 	createdAt := action.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	_, err = r.db.ExecContext(ctx, `
 INSERT IGNORE INTO actions (id, run_id, kind, subject, actor, at, metadata_json, created_by, created_at)

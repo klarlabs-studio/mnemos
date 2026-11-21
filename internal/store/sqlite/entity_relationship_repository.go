@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store/sqlite/sqlcgen"
 )
@@ -43,7 +44,7 @@ func (r EntityRelationshipRepository) Upsert(ctx context.Context, edges []domain
 		}
 		createdAt := e.CreatedAt
 		if createdAt.IsZero() {
-			createdAt = time.Now().UTC()
+			createdAt = clock.Now().UTC()
 		}
 		if err := q.UpsertEntityRelationship(ctx, sqlcgen.UpsertEntityRelationshipParams{
 			ID:        e.ID,

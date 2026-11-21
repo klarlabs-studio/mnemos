@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store/sqlite/sqlcgen"
 )
@@ -47,7 +48,7 @@ func (r EntityRepository) FindOrCreate(ctx context.Context, name string, etype d
 	if err != nil {
 		return domain.Entity{}, fmt.Errorf("generate entity id: %w", err)
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := clock.Now().UTC().Format(time.RFC3339Nano)
 	if err := r.q.UpsertEntity(ctx, sqlcgen.UpsertEntityParams{
 		ID:             id,
 		Name:           name,

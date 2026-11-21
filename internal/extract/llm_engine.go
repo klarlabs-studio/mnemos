@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/fortify/retry"
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/llm"
 )
@@ -46,7 +47,7 @@ func NewLLMEngine(client llm.Client) LLMEngine {
 	return LLMEngine{
 		client:   client,
 		fallback: NewEngine(),
-		now:      time.Now,
+		now:      clock.Now,
 		nextID:   newClaimID,
 		cacheDir: filepath.Join("data", "cache", "llm-extraction"),
 	}

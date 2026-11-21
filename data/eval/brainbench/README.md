@@ -106,17 +106,27 @@ transition, `archive` → ADR 0034 archive axis, `supersede` → ends valid time
 `contradict` → a contradicts edge). `as_of_probes` name a phase; the question is
 asked about that phase's end.
 
-**Why real time, not an injected clock.** Transaction time is stamped by the
-repositories themselves (`time.Now()` in status history, validity history,
-relationship and claim creation, on every backend). Back-dating rows or adding
-a clock the shipped write path does not have would measure a reimplementation
-of the history tables instead of the history the product records. So phases run
-on the real wall clock a few milliseconds apart, and each boundary is read
+**The write clock is simulated, not back-dated.** Transaction time is stamped
+by the repositories themselves (status history, validity history, relationship
+and claim creation). Back-dating rows would measure a reimplementation of the
+history tables instead of the history the product records, so the seeder lets
+the shipped write path stamp and reads each phase boundary from the same clock,
 strictly between the last write of one phase and the first of the next — the
-method of `internal/query/recorded_as_of_test.go`. The instants differ between
-runs; within a run every arm is a byte-copy of one seed measured against the
-same instants, so the noise arm still has to reproduce the control exactly.
-`TestRun_TimelinePhasesAreOrderedOnTheWriteClock` guards the ordering.
+method of `internal/query/recorded_as_of_test.go`.
+
+That clock is `internal/clock`, the one seam through which the library reads
+the wall clock as data. Production gets `time.Now`; a brainbench scenario runs
+on a simulated clock that starts at a fixed instant (2026-01-01T00:00:00Z) and
+advances one microsecond per read, and a phase gap is a clock advance rather
+than a sleep. Before it existed (issue #396), the same scenario gave different
+numbers on every run: claims that should score identically were rescored a few
+microseconds apart, the freshness decay between those instants decided their
+ranking order, and noisy_capture's `answer_mrr` moved between 0.55 and 0.383.
+Durations — `duration_ms` and the cost report's latencies — still use the real
+clock, since they measure the machine. `TestRun_IsReproducibleAcrossRuns` and
+`TestRunAblation_IsReproducibleAcrossRuns` require every other field of the
+report to be identical across fresh runs, and
+`TestRun_TimelinePhasesAreOrderedOnTheWriteClock` guards the phase ordering.
 
 A document can set `valid_from: <phase>` in either direction, which is what
 separates the two axes. An earlier phase is a fact learned late: the root cause

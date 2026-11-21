@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -65,7 +66,7 @@ func (r RelationshipRepository) ListByClaim(_ context.Context, claimID string) (
 func (r RelationshipRepository) RepointEndpoint(_ context.Context, oldID, newID string) error {
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
-	closedAt := time.Now().UTC()
+	closedAt := clock.Now().UTC()
 	closeEdge := func(id string, rel storedRelationship) {
 		delete(r.state.relationships, id)
 		r.state.closedRels = append(r.state.closedRels, domain.ClosedRelationship{

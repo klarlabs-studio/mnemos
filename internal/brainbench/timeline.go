@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -19,20 +20,19 @@ import (
 // Query.AsOf). Both need instants that sit strictly between writes.
 //
 // Transaction time comes from the store's own write clock: status history,
-// validity history, relationship and claim creation all stamp time.Now() inside
-// the repositories, on every backend. Faking it — back-dating rows, or
-// injecting a clock the shipped write path does not have — would measure a
-// harness reimplementation of the history tables rather than the history the
-// product records. So the phases run in real time, a few milliseconds apart,
-// and each phase boundary is read from the same wall clock the store stamps
-// with, strictly between the last write of one phase and the first of the
-// next. That is the method internal/query/recorded_as_of_test.go uses.
+// validity history, relationship and claim creation all stamp clock.Now()
+// inside the repositories. Back-dating rows would measure a harness
+// reimplementation of the history tables rather than the history the product
+// records, so the seeder does not; it lets the shipped write path stamp, and
+// reads each phase boundary from the same clock, strictly between the last
+// write of one phase and the first of the next. That is the method
+// internal/query/recorded_as_of_test.go uses.
 //
-// The run stays deterministic where it matters: the instants differ between
-// runs, but every arm is a byte-copy of one seed measured against the same
-// instants, so the noise arm still has to reproduce the control exactly.
+// The clock is the scenario's simulated clock (clock.go), not the wall clock:
+// a phase gap is a clock advance rather than a sleep, and the instants are the
+// same on every run (issue #396).
 
-// PhaseWindow is the real write-clock span of one timeline phase.
+// PhaseWindow is the write-clock span of one timeline phase.
 type PhaseWindow struct {
 	// Start is read before the phase's first write.
 	Start time.Time `json:"start"`
@@ -45,16 +45,17 @@ type PhaseWindow struct {
 type PhaseTimes map[string]PhaseWindow
 
 // phaseGap separates a boundary instant from the writes on either side of it.
-// Store timestamps carry nanoseconds, so a millisecond is ample; it is a
-// constant rather than a tuning knob because nothing reads durations off it.
+// Every clock read is a distinct instant already; the gap makes phases easy to
+// tell apart in a report. It is a constant rather than a tuning knob because
+// nothing reads durations off it.
 const phaseGap = 2 * time.Millisecond
 
 // boundary returns an instant strictly after every write so far and strictly
 // before every write that follows.
-func boundary() time.Time {
-	time.Sleep(phaseGap)
-	at := time.Now().UTC()
-	time.Sleep(phaseGap)
+func (s *seeder) boundary() time.Time {
+	s.sim.Advance(phaseGap)
+	at := clock.Now().UTC()
+	s.sim.Advance(phaseGap)
 	return at
 }
 
@@ -66,11 +67,12 @@ func boundary() time.Time {
 // seeder reserves an instant this far ahead, and when March begins it waits
 // for that instant and uses it as the phase's start. If the phases in between
 // take longer than the reservation, the seed fails rather than silently
-// placing March's start before February's end. It is generous because a
-// loaded machine running -race is slow; it costs one sleep per announced phase.
+// placing March's start before February's end. On the simulated clock a
+// phase consumes one tick per clock read, far below this; it costs nothing to
+// wait for, since waiting is a clock advance.
 const forwardReservation = 2 * time.Second
 
-// timeline seeds the store phase by phase on the real clock.
+// timeline seeds the store phase by phase on the simulated clock.
 func (s *seeder) timeline(ctx context.Context, phases []Phase) (SeedStats, error) {
 	s.stats.Phases = make(PhaseTimes, len(phases))
 	order := make(map[string]int, len(phases))
@@ -79,7 +81,7 @@ func (s *seeder) timeline(ctx context.Context, phases []Phase) (SeedStats, error
 	}
 	reserved := make(map[string]time.Time)
 	for i, ph := range phases {
-		start, err := phaseStart(ph.Name, reserved)
+		start, err := s.phaseStart(ph.Name, reserved)
 		if err != nil {
 			return s.stats, err
 		}
@@ -93,7 +95,7 @@ func (s *seeder) timeline(ctx context.Context, phases []Phase) (SeedStats, error
 					observed = s.stats.Phases[doc.ValidFrom].Start
 				}
 			}
-			if err := s.ingest(ctx, doc.ID, doc.Source, doc.Text, observed, time.Now().UTC()); err != nil {
+			if err := s.ingest(ctx, doc.ID, doc.Source, doc.Text, observed, clock.Now().UTC()); err != nil {
 				return s.stats, err
 			}
 		}
@@ -105,7 +107,7 @@ func (s *seeder) timeline(ctx context.Context, phases []Phase) (SeedStats, error
 			s.stats.Changes++
 		}
 		s.stats.CurationDuration += time.Since(began)
-		s.stats.Phases[ph.Name] = PhaseWindow{Start: start, End: boundary()}
+		s.stats.Phases[ph.Name] = PhaseWindow{Start: start, End: s.boundary()}
 	}
 	return s.stats, nil
 }
@@ -116,7 +118,7 @@ func reserve(reserved map[string]time.Time, phase string) time.Time {
 	if at, ok := reserved[phase]; ok {
 		return at
 	}
-	at := time.Now().UTC().Add(forwardReservation)
+	at := clock.Now().UTC().Add(forwardReservation)
 	reserved[phase] = at
 	return at
 }
@@ -125,8 +127,8 @@ func reserve(reserved map[string]time.Time, phase string) time.Time {
 // instant reserved for it, waited for. A reserved instant already in the past
 // would put this phase's start before the previous phase's last write, so it
 // is an error, never a silent misordering.
-func phaseStart(phase string, reserved map[string]time.Time) (time.Time, error) {
-	start := boundary()
+func (s *seeder) phaseStart(phase string, reserved map[string]time.Time) (time.Time, error) {
+	start := s.boundary()
 	at, ok := reserved[phase]
 	if !ok {
 		return start, nil
@@ -136,7 +138,7 @@ func phaseStart(phase string, reserved map[string]time.Time) (time.Time, error) 
 			"the phases before it took longer than %s", phase, start.Format(time.RFC3339Nano),
 			at.Format(time.RFC3339Nano), forwardReservation)
 	}
-	time.Sleep(time.Until(at) + phaseGap)
+	s.sim.AdvanceTo(at.Add(phaseGap))
 	return at, nil
 }
 
@@ -160,13 +162,13 @@ func (s *seeder) apply(ctx context.Context, ch Change) error {
 		if err != nil {
 			return err
 		}
-		return s.conn.Claims.Archive(ctx, c.ID, time.Now().UTC(), note)
+		return s.conn.Claims.Archive(ctx, c.ID, clock.Now().UTC(), note)
 	case ch.Supersede != "":
 		c, err := s.findCurrent(ctx, ch.Supersede)
 		if err != nil {
 			return err
 		}
-		return s.conn.Claims.SetValidity(ctx, c.ID, time.Now().UTC(), note)
+		return s.conn.Claims.SetValidity(ctx, c.ID, clock.Now().UTC(), note)
 	case ch.SupersedeBy != nil:
 		old, err := s.findCurrent(ctx, ch.SupersedeBy.Old)
 		if err != nil {
@@ -198,7 +200,7 @@ func (s *seeder) apply(ctx context.Context, ch Change) error {
 			Type:        domain.RelationshipTypeContradicts,
 			FromClaimID: from.ID,
 			ToClaimID:   to.ID,
-			CreatedAt:   time.Now().UTC(),
+			CreatedAt:   clock.Now().UTC(),
 			CreatedBy:   SeedActor,
 		}})
 	default:

@@ -9,6 +9,7 @@ import (
 
 	axidomain "go.klarlabs.de/axi/domain"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/pipeline"
 	"go.klarlabs.de/mnemos/internal/store"
@@ -56,7 +57,7 @@ func (e declareDependencyExecutor) Execute(ctx context.Context, input any, _ axi
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("%s: unexpected input %T", actionDeclareDependency, input)
 	}
-	change, err := declareDependency(ctx, e.conn, in.Dependency, time.Now().UTC())
+	change, err := declareDependency(ctx, e.conn, in.Dependency, clock.Now().UTC())
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, err
 	}
@@ -80,7 +81,7 @@ func (e removeDependencyExecutor) Execute(ctx context.Context, input any, _ axid
 	if !ok {
 		return axidomain.ExecutionResult{}, nil, fmt.Errorf("%s: unexpected input %T", actionRemoveDependency, input)
 	}
-	change, err := removeDependency(ctx, e.conn, in.EventID, in.DependsOn, in.Actor, in.Reason, time.Now().UTC())
+	change, err := removeDependency(ctx, e.conn, in.EventID, in.DependsOn, in.Actor, in.Reason, clock.Now().UTC())
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, err
 	}
@@ -121,14 +122,14 @@ func (w *Writer) RemoveEventDependency(ctx context.Context, eventID, dependsOn, 
 // (see [ApplyRetraction]). Every other caller goes through
 // [Writer.DeclareEventDependency].
 func ApplyDependencyDeclaration(ctx context.Context, conn *store.Conn, dep domain.EventDependency) (domain.DependencyChange, error) {
-	return declareDependency(ctx, conn, dep, time.Now().UTC())
+	return declareDependency(ctx, conn, dep, clock.Now().UTC())
 }
 
 // ApplyDependencyRemoval removes the dependency directly against conn, for
 // the root library's own governed kernel. Every other caller goes through
 // [Writer.RemoveEventDependency].
 func ApplyDependencyRemoval(ctx context.Context, conn *store.Conn, eventID, dependsOn, actor, reason string) (domain.DependencyChange, error) {
-	return removeDependency(ctx, conn, strings.TrimSpace(eventID), strings.TrimSpace(dependsOn), actor, strings.TrimSpace(reason), time.Now().UTC())
+	return removeDependency(ctx, conn, strings.TrimSpace(eventID), strings.TrimSpace(dependsOn), actor, strings.TrimSpace(reason), clock.Now().UTC())
 }
 
 var errNoDependencyStore = errors.New("this backend has no episode dependency store")

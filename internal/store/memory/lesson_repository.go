@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -33,7 +34,7 @@ func (r LessonRepository) Append(_ context.Context, lesson domain.Lesson) error 
 			r.state.lessonVersions[lesson.ID] = append(r.state.lessonVersions[lesson.ID], storedEntityVersion{
 				PayloadJSON: string(payload),
 				ValidFrom:   domainPrev.DerivedAt,
-				ValidTo:     time.Now().UTC(),
+				ValidTo:     clock.Now().UTC(),
 			})
 		}
 	}

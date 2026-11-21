@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/relate"
@@ -55,7 +56,7 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
 
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	for _, claim := range claims {
 		if err := claim.Validate(); err != nil {
 			return fmt.Errorf("invalid claim %s: %w", claim.ID, err)
@@ -178,7 +179,7 @@ func (r ClaimRepository) UpsertEvidence(_ context.Context, links []domain.ClaimE
 	}
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	for _, link := range links {
 		if err := link.Validate(); err != nil {
 			return fmt.Errorf("invalid claim evidence: %w", err)
@@ -353,7 +354,7 @@ func (r ClaimRepository) RepointEvidence(_ context.Context, fromClaimID, toClaim
 	}
 	// The loser's links are closed (ADR 0036 §8); the winner gains each
 	// episode as a link recorded now, unless it already holds one.
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	reason := domain.MergeClosedReason(fromClaimID, toClaimID)
 	for evID, at := range src {
 		r.state.closedEvidence = append(r.state.closedEvidence, domain.ClosedEvidence{
@@ -622,7 +623,7 @@ func (r ClaimRepository) ListStatusHistoryByClaimID(_ context.Context, claimID s
 // MarkConfirmed implements [ports.ClaimRepository.MarkConfirmed].
 func (r ClaimRepository) MarkConfirmed(_ context.Context, claimID string, confirmedAt time.Time) error {
 	if confirmedAt.IsZero() {
-		confirmedAt = time.Now().UTC()
+		confirmedAt = clock.Now().UTC()
 	}
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
@@ -642,7 +643,7 @@ func (r ClaimRepository) MarkConfirmed(_ context.Context, claimID string, confir
 // loudly when an id typo escapes).
 func (r ClaimRepository) MarkVerified(_ context.Context, claimID string, verifiedAt time.Time, halfLifeDays float64) error {
 	if verifiedAt.IsZero() {
-		verifiedAt = time.Now().UTC()
+		verifiedAt = clock.Now().UTC()
 	}
 	r.state.mu.Lock()
 	defer r.state.mu.Unlock()
@@ -737,7 +738,7 @@ func (r ClaimRepository) recordValidityChangeLocked(claimID string, field domain
 	}
 	r.state.validityHistory = append(r.state.validityHistory, domain.ValidityChange{
 		ClaimID: claimID, Field: field, From: from, To: to,
-		ChangedAt: time.Now().UTC(), Reason: note.Reason, ChangedBy: by,
+		ChangedAt: clock.Now().UTC(), Reason: note.Reason, ChangedBy: by,
 	})
 }
 
@@ -1139,7 +1140,7 @@ func (r ClaimRepository) putClaimLocked(id string, c storedClaim) {
 	if prior, ok := r.state.claims[id]; ok {
 		if from, to := domain.AppliedCredit(prior.ConfidenceComponents), domain.AppliedCredit(c.ConfidenceComponents); from != to {
 			r.state.creditHistory = append(r.state.creditHistory, domain.CreditChange{
-				ClaimID: id, From: from, To: to, ChangedAt: time.Now().UTC(),
+				ClaimID: id, From: from, To: to, ChangedAt: clock.Now().UTC(),
 			})
 		}
 	}
@@ -1147,7 +1148,7 @@ func (r ClaimRepository) putClaimLocked(id string, c storedClaim) {
 		(prior.Confidence != c.Confidence || prior.HalfLifeDays != c.HalfLifeDays || !prior.LastConfirmed.Equal(c.LastConfirmed)) {
 		r.state.trustInputHistory[id] = append(r.state.trustInputHistory[id], domain.TrustInputChange{
 			ClaimID: id, Confidence: prior.Confidence, HalfLifeDays: prior.HalfLifeDays,
-			LastConfirmed: prior.LastConfirmed, ChangedAt: time.Now().UTC(),
+			LastConfirmed: prior.LastConfirmed, ChangedAt: clock.Now().UTC(),
 		})
 	}
 	r.state.claims[id] = c

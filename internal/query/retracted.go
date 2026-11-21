@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -103,5 +104,5 @@ func liveAt(opts AnswerOptions) time.Time {
 	if !opts.RecordedAsOf.IsZero() {
 		return opts.RecordedAsOf
 	}
-	return time.Now().UTC()
+	return clock.Now().UTC()
 }

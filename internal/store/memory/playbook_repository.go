@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -32,7 +33,7 @@ func (r PlaybookRepository) Append(_ context.Context, p domain.Playbook) error {
 			r.state.playbookVersions[p.ID] = append(r.state.playbookVersions[p.ID], storedEntityVersion{
 				PayloadJSON: string(payload),
 				ValidFrom:   domainPrev.DerivedAt,
-				ValidTo:     time.Now().UTC(),
+				ValidTo:     clock.Now().UTC(),
 			})
 		}
 	}

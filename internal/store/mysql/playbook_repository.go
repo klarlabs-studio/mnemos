@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
@@ -233,7 +234,7 @@ func (r PlaybookRepository) snapshotIfExists(ctx context.Context, playbookID str
 	_, err = r.db.ExecContext(ctx, `
 INSERT INTO playbook_versions (playbook_id, payload_json, valid_from, valid_to)
 VALUES (?, CAST(? AS JSON), ?, ?)`,
-		playbookID, string(payload), current.DerivedAt.UTC(), time.Now().UTC(),
+		playbookID, string(payload), current.DerivedAt.UTC(), clock.Now().UTC(),
 	)
 	return err
 }

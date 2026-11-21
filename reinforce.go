@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -49,7 +49,7 @@ func (m *memory) reinforcePlaybooks(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("list playbooks: %w", err)
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	n := 0
 	for _, p := range playbooks {
 		rate, scored, err := m.playbookSuccessRate(ctx, p)

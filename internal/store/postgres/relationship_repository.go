@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -80,7 +81,7 @@ func (r RelationshipRepository) RepointEndpoint(ctx context.Context, oldID, newI
 	defer func() { _ = tx.Rollback() }()
 
 	// Edges the rewrite drops are closed, not deleted (ADR 0036 §8).
-	closedAt := time.Now().UTC().Truncate(time.Microsecond)
+	closedAt := clock.Now().UTC().Truncate(time.Microsecond)
 	if err := r.stageClosedEdges(ctx, tx, oldID, newID, closedAt); err != nil {
 		return err
 	}

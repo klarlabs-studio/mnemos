@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -29,7 +30,7 @@ var sentenceSplitRE = regexp.MustCompile(`[!?\n]+|\.\s+|\.\s*$`)
 // NewEngine returns an Engine with default ID generation and time source.
 func NewEngine() Engine {
 	return Engine{
-		now:    time.Now,
+		now:    clock.Now,
 		nextID: newClaimID,
 	}
 }

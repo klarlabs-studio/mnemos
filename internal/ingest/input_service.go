@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -25,7 +26,7 @@ type Service struct {
 // NewService returns a Service with default clock and ID generation.
 func NewService() Service {
 	return Service{
-		now:    time.Now,
+		now:    clock.Now,
 		nextID: newID,
 	}
 }

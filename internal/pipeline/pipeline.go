@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/fortify/retry"
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/embedding"
 	"go.klarlabs.de/mnemos/internal/extract"
@@ -369,7 +370,7 @@ func groupClaimsByCreatedBy(claims []domain.Claim) map[string][]domain.Claim {
 // for the whole pass, so every row of a rescore is scored against the same
 // clock reading.
 func defaultTrustScorer() domain.TrustScoring {
-	return trust.Scorer(time.Now().UTC())
+	return trust.Scorer(clock.Now().UTC())
 }
 
 // MaterializeEntities walks the per-claim entity tags produced by the

@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	axidomain "go.klarlabs.de/axi/domain"
 	"go.klarlabs.de/bolt"
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/consolidate"
 	"go.klarlabs.de/mnemos/internal/credit"
 	"go.klarlabs.de/mnemos/internal/domain"
@@ -505,7 +506,7 @@ func (m *memory) SetBlock(ctx context.Context, owner, label, value string) error
 		return m.conn.Blocks.Delete(ctx, owner, label)
 	}
 	return m.conn.Blocks.Upsert(ctx, domain.WorkingMemoryBlock{
-		Owner: owner, Label: label, Content: value, UpdatedAt: time.Now().UTC(),
+		Owner: owner, Label: label, Content: value, UpdatedAt: clock.Now().UTC(),
 	})
 }
 
@@ -530,7 +531,7 @@ func (m *memory) AppendBlock(ctx context.Context, owner, label, text string) err
 	combined += text
 	combined = evictToLimit(combined, WorkingMemoryBlockLimit)
 	return m.conn.Blocks.Upsert(ctx, domain.WorkingMemoryBlock{
-		Owner: owner, Label: label, Content: combined, UpdatedAt: time.Now().UTC(),
+		Owner: owner, Label: label, Content: combined, UpdatedAt: clock.Now().UTC(),
 	})
 }
 
@@ -1115,7 +1116,7 @@ func (m *memory) Consolidate(ctx context.Context, opts ConsolidateOptions) (Cons
 	// by trust.At, so this no longer erases what a previous credit pass earned.
 	// Best-effort: a scorer-less backend still consolidated correctly.
 	if scorer, ok := m.conn.Claims.(ports.TrustScorer); ok {
-		if n, terr := scorer.RecomputeTrust(ctx, trust.Scorer(time.Now().UTC())); terr == nil {
+		if n, terr := scorer.RecomputeTrust(ctx, trust.Scorer(clock.Now().UTC())); terr == nil {
 			res.TrustRefreshed = n
 		}
 	}
@@ -1333,7 +1334,7 @@ func (m *memory) journalConsolidation(ctx context.Context, res ConsolidateResult
 	if m.conn.Journal == nil {
 		return nil
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	passID := uuid.NewString()
 
 	pe, err := m.PredictiveError(ctx)
@@ -1455,7 +1456,7 @@ func (m *memory) rankForReplay(ctx context.Context, surpriseByClaim map[string]f
 	for _, e := range evidence {
 		evidenceCount[e.ClaimID]++
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	type pri struct {
 		id    string
 		score float64
@@ -1498,7 +1499,7 @@ func (m *memory) rankForReplay(ctx context.Context, surpriseByClaim map[string]f
 // replayFreshen rehearses the given claims by bumping their freshness — the write
 // half of prioritized experience replay. Returns the count actually freshened.
 func (m *memory) replayFreshen(ctx context.Context, ids []string) (int, error) {
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	replayed := 0
 	for _, id := range ids {
 		// Rehearse: bump last_verified (0 half-life keeps any existing override).
@@ -1599,7 +1600,7 @@ func (m *memory) reinforceValidatedClaims(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("list claims: %w", err)
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	n := 0
 	for _, c := range all {
 		if !c.IsCurrent() {
@@ -1719,7 +1720,7 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 	if m.conn.Expectations == nil || m.conn.Decisions == nil {
 		return 0, nil, nil
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	writer, ok := m.conn.Claims.(ports.BeliefCreditWriter)
 	if !ok {
 		return 0, nil, nil // backend does not persist the credit audit map — skip, don't guess
@@ -1953,7 +1954,7 @@ func (m *memory) forgetRefutedClaims(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("list claims: %w", err)
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	n := 0
 	for _, c := range all {
 		if !c.IsCurrent() {
@@ -2019,7 +2020,7 @@ func (m *memory) forgetStaleClaims(ctx context.Context, belowTrust float64, prot
 	for _, e := range evidence {
 		evidenceCount[e.ClaimID]++
 	}
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	forgotten := 0
 	protectedSkipped := 0
 	for _, c := range all {

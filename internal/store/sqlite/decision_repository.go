@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/store/sqlite/sqlcgen"
 )
@@ -39,7 +40,7 @@ func (r DecisionRepository) Append(ctx context.Context, decision domain.Decision
 	}
 	createdAt := decision.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	if err := r.q.CreateDecision(ctx, sqlcgen.CreateDecisionParams{
 		ID:                 decision.ID,

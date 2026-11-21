@@ -3,6 +3,7 @@ package memory
 import (
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -80,7 +81,7 @@ func (a storedAction) toDomain() domain.Action {
 func storedActionFromDomain(a domain.Action) storedAction {
 	createdAt := a.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	return storedAction{
 		ID:        a.ID,
@@ -124,7 +125,7 @@ func (o storedOutcome) toDomain() domain.Outcome {
 func storedOutcomeFromDomain(o domain.Outcome) storedOutcome {
 	createdAt := o.CreatedAt
 	if createdAt.IsZero() {
-		createdAt = time.Now().UTC()
+		createdAt = clock.Now().UTC()
 	}
 	source := o.Source
 	if source == "" {

@@ -3,8 +3,8 @@ package mnemos
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/trust"
@@ -61,7 +61,7 @@ func (m *memory) KnowledgeGapsBounded(ctx context.Context, limit int) (GapReport
 		return GapReport{}, err
 	}
 	all, evidenceCount, resolved, contradicts := in.claims, in.evidence, in.resolved, in.contradicts
-	now := time.Now().UTC()
+	now := clock.Now().UTC()
 	var gaps []Gap
 	for _, c := range all {
 		if !c.IsCurrent() {

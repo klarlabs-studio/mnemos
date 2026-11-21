@@ -3,8 +3,8 @@ package memory
 import (
 	"context"
 	"sort"
-	"time"
 
+	"go.klarlabs.de/mnemos/internal/clock"
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
@@ -22,7 +22,7 @@ func (r ClaimVersionRepository) Append(_ context.Context, v domain.ClaimVersion)
 	existing := r.state.claimVersions[v.ClaimID]
 	v.Version = len(existing) + 1
 	if v.WrittenAt.IsZero() {
-		v.WrittenAt = time.Now().UTC()
+		v.WrittenAt = clock.Now().UTC()
 	}
 	if v.WrittenBy == "" {
 		v.WrittenBy = "<system>"
