@@ -114,6 +114,12 @@ notable changes.
 
 ### Fixed
 
+- MCP tool responses match their advertised output schemas again (#503). A nil map or
+  slice was sent as `null` where the schema says object or array, so strict clients such as
+  Claude Code rejected the whole response: `query_knowledge` returned nothing whenever a belief
+  had no confidence decomposition or the answer had no dissonances. Null members are now
+  removed from `structuredContent` for every tool, on stdio and HTTP.
+
 - `list_dissonances` (MCP, and the browse surfaces that share it) reads one page of
   contradictions from an index instead of decoding every association in the brain (ADR 0043).
   At 100k beliefs the old path took ~0.45–0.66 s per page; the indexed read measured
