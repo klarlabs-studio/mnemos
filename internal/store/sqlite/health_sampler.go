@@ -40,12 +40,34 @@ func (r ClaimRepository) CountLiveOrphans(ctx context.Context) (int, error) {
 	return n, err
 }
 
-// CountDanglingRelationships implements ports.HealthSampler.
+// danglingRelationshipsSQL counts the relationships with a missing endpoint,
+// probing claims once per distinct endpoint id instead of twice per edge.
+//
+// The per-edge form (NOT EXISTS for each side of every row) made two
+// primary-key probes into claims per edge: on a real brain with 13 edges per
+// belief that was 71% of BrainHealth (#438). Here each endpoint index is read
+// in order, grouped to its distinct ids, and only those are probed; the edges
+// of the missing ids are then counted through the same indexes (the planner
+// takes a MULTI-INDEX OR), which costs nothing when there are none. An edge
+// missing both endpoints matches both arms of the OR and is counted once, as
+// before. INDEXED BY pins the covering index scans: they are the plan.
+const danglingRelationshipsSQL = `
+	WITH missing_from AS (
+		SELECT g.id FROM (SELECT from_claim_id AS id FROM relationships INDEXED BY idx_relationships_from_claim GROUP BY from_claim_id) g
+		WHERE NOT EXISTS (SELECT 1 FROM claims c WHERE c.id = g.id)
+	), missing_to AS (
+		SELECT g.id FROM (SELECT to_claim_id AS id FROM relationships INDEXED BY idx_relationships_to_claim GROUP BY to_claim_id) g
+		WHERE NOT EXISTS (SELECT 1 FROM claims c WHERE c.id = g.id)
+	)
+	SELECT count(*) FROM relationships r
+	WHERE r.from_claim_id IN (SELECT id FROM missing_from)
+	   OR r.to_claim_id IN (SELECT id FROM missing_to)`
+
+// CountDanglingRelationships implements ports.HealthSampler. The count is
+// exact: brain health reports any dangling edge as referential corruption.
 func (r ClaimRepository) CountDanglingRelationships(ctx context.Context) (int, error) {
 	var n int
-	err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM relationships r
-		WHERE NOT EXISTS (SELECT 1 FROM claims c WHERE c.id = r.from_claim_id)
-		   OR NOT EXISTS (SELECT 1 FROM claims c WHERE c.id = r.to_claim_id)`).Scan(&n)
+	err := r.db.QueryRowContext(ctx, danglingRelationshipsSQL).Scan(&n)
 	return n, err
 }
 
