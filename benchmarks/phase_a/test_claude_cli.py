@@ -43,6 +43,7 @@ class CommandIsolation(unittest.TestCase):
             text, cost = claude_cli.complete("m", [{"role": "user", "content": "hi"}])
         self.assertEqual((text, cost), ("ok", 0.01))
         self.assertEqual(seen["env"]["MNEMOS_DB_URL"], "memory://")
+        self.assertLessEqual(set(seen["env"]), set(claude_cli._ENV_ALLOWLIST) | {"MNEMOS_DB_URL"})
         self.assertEqual(seen["cwd"], claude_cli._WORKDIR)
         self.assertEqual(seen["input"], "hi")
 

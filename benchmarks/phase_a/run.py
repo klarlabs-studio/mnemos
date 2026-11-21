@@ -113,7 +113,7 @@ def run_dir(args) -> Path:
 
 def load_selected(d: Path) -> list[datasets.Haystack]:
     sel = json.loads((d / "selection.json").read_text())
-    by_bench = datasets.load(DATA)
+    by_bench = datasets.load(DATA, tuple(sel["questions"]))
     out = []
     for bench, picks in sel["questions"].items():
         for h in by_bench[bench]:
@@ -125,8 +125,8 @@ def load_selected(d: Path) -> list[datasets.Haystack]:
 
 def cmd_prepare(args) -> None:
     d = run_dir(args)
-    by_bench = datasets.load(DATA)
     benches = ["longmemeval", "locomo"] if args.benchmark == "all" else [args.benchmark]
+    by_bench = datasets.load(DATA, tuple(benches))
     sel: dict[str, list[str]] = {}
     rng = random.Random(args.seed)
     for b in benches:
@@ -168,8 +168,20 @@ def stratified_sample(questions: list, total: int, seed: int) -> list[str]:
     return sorted(picked)
 
 
+# memeval invocations per Mnemos system: the output file (see MNEMOS_SYSTEMS)
+# and the flags that produce it in one pass. "mnemos" is the original plain
+# ingest; "mnemos-excerpts-anchored-passages" is deviation 6's configuration
+# (ingest with session times, then recall with excerpts and 30 passages).
+INGEST_PRESETS = {
+    "mnemos": ("mnemos.jsonl", []),
+    "mnemos-excerpts-anchored-passages": (
+        "mnemos-excerpts-anchored-passages.jsonl", ["-session-time", "-excerpts", "-passages", "30"]),
+}
+
+
 def cmd_ingest(args) -> None:
     d = run_dir(args)
+    out_file, preset_flags = INGEST_PRESETS[args.ingest_preset]
     binary = Path(args.out) / "memeval"
     subprocess.run(["go", "build", "-o", str(binary), "./tools/memeval"], cwd=ROOT, check=True)
     shim = None
@@ -192,13 +204,14 @@ def cmd_ingest(args) -> None:
     }
     with (d / "ingest.log").open("a") as log:
         subprocess.run(
-            [str(binary), "-in", str(d / "haystacks.jsonl"), "-out", str(d / "mnemos.jsonl"),
-             "-workdir", str(Path(args.out) / "brains"), "-workers", str(args.workers), "-limit", "100"],
+            [str(binary), "-in", str(d / "haystacks.jsonl"), "-out", str(d / out_file),
+             "-workdir", str(Path(args.out) / "brains"), "-workers", str(args.workers), "-limit", "100",
+             *preset_flags, *(["-keep"] if args.keep_brains else [])],
             env=env, stderr=log, check=True,
         )
     if shim:
         shim.shutdown()
-    failed = sum(1 for l in (d / "mnemos.jsonl").read_text().splitlines() if '"error"' in l)
+    failed = sum(1 for l in (d / out_file).read_text().splitlines() if '"error"' in l)
     exhausted = (d / "ingest.log").read_text().count("retry exhausted")
     print(f"ingest done; failed haystacks: {failed}; LLM calls that exhausted retries (rule-based fallback): {exhausted}")
 
@@ -315,6 +328,9 @@ def main() -> None:
     p.add_argument("--systems", nargs="+", default=SYSTEMS)
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--budget", type=float, default=30.0, help="hard stop in USD for this cache's total spend")
+    p.add_argument("--ingest-preset", default="mnemos", choices=sorted(INGEST_PRESETS),
+                   help="which Mnemos system ingest produces (memeval flags and output file)")
+    p.add_argument("--keep-brains", action="store_true", help="keep each brain for later -recall-only runs")
     p.add_argument("--models", default="openrouter", choices=sorted(PROFILES),
                    help="model profile: openrouter (pre-registered) or claude (deviation 7: headless Claude + local judges)")
     args = p.parse_args()

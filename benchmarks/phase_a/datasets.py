@@ -131,8 +131,12 @@ def load_locomo(path: Path) -> list[Haystack]:
     return out
 
 
-def load(data_dir: Path) -> dict[str, list[Haystack]]:
-    return {
-        "longmemeval": load_longmemeval(data_dir / "longmemeval_s_cleaned.json"),
-        "locomo": load_locomo(data_dir / "locomo10.json"),
-    }
+_LOADERS = {
+    "longmemeval": lambda d: load_longmemeval(d / "longmemeval_s_cleaned.json"),
+    "locomo": lambda d: load_locomo(d / "locomo10.json"),
+}
+
+
+def load(data_dir: Path, benchmarks=tuple(_LOADERS)) -> dict[str, list[Haystack]]:
+    """Load the named benchmarks only, so a LoCoMo-only run needs no LongMemEval file."""
+    return {b: _LOADERS[b](data_dir) for b in benchmarks}

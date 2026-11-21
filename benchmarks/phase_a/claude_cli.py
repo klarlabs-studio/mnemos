@@ -40,6 +40,18 @@ def _prepare() -> None:
         _MCP_CONFIG.write_text('{"mcpServers": {}}')
 
 
+# The only variables the child sees. HOME and USER let the CLI find the
+# operator's login; PATH and TMPDIR let it run. Nothing else is inherited, so
+# no MNEMOS_* setting or credential of the parent reaches it.
+_ENV_ALLOWLIST = ("HOME", "USER", "LOGNAME", "PATH", "TMPDIR", "LANG")
+
+
+def _child_env() -> dict[str, str]:
+    env = {k: v for k in _ENV_ALLOWLIST if (v := os.environ.get(k)) and "\n" not in v and "\0" not in v}
+    env["MNEMOS_DB_URL"] = "memory://"
+    return env
+
+
 def render(messages: list[dict]) -> tuple[str, str]:
     """Split chat messages into a system prompt and one user prompt.
 
@@ -78,7 +90,7 @@ def complete(model: str, messages: list[dict], timeout: int = 300) -> tuple[str,
     """
     _prepare()
     system, prompt = render(messages)
-    env = {**os.environ, "MNEMOS_DB_URL": "memory://"}
+    env = _child_env()
     delay, last = 5.0, None
     for _ in range(6):
         try:
