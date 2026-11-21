@@ -193,6 +193,17 @@ class ReportTest(unittest.TestCase):
         held = score.report(self.sample, labels, "heldout")
         self.assertEqual(held["items"] + r["items"], len(self.sample["items"]))
 
+    def test_primary_extraction_row_counts_live_claims_only(self):
+        labels = self.labels()
+        it = next(i for i in self.sample["items"] if i["split"] == "dev" and i["claims"])
+        it["claims"][0]["status"] = "deprecated"  # e.g. pruned as narration after ingest
+        labels[it["item_id"]]["extraction"]["gold"].remove(it["claims"][0]["text"])
+        ext = score.report(self.sample, labels, "dev")["extraction"]
+        self.assertEqual(ext["measure"], "live claims (H3 primary)")
+        self.assertEqual(ext["precision"]["value"], 1.0)
+        self.assertLess(ext["all_linked"]["precision"]["value"], 1.0)
+        self.assertEqual(ext["all_linked"]["predicted"], ext["predicted"] + 1)
+
     def test_agreement_on_the_kappa_subset(self):
         r = score.report(self.sample, self.labels(), "all", second=self.labels())
         a = r["agreement"]

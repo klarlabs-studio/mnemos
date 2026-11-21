@@ -8,7 +8,9 @@ Stages are scored separately, as HaluMem does, so a failure traces to its stage:
 
 - extraction: precision and recall of the stored claims against the gold
   atomic claims, by the deterministic matching rule in match_claims (defined
-  in docs/eval/phase-b-labelling-guide.md, "Matching rule");
+  in docs/eval/phase-b-labelling-guide.md, "Matching rule"). The primary row,
+  H3's measure, counts live claims only (not deprecated, not merged); the
+  row over every claim linked to the episode is secondary (all_linked);
 - relations: precision and recall by edge type (supports, contradicts,
   supersedes) over the claims each item displays;
 - trust: Brier score, Brier skill score, expected calibration error and the
@@ -405,9 +407,14 @@ def extraction_scores(items: list[dict], labels: dict, threshold: float, live_on
 def report(sample: dict, labels: dict, split: str, threshold: float = MATCH_THRESHOLD,
            second: dict | None = None) -> dict:
     items = [i for i in sample["items"] if split == "all" or i["split"] == split]
-    ext = extraction_scores(items, labels, threshold)
-    ext["live_only"] = extraction_scores(items, labels, threshold, live_only=True)
-    ext["sensitivity"] = {str(t): {k: extraction_scores(items, labels, t, resamples=0)[k]["value"]
+    # H3's primary measure (decided before the first run): precision over LIVE
+    # claims, those neither deprecated nor merged into another. The figure over
+    # every claim linked to the episode is kept as a secondary row.
+    ext = extraction_scores(items, labels, threshold, live_only=True)
+    ext["measure"] = "live claims (H3 primary)"
+    ext["all_linked"] = extraction_scores(items, labels, threshold)
+    ext["all_linked"]["measure"] = "all claims linked to the episode (secondary)"
+    ext["sensitivity"] = {str(t): {k: extraction_scores(items, labels, t, live_only=True, resamples=0)[k]["value"]
                                    for k in ("precision", "recall")} for t in SENSITIVITY_THRESHOLDS}
 
     rel_all, rel_in, invalid, rel_items = [], [], 0, 0
