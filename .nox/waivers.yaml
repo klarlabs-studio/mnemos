@@ -135,20 +135,17 @@ waivers:
       The test sets MaxRetries = 0 on purpose, to assert a failing step fails
       once. Production runners keep their retry policy.
 
-  # Real hardening gaps, accepted for now with a short expiry so they are fixed
-  # rather than carried: none is exploitable on its own, all are worth doing.
-  - id: container-hardening
-    rules: [CONT-001, IAC-121, IAC-123, IAC-124]
+  # IAC-123 (COPY without --chown) is deliberate: the binary stays root-owned,
+  # so the runtime user cannot replace it. The other container findings (tag
+  # pin, HEALTHCHECK, authors label) were fixed in #508.
+  - id: container-root-owned-binary
+    rules: [IAC-123]
     paths: [Dockerfile]
     owner: "@felixgeelhaar"
-    expires: 2027-01-06
+    expires: 2027-11-21
     reason: >-
-      Accepted gap. The base image is pinned by tag, not digest; there is no
-      HEALTHCHECK and no maintainer LABEL. The image runs as the non-root
-      user "mnemos" and GoReleaser signs it (docker_signs), but a digest pin
-      and a HEALTHCHECK are the fix; do them before this expires. IAC-123
-      (COPY without --chown) is deliberate: the binary stays root-owned, so
-      the runtime user cannot replace it.
+      Deliberate. The binary is copied root-owned and the image runs as the
+      non-root user "mnemos", so the runtime user cannot replace it.
 
   - id: docs-site-workflow
     rules: [IAC-153, IAC-308, IAC-314]
