@@ -8,7 +8,7 @@
 # needs the other's inputs.
 ARG BINARY_SOURCE=source
 
-FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS binary-source
+FROM golang:1.27.4-alpine3.23@sha256:f70850ef6ce341e8b6427f677049145d63c0b7ce002d4d7e3d464828b1b96dcd AS binary-source
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -39,6 +39,6 @@ WORKDIR /home/mnemos
 # design; a container started for a one-off CLI command exits before the
 # first probe.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget -q --spider http://127.0.0.1:7777/health || exit 1
+  CMD ["wget", "-q", "--spider", "http://127.0.0.1:7777/health"]
 
 ENTRYPOINT ["mnemos"]

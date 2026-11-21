@@ -58,7 +58,7 @@ go build -o "${BIN}" ./tools/graphbench
 
 # A random password per run: the container is throwaway, and a fixed
 # credential in a committed DSN is exactly what the secret scan looks for.
-PG_PASSWORD="$(openssl rand -hex 16)"
+PG_PASSWORD="$(openssl rand -hex 16)" # nox:ignore SEC-080 -- random per-run password for a throwaway container, not a committed credential
 docker run -d --rm --name "${PG_NAME}" --label "${LABEL}=$$" \
   -e POSTGRES_USER=mnemos -e POSTGRES_PASSWORD="${PG_PASSWORD}" -e POSTGRES_DB=mnemos \
   -p "127.0.0.1::5432" "${PG_IMAGE}" >/dev/null

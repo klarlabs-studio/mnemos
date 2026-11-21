@@ -81,7 +81,7 @@ func TestRunnerRunsTheJobWhenTheRecordCannotBeWritten(t *testing.T) {
 	store := &busyStore{}
 	runner := NewRunner(store)
 	runner.Timeout = time.Second
-	runner.MaxRetries = 0
+	runner.MaxRetries = 0 // nox:ignore AI-050 -- test asserts a failing step runs exactly once
 
 	ran := false
 	err := runner.Run(context.Background(), "process", nil, func(_ context.Context, job *Job) error {
@@ -106,7 +106,7 @@ func TestReadOnlyRunnerNeverWritesItsRecord(t *testing.T) {
 	store := &busyStore{}
 	runner := NewRunner(store)
 	runner.Timeout = time.Second
-	runner.MaxRetries = 0
+	runner.MaxRetries = 0 // nox:ignore AI-050 -- test asserts a failing step runs exactly once
 	runner.ReadOnly = true
 
 	err := runner.Run(context.Background(), "query", nil, func(_ context.Context, job *Job) error {

@@ -6,10 +6,9 @@ on:
     paths:
       - "docs-site/**"
       - ".github/workflows/docs.yml"
-  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:

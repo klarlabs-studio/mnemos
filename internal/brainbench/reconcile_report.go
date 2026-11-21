@@ -78,7 +78,7 @@ func (r ReconcileReport) WriteHuman(w io.Writer) error {
 	var b strings.Builder
 	d := r.Dataset
 	fmt.Fprintf(&b, "Reconciliation: %s\n\nHypothesis: %s\nSuccess: %s\n", r.Experiment, r.Hypothesis, r.Success)
-	fmt.Fprintf(&b, "Relate: %s   Prompt: %s   Bootstrap: %d resamples, seed %d\n", r.RelateModelVersion, r.PromptVersion, r.BootstrapIters, r.Seed)
+	fmt.Fprintf(&b, "Relate: %s   Prompt: %s   Bootstrap: %d resamples, seed %d\n", r.RelateModelVersion, r.PromptVersion, r.BootstrapIters, r.Seed) // nox:ignore AI-006 -- report header naming the prompt version, not a prompt or response
 	fmt.Fprintf(&b, "Routing (fixed before results): %s\n\n", r.RoutingRule)
 	fmt.Fprintf(&b, "Pairs: %d (%d contradicts, %d compatible; %d hand-written). Split: %d dev, %d test (%d contradicts in test).\n\n",
 		d.Total, d.Contradicts, d.Compatible, d.Hand, d.Dev, d.Test, d.TestContradicts)

@@ -21,7 +21,7 @@ func TestParseDSN_DefaultsNamespaceToMnemos(t *testing.T) {
 		t.Errorf("Namespace = %q, want mnemos (default)", d.Namespace)
 	}
 	// LibpqDSN should equal Raw when there was no namespace param to strip.
-	if d.LibpqDSN != "postgres://user:pw@host:5432/cogstack" {
+	if d.LibpqDSN != "postgres://user:pw@host:5432/cogstack" { // nox:ignore SEC-073 -- test fixture DSN with placeholder credentials
 		t.Errorf("LibpqDSN = %q, want raw passthrough", d.LibpqDSN)
 	}
 }

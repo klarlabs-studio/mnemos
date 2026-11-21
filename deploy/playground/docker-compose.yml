@@ -20,6 +20,8 @@
 services:
   mnemos:
     image: ghcr.io/klarlabs-studio/mnemos:${MNEMOS_TAG:-0.13.0}
+    mem_limit: 1g
+    cpus: 1.0
     environment:
       MNEMOS_DB_URL: "memory://playground"
       MNEMOS_SERVE_PORT: "7777"
@@ -41,6 +43,8 @@ services:
   # container restart (i.e., daily if you scheduled a restart).
   token-mint:
     image: ghcr.io/klarlabs-studio/mnemos:${MNEMOS_TAG:-0.13.0}
+    mem_limit: 256m
+    cpus: 0.5
     depends_on:
       mnemos:
         condition: service_healthy
@@ -60,6 +64,13 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       - mnemos
       - token-mint
