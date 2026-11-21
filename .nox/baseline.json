@@ -9,29 +9,8 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
-      "fingerprint": "214dd2f507109d807044cf1a64b7449f473211edec704364fa497165c77949bf",
-      "rule_id": "CONT-001",
-      "file_path": "Dockerfile",
-      "severity": "medium",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "9e1a7b19358d6a56aa6236ff55d452ba346c1d824bb455e71a333e1d1c96a2d1",
-      "rule_id": "IAC-121",
-      "file_path": "Dockerfile",
-      "severity": "medium",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
       "fingerprint": "e00c51bfc3329de81afc0694bac32126ad6633509c1a86c193d918c2bb3c0131",
       "rule_id": "IAC-123",
-      "file_path": "Dockerfile",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "4fd64c61428129c9b590f1fc650db67aadfdc5b80a6dcfc20226c977d7a5c204",
-      "rule_id": "IAC-124",
       "file_path": "Dockerfile",
       "severity": "low",
       "created_at": "2026-07-25T19:24:07.826791Z"
@@ -433,7 +412,7 @@
       "rule_id": "SEC-073",
       "file_path": "internal/query/pgvector_integration_test.go",
       "severity": "critical",
-      "reason": "False positive. The match is inside a comment block: a copy-pasteable `docker run` + `export` pair telling a developer how to bring up a throwaway local pgvector container for this test suite. The \"credentials\" are `mnemos:mnemos` on 127.0.0.1:55440, for a container the two preceding comment lines instruct the reader to create with that same password. No secret is disclosed — the string is the setup instruction, not a credential to anything that exists. The real DSN is read from TEST_POSTGRES_DSN at runtime (pgDSNOrSkip), and the suite skips when it is unset.",
+      "reason": "False positive. The match is inside a comment block: a copy-pasteable `docker run` + `export` pair telling a developer how to bring up a throwaway local pgvector container for this test suite. The \"credentials\" are `mnemos:mnemos` on 127.0.0.1:55440, for a container the two preceding comment lines instruct the reader to create with that same password. No secret is disclosed \u2014 the string is the setup instruction, not a credential to anything that exists. The real DSN is read from TEST_POSTGRES_DSN at runtime (pgDSNOrSkip), and the suite skips when it is unset.",
       "created_at": "2026-07-28T05:35:29.413321Z"
     },
     {

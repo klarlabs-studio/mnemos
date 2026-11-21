@@ -114,6 +114,12 @@ notable changes.
 
 ### Fixed
 
+- The container image is hardened (#508). The base image is pinned by digest, the image
+  carries a `HEALTHCHECK` against `serve`'s `/health` and an authors label, and zlib is
+  upgraded past ALPINE-CVE-2026-4738. The Dockerfile now also builds in a plain context
+  (`docker build .` compiles from source), which the shared CI smoke build needs; releases
+  still copy GoReleaser's binary via `--build-arg BINARY_SOURCE=release`.
+
 - MCP tool responses match their advertised output schemas again (#503). A nil map or
   slice was sent as `null` where the schema says object or array, so strict clients such as
   Claude Code rejected the whole response: `query_knowledge` returned nothing whenever a belief

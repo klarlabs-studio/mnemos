@@ -91,6 +91,9 @@ dockers_v2:
     ids:
       - mnemos
     dockerfile: Dockerfile
+    # Use the binary GoReleaser built, not a from-source build (see Dockerfile).
+    build_args:
+      BINARY_SOURCE: release
     platforms:
       - linux/amd64
       - linux/arm64
