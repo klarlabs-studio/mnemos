@@ -62,3 +62,14 @@ ai.inventory.json
 
 # Phase A benchmark data (#441): downloaded, pinned by sha256 in phase_a/datasets.py
 benchmarks/data/phase_a/
+
+# Phase B golden set (#441): drawn from a personal brain, never committed. The
+# sampler refuses any output directory inside a git worktree and writes a
+# self-ignoring .gitignore into its output; these guard the paths someone might
+# still reach for by hand.
+benchmarks/data/phase_b/
+benchmarks/phase_b/out/
+benchmarks/phase_b/labels/
+benchmarks/phase_b/**/sample.json
+benchmarks/phase_b/**/manifest.json
+benchmarks/phase_b/**/pass[12]-*.json
