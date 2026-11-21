@@ -112,9 +112,15 @@ line, and each gold line to at most one extracted claim:
    similarity first, ties broken by gold line order and then extracted order.
 
 Precision is matched extracted claims over all extracted claims; recall is
-matched gold lines over all gold lines, both summed over items. The report
-also gives the scores at 0.4 and 0.6, and over live claims only (excluding
-claims since deprecated or merged into another).
+matched gold lines over all gold lines, both summed over items.
+
+**H3's primary measure is precision over live claims only**: claims that are
+neither deprecated (for example pruned as narration after ingest) nor merged
+into another claim. That is the report's primary extraction row. The same
+scores over every claim linked to the episode are kept as a secondary row
+(`all_linked`). The report also gives the live-claim scores at thresholds 0.4
+and 0.6. Label every extracted claim the page shows, live or not: you cannot
+see which are live, and the scorer applies the filter.
 
 **When to link by hand.** The page shows each automatic match and its score.
 Override it when:
@@ -234,5 +240,13 @@ About 50 items are labelled by both passes. The report gives Cohen's kappa
 for extraction (whether each extracted claim matched a gold line under each
 labeller's gold), truth (three categories, and true/false where both knew),
 and relations (the label of every pair either labeller or Mnemos linked). A
-kappa below 0.6 on a stage means the guide is ambiguous for that stage; fix
-the guide and relabel rather than report the stage's scores as settled.
+kappa below 0.6 on a stage means the guide is ambiguous for that stage: fix
+the guide and relabel that stage, rather than report its scores as settled.
+
+The second labeller may be a model run blind by
+`benchmarks/phase_b/claude_label.py`. It is given this guide as its
+instructions and sees exactly what a human pass-2 labeller sees, in the same
+order: it writes gold claims from the episode alone, and only then sees the
+extracted claims, with stored trust, status and validity hidden. It never
+reads pass-1 labels. Its labels go to `labels/pass2-<model>.json`, in the
+same format as the labelling page's.
