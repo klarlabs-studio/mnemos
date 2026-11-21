@@ -29,7 +29,9 @@ memeval -recall-only -excerpts -passages 30 against a fresh copy of the same
 kept -session-time brains. Confirm its recalled claim IDs match
 mnemos-excerpts-anchored.jsonl, so the passages are the only difference.
 
-OPENROUTER_API_KEY must be set. Raw outputs go to --out (default: a directory
+With --models openrouter (the default), OPENROUTER_API_KEY must be set; with
+--models claude, answering and extraction run on headless Claude and judging on
+local Ollama models, with no key (deviation 7). Raw outputs go to --out (default: a directory
 outside the repository), never to the repository.
 """
 
@@ -47,18 +49,39 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import datasets, prompts, stats, systems
-from .llm import BudgetExceeded, Client, Model
+from .llm import CLAUDE_CLI, OLLAMA, BudgetExceeded, Client, Model
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "benchmarks" / "data" / "phase_a"
 
-# Pinned per role. Recorded in every report.
-MODELS = {
-    "answerer": Model("google/gemini-2.5-flash-lite", "google-ai-studio", max_tokens=200),
-    "judge_mistral": Model("mistralai/mistral-small-3.2-24b-instruct", "mistral/eu", max_tokens=5),
-    "judge_qwen": Model("qwen/qwen3-30b-a3b-instruct-2507", "nebius/fp8", max_tokens=5),
+# Pinned per role, per profile. Recorded in every report. The judge slots keep
+# their original keys so earlier runs still report; the model in each slot is
+# what the report records.
+#
+# "openrouter" is the pre-registered configuration. "claude" is deviation 7:
+# answering and extraction on headless Claude (the operator's subscription),
+# judging on two local models from two other families, so the judges still
+# share a family neither with each other nor with the answerer.
+PROFILES = {
+    "openrouter": {
+        "models": {
+            "answerer": Model("google/gemini-2.5-flash-lite", "google-ai-studio", max_tokens=200),
+            "judge_mistral": Model("mistralai/mistral-small-3.2-24b-instruct", "mistral/eu", max_tokens=5),
+            "judge_qwen": Model("qwen/qwen3-30b-a3b-instruct-2507", "nebius/fp8", max_tokens=5),
+        },
+        "extractor": "google/gemini-2.5-flash-lite",  # Mnemos's own client; OpenRouter routes within Google.
+    },
+    "claude": {
+        "models": {
+            "answerer": Model("claude-haiku-5-5", CLAUDE_CLI, max_tokens=200),
+            "judge_mistral": Model("gemma3:12b", OLLAMA, max_tokens=5),
+            "judge_qwen": Model("qwen2.5:3b", OLLAMA, max_tokens=5),
+        },
+        "extractor": "claude-haiku-5-5",
+    },
 }
-EXTRACTOR = "google/gemini-2.5-flash-lite"  # Mnemos's own client; OpenRouter routes within Google.
+MODELS = PROFILES["openrouter"]["models"]
+EXTRACTOR = PROFILES["openrouter"]["extractor"]
 SYSTEMS = ["mnemos", "mnemos-excerpts", "mnemos-excerpts-top10", "mnemos-excerpts-top20",
            "mnemos-excerpts-anchored", "mnemos-excerpts-reingest", "mnemos-excerpts-anchored-passages",
            "bm25", "full-context"]
@@ -149,11 +172,17 @@ def cmd_ingest(args) -> None:
     d = run_dir(args)
     binary = Path(args.out) / "memeval"
     subprocess.run(["go", "build", "-o", str(binary), "./tools/memeval"], cwd=ROOT, check=True)
+    shim = None
+    if args.models == "claude":
+        from . import claude_shim
+        shim, base_url = claude_shim.serve(EXTRACTOR)
+        llm = {"MEMEVAL_LLM_BASE_URL": base_url, "MEMEVAL_LLM_API_KEY": "unused"}
+    else:
+        llm = {"MEMEVAL_LLM_BASE_URL": "https://openrouter.ai/api", "MEMEVAL_LLM_API_KEY": os.environ["OPENROUTER_API_KEY"]}
     env = {
         **os.environ,
+        **llm,
         "MEMEVAL_LLM_PROVIDER": "openai-compat",
-        "MEMEVAL_LLM_BASE_URL": "https://openrouter.ai/api",
-        "MEMEVAL_LLM_API_KEY": os.environ["OPENROUTER_API_KEY"],
         "MEMEVAL_LLM_MODEL": EXTRACTOR,
         "MEMEVAL_EMBED_PROVIDER": "ollama",
         "MEMEVAL_EMBED_MODEL": "nomic-embed-text",
@@ -167,6 +196,8 @@ def cmd_ingest(args) -> None:
              "-workdir", str(Path(args.out) / "brains"), "-workers", str(args.workers), "-limit", "100"],
             env=env, stderr=log, check=True,
         )
+    if shim:
+        shim.shutdown()
     failed = sum(1 for l in (d / "mnemos.jsonl").read_text().splitlines() if '"error"' in l)
     exhausted = (d / "ingest.log").read_text().count("retry exhausted")
     print(f"ingest done; failed haystacks: {failed}; LLM calls that exhausted retries (rule-based fallback): {exhausted}")
@@ -284,8 +315,12 @@ def main() -> None:
     p.add_argument("--systems", nargs="+", default=SYSTEMS)
     p.add_argument("--workers", type=int, default=8)
     p.add_argument("--budget", type=float, default=30.0, help="hard stop in USD for this cache's total spend")
+    p.add_argument("--models", default="openrouter", choices=sorted(PROFILES),
+                   help="model profile: openrouter (pre-registered) or claude (deviation 7: headless Claude + local judges)")
     args = p.parse_args()
     args.stratify = {"longmemeval": args.sample_longmemeval} if args.sample_longmemeval else {}
+    global MODELS, EXTRACTOR
+    MODELS, EXTRACTOR = PROFILES[args.models]["models"], PROFILES[args.models]["extractor"]
     {"prepare": cmd_prepare, "ingest": cmd_ingest, "answer": cmd_answer, "judge": cmd_judge, "report": cmd_report}[args.stage](args)
 
 
