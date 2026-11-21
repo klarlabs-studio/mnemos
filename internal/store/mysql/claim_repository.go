@@ -657,7 +657,7 @@ func (r ClaimRepository) SetLifecycle(ctx context.Context, claimID string, lifec
 }
 
 // trustInput is one claim's scoring inputs: its own confidence, how many
-// DISTINCT evidence-event authors corroborate it, how many evidence events
+// DISTINCT evidence origins (ADR 0046) corroborate it, how many evidence events
 // there are in total, and the most recent evidence timestamp.
 type trustInput struct {
 	id              string
@@ -683,17 +683,30 @@ func (in trustInput) toDomain() domain.TrustInput {
 }
 
 // trustInputsSelect is the aggregate that feeds trust scoring. COUNT distinct
-// evidence-event AUTHORS and total events separately, so corroboration can be
+// evidence ORIGINS and total events separately, so corroboration can be
 // graded by independence (echo-chamber guard). An evidence episode that depends
-// on another evidence episode of the same claim adds no author (ADR 0038 §3),
+// on another evidence episode of the same claim adds no source (ADR 0038 §3),
 // unless that dependency was removed.
+//
+// The origin COALESCE restates domain.EvidenceOrigin, which is the definition
+// (ADR 0046): the file path, else the session, else the text with U+0020
+// trimmed and lower-cased. It is compared as BINARY: under the table's
+// utf8mb4_unicode_ci collation DISTINCT would otherwise also merge accents and
+// ignore trailing spaces. LOWER() folds non-ASCII letters too, so MySQL can
+// count fewer sources than the definition, never more (documented in
+// domain.EvidenceOrigin).
 // LEFT JOIN so claims with no evidence still appear.
 const trustInputsSelect = `
 SELECT c.id, c.confidence,
        COUNT(DISTINCT CASE WHEN NOT EXISTS (
          SELECT 1 FROM event_dependencies d JOIN claim_evidence ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
          WHERE d.event_id = ce.event_id AND d.removed_at IS NULL
-       ) THEN e.created_by END),
+       ) THEN CAST(COALESCE(
+         CONCAT('path:', NULLIF(JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json, '$.input_source_path')), '')),
+         CONCAT('session:', NULLIF(JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json, '$.session_id')), '')),
+         CONCAT('session:', NULLIF(JSON_UNQUOTE(JSON_EXTRACT(e.metadata_json, '$.input_session_id')), '')),
+         CONCAT('content:', LOWER(TRIM(e.content)))
+       ) AS BINARY) END),
        COUNT(DISTINCT ce.event_id), MAX(e.timestamp),
        c.last_confirmed, c.half_life_days, c.confidence_components
 FROM claims c

@@ -665,7 +665,7 @@ func (r ClaimRepository) ListCreditHistory(ctx context.Context, claimIDs []strin
 }
 
 // trustInput is one claim's scoring inputs: its own confidence, how many
-// DISTINCT evidence-event authors corroborate it, how many evidence events
+// DISTINCT evidence origins (ADR 0046) corroborate it, how many evidence events
 // there are in total, and the most recent evidence timestamp.
 type trustInput struct {
 	id              string
@@ -691,10 +691,17 @@ func (in trustInput) toDomain() domain.TrustInput {
 }
 
 // trustInputsSQL builds the aggregate that feeds trust scoring. A non-empty
-// where clause bounds it to a subset of claims. COUNT distinct evidence-event
-// AUTHORS and total events separately, so corroboration can be graded by
+// where clause bounds it to a subset of claims. COUNT distinct evidence
+// ORIGINS and total events separately, so corroboration can be graded by
 // independence (echo-chamber guard). LEFT JOIN so claims with no evidence still
 // appear.
+//
+// The origin COALESCE restates domain.EvidenceOrigin, which is the definition
+// (ADR 0046): the file path, else the session, else the text with U+0020
+// trimmed and ASCII lower-cased. translate() folds ASCII only, as SQLite's
+// lower() does; Postgres's lower() would also fold non-ASCII letters.
+// An evidence episode that depends on another evidence episode of the same
+// claim adds no source (ADR 0038 §3).
 //
 // MAX(e.timestamp) is deliberately NOT coalesced to a date sentinel. A claim
 // with no evidence must reach trust.Score with the ZERO time — the value
@@ -710,7 +717,12 @@ SELECT c.id, c.confidence,
        COUNT(DISTINCT CASE WHEN NOT EXISTS (
          SELECT 1 FROM %s d JOIN %s ce2 ON ce2.event_id = d.depends_on AND ce2.claim_id = ce.claim_id
          WHERE d.event_id = ce.event_id AND d.removed_at IS NULL
-       ) THEN e.created_by END),
+       ) THEN COALESCE(
+         'path:' || NULLIF(e.metadata_json->>'input_source_path', ''),
+         'session:' || NULLIF(e.metadata_json->>'session_id', ''),
+         'session:' || NULLIF(e.metadata_json->>'input_session_id', ''),
+         'content:' || translate(trim(e.content), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')
+       ) END),
        COUNT(DISTINCT ce.event_id),
        MAX(e.timestamp),
        c.last_confirmed, c.half_life_days, c.confidence_components

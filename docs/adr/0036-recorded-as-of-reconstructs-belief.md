@@ -217,7 +217,7 @@ over the inputs as they stood at T, scored at T (`recorded.TrustInputAt`, pure;
 
 | Input | At T |
 |---|---|
-| evidence count | links recorded by T to episodes ingested by T, graded by independence (`domain.EffectiveEvidenceCount` over distinct episode authors), as the stores grade them |
+| evidence count | links recorded by T to episodes ingested by T, graded by independence (`domain.EffectiveEvidenceCount` over distinct episode origins, `domain.EvidenceOrigin`, since ADR 0046; distinct episode authors before it), as the stores grade them |
 | latest evidence | the freshest such episode's timestamp |
 | credit | the applied net credit from `claim_credit_history`, by the same rule as status (§1); no history, the stored value |
 | confidence, half-life, last confirmed | from `claim_trust_input_history`: the prior values of the first change recorded after T; nothing changed after T, the stored values. A last confirmation still after T reads as none |

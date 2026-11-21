@@ -132,12 +132,13 @@ func TestPostgres_RecomputeTrustForClaims_MatchesFullRecompute(t *testing.T) {
 	full := conn.Claims.(ports.TrustScorer)
 	now := time.Now().UTC()
 
-	// "a" is corroborated by two independent authors, "b" by one author twice,
+	// "a" is corroborated by two independent origins (two texts), "b" by one
+	// text twice (ADR 0046: origin, not author),
 	// "c" by nothing at all — so the graded evidence count differs per claim and
 	// the two paths have something to disagree about.
 	for i, author := range []string{"alice", "bob", "dave", "dave"} {
 		if err := conn.Events.Append(ctx, domain.Event{
-			ID: fmt.Sprintf("ev%d", i), RunID: "r", SchemaVersion: "1", Content: "c",
+			ID: fmt.Sprintf("ev%d", i), RunID: "r", SchemaVersion: "1", Content: "c " + author,
 			SourceInputID: "in", Timestamp: now, IngestedAt: now, CreatedBy: author,
 		}); err != nil {
 			t.Fatalf("seed event: %v", err)

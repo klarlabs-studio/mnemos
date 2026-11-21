@@ -298,25 +298,27 @@ func TestPostgres_ClaimUpsertWithStatusHistory(t *testing.T) {
 }
 
 // TestPostgres_IndependenceAwareCorroboration proves the echo-chamber guard runs
-// on the SQL path: COUNT(DISTINCT created_by) vs COUNT(DISTINCT event_id) feeds the
-// graded evidence count, so three independent authors beat one author repeated.
+// on the SQL path: COUNT(DISTINCT origin) (domain.EvidenceOrigin, ADR 0046) vs
+// COUNT(DISTINCT event_id) feeds the graded evidence count, so three independent
+// files beat three chunks of one file, all ingested by one principal.
 func TestPostgres_IndependenceAwareCorroboration(t *testing.T) {
 	conn := withConn(t)
 	ctx := context.Background()
 	scorer := conn.Claims.(ports.TrustScorer)
 	now := time.Now().UTC()
 
-	ev := func(id, author string) domain.Event {
+	ev := func(id, file string) domain.Event {
 		return domain.Event{ID: id, RunID: "r", SchemaVersion: "1", Content: "c " + id,
-			SourceInputID: "in", Timestamp: now, IngestedAt: now, CreatedBy: author}
+			SourceInputID: "in", Timestamp: now, IngestedAt: now, CreatedBy: "alice",
+			Metadata: map[string]string{domain.OriginPathKey: file}}
 	}
-	for i, a := range []string{"alice", "bob", "carol"} {
+	for i, a := range []string{"/a.md", "/b.md", "/c.md"} {
 		if err := conn.Events.Append(ctx, ev(fmt.Sprintf("evA%d", i), a)); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for i := 0; i < 3; i++ {
-		if err := conn.Events.Append(ctx, ev(fmt.Sprintf("evB%d", i), "dave")); err != nil {
+		if err := conn.Events.Append(ctx, ev(fmt.Sprintf("evB%d", i), "/d.md")); err != nil {
 			t.Fatal(err)
 		}
 	}

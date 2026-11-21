@@ -301,27 +301,28 @@ func TestClaimRepository_TrustScorerCapability(t *testing.T) {
 }
 
 // TestClaimRepository_IndependenceAwareCorroboration is the echo-chamber guard:
-// three events from three DISTINCT authors corroborate more than three events from
-// ONE author (whose repeats are discounted), even though the raw event count is
-// identical.
+// three events from three DISTINCT origins (files, ADR 0046) corroborate more
+// than three chunks of ONE file (whose repeats are discounted), even though the
+// raw event count is identical and one principal ingested all six.
 func TestClaimRepository_IndependenceAwareCorroboration(t *testing.T) {
 	t.Parallel()
 	conn := openMemory(t)
 	ctx := context.Background()
 	scorer := conn.Claims.(ports.TrustScorer)
 
-	mkEvent := func(id, author string) domain.Event {
+	mkEvent := func(id, file string) domain.Event {
 		e := newEvent(id, "run", "content "+id)
-		e.CreatedBy = author
+		e.CreatedBy = "alice"
+		e.Metadata = map[string]string{domain.OriginPathKey: file}
 		return e
 	}
-	for i, a := range []string{"alice", "bob", "carol"} { // claim A: three voices
+	for i, a := range []string{"/a.md", "/b.md", "/c.md"} { // claim A: three files
 		if err := conn.Events.Append(ctx, mkEvent(fmt.Sprintf("evA%d", i), a)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for i := 0; i < 3; i++ { // claim B: one voice, thrice
-		if err := conn.Events.Append(ctx, mkEvent(fmt.Sprintf("evB%d", i), "dave")); err != nil {
+	for i := 0; i < 3; i++ { // claim B: one file, three chunks
+		if err := conn.Events.Append(ctx, mkEvent(fmt.Sprintf("evB%d", i), "/d.md")); err != nil {
 			t.Fatal(err)
 		}
 	}

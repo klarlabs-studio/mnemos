@@ -131,10 +131,12 @@ func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[strin
 			dependent[d.EventID] = true
 		}
 	}
-	authors := map[string]bool{}
+	// Distinct sources are distinct origins (domain.EvidenceOrigin, ADR 0046),
+	// exactly as the stores count them.
+	sources := map[string]bool{}
 	for id := range counted {
 		if !dependent[id] {
-			authors[events[id].CreatedBy] = true
+			sources[domain.EvidenceOrigin(events[id])] = true
 		}
 	}
 	confidence, halfLife, confirmed := StoredInputsAt(c, inputs, t)
@@ -146,7 +148,7 @@ func TrustInputAt(c domain.Claim, links []domain.ClaimEvidence, events map[strin
 	}
 	return domain.TrustInput{
 		Confidence:     confidence,
-		EvidenceCount:  domain.EffectiveEvidenceCount(len(authors), len(counted)),
+		EvidenceCount:  domain.EffectiveEvidenceCount(len(sources), len(counted)),
 		LatestEvidence: latest,
 		LastConfirmed:  confirmed,
 		HalfLifeDays:   halfLife,

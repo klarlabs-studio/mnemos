@@ -83,6 +83,21 @@ notable changes.
 
 ### Changed
 
+- **Trust changes: evidence independence is keyed on origin, not on who ingested it**
+  (ADR 0046, #390). Corroboration counted distinct sources as distinct ingesting
+  principals (`created_by`), so in a single-user brain no belief could have more than one
+  source, and one document ingested by two users counted as two. A source is now the
+  evidence episode's origin (`domain.EvidenceOrigin`): its file (`input_source_path`),
+  else its session (`session_id`), else its trimmed, ASCII-lower-cased text. Every backend
+  (SQLite, libSQL, Postgres, MySQL, memory) and the recorded-as-of reconstruction count
+  it the same way; ADR 0038 dependence, the repeat weight and the trust formula are
+  unchanged. On a measured 46,641-belief brain, beliefs with two or more sources went
+  from 14 to 1,217 (2.6%), whose trust rises; a belief whose sources were only several
+  principals reading one file falls. The trust model version is now `trust/v3`: stored
+  `trust/v2` scores are stale, and `mnemos recompute-trust --stale` rescores them in
+  verified batches. Recorded-as-of trust at instants before this change is reconstructed
+  under `trust/v3`, so it differs from the score stored at the time.
+
 - **Behaviour change: restating a belief the brain already holds no longer creates a second
   belief on the single-fact write paths.** `Memory.RememberClaim`,
   `RememberClaimWithEvidence`, REST `POST /v1/facts`, gRPC `RememberFact`, the client,

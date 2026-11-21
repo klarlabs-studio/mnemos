@@ -812,11 +812,12 @@ func (r ClaimRepository) recomputeTrustLocked(ids []string, scoring domain.Trust
 // claim. Callers hold state.mu. The recompute and ListTrustInputs both use it.
 func (r ClaimRepository) trustInputLocked(id string, c storedClaim) domain.TrustInput {
 	// Corroboration is graded by INDEPENDENCE, not raw volume: count distinct
-	// evidence-event authors, with same-source repeats discounted (echo-chamber
-	// guard) — many events from one voice don't corroborate like many voices.
+	// evidence ORIGINS (domain.EvidenceOrigin, ADR 0046), with same-source
+	// repeats discounted (echo-chamber guard) — many chunks of one document
+	// don't corroborate like many documents.
 	//
 	// An evidence episode that depends on another evidence episode of this
-	// claim adds no author (ADR 0038 §3); it still counts toward the total.
+	// claim adds no source (ADR 0038 §3); it still counts toward the total.
 	evidence := r.state.evidence[id]
 	dependent := map[string]bool{}
 	for _, d := range r.state.dependencies {
@@ -832,7 +833,7 @@ func (r ClaimRepository) trustInputLocked(id string, c storedClaim) domain.Trust
 	for evID := range evidence {
 		if ev, ok := r.state.events[evID]; ok {
 			if !dependent[evID] {
-				distinct[ev.CreatedBy] = struct{}{}
+				distinct[domain.EvidenceOrigin(domain.Event{Content: ev.Content, Metadata: ev.Metadata})] = struct{}{}
 			}
 			total++
 		}
