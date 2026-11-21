@@ -96,7 +96,7 @@ func TestE2E_CompactionSummaryIsNotCaptured(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.TrimSpace(extractTranscriptText(path, 64*1024))
-	if got != "Move the release pipeline to kiln" {
+	if got != "user: Move the release pipeline to kiln" {
 		t.Errorf("capture text = %q, want only the real user message", got)
 	}
 }

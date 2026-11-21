@@ -83,6 +83,21 @@ notable changes.
 
 ### Changed
 
+- **Extraction names the speaker** (#445 item 4). In LoCoMo's two-person sessions
+  extraction stored first-person beliefs with no speaker ("Sitting in that spot by the
+  window gives me peace"), detached from who said it, and Claude Code capture joined user
+  and assistant text with no labels, so the assistant's "I found the race" read like a
+  statement the user made about themselves. Capture now opens each message with its role
+  (`user:` / `assistant:`). The rule-based extractor resolves `I`/`me`/`my` on a labelled
+  line to that line's speaker, and `you`/`your` to the other party of a two-person
+  conversation, agreeing the verb ("Melanie loves making this dairy-free chocolate cake",
+  "The assistant found the race in the retry loop"). Unlabelled text is unchanged: a
+  personal-name label counts only when two or more lines carry one, metadata labels
+  (`Note:`, `Status:`) are never speakers, and `we` and an unknown addressee's `you` are
+  left alone. The LLM prompt (`PromptVersion` v1.5 → v1.6, which invalidates the
+  extraction cache) gains the same rules and two dialogue examples. New eval suite
+  `data/eval/speaker_attribution.yaml`.
+
 - **Trust changes: evidence independence is keyed on origin, not on who ingested it**
   (ADR 0046, #390). Corroboration counted distinct sources as distinct ingesting
   principals (`created_by`), so in a single-user brain no belief could have more than one

@@ -1,0 +1,56 @@
+# Speaker Attribution Tests (#445 item 4)
+#
+# A first- or second-person statement on a line that names its speaker must
+# become a claim that names the speaker (or addressee), so it stands alone once
+# detached from the conversation. Nothing is invented when no speaker is
+# labelled.
+
+test_cases:
+  - id: speaker-001
+    description: "LoCoMo-style two-speaker session: I/me/my resolve to the line's speaker"
+    tags: [speaker_attribution, dialogue]
+    input: "Session date: 8 May 2023\nCaroline: Sitting in that spot by the window gives me peace.\nMelanie: I love making this dairy-free chocolate cake with raspberries."
+    expected_claims:
+      - text: "Sitting in that spot by the window gives Caroline peace"
+        type: fact
+      - text: "Melanie loves making this dairy-free chocolate cake with raspberries"
+        type: fact
+    expected_count: 2
+    not_expected_claims:
+      - "I love making this dairy-free chocolate cake with raspberries"
+
+  - id: speaker-002
+    description: "Two-person conversation: you resolves to the other speaker"
+    tags: [speaker_attribution, dialogue]
+    input: "Caroline: My sister moved to Boston last spring.\nMelanie: You told me about the adoption agency last week."
+    expected_claims:
+      - text: "Caroline's sister moved to Boston last spring"
+        type: fact
+      - text: "Caroline told Melanie about the adoption agency last week"
+        type: fact
+    expected_count: 2
+    not_expected_claims: []
+
+  - id: speaker-003
+    description: "Captured transcript: the assistant's self-statements stay about the assistant"
+    tags: [speaker_attribution, transcript]
+    input: "user: I prefer table-driven tests in Go.\nassistant: I found the race in the retry loop.\nMy next step is adding a deadline to the client."
+    expected_claims:
+      - text: "The user prefers table-driven tests in Go"
+        type: fact
+      - text: "The assistant found the race in the retry loop"
+        type: fact
+      - text: "The assistant's next step is adding a deadline to the client"
+        type: fact
+    expected_count: 3
+    not_expected_claims: []
+
+  - id: speaker-004
+    description: "No speaker label: first person is kept, no speaker invented"
+    tags: [speaker_attribution, unlabelled]
+    input: "I love making this dairy-free chocolate cake with raspberries."
+    expected_claims:
+      - text: "I love making this dairy-free chocolate cake with raspberries"
+        type: fact
+    expected_count: 1
+    not_expected_claims: []

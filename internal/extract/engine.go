@@ -50,7 +50,7 @@ func (e Engine) Extract(_ context.Context, events []domain.Event) ([]domain.Clai
 			continue
 		}
 
-		candidates := splitCandidates(content)
+		candidates := extractCandidates(content)
 		for _, candidate := range candidates {
 			dedupeKey := normalizeForDedupe(candidate)
 			if dedupeKey == "" {
