@@ -114,6 +114,12 @@ type memory struct {
 	// embedSlots bounds how many background embeds call the provider at once
 	// (#457). nil means unbounded, for a memory built without the constructor.
 	embedSlots chan struct{}
+	// embedFinished counts background embeds that have returned, stored or
+	// not, so Close can tell a provider still working through a queue from a
+	// stalled one (#460). embedAbandoned counts the embeds Close cancelled,
+	// for the one summary line Close logs.
+	embedFinished  atomic.Int64
+	embedAbandoned atomic.Int64
 }
 
 // embedConcurrency is how many background embeds one memory runs against its
@@ -775,6 +781,7 @@ func (m *memory) embedAsync(entityID, entityType, text string) {
 	m.embedWG.Add(1)
 	go func() {
 		defer m.embedWG.Done()
+		defer m.embedFinished.Add(1)
 		// Derived from embedCtx so Close cancels in-flight work instead of
 		// waiting out the full 30s timeout. Fall back to Background for a
 		// memory built by some path that skipped the constructor — nil here
@@ -783,6 +790,16 @@ func (m *memory) embedAsync(entityID, entityType, text string) {
 		if parent == nil {
 			parent = context.Background()
 		}
+		fail := func(err error) {
+			// Cancelled by Close: counted here and reported by Close in one
+			// line with the total, rather than one warning per queued item.
+			if parent.Err() != nil {
+				embedding.RecordFailure()
+				m.embedAbandoned.Add(1)
+				return
+			}
+			embedFailed(entityID, entityType, err)
+		}
 		// Wait for a slot before the timeout starts, so a queued embed is not
 		// timed out by the ones ahead of it.
 		if m.embedSlots != nil {
@@ -790,7 +807,7 @@ func (m *memory) embedAsync(entityID, entityType, text string) {
 			case m.embedSlots <- struct{}{}:
 				defer func() { <-m.embedSlots }()
 			case <-parent.Done():
-				embedFailed(entityID, entityType, parent.Err())
+				fail(parent.Err())
 				return
 			}
 		}
@@ -801,11 +818,11 @@ func (m *memory) embedAsync(entityID, entityType, text string) {
 			if err == nil {
 				err = errors.New("embedder returned no vector")
 			}
-			embedFailed(entityID, entityType, err)
+			fail(err)
 			return
 		}
 		if err := embeddings.Upsert(ctx, entityID, entityType, vectors[0], embedding.ModelIDOf(embedder), m.actorID); err != nil {
-			embedFailed(entityID, entityType, err)
+			fail(err)
 		}
 	}()
 }
@@ -819,36 +836,59 @@ func embedFailed(entityID, entityType string, err error) {
 		"entity_id", entityID, "entity_type", entityType, "error", err)
 }
 
-// closeEmbedGrace is how long Close lets in-flight background embeds finish
-// before cancelling them. An embed takes milliseconds against a local model and
-// well under a second against a remote one, so a write followed at once by
-// Close (a CLI call, a capture hook, an MCP handler's deferred Close) keeps its
-// vectors. A stalled provider still cannot hold Close for the full 30s embed
-// timeout.
-const closeEmbedGrace = 5 * time.Second
-
-// drainEmbeds waits up to grace for in-flight embeds, then cancels the rest and
-// waits for them to return.
+// closeEmbedStall is how long Close waits without a single background embed
+// finishing before it treats the provider as stalled and cancels the rest.
 //
-// Close used to cancel first and then wait, so every embed still in flight was
-// discarded. A process that wrote and exited lost the vectors for what it had
-// just written, and that belief was recalled by token overlap only from then on.
-func (m *memory) drainEmbeds(grace time.Duration) {
+// It bounds a stall, not the drain. Close used to wait a fixed 5s in total and
+// then cancel everything still queued, so a process that wrote more than a few
+// seconds' worth of embeds (a 3,000-belief import against a 4-slot pool) and
+// exited stored the tail of its batch with no vector (#460). Now Close drains
+// the whole queue for as long as the provider keeps answering, and a stalled
+// provider still cannot hold Close for the full 30s embed timeout.
+const closeEmbedStall = 5 * time.Second
+
+// drainEmbeds waits for every queued and in-flight background embed to finish,
+// for as long as at least one finishes in each stall window. When a window
+// passes with none finishing, it cancels the rest and waits for them to return.
+//
+// Anything cancelled is counted in mnemos_embed_failed_total and reported in a
+// single warning with the count. The beliefs and episodes themselves were
+// already committed; only their vectors are missing, and `mnemos reembed`
+// embeds exactly the claims and events that have none.
+func (m *memory) drainEmbeds(stall time.Duration) {
 	done := make(chan struct{})
 	go func() {
 		m.embedWG.Wait()
 		close(done)
 	}()
-	select {
-	case <-done:
-	case <-time.After(grace):
-		if m.embedCancel != nil {
-			m.embedCancel()
+	finished := m.embedFinished.Load()
+	timer := time.NewTimer(stall)
+	defer timer.Stop()
+drain:
+	for {
+		select {
+		case <-done:
+			break drain
+		case <-timer.C:
+			if now := m.embedFinished.Load(); now != finished {
+				finished = now
+				timer.Reset(stall)
+				continue
+			}
+			if m.embedCancel != nil {
+				m.embedCancel()
+			}
+			<-done
+			break drain
 		}
-		<-done
 	}
 	if m.embedCancel != nil {
 		m.embedCancel()
+	}
+	if n := m.embedAbandoned.Swap(0); n > 0 {
+		slog.Warn("mnemos: Close abandoned background embeds after the provider made no progress; "+
+			"those items are recallable by text only until `mnemos reembed` backfills them",
+			"abandoned", n, "stalled_for", stall)
 	}
 }
 
@@ -2701,7 +2741,7 @@ func (m *memory) calibrationIn(ctx context.Context, h *healthCorpus) (Calibratio
 // does `defer mem.Close()` (the remember_episode MCP tool, every short-lived
 // CLI write) tore the connection away from a goroutine still mid-request.
 func (m *memory) Close() error {
-	m.drainEmbeds(closeEmbedGrace)
+	m.drainEmbeds(closeEmbedStall)
 
 	var firstErr error
 	if m.conn != nil {

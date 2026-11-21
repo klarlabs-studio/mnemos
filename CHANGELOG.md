@@ -120,6 +120,14 @@ notable changes.
   had no confidence decomposition or the answer had no dissonances. Null members are now
   removed from `structuredContent` for every tool, on stdio and HTTP.
 
+- `Memory.Close` no longer discards queued background embeds after a fixed 5 s (#460). A
+  process that wrote a batch larger than the 4-slot embed pool and then closed (an import,
+  a large capture, a long `process`) stored the tail of the batch with no vector, and
+  recall found those beliefs by token overlap only. Close now drains the whole queue for
+  as long as the provider keeps finishing embeds, and cancels only after 5 s with none
+  finishing (a stalled provider). Cancelled embeds still count in
+  `mnemos_embed_failed_total`, and Close logs one warning with the number abandoned and
+  points to `mnemos reembed`, which backfills exactly the claims and events with no vector.
 - `list_dissonances` (MCP, and the browse surfaces that share it) reads one page of
   contradictions from an index instead of decoding every association in the brain (ADR 0043).
   At 100k beliefs the old path took ~0.45–0.66 s per page; the indexed read measured
