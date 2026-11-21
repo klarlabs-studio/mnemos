@@ -166,7 +166,52 @@ contradict.
   package's test-file count had contradicted every other package's.
 - When the wording differs in the same position, a few genuine changes of one
   quantity over time lose their edge (4 of 101 removals above). Those claims
-  now coexist in recall, as all paraphrased supersessions already did.
+  now coexist in recall, as all paraphrased supersessions already did. A
+  lexical fix for them was tried and rejected; see below.
+
+## Rejected refinement: clause boundaries (2026-11-21)
+
+I tried to recover the four lost supersessions. Three of them, found again in
+the brain, share a shape:
+
+- "Critical — 281 MB free on a 460 GB disk (98%)" / "Fixed: 281 MB → 27 GB
+  free (98% → 31%)";
+- "… your Mac now has 114 GB free (74% used)" / "Your Mac now has 130 GB free,
+  up from 79 GB";
+- "Dissonance is `0.055`, a hair over the `0.05` warn line" / "[warn]
+  dissonance 0.097 ← the only issue, just over the 0.05 line".
+
+The swapped words are cut off from what they could qualify by a dash, a colon,
+a bracket or an arrow. The refinement gave each qualifier a clause, split at
+those marks (not at commas, which set off fronted scopes such as "On mobile,
+…"). A slot then counted as a swap only when, on both sides, one of its words
+shared a clause with a shared word bounding the slot.
+
+I ran the same real-brain diff again (46,724 live claims, 19,088 with a number,
+cap off). Against relate/v6 it restored 10 of the 102 removed edges and added
+none:
+
+| judgement | edges | examples |
+|---|---|---|
+| correct: a supersession regained | 2 | the 281 MB and the 114/130 GB pairs above |
+| wrong: the claims agree | 4 | two "Runner: Claude Code (…)" lines; the `node_modules` restatement; one classification note restated |
+| wrong: different quantities | 1 | "Go module cache (16 GB): cleared" / "The Go cache freed 62 GB" |
+| ambiguous | 3 | two "free space went from … to …" cleanups; two scans' finding counts |
+
+The dissonance pair stays removed, because "issue" shares a clause with "over"
+across a comma. Two cache pairs contradict on their own but appeared and
+disappeared in the brain run because of the incremental pass's candidate
+selection. Read the diff as about ±2 edges.
+
+The refinement was **not adopted**. It regains 2 correct edges for 5 wrong ones.
+The swap rule removes agreeing restatements for an incidental reason: their
+wording varies in the same place as a lost supersession's. A lexical rule
+cannot tell the two apart. The difference lies in whether the numbers name the
+same reading, not in the words around them. Narrower variants, such as breaking
+only on a headline dash or colon, would be fitted to the four known pairs on a
+set already seen. Recovering these supersessions needs something that reads
+the numbers' roles, such as the LLM reconciliation arm of ADR 0042, not another
+lexical rule.
 
 ## Limitations
 
