@@ -174,6 +174,9 @@ func mcpMiddlewareStack(logger *bolt.Logger) []mcp.Middleware {
 		// authenticated-but-read-scoped token cannot reach a write tool. A
 		// no-op on stdio, where there are no claims to check.
 		mcpScopeMiddleware(),
+		// Strict clients reject a null where the advertised schema types an
+		// object or array (#503); see mcp_structured.go.
+		mcpStructuredContentMiddleware(),
 	)
 }
 
