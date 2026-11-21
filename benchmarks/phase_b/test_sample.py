@@ -151,6 +151,20 @@ class SamplerTest(unittest.TestCase):
         self.assertEqual(run(self.brain, self.root / "out"), 2)
         self.assertEqual(run(self.brain, self.root / "out2", "--n", "5", "--ignore-wal"), 0)
 
+    def test_reads_a_brain_that_predates_newer_edge_columns(self):
+        # Real workspace brains written by older versions lack
+        # relationships.derived_by; the sampler must still export their edges.
+        old = self.root / "old.db"
+        _brain_fixture.build(old)
+        with sqlite3.connect(old) as c:
+            c.execute("ALTER TABLE relationships DROP COLUMN derived_by")
+        out = self.root / "out-old"
+        self.assertEqual(run(old, out, "--n", "10"), 0)
+        sample_json, _ = self.load(out)
+        edges = [e for it in sample_json["items"] for e in it["relationships"]]
+        self.assertTrue(edges, "fixture should yield edges")
+        self.assertTrue(all("derived_by" in e and e["derived_by"] is None for e in edges))
+
     def test_no_default_brain(self):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             sample.parser().parse_args(["--out", str(self.root / "o")])

@@ -222,6 +222,9 @@ def population(conn: sqlite3.Connection, label: str, args) -> tuple[list[dict], 
     return eligible, info
 
 
+EDGE_COLUMNS = ["id", "type", "from_claim_id", "to_claim_id", "strength", "derived_by", "created_at"]
+
+
 def _select(conn, table: str, wanted: list[str]) -> str:
     have = columns(conn, table)
     return ", ".join(c for c in wanted if c in have)
@@ -249,9 +252,15 @@ def export_item(conn: sqlite3.Connection, label: str, event_id: str, max_cross_e
     edges, neighbours, truncated = [], {}, 0
     if ids:
         marks = ",".join("?" * len(ids))
+        # Older brains predate some edge columns (derived_by, strength); read
+        # what this brain has and leave the rest absent, as for claims.
+        ecols = _select(conn, "relationships", EDGE_COLUMNS)
         rows = [dict(r) for r in conn.execute(
-            "SELECT id, type, from_claim_id, to_claim_id, strength, derived_by, created_at FROM relationships "
+            f"SELECT {ecols} FROM relationships "
             f"WHERE from_claim_id IN ({marks}) OR to_claim_id IN ({marks})", ids + ids)]
+        for r in rows:
+            for c in EDGE_COLUMNS:
+                r.setdefault(c, None)
         mine = set(ids)
         for r in rows:
             r["within_episode"] = r["from_claim_id"] in mine and r["to_claim_id"] in mine
