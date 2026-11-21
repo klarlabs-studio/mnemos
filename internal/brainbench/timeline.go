@@ -95,7 +95,7 @@ func (s *seeder) timeline(ctx context.Context, phases []Phase) (SeedStats, error
 					observed = s.stats.Phases[doc.ValidFrom].Start
 				}
 			}
-			if err := s.ingest(ctx, doc.ID, doc.Source, doc.Text, observed, clock.Now().UTC()); err != nil {
+			if err := s.ingest(ctx, doc.ID, doc.Source, doc.Text, nil, observed, clock.Now().UTC()); err != nil {
 				return s.stats, err
 			}
 		}

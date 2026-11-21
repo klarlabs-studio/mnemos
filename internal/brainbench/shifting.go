@@ -342,7 +342,7 @@ func ingestRound(ctx context.Context, dsn, scenarioID string, round ShiftRound) 
 	s := seeder{conn: conn, scenario: scenarioID, engine: extract.NewEngine(), relator: relate.NewEngine()}
 	for _, d := range round.Docs {
 		now := clock.Now().UTC()
-		if err := s.ingest(ctx, d.ID, d.Source, d.Text, now.AddDate(0, 0, -d.AgeDays), now); err != nil {
+		if err := s.ingest(ctx, d.ID, d.Source, d.Text, d.metadata(), now.AddDate(0, 0, -d.AgeDays), now); err != nil {
 			return nil, err
 		}
 	}

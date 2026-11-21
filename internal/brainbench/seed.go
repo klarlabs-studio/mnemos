@@ -91,7 +91,8 @@ func Seed(ctx context.Context, dsn string, sc Scenario, sim *clock.Simulated) (S
 		// IngestedAt is the transaction time and is genuinely "now" even for
 		// a back-dated document — back-dating models a fact observed long
 		// ago, not a row written long ago.
-		if err := s.ingest(ctx, doc.ID, doc.Source, doc.Text, now.AddDate(0, 0, -doc.AgeDays), now); err != nil {
+		observed := now.AddDate(0, 0, -doc.AgeDays)
+		if err := s.ingest(ctx, doc.ID, doc.Source, doc.Text, doc.metadata(), observed, now); err != nil {
 			return s.stats, err
 		}
 	}
@@ -110,7 +111,8 @@ type seeder struct {
 
 // ingest runs one document through the production ingest path.
 // observedAt is the event's valid time; ingestedAt its transaction time.
-func (s *seeder) ingest(ctx context.Context, docID, source, text string, observedAt, ingestedAt time.Time) error {
+// meta is the episode's metadata (a document's session, see Doc.Session).
+func (s *seeder) ingest(ctx context.Context, docID, source, text string, meta map[string]string, observedAt, ingestedAt time.Time) error {
 	began := time.Now()
 	defer func() { s.stats.IngestDuration += time.Since(began) }()
 	// domain.Event requires a source input id. Defaulting it to the doc id
@@ -127,6 +129,7 @@ func (s *seeder) ingest(ctx context.Context, docID, source, text string, observe
 		SourceInputID: source,
 		Timestamp:     observedAt,
 		IngestedAt:    ingestedAt,
+		Metadata:      meta,
 	}
 
 	claims, links, err := s.engine.Extract(ctx, []domain.Event{ev})

@@ -19,7 +19,9 @@ import (
 // retraction_summary, retraction_baseline_summary, retraction_hypotheses).
 // 4: per-class accuracy metrics (accuracy_<class>) and the per-system cost
 // report (scenarios[].cost).
-const ReportVersion = 4
+// 5: the credibility-order track (scenarios[].credibility,
+// credibility_summary).
+const ReportVersion = 5
 
 // Report is the harness's complete machine-readable output.
 type Report struct {
@@ -56,6 +58,18 @@ type Report struct {
 	ShiftingSummary Summary `json:"shifting_summary"`
 	// ShiftingHypotheses counts the shifting-world hypothesis verdicts.
 	ShiftingHypotheses map[HypothesisVerdict]int `json:"shifting_hypotheses"`
+
+	// CredibilitySummary totals the credibility-order tracks' pairs. A pair
+	// whose gold-true belief does not out-trust the gold-false one means the
+	// trust model rewarded something other than independent evidence and
+	// consequences, so a violated pair counts in HasRegression.
+	CredibilitySummary CredibilitySummary `json:"credibility_summary"`
+}
+
+// CredibilitySummary counts credibility-order pairs across scenarios.
+type CredibilitySummary struct {
+	Held     int `json:"held"`
+	Violated int `json:"violated"`
 }
 
 // Config records the conditions the numbers were produced under. It travels
@@ -182,6 +196,15 @@ func BuildReport(results []ScenarioResult) Report {
 			r.ShiftingSummary.add(sw.Summary)
 			r.ShiftingHypotheses[sw.Hypothesis.Verdict]++
 		}
+		if cr := s.Credibility; cr != nil {
+			for _, p := range cr.Pairs {
+				if p.Holds {
+					r.CredibilitySummary.Held++
+				} else {
+					r.CredibilitySummary.Violated++
+				}
+			}
+		}
 		if rt := s.Retraction; rt != nil {
 			r.RetractionSummary.add(rt.Summary)
 			r.RetractionHypotheses[rt.Hypothesis.Verdict]++
@@ -212,12 +235,12 @@ func (s *Summary) add(o Summary) {
 }
 
 // HasRegression reports whether any scenario degraded a scored metric, in the
-// process track or the retraction track. Callers
+// process track or the retraction track, or violated a credibility order. Callers
 // that want the harness to gate CI use this; it is not the default, because the
 // harness's job is to report honestly, not to block on a number nobody has
 // baselined yet.
 func (r Report) HasRegression() bool {
-	return r.Summary.Worse > 0 || r.RetractionSummary.Worse > 0 || r.ShiftingSummary.Worse > 0
+	return r.Summary.Worse > 0 || r.RetractionSummary.Worse > 0 || r.ShiftingSummary.Worse > 0 || r.CredibilitySummary.Violated > 0
 }
 
 // WriteJSON emits the machine-readable report.
@@ -308,6 +331,9 @@ func (r Report) WriteHuman(w io.Writer) error {
 		if s.ShiftingWorld != nil {
 			writeShifting(p, s.ShiftingWorld)
 		}
+		if s.Credibility != nil {
+			writeCredibility(p, s.Credibility)
+		}
 	}
 
 	p("──────────────────────────────────────────────────────────────────────\n")
@@ -360,6 +386,9 @@ func (r Report) WriteHuman(w io.Writer) error {
 		}
 		sort.Strings(hyp)
 		p("SHIFTING WORLD HYPOTHESIS: %s\n", strings.Join(hyp, " "))
+	}
+	if c := r.CredibilitySummary; c.Held+c.Violated > 0 {
+		p("CREDIBILITY ORDER: %d held, %d violated\n", c.Held, c.Violated)
 	}
 	p("\n")
 
