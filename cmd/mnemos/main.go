@@ -1350,7 +1350,7 @@ func handleMetrics(args []string, f Flags) {
 			fmt.Printf("Entities: %v\n", entityCount)
 			fmt.Printf("LLM cache entries: %v\n", metrics["llm_cache_entries"])
 			fmt.Printf("Eval cases: %v\n", metrics["eval_cases"])
-			fmt.Printf("Prompt version: %v\n", metrics["prompt_version"])
+			fmt.Printf("Prompt version: %v\n", metrics["prompt_version"]) // nox:ignore AI-006 -- prints the extraction prompt version string, not a prompt or response
 			return nil
 		}
 

@@ -9,22 +9,6 @@
       "created_at": "2026-07-25T19:24:07.826791Z"
     },
     {
-      "fingerprint": "e00c51bfc3329de81afc0694bac32126ad6633509c1a86c193d918c2bb3c0131",
-      "rule_id": "IAC-123",
-      "file_path": "Dockerfile",
-      "severity": "low",
-      "created_at": "2026-07-25T19:24:07.826791Z"
-    },
-    {
-      "fingerprint": "41131eda8752e6de09401f8c4866ec55ec1e19705e88f31926584175a8567eb1",
-      "rule_id": "VULN-001",
-      "file_path": "Dockerfile",
-      "severity": "medium",
-      "created_at": "2026-11-15T00:00:00Z",
-      "owner": "@felixgeelhaar",
-      "reason": "ALPINE-CVE-2026-4738 (zlib 1.3.2-r1) is in the digest-pinned alpine:3.21 base; Alpine ships the fix (1.4-r0) as a package update only, so the Dockerfile runs apk upgrade zlib at build time. The scanner reads the base image, not the built layer. The mnemos binary is static Go and does not link zlib."
-    },
-    {
       "fingerprint": "109162fa5cddcf174a6a55c1beeda52e73b33b5c524dcb0bc48dd32dc989e347",
       "rule_id": "IAC-406",
       "file_path": "api/openapi.yaml",
@@ -680,6 +664,41 @@
       "file_path": "test/integration/docker-compose.yml",
       "severity": "high",
       "created_at": "2026-07-25T19:24:07.826791Z"
+    },
+    {
+      "fingerprint": "3cb0974f40120543f0df690f71c1d81ba34e1efdd237fbd52c767033afb736b5",
+      "rule_id": "IAC-123",
+      "file_path": "Dockerfile",
+      "severity": "low",
+      "created_at": "2026-11-21T12:00:00Z"
+    },
+    {
+      "fingerprint": "950950a207f915771a84bc9b1baf629aa727cf38b2bfaf0cae2458a059cff5a2",
+      "rule_id": "IAC-123",
+      "file_path": "Dockerfile",
+      "severity": "low",
+      "created_at": "2026-11-21T12:00:00Z"
+    },
+    {
+      "fingerprint": "e00c51bfc3329de81afc0694bac32126ad6633509c1a86c193d918c2bb3c0131",
+      "rule_id": "IAC-123",
+      "file_path": "Dockerfile",
+      "severity": "low",
+      "created_at": "2026-11-21T12:00:00Z"
+    },
+    {
+      "fingerprint": "d58c933ad0380702f6ea55c0ba61008ec8a7fab4efc9f3c4b05c88972c4aae19",
+      "rule_id": "IAC-123",
+      "file_path": "Dockerfile",
+      "severity": "low",
+      "created_at": "2026-11-21T12:00:00Z"
+    },
+    {
+      "fingerprint": "41131eda8752e6de09401f8c4866ec55ec1e19705e88f31926584175a8567eb1",
+      "rule_id": "VULN-001",
+      "file_path": "Dockerfile",
+      "severity": "medium",
+      "created_at": "2026-11-21T12:00:00Z"
     }
   ]
 }

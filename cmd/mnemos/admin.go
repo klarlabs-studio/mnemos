@@ -553,7 +553,7 @@ func stdinReader() *bufio.Reader {
 // was actually read (false on EOF, so callers can distinguish "declined" from
 // "nobody there").
 func promptLine(prompt string) (string, bool) {
-	fmt.Print(prompt)
+	fmt.Print(prompt) // nox:ignore AI-006 -- an interactive CLI question to the operator, not an LLM prompt
 	line, err := stdinReader().ReadString('\n')
 	if err != nil && strings.TrimSpace(line) == "" {
 		return "", false
@@ -562,7 +562,7 @@ func promptLine(prompt string) (string, bool) {
 }
 
 func confirm(prompt string) bool {
-	line, ok := promptLine(fmt.Sprintf("%s [y/N]: ", prompt))
+	line, ok := promptLine(fmt.Sprintf("%s [y/N]: ", prompt)) // nox:ignore AI-006 -- an interactive CLI question to the operator, not an LLM prompt
 	if !ok {
 		return false
 	}
