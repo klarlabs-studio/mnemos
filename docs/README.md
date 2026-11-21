@@ -26,6 +26,7 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [Mutation testing](testing/mutation.md)
 - [Consolidation baseline (Phase 0, #382)](consolidation/baseline/README.md)
 - [Relational vs graph representation (ADR 0043)](eval/graphbench/README.md)
+- [Phase B labelling guide (#441)](eval/phase-b-labelling-guide.md)
 
 ## Decisions
 

@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase B labelling</title>
+<style>
+:root { --bg:#fbfaf7; --fg:#1d1c1a; --muted:#6b6862; --line:#dedad2; --card:#fff; --accent:#2f5fb3;
+        --ok:#2e7d4f; --bad:#b3402f; --warn:#9a6b00; --focus:#fff4c2; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#161614; --fg:#e8e6e1; --muted:#9a968e; --line:#34322e; --card:#1f1e1b; --accent:#7fa6ea;
+          --ok:#6cc392; --bad:#ec8a78; --warn:#e0b84f; --focus:#3a3520; }
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, sans-serif; }
+header { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line);
+         padding:8px 16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+header .id { font-family:ui-monospace, monospace; font-size:12px; color:var(--muted); }
+main { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:16px; padding:16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+section.card { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:12px; min-width:0; }
+pre.episode { white-space:pre-wrap; word-wrap:break-word; margin:0; font:13px/1.5 ui-monospace, monospace;
+              max-height:75vh; overflow:auto; }
+.meta { color:var(--muted); font-size:12px; margin-bottom:8px; }
+nav.tabs { display:flex; gap:4px; margin-bottom:10px; flex-wrap:wrap; }
+nav.tabs button { border:1px solid var(--line); background:transparent; color:var(--fg); padding:4px 10px;
+                  border-radius:4px; cursor:pointer; }
+nav.tabs button.active { border-color:var(--accent); color:var(--accent); font-weight:600; }
+nav.tabs button.done::after { content:" \2713"; color:var(--ok); }
+nav.tabs button:disabled { opacity:.45; cursor:not-allowed; }
+textarea, input, select { width:100%; background:var(--bg); color:var(--fg); border:1px solid var(--line);
+                          border-radius:4px; padding:6px; font:inherit; }
+textarea.gold { min-height:180px; font:13px/1.5 ui-monospace, monospace; }
+.row { padding:6px 8px; border:1px solid var(--line); border-radius:4px; margin:4px 0; }
+.row.focus { background:var(--focus); }
+.row .claim { margin:2px 0; }
+.small { font-size:12px; color:var(--muted); }
+.v-true { color:var(--ok); font-weight:600; } .v-false { color:var(--bad); font-weight:600; }
+.v-unknown { color:var(--warn); font-weight:600; }
+button.act { border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:4px;
+             padding:4px 10px; cursor:pointer; }
+button.act.primary { border-color:var(--accent); color:var(--accent); }
+.status { font-size:12px; color:var(--muted); }
+kbd { font:11px ui-monospace, monospace; border:1px solid var(--line); border-radius:3px; padding:0 4px; }
+#help { display:none; position:fixed; inset:10% 20%; background:var(--card); border:1px solid var(--line);
+        border-radius:6px; padding:16px; z-index:3; overflow:auto; }
+@media (max-width: 900px) { #help { inset:5% 16px; } }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Phase B labelling</strong>
+  <span id="who" class="small"></span>
+  <span id="pos"></span>
+  <span class="id" id="itemid"></span>
+  <span id="progress" class="small"></span>
+  <span id="saved" class="status"></span>
+  <span class="small">Press <kbd>?</kbd> for keys</span>
+</header>
+<main>
+  <section class="card">
+    <div class="meta" id="epmeta"></div>
+    <pre class="episode" id="episode"></pre>
+  </section>
+  <section class="card">
+    <nav class="tabs" id="tabs"></nav>
+    <div id="panel"></div>
+    <div style="margin-top:12px">
+      <label class="small" for="notes">Notes (free text, kept with the item)</label>
+      <textarea id="notes" rows="2"></textarea>
+    </div>
+  </section>
+</main>
+<div id="help">
+  <h3>Keys (when not typing)</h3>
+  <p><kbd>n</kbd>/<kbd>p</kbd> next / previous item &middot; <kbd>N</kbd> next item with work left &middot;
+     <kbd>1</kbd>-<kbd>4</kbd> stage tabs &middot; <kbd>d</kbd> mark this stage done / not done &middot;
+     <kbd>Esc</kbd> leave a text field &middot; <kbd>?</kbd> this help</p>
+  <p><b>Extraction:</b> <kbd>e</kbd> edit gold claims (one per line) &middot; <kbd>r</kbd> reveal the
+     extracted claims (only after writing your gold claims; this cannot be undone for the item).</p>
+  <p><b>Relations:</b> <kbd>j</kbd>/<kbd>k</kbd> move &middot; <kbd>s</kbd> supports &middot;
+     <kbd>c</kbd> contradicts &middot; <kbd>&gt;</kbd> first supersedes second &middot;
+     <kbd>&lt;</kbd> second supersedes first &middot; <kbd>x</kbd> no relation &middot; <kbd>a</kbd> add a missing edge</p>
+  <p><b>Truth:</b> <kbd>j</kbd>/<kbd>k</kbd> move &middot; <kbd>t</kbd> true &middot; <kbd>f</kbd> false &middot;
+     <kbd>u</kbd> cannot tell</p>
+  <p><b>Questions:</b> <kbd>a</kbd> add a question.</p>
+  <p>Rules and examples: docs/eval/phase-b-labelling-guide.md. Every change is saved to the server as you go.</p>
+  <button class="act" id="closehelp">Close</button>
+</div>
+<script>
+"use strict";
+const STAGES = ["extraction", "relations", "truth", "questions"];
+const QTYPES = ["single-episode", "multi-episode", "knowledge-update", "temporal", "abstention"];
+let S = null, idx = 0, stage = "extraction", focus = 0, saveTimer = null;
+
+const $ = (id) => document.getElementById(id);
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null && v !== false) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) e.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  return e;
+}
+const item = () => S.items[idx];
+function label() {
+  const id = item().item_id;
+  if (!S.labels[id]) S.labels[id] = {};
+  const L = S.labels[id];
+  L.done = L.done || {};
+  L.extraction = L.extraction || { gold: [], links: {}, revealed: false };
+  L.relations = L.relations || { judged: {}, added: [], edges: [] };
+  L.truth = L.truth || {};
+  L.questions = L.questions || [];
+  return L;
+}
+function claimText(id) {
+  const c = item().claims.concat(item().neighbour_claims).find((c) => c.id === id);
+  return c ? c.text : "(" + id + ")";
+}
+function deriveEdges(L) {
+  const edges = [];
+  for (const r of item().relationships) {
+    const v = L.relations.judged[r.id];
+    if (!v || v === "none") continue;
+    if (v === "supersedes>") edges.push({ a: r.from_claim_id, b: r.to_claim_id, type: "supersedes", source: r.id });
+    else if (v === "supersedes<") edges.push({ a: r.to_claim_id, b: r.from_claim_id, type: "supersedes", source: r.id });
+    else edges.push({ a: r.from_claim_id, b: r.to_claim_id, type: v, source: r.id });
+  }
+  for (const e of L.relations.added) edges.push({ a: e.a, b: e.b, type: e.type, source: "added" });
+  L.relations.edges = edges;
+}
+function save() {
+  clearTimeout(saveTimer);
+  $("saved").textContent = "saving…";
+  saveTimer = setTimeout(async () => {
+    const L = label();
+    deriveEdges(L);
+    try {
+      const r = await fetch("/api/label", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: item().item_id, label: L }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      L.updated_at = j.updated_at;
+      $("saved").textContent = "saved " + j.updated_at.slice(11, 19);
+    } catch (err) { $("saved").textContent = "NOT SAVED: " + err.message; }
+    header();
+  }, 250);
+}
+function header() {
+  $("who").textContent = S.labeller + " · pass " + S.pass + " · " + S.file;
+  $("pos").textContent = (idx + 1) + " / " + S.items.length;
+  $("itemid").textContent = item().item_id;
+  const done = STAGES.map((s) => s + " " + S.items.filter((i) => ((S.labels[i.item_id] || {}).done || {})[s]).length);
+  $("progress").textContent = "done: " + done.join(" · ");
+}
+function renderEpisode() {
+  const ep = item().episode, st = item().stratum;
+  $("epmeta").textContent = [ep.timestamp, st.project, st.session_type, st.age].join(" · ");
+  $("episode").textContent = ep.content;
+  $("notes").value = label().notes || "";
+}
+function renderTabs() {
+  const L = label(), nav = $("tabs");
+  nav.replaceChildren();
+  STAGES.forEach((s, i) => {
+    const locked = (s === "relations" || s === "truth") && !L.extraction.revealed;
+    nav.append(el("button", { class: (s === stage ? "active " : "") + (L.done[s] ? "done" : ""),
+      disabled: locked, title: locked ? "Reveal the extracted claims first (extraction tab, r)" : "",
+      onclick: () => setStage(s) }, (i + 1) + " " + s));
+  });
+}
+function setStage(s) {
+  const L = label();
+  if ((s === "relations" || s === "truth") && !L.extraction.revealed) return;
+  stage = s; focus = 0; render();
+}
+function render() { header(); renderTabs(); ({ extraction, relations, truth, questions })[stage](); }
+
+async function extraction() {
+  const L = label(), P = $("panel");
+  P.replaceChildren();
+  P.append(el("p", { class: "small" }, "Write the gold atomic claims this episode asserts, one per line, " +
+    "before looking at what Mnemos extracted. See the guide for what counts as one claim."));
+  const ta = el("textarea", { class: "gold", id: "gold", placeholder: "One atomic claim per line",
+    oninput: (e) => { L.extraction.gold = e.target.value.split("\n"); save(); },
+    onchange: () => { if (L.extraction.revealed) extraction(); } });
+  ta.value = L.extraction.gold.join("\n");
+  P.append(ta);
+  if (!L.extraction.revealed) {
+    P.append(el("p", {}, el("button", { class: "act primary", onclick: reveal },
+      "Reveal extracted claims (r)"), " ", el("span", { class: "small" }, item().claims.length + " extracted")));
+    return;
+  }
+  const gold = L.extraction.gold.map((g) => g.trim()).filter(Boolean);
+  let m = { pairs: {}, similarity: {} };
+  try {
+    const r = await fetch("/api/match", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item_id: item().item_id, gold, links: L.extraction.links }) });
+    m = await r.json();
+  } catch (err) { /* matching preview only */ }
+  if (stage !== "extraction") return;
+  P.append(el("h4", {}, "Extracted claims (" + item().claims.length + ")"));
+  P.append(el("p", { class: "small" }, "Each is matched automatically to a gold line (Dice ≥ " +
+    (m.threshold || 0.5) + "). Override when the match is wrong: pick the gold line it expresses, or none."));
+  for (const c of item().claims) {
+    const cur = Object.prototype.hasOwnProperty.call(L.extraction.links, c.id) ? L.extraction.links[c.id] : "auto";
+    const sel = el("select", { onchange: (e) => {
+      const v = e.target.value;
+      if (v === "auto") delete L.extraction.links[c.id];
+      else L.extraction.links[c.id] = v === "none" ? null : Number(v);
+      save(); extraction();
+    } });
+    sel.append(el("option", { value: "auto" }, "auto"), el("option", { value: "none" }, "matches no gold claim"));
+    gold.forEach((g, i) => sel.append(el("option", { value: String(i) }, "#" + (i + 1) + " " + g.slice(0, 70))));
+    sel.value = cur === null ? "none" : String(cur);
+    const g = m.pairs[c.id];
+    P.append(el("div", { class: "row" }, el("div", { class: "claim" }, c.text),
+      el("div", { class: "small" }, g === undefined ? "unmatched" :
+        "→ #" + (g + 1) + " " + gold[g] + (m.similarity[c.id] !== undefined ? "  (" + m.similarity[c.id] + ")" : "")),
+      sel));
+  }
+}
+function reveal() {
+  const L = label();
+  if (L.extraction.revealed) return;
+  if (!L.extraction.gold.some((g) => g.trim()) &&
+      !confirm("No gold claims written. Reveal anyway (this episode asserts nothing)?")) return;
+  L.extraction.revealed = true; save(); render();
+}
+
+function relations() {
+  const L = label(), P = $("panel"), rels = item().relationships;
+  P.replaceChildren();
+  P.append(el("p", { class: "small" }, "Judge each edge Mnemos stored, then add any edge it missed among the " +
+    "claims shown. First = upper claim, second = lower claim."));
+  if (!rels.length) P.append(el("p", { class: "small" }, "Mnemos stored no edges for these claims."));
+  rels.forEach((r, i) => {
+    const v = L.relations.judged[r.id];
+    P.append(el("div", { class: "row" + (stage === "relations" && i === focus ? " focus" : ""),
+        onclick: () => { focus = i; relations(); } },
+      el("div", { class: "small" }, "stored: " + r.type + (r.within_episode ? " · within episode" : " · to another episode")),
+      el("div", { class: "claim" }, "1. " + claimText(r.from_claim_id)),
+      el("div", { class: "claim" }, "2. " + claimText(r.to_claim_id)),
+      el("div", { class: v ? "" : "small" }, "your label: " + (v ? v.replace(">", " (1 supersedes 2)").replace("<", " (2 supersedes 1)") : "not judged"))));
+  });
+  const all = item().claims.concat(item().neighbour_claims);
+  if (L.relations.added.length) P.append(el("h4", {}, "Added edges"));
+  L.relations.added.forEach((e, i) => P.append(el("div", { class: "row" },
+    el("div", { class: "small" }, e.type + (e.type === "supersedes" ? " (1 supersedes 2)" : "")),
+    el("div", { class: "claim" }, "1. " + claimText(e.a)), el("div", { class: "claim" }, "2. " + claimText(e.b)),
+    el("button", { class: "act", onclick: () => { L.relations.added.splice(i, 1); save(); relations(); } }, "remove"))));
+  const opts = (id) => { const s = el("select", { id }); all.forEach((c) => s.append(el("option", { value: c.id }, c.text.slice(0, 90)))); return s; };
+  const type = el("select", { id: "addtype" });
+  ["supports", "contradicts", "supersedes"].forEach((t) => type.append(el("option", { value: t }, t)));
+  P.append(el("h4", {}, "Add a missing edge"), el("div", { class: "grid2" }, opts("adda"), opts("addb")),
+    el("div", { class: "grid2", style: "margin-top:6px" }, type, el("button", { class: "act", onclick: () => {
+      const a = $("adda").value, b = $("addb").value;
+      if (!a || !b || a === b) return;
+      L.relations.added.push({ a, b, type: $("addtype").value }); save(); relations();
+    } }, "add (for supersedes: first supersedes second)")));
+}
+function judgeRelation(v) {
+  const rels = item().relationships;
+  if (!rels.length) return;
+  label().relations.judged[rels[focus].id] = v;
+  focus = Math.min(focus + 1, rels.length - 1);
+  save(); relations();
+}
+
+function truth() {
+  const L = label(), P = $("panel");
+  P.replaceChildren();
+  P.append(el("p", { class: "small" }, "Is each claim still true today (" + S.today + ")? This is not whether it " +
+    "was extracted correctly. Stored trust is hidden on purpose."));
+  item().claims.forEach((c, i) => {
+    const v = L.truth[c.id];
+    P.append(el("div", { class: "row" + (i === focus ? " focus" : ""), onclick: () => { focus = i; truth(); } },
+      el("div", { class: "claim" }, c.text),
+      el("div", { class: "small" }, "recorded " + (c.created_at || "").slice(0, 10) + " · ",
+        el("span", { class: v ? "v-" + v : "" }, v || "not labelled"))));
+  });
+  if (!item().claims.length) P.append(el("p", { class: "small" }, "No claims were extracted from this episode."));
+}
+function judgeTruth(v) {
+  const cs = item().claims;
+  if (!cs.length) return;
+  label().truth[cs[focus].id] = v;
+  focus = Math.min(focus + 1, cs.length - 1);
+  save(); truth();
+}
+
+function questions() {
+  const L = label(), P = $("panel");
+  P.replaceChildren();
+  P.append(el("p", { class: "small" }, "Optional: questions this episode can answer (or that it shows the brain " +
+    "cannot answer), LongMemEval-style. Mark the stage done even when you add none."));
+  L.questions.forEach((q, i) => {
+    const f = (k, ph, rows) => {
+      const t = el(rows ? "textarea" : "input", { placeholder: ph, rows: rows || undefined,
+        oninput: (e) => { q[k] = k === "invalidated_answers" ? e.target.value.split("\n").filter(Boolean) : e.target.value; save(); } });
+      t.value = Array.isArray(q[k]) ? q[k].join("\n") : (q[k] || "");
+      return t;
+    };
+    const ty = el("select", { onchange: (e) => { q.type = e.target.value; save(); } });
+    QTYPES.forEach((t) => ty.append(el("option", { value: t }, t)));
+    ty.value = q.type || "single-episode";
+    const asOf = el("input", { type: "date", onchange: (e) => { q.as_of = e.target.value; save(); } });
+    asOf.value = q.as_of || "";
+    P.append(el("div", { class: "row" }, f("question", "Question"), f("answer", "Gold answer (for abstention: what the system should say)"),
+      el("div", { class: "grid2" }, ty, asOf),
+      f("invalidated_answers", "Stale answers that count as wrong, one per line (knowledge-update)", 2),
+      el("button", { class: "act", onclick: () => { L.questions.splice(i, 1); save(); questions(); } }, "remove")));
+  });
+  P.append(el("button", { class: "act primary", onclick: addQuestion }, "Add question (a)"));
+}
+function addQuestion() {
+  label().questions.push({ question: "", answer: "", type: "single-episode", as_of: S.today,
+                           invalidated_answers: [], evidence: [item().episode.id] });
+  save(); questions();
+  const rows = $("panel").querySelectorAll(".row");
+  if (rows.length) rows[rows.length - 1].querySelector("input").focus();
+}
+
+function go(i) { idx = Math.max(0, Math.min(S.items.length - 1, i)); focus = 0; stage = "extraction"; renderEpisode(); render(); window.scrollTo(0, 0); }
+function nextIncomplete() {
+  for (let k = 1; k <= S.items.length; k++) {
+    const j = (idx + k) % S.items.length, d = ((S.labels[S.items[j].item_id] || {}).done) || {};
+    if (!STAGES.every((s) => d[s])) return go(j);
+  }
+}
+document.addEventListener("keydown", (e) => {
+  const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName);
+  if (e.key === "Escape") { document.activeElement.blur(); $("help").style.display = "none"; return; }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key, L = label();
+  if (k === "?") { $("help").style.display = "block"; return; }
+  if (k === "n") return go(idx + 1);
+  if (k === "p") return go(idx - 1);
+  if (k === "N") return nextIncomplete();
+  if ("1234".includes(k) && k.length === 1) return setStage(STAGES[Number(k) - 1]);
+  if (k === "d") { L.done[stage] = !L.done[stage]; save(); return render(); }
+  if (stage === "extraction") {
+    if (k === "e") { e.preventDefault(); $("gold").focus(); }
+    if (k === "r") reveal();
+  } else if (stage === "relations") {
+    const n = item().relationships.length;
+    if (k === "j") { focus = Math.min(focus + 1, Math.max(n - 1, 0)); relations(); }
+    if (k === "k") { focus = Math.max(focus - 1, 0); relations(); }
+    const map = { s: "supports", c: "contradicts", ">": "supersedes>", "<": "supersedes<", x: "none" };
+    if (map[k]) judgeRelation(map[k]);
+    if (k === "a") { e.preventDefault(); $("adda").focus(); }
+  } else if (stage === "truth") {
+    const n = item().claims.length;
+    if (k === "j") { focus = Math.min(focus + 1, Math.max(n - 1, 0)); truth(); }
+    if (k === "k") { focus = Math.max(focus - 1, 0); truth(); }
+    const map = { t: "true", f: "false", u: "unknown" };
+    if (map[k]) judgeTruth(map[k]);
+  } else if (stage === "questions" && k === "a") { e.preventDefault(); addQuestion(); }
+});
+$("notes").addEventListener("input", (e) => { label().notes = e.target.value; save(); });
+$("closehelp").addEventListener("click", () => { $("help").style.display = "none"; });
+
+(async () => {
+  const r = await fetch("/api/session");
+  S = await r.json();
+  if (!S.items.length) { $("panel").textContent = "No items for this pass."; return; }
+  go(0);
+})();
+</script>
+</body>
+</html>
