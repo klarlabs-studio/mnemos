@@ -179,8 +179,27 @@ INGEST_PRESETS = {
 }
 
 
+def _require_embedder(base_url: str, model: str) -> None:
+    """Fail before ingest if the embedding model cannot embed.
+
+    Without it every embed fails, the brains hold no vectors, and recall falls
+    back to keywords: a run that silently measures a different system.
+    """
+    import urllib.request
+    req = urllib.request.Request(f"{base_url}/api/embeddings", data=json.dumps({"model": model, "prompt": "probe"}).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            if json.loads(r.read()).get("embedding"):
+                return
+    except Exception as e:  # noqa: BLE001 (reported, then fatal)
+        raise SystemExit(f"embedding model {model} at {base_url} is unavailable: {e}; try `ollama pull {model}`") from e
+    raise SystemExit(f"embedding model {model} at {base_url} returned no vector")
+
+
 def cmd_ingest(args) -> None:
     d = run_dir(args)
+    _require_embedder("http://localhost:11434", "nomic-embed-text")
     out_file, preset_flags = INGEST_PRESETS[args.ingest_preset]
     binary = Path(args.out) / "memeval"
     subprocess.run(["go", "build", "-o", str(binary), "./tools/memeval"], cwd=ROOT, check=True)
