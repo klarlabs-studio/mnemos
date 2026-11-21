@@ -55,3 +55,11 @@ re-derives every contradiction.
   through the LLM response cache key. Lessons and playbooks carry no producer
   version either. Neither has needed re-interpretation so far; the third point
   of the decision applies when one does.
+- Update (#445 item 3): claims now record their extractor in `extracted_by` on
+  every backend (SQLite schema v40). The rule-based engine stamps
+  `extract.RuleExtractorVersion` (`rules/v1`); LLM extraction stamps
+  `llm/<provider>:<model>/<PromptVersion>`, taken from the client identity
+  without its base URL. A batch that fell back to the rules carries the rules'
+  stamp. Claims a writer supplies whole (remember, `POST /v1/beliefs`, imports)
+  and rows from before the column read empty. The upsert preserves a stored
+  value when the incoming one is empty, as for `half_life_classifier`.

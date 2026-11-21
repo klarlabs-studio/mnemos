@@ -103,6 +103,14 @@ func (r ClaimRepository) upsertWithReason(_ context.Context, claims []domain.Cla
 				stored.HalfLifeClassifier = existing.HalfLifeClassifier
 			}
 		}
+		// The extractor that produced a claim survives a write that carries
+		// none (#445), matching the SQL backends' `CASE WHEN
+		// excluded.extracted_by <> ''` rule.
+		if claim.ExtractedBy == "" {
+			if existing, ok := r.state.claims[claim.ID]; ok {
+				stored.ExtractedBy = existing.ExtractedBy
+			}
+		}
 		// A merge redirect survives a write that carries none (#387), matching
 		// the SQL backends' `CASE WHEN excluded.merged_into <> ''` rule.
 		if claim.MergedInto == "" {

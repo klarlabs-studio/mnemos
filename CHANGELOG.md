@@ -10,6 +10,15 @@ notable changes.
 
 ### Added
 
+- Claims record the extractor that produced them (#445 item 3, ADR 0029). New
+  `claims.extracted_by` column on SQLite/libSQL (schema v40), Postgres, MySQL and the
+  memory store: `rules/v1` for rule-based extraction (including an LLM batch that fell
+  back to the rules), `llm/<provider>:<model>/<prompt version>` for LLM extraction (no
+  endpoint URL is stored). A write without a producer keeps the stored one; claims
+  supplied whole by a writer, and rows from before this release, read empty. No
+  backfill. Nothing in scoring or recall reads it yet; it lets a bad extractor's
+  claims be found and re-extracted.
+
 - Deterministic vs LLM reconciliation experiment (ADR 0042, nothing wired into production):
   `go run ./tools/brainbench -mode reconcile [-llm-model gemma3:12b,qwen2.5:3b]` scores
   the relate classifier, a local Ollama model alone, and a pre-registered hybrid on 201

@@ -15,8 +15,8 @@
 -- not confident about), so a plain excluded.half_life_days would reset a
 -- human override set through MarkVerified the next time the same claim
 -- came back through ingest. Same COALESCE semantics as MarkClaimVerified.
-INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, half_life_days, half_life_classifier, extracted_by, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   text = excluded.text,
   type = excluded.type,
@@ -30,6 +30,10 @@ ON CONFLICT(id) DO UPDATE SET
   -- a writer that carries no classifier verdict must not erase one, or the
   -- coverage number would decay under ordinary write traffic (ADR 0025).
   half_life_classifier = CASE WHEN excluded.half_life_classifier <> '' THEN excluded.half_life_classifier ELSE claims.half_life_classifier END,
+  -- The extractor that produced the claim (#445, ADR 0029 point 3), preserved on
+  -- empty: maintenance passes and API writers that hit an existing id carry
+  -- none, and must not erase the record of which extractor wrote it.
+  extracted_by = CASE WHEN excluded.extracted_by <> '' THEN excluded.extracted_by ELSE claims.extracted_by END,
   -- A merge redirect survives a write that carries none: re-extraction rebuilds
   -- a claim from its text and never sets merged_into (#387).
   merged_into = CASE WHEN excluded.merged_into <> '' THEN excluded.merged_into ELSE claims.merged_into END,
@@ -100,7 +104,7 @@ ON CONFLICT(claim_id, event_id) DO NOTHING;
 
 -- name: ListAllClaims :many
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
-       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, extracted_by,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -116,7 +120,7 @@ ORDER BY created_at ASC;
 -- previous implementation called ListAllClaims and filtered in Go,
 -- which scaled O(n) per invocation.
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
-       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, extracted_by,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,

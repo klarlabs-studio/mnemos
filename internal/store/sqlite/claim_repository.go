@@ -120,6 +120,7 @@ func (r ClaimRepository) upsertWithReason(ctx context.Context, claims []domain.C
 			ValidFrom:           validFrom.UTC().Format(time.RFC3339Nano),
 			HalfLifeDays:        claim.HalfLifeDays,
 			HalfLifeClassifier:  claim.HalfLifeClassifier,
+			ExtractedBy:         claim.ExtractedBy,
 			ScopeService:        claim.Scope.Service,
 			ScopeEnv:            claim.Scope.Env,
 			ScopeTeam:           claim.Scope.Team,
@@ -261,7 +262,7 @@ func (r ClaimRepository) listByEventIDsChunk(ctx context.Context, eventIDs []str
 	}
 
 	query := fmt.Sprintf(`
-SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.trust_computed_at, c.trust_model_version, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.last_confirmed, c.half_life_days, c.half_life_classifier, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class, c.durability, c.merged_into, c.archived_at
+SELECT DISTINCT c.id, c.text, c.type, c.confidence, c.status, c.created_at, c.created_by, c.trust_score, c.trust_computed_at, c.trust_model_version, c.valid_from, c.valid_to, c.last_verified, c.verify_count, c.last_confirmed, c.half_life_days, c.half_life_classifier, c.extracted_by, c.scope_service, c.scope_env, c.scope_team, c.source_document, c.source_type, c.source_authority, c.liveness, c.last_executed, c.citation_count, c.provenance_rationale, c.test_id, c.test_requirement_ref, c.test_author, c.test_last_modified, c.test_last_run_at, c.test_pass_count, c.test_fail_count, c.visibility, c.confidence_components, c.lifecycle, c.subject_class, c.durability, c.merged_into, c.archived_at
 FROM claims c
 JOIN claim_evidence ce ON ce.claim_id = c.id
 WHERE ce.event_id IN (%s)
@@ -389,7 +390,7 @@ func scanEvidenceRows(rows *sql.Rows) ([]domain.ClaimEvidence, error) {
 }
 
 // scanClaimColumns is the projection scanClaim reads, in its order.
-const scanClaimColumns = `id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version, valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, merged_into, archived_at`
+const scanClaimColumns = `id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version, valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, extracted_by, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, merged_into, archived_at`
 
 // ListByIDs returns the claims with the given IDs (in unspecified order).
 // Used by the query engine for hop-expanded claim lookup — given a set of
@@ -1051,6 +1052,7 @@ func mapSQLClaim(row sqlcgen.Claim) (domain.Claim, error) {
 		VerifyCount:          int(row.VerifyCount),
 		HalfLifeDays:         row.HalfLifeDays,
 		HalfLifeClassifier:   row.HalfLifeClassifier,
+		ExtractedBy:          row.ExtractedBy,
 		Scope:                domain.Scope{Service: row.ScopeService, Env: row.ScopeEnv, Team: row.ScopeTeam},
 		SourceDocument:       row.SourceDocument,
 		SourceType:           domain.SourceType(row.SourceType),
@@ -1204,6 +1206,7 @@ func scanClaim(scanner claimRowScanner) (domain.Claim, error) {
 		&lastConfirmed,
 		&halfLifeDays,
 		&claim.HalfLifeClassifier,
+		&claim.ExtractedBy,
 		&scopeService,
 		&scopeEnv,
 		&scopeTeam,

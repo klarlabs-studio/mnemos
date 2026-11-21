@@ -57,6 +57,9 @@ CREATE TABLE IF NOT EXISTS claims (
   -- (that also stores 0). No RLS change needed: the ADR-0007 scoped[] array
   -- lists TABLES, and claims is already in it.
   half_life_classifier text NOT NULL DEFAULT '',
+  -- #445 item 3 (ADR 0029 point 3): which extractor produced the claim. ''
+  -- when none did (a writer supplied it whole) or the row predates it.
+  extracted_by text NOT NULL DEFAULT '',
   scope_service  text             NOT NULL DEFAULT '',
   scope_env      text             NOT NULL DEFAULT '',
   scope_team     text             NOT NULL DEFAULT ''
@@ -75,6 +78,7 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_days double precision NOT 
 -- Metadata-only on PG 11+: a non-volatile default lives in the catalog rather
 -- than rewriting the heap, so this does not touch the existing rows.
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_classifier text NOT NULL DEFAULT '';
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS extracted_by text NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_service  text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_env      text             NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_team     text             NOT NULL DEFAULT '';

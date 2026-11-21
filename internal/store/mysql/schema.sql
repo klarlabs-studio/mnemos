@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS claims (
   half_life_days DOUBLE           NOT NULL DEFAULT 0,
   -- ADR 0025: which classifier assigned half_life_days. '' means none did.
   half_life_classifier VARCHAR(64) NOT NULL DEFAULT '',
+  -- #445 item 3 (ADR 0029 point 3): which extractor produced the claim.
+  extracted_by VARCHAR(190) NOT NULL DEFAULT '',
   scope_service  VARCHAR(190)     NOT NULL DEFAULT '',
   scope_env      VARCHAR(64)      NOT NULL DEFAULT '',
   scope_team     VARCHAR(190)     NOT NULL DEFAULT '',
@@ -87,6 +89,7 @@ ALTER TABLE claims ADD COLUMN IF NOT EXISTS trust_model_version VARCHAR(32)     
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_days DOUBLE       NOT NULL DEFAULT 0;
 -- ALGORITHM=INSTANT on MySQL 8.0 (column added at the end of the table).
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS half_life_classifier VARCHAR(64) NOT NULL DEFAULT '';
+ALTER TABLE claims ADD COLUMN IF NOT EXISTS extracted_by VARCHAR(190) NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_service  VARCHAR(190) NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_env      VARCHAR(64)  NOT NULL DEFAULT '';
 ALTER TABLE claims ADD COLUMN IF NOT EXISTS scope_team     VARCHAR(190) NOT NULL DEFAULT '';

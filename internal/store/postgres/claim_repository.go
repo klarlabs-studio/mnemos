@@ -55,10 +55,10 @@ func claimUpsertSQL(ns string) string {
 INSERT INTO %s (id, text, type, confidence, status, created_at, created_by, valid_from, trust_score, valid_to, half_life_days, lifecycle, subject_class, durability, confidence_components,
                 test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count,
                 scope_service, scope_env, scope_team,
-                source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, visibility, half_life_classifier, text_key, merged_into)
+                source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, visibility, half_life_classifier, text_key, merged_into, extracted_by)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NULL, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
         $21, $22, $23,
-        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
+        $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
 ON CONFLICT (id) DO UPDATE SET
   text = EXCLUDED.text,
   type = EXCLUDED.type,
@@ -72,6 +72,9 @@ ON CONFLICT (id) DO UPDATE SET
   -- A merge redirect survives a write that carries none: re-extraction rebuilds
   -- a claim from its text and never sets merged_into (#387).
   merged_into = CASE WHEN EXCLUDED.merged_into <> '' THEN EXCLUDED.merged_into ELSE claims.merged_into END,
+  -- The extractor that produced the claim (#445, ADR 0029 point 3) survives a
+  -- write that carries none: maintenance passes and API writers never set it.
+  extracted_by = CASE WHEN EXCLUDED.extracted_by <> '' THEN EXCLUDED.extracted_by ELSE claims.extracted_by END,
   lifecycle = EXCLUDED.lifecycle,
   subject_class = EXCLUDED.subject_class,
   durability = EXCLUDED.durability,
@@ -181,6 +184,7 @@ VALUES ($1, $2, $3, $4, $5, $6)`, qualify(r.ns, "claim_status_history"))
 			claim.HalfLifeClassifier,
 			domain.ClaimTextKey(claim.Text),
 			claim.MergedInto,
+			claim.ExtractedBy,
 		); err != nil {
 			return fmt.Errorf("upsert claim %s: %w", claim.ID, err)
 		}
@@ -897,7 +901,7 @@ func nullTime(t time.Time) any {
 var claimColumnNames = []string{
 	"id", "text", "type", "confidence", "status", "created_at", "created_by",
 	"trust_score", "trust_computed_at", "trust_model_version", "valid_from", "valid_to", "last_verified", "verify_count", "last_confirmed",
-	"half_life_days", "half_life_classifier", "lifecycle", "subject_class",
+	"half_life_days", "half_life_classifier", "extracted_by", "lifecycle", "subject_class",
 	"durability", "confidence_components",
 	"test_id", "test_requirement_ref", "test_author", "test_last_modified",
 	"test_last_run_at", "test_pass_count", "test_fail_count",
@@ -973,7 +977,7 @@ func scanClaimRow(rows *sql.Rows) (domain.Claim, error) {
 	if err := rows.Scan(
 		&c.ID, &c.Text, &typ, &c.Confidence, &status,
 		&c.CreatedAt, &c.CreatedBy, &c.TrustScore, &trustComputedAt, &c.TrustModelVersion, &validFrom, &validTo, &lastVerified, &c.VerifyCount, &lastConfirmed,
-		&c.HalfLifeDays, &c.HalfLifeClassifier, &lifecycle, &subjectClass, &durability, &confidenceComponents,
+		&c.HalfLifeDays, &c.HalfLifeClassifier, &c.ExtractedBy, &lifecycle, &subjectClass, &durability, &confidenceComponents,
 		&c.TestID, &c.TestRequirementRef, &c.TestAuthor, &testLastModified, &testLastRunAt, &c.TestPassCount, &c.TestFailCount,
 		&scopeService, &scopeEnv, &scopeTeam,
 		&sourceDocument, &sourceType, &c.SourceAuthority, &liveness,
