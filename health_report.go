@@ -349,5 +349,5 @@ func (m *memory) healthReport(ctx context.Context, h *healthCorpus, now time.Tim
 	for _, p := range pathologies {
 		overall = worseHealth(overall, p.Status)
 	}
-	return BrainHealth{Status: overall, Mode: mode, Vitals: vitals, Pathologies: pathologies, Estimates: estimates, At: now}, nil
+	return BrainHealth{Status: overall, Mode: mode, Vitals: vitals, Pathologies: pathologies, Estimates: estimates, At: now, ModelVersion: HealthModelVersion}, nil
 }

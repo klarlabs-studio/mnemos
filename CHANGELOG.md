@@ -120,6 +120,13 @@ notable changes.
   (`docker build .` compiles from source), which the shared CI smoke build needs; releases
   still copy GoReleaser's binary via `--build-arg BINARY_SOURCE=release`.
 
+- Health snapshots say which rules graded them (#389). `BrainHealth` carries
+  `model_version` (`HealthModelVersion`, now `health/v1`), recorded in every journal snapshot,
+  so a health time series can tell a change of thresholds from a change of the brain. A test
+  fingerprints every threshold and fails when one changes without a version bump. Calibration
+  keeps counting beliefs retired after their verdict, now pinned by a test: a refuted belief is
+  usually retired because it was refuted, and dropping it would hide the brain's mistakes.
+
 - MCP tool responses match their advertised output schemas again (#503). A nil map or
   slice was sent as `null` where the schema says object or array, so strict clients such as
   Claude Code rejected the whole response: `query_knowledge` returned nothing whenever a belief

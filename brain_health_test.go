@@ -112,6 +112,10 @@ func TestSnapshotHealth_RecordsToJournal(t *testing.T) {
 	if recorded.Status != got.Status || len(recorded.Vitals) != len(got.Vitals) {
 		t.Errorf("recorded snapshot = %+v, want status %q with %d vitals", recorded, got.Status, len(got.Vitals))
 	}
+	// #389: a snapshot says which rules graded it.
+	if recorded.ModelVersion != HealthModelVersion {
+		t.Errorf("recorded model_version = %q, want %q", recorded.ModelVersion, HealthModelVersion)
+	}
 }
 
 // TestBrainHealth_DeprecatedClaimsAreNotCurrentlyValid pins that a deprecated
