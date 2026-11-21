@@ -71,6 +71,7 @@ const (
 	actionWriteEntityRels    = "write_entity_rels"
 	actionWriteIncident      = "write_incident"
 	actionWriteFeedback      = "write_feedback"
+	actionRecallExposures    = "write_recall_exposures"
 	actionWriteArtifacts     = "write_artifacts"
 	actionAttachOutcome      = "attach_outcome"
 	actionResolveIncident    = "resolve_incident"
@@ -153,6 +154,8 @@ func actions() []kernel.Action {
 			Description: "Upsert an incident record."},
 		{Name: actionWriteFeedback, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Upsert per-claim feedback state."},
+		{Name: actionRecallExposures, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Record which beliefs recall showed to an agent session (ADR 0048)."},
 		{Name: actionWriteArtifacts, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Persist a full ingest batch (events, claims, evidence links, relationships)."},
 		{Name: actionAttachOutcome, Effect: axidomain.EffectWriteLocal, Idempotent: true,
@@ -210,6 +213,7 @@ func executors(conn *store.Conn) map[string]axidomain.ActionExecutor {
 		kernel.ExecutorRef(actionWriteEntityRels):       entityRelsExecutor{conn: conn},
 		kernel.ExecutorRef(actionWriteIncident):         incidentExecutor{conn: conn},
 		kernel.ExecutorRef(actionWriteFeedback):         feedbackExecutor{conn: conn},
+		kernel.ExecutorRef(actionRecallExposures):       recallExposuresExecutor{conn: conn},
 		kernel.ExecutorRef(actionWriteArtifacts):        artifactsExecutor{conn: conn},
 		kernel.ExecutorRef(actionAttachOutcome):         attachOutcomeExecutor{conn: conn},
 		kernel.ExecutorRef(actionResolveIncident):       resolveIncidentExecutor{conn: conn},

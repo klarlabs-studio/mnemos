@@ -84,6 +84,12 @@ func handleHook(args []string) {
 		hookCapture(ev)
 	case "capture-incremental", "stop", "pre-compact":
 		hookCaptureIncremental(ev, isWorker, raw)
+	case recallExposureHook:
+		// Only ever run as the recall hook's detached worker; its stdin is a
+		// recallExposurePayload, not a Claude Code event.
+		if isWorker {
+			hookRecordExposures(raw)
+		}
 	default:
 		// Unknown hook name: nothing to do, but don't fail the session.
 	}
@@ -290,6 +296,11 @@ func hookRecall(ev hookEvent) {
 	claims, contra := mergeRecall(repoClaims, repoContra, globalClaims, globalContra, query.PrecedenceOrDefault())
 	emitContext("UserPromptSubmit", renderRecall(claims, contra))
 
+	// Record what this session was just shown (ADR 0048), so a later capture
+	// of the session saying it back is not counted as independent evidence.
+	// Detached, after the context is emitted: the prompt never waits on it.
+	spawnRecallExposures(ev, claims, time.Now())
+
 	// Fill in durability verdicts for what this brief just showed. The reader's
 	// own path is the only thing that predicts which beliefs surface — recall
 	// ranks by relevance to the question, so no static ordering over the brain
@@ -444,6 +455,10 @@ func flagRecallDissonance(out, repo, global []recallClaim) {
 // renderRecall renders a compact, citation-friendly context block. It caps the
 // claim list so the injection stays small. When a repo overlay contributed, each
 // claim is tagged with its tier so the model knows what's repo-specific.
+// maxRecallLines is how many beliefs renderRecall shows. The rest are counted,
+// not shown, and so never enter the session's context.
+const maxRecallLines = 6
+
 func renderRecall(claims []recallClaim, contradictions int) string {
 	if len(claims) == 0 {
 		return ""
@@ -468,10 +483,9 @@ func renderRecall(claims []recallClaim, contradictions int) string {
 		fmt.Fprintf(&b, "⚠ This topic is heavily contested — %d contradiction(s) recorded. Verify against the source before relying on anything below.\n", contradictions)
 	}
 	b.WriteString("Relevant knowledge from Mnemos (your long-term memory):\n")
-	const maxClaims = 6
 	for i, c := range claims {
-		if i >= maxClaims {
-			fmt.Fprintf(&b, "  …and %d more (use the query_knowledge tool for the full set)\n", len(claims)-maxClaims)
+		if i >= maxRecallLines {
+			fmt.Fprintf(&b, "  …and %d more (use the query_knowledge tool for the full set)\n", len(claims)-maxRecallLines)
 			break
 		}
 		tier := ""
