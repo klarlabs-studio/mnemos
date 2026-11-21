@@ -134,6 +134,14 @@ notable changes.
   finishing (a stalled provider). Cancelled embeds still count in
   `mnemos_embed_failed_total`, and Close logs one warning with the number abandoned and
   points to `mnemos reembed`, which backfills exactly the claims and events with no vector.
+- Brain health's dangling-edge count no longer dominates `health` on edge-dense brains
+  (#438). The SQLite query probed `claims` twice for every edge (71% of `BrainHealth` on a
+  real brain with 3M edges over 235k beliefs). It now reads each endpoint index grouped to
+  its distinct ids, probes `claims` once per id, and counts only the edges of the missing
+  ids. The count stays exact, since brain health reports any dangling edge as referential
+  corruption. On a synthetic brain with 50k beliefs and 600k edges the count fell from
+  ~0.8 s to ~0.19 s warm. With 235k beliefs, 3M edges and 500 dangling edges (a busy
+  machine, so noisy) the median fell from 22.8 s to 4.5 s, and both forms counted 500.
 - `list_dissonances` (MCP, and the browse surfaces that share it) reads one page of
   contradictions from an index instead of decoding every association in the brain (ADR 0043).
   At 100k beliefs the old path took ~0.45–0.66 s per page; the indexed read measured
