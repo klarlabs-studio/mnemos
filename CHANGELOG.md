@@ -35,6 +35,12 @@ notable changes.
   session's lock and one of two machine-wide slots (kernel file locks, released however
   the worker exits). An incremental worker that finds either busy leaves its lines for the
   next reply; the SessionEnd sweep waits for them within its budget.
+- The session-start brief costs 0.2 s instead of 14 s. It printed three counts but computed
+  them by loading every episode, belief, association and embedding vector: on a 1.1 GB
+  brain, 14.5 s and 1.2 GB resident per Claude Code session start, headless `claude -p`
+  calls included, so a script making many such calls saturated the machine. It now counts
+  in the store (`kbmetrics.Brief`, plus an optional `ports.RunCounter` that SQLite, libSQL,
+  Postgres and MySQL implement) and prints the same numbers in 0.22 s and 36 MB.
 
 ## [0.133.0] — 2026-11-23
 
