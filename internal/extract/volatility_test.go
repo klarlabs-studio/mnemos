@@ -43,6 +43,41 @@ func TestHalfLifeFor_DurableKnowledge(t *testing.T) {
 	}
 }
 
+// Time-bound results (#565): a single run's tally, and open/pending status. They
+// are worth keeping for a while, but recalled months later as durable facts
+// they are false or meaningless. Invented examples.
+func TestHalfLifeFor_TimeBoundResults(t *testing.T) {
+	cases := []struct {
+		text string
+		want float64
+	}{
+		{"In 31 of the 40 failed lookups, the cached entry had expired", VolatileHalfLifeDays},
+		{"The cache covered 118 of 120 sessions on the rerun", VolatileHalfLifeDays},
+		{"Of the 64 slow queries: 70% scanned the whole table", VolatileHalfLifeDays},
+		{"412 claims (6.1%) got a resolved date", VolatileHalfLifeDays},
+		{"The new ranker changes the top result on 12.5% of queries", VolatileHalfLifeDays},
+		{"Issue #812 is still open", VolatileHalfLifeDays},
+		{"The data import is still running in the background", VolatileHalfLifeDays},
+		{"CI on #612 is waiting for maintainer approval", VolatileHalfLifeDays},
+		{"The service is still running on Java 8 because of the vendor SDK", 0},
+		{"Still open: the mergeability of the branch is unknown", VolatileHalfLifeDays},
+		{"I merged #345 first, which closed #339", VolatileHalfLifeDays},
+		{"I've reviewed #347 and it is good to merge", VolatileHalfLifeDays},
+
+		// Durable quantities and history keep the default.
+		{"Revenue grew 15% in Q3", 0},
+		{"The retry budget is 3 attempts, not 5", 0},
+		{"One in three requests is retried because the pool is undersized", 0},
+		{"Issue templates live in .github/ISSUE_TEMPLATE", 0},
+		{"I merged the feature flag code into the core package to simplify wiring", 0},
+	}
+	for _, tc := range cases {
+		if got := HalfLifeFor("fact", tc.text); got != tc.want {
+			t.Errorf("HalfLifeFor(%q) = %v, want %v", tc.text, got, tc.want)
+		}
+	}
+}
+
 // A decision's value is its reasoning, which survives the thing it decided
 // about changing — so decisions are never volatile regardless of wording.
 func TestHalfLifeFor_DecisionsNeverVolatile(t *testing.T) {
