@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"go.klarlabs.de/mnemos/internal/filelock"
 )
 
 // Capture workers are spawned after every assistant reply in every open
@@ -37,7 +39,7 @@ const maxCaptureWorkers = 2
 const captureLockPoll = 250 * time.Millisecond
 
 // errLockHeld reports that another worker holds a lock.
-var errLockHeld = errors.New("lock held")
+var errLockHeld = filelock.ErrHeld
 
 // captureLocks is what a worker holds while it captures.
 type captureLocks struct{ files []*os.File }
@@ -104,7 +106,7 @@ func lockPath(path string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := tryLockFile(f); err != nil {
+	if err := filelock.TryLock(f); err != nil {
 		_ = f.Close()
 		return nil, err
 	}
