@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -309,5 +310,30 @@ func TestFilterSessionNarrationFailsOpen(t *testing.T) {
 	}
 	if got, _, _ := filterSessionNarration(context.Background(), nil, claims, links, nil); len(got) != 1 {
 		t.Error("no judge dropped a claim")
+	}
+}
+
+// A judge that can never answer still keeps every claim, but capture says so:
+// otherwise a missing model is a narration filter that silently does nothing.
+func TestFilterSessionNarrationWarnsWhenTheJudgeIsUnavailable(t *testing.T) {
+	var buf bytes.Buffer
+	prev := narrationWarnings
+	narrationWarnings = &buf
+	t.Cleanup(func() { narrationWarnings = prev })
+
+	claims := []domain.Claim{{ID: "a", Text: "Both PRs are green"}}
+	unavailable := fmt.Errorf("%w (llama3.1): model not found", narration.ErrUnavailable)
+	got, _, _ := filterSessionNarration(context.Background(), &fakeJudge{err: unavailable}, claims, nil, nil)
+	if len(got) != 1 {
+		t.Fatal("an unavailable judge dropped a claim")
+	}
+	if !strings.Contains(buf.String(), "kept all 1 captured claims unjudged") || !strings.Contains(buf.String(), "llama3.1") {
+		t.Errorf("warning = %q", buf.String())
+	}
+
+	buf.Reset()
+	filterSessionNarration(context.Background(), &fakeJudge{}, claims, nil, nil)
+	if buf.Len() != 0 {
+		t.Errorf("a working judge warned: %q", buf.String())
 	}
 }

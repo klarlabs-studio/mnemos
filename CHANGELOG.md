@@ -21,6 +21,13 @@ notable changes.
   `mnemos prune --narration` and `mnemos recompute-half-life` apply the new rules to
   existing brains. Capture also strips the compaction tail even when its marker line is
   missing; the leaked instructions came from brains captured before #469.
+- The capture-time narration judge no longer stops filtering without a word. On Ollama it
+  runs on its own model (`llama3.1` unless `llm.narration_model` is set), and where that
+  model was never pulled every request failed, every claim was kept and nothing said so.
+  Capture now prints a warning when the judge cannot answer at all (it still keeps every
+  claim), `prune --narration-judge` fails with the cause instead of reporting each claim
+  unanswered, and `mnemos doctor` gains a `narration_judge` check that lists the
+  installed models when the configured one is missing.
 
 ## [0.133.0] — 2026-11-23
 

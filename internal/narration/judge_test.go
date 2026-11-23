@@ -70,15 +70,48 @@ func TestParseVerdicts(t *testing.T) {
 // A failed request must never drop anything: every statement in that batch
 // comes back Unknown, which callers keep.
 func TestClassifyKeepsEverythingWhenTheModelFails(t *testing.T) {
-	j := New(&scripted{err: errors.New("connection refused")}, "")
+	j := New(&scripted{err: errors.New(`model "llama3.1" not found`)}, "")
 	got, err := j.Classify(context.Background(), []string{"Both PRs are green", "drop_console strips console.log"})
-	if err != nil {
-		t.Fatalf("a model failure must not fail the pass: %v", err)
-	}
 	for i, v := range got {
 		if v == Drop {
 			t.Errorf("statement %d dropped although the model never answered", i)
 		}
+	}
+	// ... but a judge that never answered is reported, not silently inert.
+	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "llama3.1") {
+		t.Fatalf("err = %v, want ErrUnavailable carrying the request's cause", err)
+	}
+}
+
+// failing fails the requests it is told to and answers the rest with "[]".
+type failing struct {
+	failOn map[int]bool
+	calls  int
+}
+
+func (f *failing) Complete(_ context.Context, _ []llm.Message) (llm.Response, error) {
+	f.calls++
+	if f.failOn[f.calls] {
+		return llm.Response{}, errors.New("timeout")
+	}
+	return llm.Response{Content: "[]"}, nil
+}
+
+// One failed batch among answered ones is an ordinary miss, not an outage; an
+// unparsable answer proves the model is there.
+func TestClassifyReportsUnavailableOnlyWhenEveryRequestFailed(t *testing.T) {
+	texts := make([]string, 2*BatchSize)
+	for i := range texts {
+		texts[i] = fmt.Sprintf("statement %d", i)
+	}
+	if _, err := New(&failing{failOn: map[int]bool{1: true}}, "").Classify(context.Background(), texts); err != nil {
+		t.Errorf("one of two batches failed: err = %v, want nil", err)
+	}
+	if _, err := New(&scripted{responses: []string{"no json here"}}, "").Classify(context.Background(), texts[:1]); err != nil {
+		t.Errorf("unparsable answer: err = %v, want nil", err)
+	}
+	if _, err := New(&failing{failOn: map[int]bool{1: true, 2: true}}, "").Classify(context.Background(), texts); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("every batch failed: err = %v, want ErrUnavailable", err)
 	}
 }
 
