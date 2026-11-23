@@ -216,7 +216,7 @@ func (e LLMEngine) extractBatch(ctx context.Context, b promptBatch, usage *Token
 
 	cacheKey := e.cacheKey(b.texts)
 	if rawClaims, ok := e.loadCachedClaims(cacheKey); ok {
-		claims, links, ents, err := e.buildClaims(rawClaims, b.events)
+		claims, links, ents, err := e.buildClaims(rawClaims, b.events, e.producer(""))
 		if err != nil {
 			c, l := fallback("cached_claims_unusable", err)
 			return c, l, nil
@@ -279,7 +279,7 @@ func (e LLMEngine) extractBatch(ctx context.Context, b promptBatch, usage *Token
 		return nil, nil, nil
 	}
 
-	claims, links, ents, err := e.buildClaims(rawClaims, b.events)
+	claims, links, ents, err := e.buildClaims(rawClaims, b.events, e.producer(resp.Model))
 	if err != nil {
 		c, l := fallback("claims_unusable", err)
 		return c, l, nil
@@ -372,7 +372,26 @@ func extractBatchChars() int {
 // map is a valid result (older models or claims without named
 // entities).
 
-func (e LLMEngine) buildClaims(rawClaims []llmClaim, sourceEvents []domain.Event) ([]domain.Claim, []domain.ClaimEvidence, map[string][]ExtractedEntity, error) {
+// producer is the Claim.ExtractedBy stamp for claims this engine's model wrote
+// (#445 item 3, ADR 0029 §3): "llm/<provider>:<model>/<PromptVersion>". It
+// takes provider and model from the client's identity, never its base URL,
+// which can name an internal host; a client without an identity falls back to
+// the model the response reported.
+func (e LLMEngine) producer(respModel string) string {
+	model := respModel
+	if id, ok := e.client.(llm.Identified); ok {
+		parts := strings.Split(id.Identity(), "|")
+		if len(parts) >= 2 && parts[1] != "" {
+			model = parts[0] + ":" + parts[1]
+		}
+	}
+	if model == "" {
+		model = "unknown"
+	}
+	return "llm/" + model + "/" + PromptVersion
+}
+
+func (e LLMEngine) buildClaims(rawClaims []llmClaim, sourceEvents []domain.Event, producer string) ([]domain.Claim, []domain.ClaimEvidence, map[string][]ExtractedEntity, error) {
 	claims := make([]domain.Claim, 0, len(rawClaims))
 	evidence := make([]domain.ClaimEvidence, 0, len(rawClaims))
 	entities := make(map[string][]ExtractedEntity)
@@ -416,6 +435,7 @@ func (e LLMEngine) buildClaims(rawClaims []llmClaim, sourceEvents []domain.Event
 			Status:       domain.ClaimStatusActive,
 			SubjectClass: subjectClassForClaim(rc),
 			CreatedAt:    e.now().UTC(),
+			ExtractedBy:  producer,
 		}
 		if err := claim.Validate(); err != nil {
 			continue // Skip invalid claims from LLM.

@@ -48,6 +48,7 @@ type Claim struct {
 	LastConfirmed        string         `json:"last_confirmed"`
 	HalfLifeDays         float64        `json:"half_life_days"`
 	HalfLifeClassifier   string         `json:"half_life_classifier"`
+	ExtractedBy          string         `json:"extracted_by"`
 	ScopeService         string         `json:"scope_service"`
 	ScopeEnv             string         `json:"scope_env"`
 	ScopeTeam            string         `json:"scope_team"`
@@ -242,6 +243,21 @@ type EventDependency struct {
 	CreatedBy     string         `json:"created_by"`
 	RemovedAt     sql.NullString `json:"removed_at"`
 	RemovedBy     string         `json:"removed_by"`
+	RemovalReason string         `json:"removal_reason"`
+}
+
+type EventDependencyHistory struct {
+	ID            int64  `json:"id"`
+	EventID       string `json:"event_id"`
+	DependsOn     string `json:"depends_on"`
+	Kind          string `json:"kind"`
+	SignalType    string `json:"signal_type"`
+	ReferenceText string `json:"reference_text"`
+	ValidFrom     string `json:"valid_from"`
+	RecordedBy    string `json:"recorded_by"`
+	ValidTo       string `json:"valid_to"`
+	RemovedBy     string `json:"removed_by"`
+	RemovalReason string `json:"removal_reason"`
 }
 
 type Lesson struct {

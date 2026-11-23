@@ -141,14 +141,14 @@ func TestCacheNeverServesAnotherModelsClaims(t *testing.T) {
 // distinguishable in the merged output.
 type countingLLMClient struct {
 	calls    int
-	maxChars int // largest prompt seen
+	maxChars int // largest user prompt seen; the fixed system prompt is not batched input
 	failOn   map[int]bool
 }
 
 func (c *countingLLMClient) Complete(_ context.Context, msgs []llm.Message) (llm.Response, error) {
 	c.calls++
 	for _, m := range msgs {
-		if len(m.Content) > c.maxChars {
+		if m.Role == llm.RoleUser && len(m.Content) > c.maxChars {
 			c.maxChars = len(m.Content)
 		}
 	}

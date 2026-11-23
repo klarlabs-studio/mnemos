@@ -14,6 +14,14 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
+// RuleExtractorVersion is stamped on every claim the rule-based engine
+// produces (Claim.ExtractedBy, #445 item 3, ADR 0029 §3). Bump it whenever
+// what the rules produce changes, so the claims an older rule set wrote can be
+// found and re-extracted.
+//
+//	rules/v1  first stamped; includes speaker attribution (#445 item 4)
+const RuleExtractorVersion = "rules/v1"
+
 // Engine extracts claims from domain events using heuristic NLP.
 type Engine struct {
 	now    func() time.Time
@@ -50,7 +58,7 @@ func (e Engine) Extract(_ context.Context, events []domain.Event) ([]domain.Clai
 			continue
 		}
 
-		candidates := splitCandidates(content)
+		candidates := extractCandidates(content)
 		for _, candidate := range candidates {
 			dedupeKey := normalizeForDedupe(candidate)
 			if dedupeKey == "" {
@@ -68,12 +76,13 @@ func (e Engine) Extract(_ context.Context, events []domain.Event) ([]domain.Clai
 
 			claimType := inferClaimType(candidate)
 			claim := domain.Claim{
-				ID:         claimID,
-				Text:       candidate,
-				Type:       claimType,
-				Confidence: inferConfidence(candidate, claimType),
-				Status:     domain.ClaimStatusActive,
-				CreatedAt:  e.now().UTC(),
+				ID:          claimID,
+				Text:        candidate,
+				Type:        claimType,
+				Confidence:  inferConfidence(candidate, claimType),
+				Status:      domain.ClaimStatusActive,
+				CreatedAt:   e.now().UTC(),
+				ExtractedBy: RuleExtractorVersion,
 			}
 			if err := claim.Validate(); err != nil {
 				return nil, nil, fmt.Errorf("validate extracted claim: %w", err)

@@ -119,6 +119,10 @@ CREATE TABLE IF NOT EXISTS claims (
 	-- '' means none did. That is a different fact from "the classifier read this
 	-- and judged it durable", which also stores 0.
 	half_life_classifier TEXT NOT NULL DEFAULT '',
+	-- extracted_by (#445, ADR 0029 §3): which extractor produced the claim —
+	-- 'rules/<v>' or 'llm/<provider>:<model>/<prompt v>'. '' when none did (a
+	-- writer supplied the claim whole) or the row predates schema v40.
+	extracted_by TEXT NOT NULL DEFAULT '',
 	scope_service TEXT NOT NULL DEFAULT '',
 	scope_env TEXT NOT NULL DEFAULT '',
 	scope_team TEXT NOT NULL DEFAULT '',
@@ -836,7 +840,9 @@ CREATE TABLE IF NOT EXISTS relate_token_state (
 // event_dependency_history (CREATE TABLE IF NOT EXISTS): a revival keeps the
 // interval it supersedes. No backfill: an existing tombstone is already one
 // closed interval and moves into the history on its first revival.
-const currentSchemaVersion = 39
+// v40 (#445 item 3, ADR 0029 §3) adds claims.extracted_by, the extractor that
+// produced each claim. No backfill: earlier rows read empty (producer unknown).
+const currentSchemaVersion = 40
 
 // addMissingColumn declares one defensive column-add. Each entry is
 // idempotent: if the column already exists in the table we skip it,
@@ -970,6 +976,9 @@ var expectedColumns = []addMissingColumn{
 	// v39 - why a dependency was removed (ADR 0038, edit history). Existing
 	// tombstones read an empty reason: none was asked for when they were made.
 	{"event_dependencies", "removal_reason", "TEXT NOT NULL DEFAULT ''"},
+	// v40 - which extractor produced the claim (#445, ADR 0029 §3). Existing
+	// rows read '': their producer was never recorded.
+	{"claims", "extracted_by", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // v1Columns is the legacy alias kept for any external callers (and for

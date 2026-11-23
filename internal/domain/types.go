@@ -315,6 +315,16 @@ type Belief struct {
 	// on day one cannot be rolled back by reverting a binary.
 	HalfLifeClassifier string
 
+	// ExtractedBy records which extractor produced this claim's text from its
+	// source episode (#445 item 3, ADR 0029 §3): "rules/<version>" for the
+	// rule-based engine, "llm/<provider>:<model>/<prompt version>" for LLM
+	// extraction. Empty means no extractor wrote it — a claim supplied whole by
+	// a writer (remember, POST /v1/beliefs, an import), or one stored before
+	// the column existed. It lets a bad extractor's claims be found and
+	// re-extracted without reprocessing the whole brain. Like
+	// HalfLifeClassifier, nothing in scoring or recall reads it.
+	ExtractedBy string
+
 	// MergedInto is the id of the claim that absorbed this one, or empty. A
 	// semantic-dedupe merge keeps the losing claim as a deprecated redirect
 	// instead of deleting it (#387, ADR 0033), as Wikidata keeps a merged item:

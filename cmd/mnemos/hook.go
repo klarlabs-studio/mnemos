@@ -836,6 +836,13 @@ func transcriptTextFromLines(data string, maxBytes int) (text string, consumed i
 // line, reporting whether the line carried any. Non-JSON, non-conversational,
 // and empty-text lines are skipped — a transcript legitimately contains all
 // three, so they are not errors.
+//
+// The text opens with its speaker's role ("user: ", "assistant: "). Capture
+// used to drop it, so the assistant's "I found the race" reached extraction
+// as an unattributed first-person statement — indistinguishable from one the
+// user made about themselves (#445). Extraction resolves first-person
+// pronouns to the labelled speaker; continuation lines of a multi-line
+// message belong to the same speaker, so only the first line carries it.
 func parseTranscriptLine(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -860,7 +867,10 @@ func parseTranscriptLine(raw string) (string, bool) {
 		body = line.Content
 	}
 	txt := extractMessageText(body, line.Content)
-	return txt, txt != ""
+	if txt == "" {
+		return "", false
+	}
+	return role + ": " + txt, true
 }
 
 // extractMessageText coaxes plain text out of a message payload that may be a

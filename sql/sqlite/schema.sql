@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS claims (
   -- '' means none did, which is NOT the same as a classifier deciding the
   -- belief is durable -- that also stores half_life_days = 0.
   half_life_classifier TEXT NOT NULL DEFAULT '',
+  -- extracted_by (#445, ADR 0029 point 3): which extractor produced the claim.
+  -- '' when none did (a writer supplied it whole) or the row predates v40.
+  extracted_by TEXT NOT NULL DEFAULT '',
   scope_service TEXT NOT NULL DEFAULT '',
   scope_env TEXT NOT NULL DEFAULT '',
   scope_team TEXT NOT NULL DEFAULT '',

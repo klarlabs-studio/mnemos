@@ -88,7 +88,7 @@ func (q *Queries) DeleteClaimStatusHistoryByClaimID(ctx context.Context, claimID
 
 const listAllClaims = `-- name: ListAllClaims :many
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
-       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, extracted_by,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -126,6 +126,7 @@ func (q *Queries) ListAllClaims(ctx context.Context) ([]Claim, error) {
 			&i.LastConfirmed,
 			&i.HalfLifeDays,
 			&i.HalfLifeClassifier,
+			&i.ExtractedBy,
 			&i.ScopeService,
 			&i.ScopeEnv,
 			&i.ScopeTeam,
@@ -344,7 +345,7 @@ func (q *Queries) ListClaimTrustInputsForClaims(ctx context.Context, claimIds []
 
 const listClaimsByTestRequirementRef = `-- name: ListClaimsByTestRequirementRef :many
 SELECT id, text, type, confidence, status, created_at, created_by, trust_score, trust_computed_at, trust_model_version,
-       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier,
+       valid_from, valid_to, last_verified, verify_count, last_confirmed, half_life_days, half_life_classifier, extracted_by,
        scope_service, scope_env, scope_team,
        source_document, source_type, source_authority, liveness,
        last_executed, citation_count, provenance_rationale,
@@ -388,6 +389,7 @@ func (q *Queries) ListClaimsByTestRequirementRef(ctx context.Context, testRequir
 			&i.LastConfirmed,
 			&i.HalfLifeDays,
 			&i.HalfLifeClassifier,
+			&i.ExtractedBy,
 			&i.ScopeService,
 			&i.ScopeEnv,
 			&i.ScopeTeam,
@@ -497,8 +499,8 @@ func (q *Queries) UpdateClaimTrust(ctx context.Context, arg UpdateClaimTrustPara
 }
 
 const upsertClaim = `-- name: UpsertClaim :exec
-INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, half_life_days, half_life_classifier, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO claims (id, text, type, confidence, status, created_at, created_by, valid_from, half_life_days, half_life_classifier, extracted_by, scope_service, scope_env, scope_team, source_document, source_type, source_authority, liveness, last_executed, citation_count, provenance_rationale, test_id, test_requirement_ref, test_author, test_last_modified, test_last_run_at, test_pass_count, test_fail_count, visibility, confidence_components, lifecycle, subject_class, durability, text_key, merged_into)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   text = excluded.text,
   type = excluded.type,
@@ -512,6 +514,10 @@ ON CONFLICT(id) DO UPDATE SET
   -- a writer that carries no classifier verdict must not erase one, or the
   -- coverage number would decay under ordinary write traffic (ADR 0025).
   half_life_classifier = CASE WHEN excluded.half_life_classifier <> '' THEN excluded.half_life_classifier ELSE claims.half_life_classifier END,
+  -- The extractor that produced the claim (#445, ADR 0029 point 3), preserved on
+  -- empty: maintenance passes and API writers that hit an existing id carry
+  -- none, and must not erase the record of which extractor wrote it.
+  extracted_by = CASE WHEN excluded.extracted_by <> '' THEN excluded.extracted_by ELSE claims.extracted_by END,
   -- A merge redirect survives a write that carries none: re-extraction rebuilds
   -- a claim from its text and never sets merged_into (#387).
   merged_into = CASE WHEN excluded.merged_into <> '' THEN excluded.merged_into ELSE claims.merged_into END,
@@ -569,6 +575,7 @@ type UpsertClaimParams struct {
 	ValidFrom            string  `json:"valid_from"`
 	HalfLifeDays         float64 `json:"half_life_days"`
 	HalfLifeClassifier   string  `json:"half_life_classifier"`
+	ExtractedBy          string  `json:"extracted_by"`
 	ScopeService         string  `json:"scope_service"`
 	ScopeEnv             string  `json:"scope_env"`
 	ScopeTeam            string  `json:"scope_team"`
@@ -623,6 +630,7 @@ func (q *Queries) UpsertClaim(ctx context.Context, arg UpsertClaimParams) error 
 		arg.ValidFrom,
 		arg.HalfLifeDays,
 		arg.HalfLifeClassifier,
+		arg.ExtractedBy,
 		arg.ScopeService,
 		arg.ScopeEnv,
 		arg.ScopeTeam,

@@ -10,6 +10,15 @@ notable changes.
 
 ### Added
 
+- Claims record the extractor that produced them (#445 item 3, ADR 0029). New
+  `claims.extracted_by` column on SQLite/libSQL (schema v40), Postgres, MySQL and the
+  memory store: `rules/v1` for rule-based extraction (including an LLM batch that fell
+  back to the rules), `llm/<provider>:<model>/<prompt version>` for LLM extraction (no
+  endpoint URL is stored). A write without a producer keeps the stored one; claims
+  supplied whole by a writer, and rows from before this release, read empty. No
+  backfill. Nothing in scoring or recall reads it yet; it lets a bad extractor's
+  claims be found and re-extracted.
+
 - Deterministic vs LLM reconciliation experiment (ADR 0042, nothing wired into production):
   `go run ./tools/brainbench -mode reconcile [-llm-model gemma3:12b,qwen2.5:3b]` scores
   the relate classifier, a local Ollama model alone, and a pre-registered hybrid on 201
@@ -82,6 +91,21 @@ notable changes.
   binding calls one implementation (`internal/skills`, `internal/incident`).
 
 ### Changed
+
+- **Extraction names the speaker** (#445 item 4). In LoCoMo's two-person sessions
+  extraction stored first-person beliefs with no speaker ("Sitting in that spot by the
+  window gives me peace"), detached from who said it, and Claude Code capture joined user
+  and assistant text with no labels, so the assistant's "I found the race" read like a
+  statement the user made about themselves. Capture now opens each message with its role
+  (`user:` / `assistant:`). The rule-based extractor resolves `I`/`me`/`my` on a labelled
+  line to that line's speaker, and `you`/`your` to the other party of a two-person
+  conversation, agreeing the verb ("Melanie loves making this dairy-free chocolate cake",
+  "The assistant found the race in the retry loop"). Unlabelled text is unchanged: a
+  personal-name label counts only when two or more lines carry one, metadata labels
+  (`Note:`, `Status:`) are never speakers, and `we` and an unknown addressee's `you` are
+  left alone. The LLM prompt (`PromptVersion` v1.5 → v1.6, which invalidates the
+  extraction cache) gains the same rules and two dialogue examples. New eval suite
+  `data/eval/speaker_attribution.yaml`.
 
 - **Trust changes: evidence independence is keyed on origin, not on who ingested it**
   (ADR 0046, #390). Corroboration counted distinct sources as distinct ingesting
