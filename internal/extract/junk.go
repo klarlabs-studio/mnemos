@@ -39,7 +39,7 @@ func isJunkClaim(text string) bool {
 	if isSectionLabel(stripped) {
 		return true
 	}
-	if narrationRE.MatchString(stripped) {
+	if narrationRE.MatchString(stripped) || isMomentNarration(stripped) {
 		return true
 	}
 	if metaClaimRE.MatchString(stripped) {
@@ -156,14 +156,15 @@ func stripDecorations(text string) string {
 // Deliberately narrow. It requires the agent as subject AND an intent verb, so
 // "We decided to use Go" and "Users let sessions expire" are untouched; only
 // the agent talking about what it is about to do is dropped.
-var narrationRE = regexp.MustCompile(`(?i)^(?:(?:ok(?:ay)?|now|next|first|then|finally|so)[,\s]+)*` +
+var narrationRE = regexp.MustCompile(`(?i)^(?:(?:ok(?:ay)?|now|next|first|then|finally|so|meanwhile)[,\s]+)*` +
 	`(?:let\s+me|let'?s|i'?ll|i\s+will|i'?m\s+going\s+to)\s+` +
 	`(?:also\s+|just\s+|now\s+|quickly\s+|first\s+)*` +
 	`(?:add|build|check|create|do|explore|fix|go|handle|implement|inspect|look|make|open|read|` +
 	`replace|run|see|start|survey|take|test|try|update|use|verify|view|wire|write|examine|` +
 	`confirm|continue|dig|drop|find|finish|get|give|keep|land|list|move|note|pick|put|remove|` +
 	`rename|report|review|scan|search|set|show|split|switch|trace|walk|` +
-	`rewrite|extend|compose|import|refactor|apply|thread|ground|adjust|swap|delete|generate)\b`)
+	`rewrite|extend|compose|import|refactor|apply|thread|ground|adjust|swap|delete|generate|` +
+	`document|ship|approve|bypass|merge|push|rebase|commit|retry|wait|fetch|clean|draft|tag|release)\b`)
 
 // metaClaimRE matches commentary ABOUT the knowledge graph rather than about
 // the world: "that's the fourth stale belief this session", "correcting the

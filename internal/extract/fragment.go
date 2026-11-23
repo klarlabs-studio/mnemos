@@ -133,7 +133,9 @@ func isGerundAction(words []string) bool {
 }
 
 // isNoiseFragment is the shape filter both extractors share: a code line or a
-// narration fragment is never a claim, whichever engine produced it.
+// narration fragment is never a claim, whichever engine produced it. Moment
+// narration (#565) joins them: rule-based extraction is the default capture
+// path, so a rule only the LLM engine applied would miss most brains.
 func isNoiseFragment(text string) bool {
-	return isCodeLine(text) || isNarrationFragment(text)
+	return isCodeLine(text) || isNarrationFragment(text) || isMomentNarration(text)
 }

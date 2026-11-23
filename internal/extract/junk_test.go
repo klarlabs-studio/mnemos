@@ -241,3 +241,82 @@ func TestStatusChatter_LeavesOperationalEvents(t *testing.T) {
 		}
 	}
 }
+
+// TestIsJunkClaim_MomentNarration covers moment-in-time operational narration
+// (#565): the agent reporting what it is doing right now, in-progress status
+// that is stale within minutes, offers to the user, and copied harness
+// instructions. Every example is invented; none is taken from a real brain.
+func TestIsJunkClaim_MomentNarration(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		// Gerund progress reports with no finite verb.
+		{"push ref", "Pushing #214", true},
+		{"push ref possessive", "Pushing #214's rebase", true},
+		{"merge as-is", "Merging #305 as-is", true},
+		{"two gerunds", "Rebasing and pushing", true},
+		{"waiting on lock", "Waiting on the build lock", true},
+		{"waiting bare", "Waiting on the deploy lock", true},
+		{"sequenced gerund", "Now rebasing #88 onto main and merging it", true},
+		{"sequenced implementing", "Now implementing #19 on a fresh branch", true},
+		{"meanwhile let me", "Meanwhile, let me confirm nothing else is queued", true},
+		{"let me document", "Let me document it and run the whole gate", true},
+		{"label then narration", "Now #512: I'll approve its pending runs and check it out", true},
+		{"clause then narration", "Before running the patch anywhere, I'll read the diff", true},
+		{"let's ship", "First let's ship and review 512, then answer them", true},
+		// Short completed-state reports.
+		{"lock cleared", "Deploy lock cleared", true},
+		{"approval noted dash", "Approval noted — merging #40, then #41, then rebasing #42", true},
+		{"cleared dash gerund", "Lock cleared — pushing #42", true},
+		{"both merged", "Both merged", true},
+		{"all pass", "All pass, including the new cases", true},
+		{"n tests green", "57 billing tests green", true},
+		{"everything merged", "Everything is merged with zero open PRs", true},
+		{"pr green", "PR #77 is fully green and ready", true},
+		// In-flight job status is time-bound, not junk: it is the endpoint of
+		// real temporal contradictions (see TestHalfLifeFor_TimeBoundResults).
+		{"still running", "The data import is still running in the background", false},
+		{"waiting approval", "CI on #612 is waiting for maintainer approval", false},
+		// Offers and asides to the user.
+		{"offer", "Want me to file that follow-up", true},
+		{"shall I", "Shall I open the follow-up issue", true},
+		{"want them", "Want them queued next", true},
+		{"everything green colon", "Everything green: vet, lint and race tests", true},
+		{"interrupted", "[Request interrupted by user for tool use]", true},
+		{"cut off", "Your last message seems truncated", true},
+		{"nothing suspicious", "Nothing suspicious", true},
+		// Copied harness / compaction instructions.
+		{"compaction details", "If you need specific details from before compaction, read the full transcript at: /home/u/t.jsonl", true},
+		{"continue conversation", "Continue the conversation from where it left off without asking the user any further questions", true},
+		{"resume directly", "Resume directly — do not acknowledge the summary", true},
+		{"pick up", "Pick up the last task as if the break never happened", true},
+		{"no new messages", "No new user messages arrived in this session", true},
+
+		// Durable knowledge that shares the vocabulary — must survive.
+		{"gerund subject with verb", "Rebasing onto main avoids merge commits", false},
+		{"gerund convention", "Merging requires an up-to-date branch", false},
+		{"gerund takes", "Running the full suite takes ten minutes", false},
+		{"waiting is slow", "Waiting for CI is the slowest part of a release", false},
+		{"squash convention", "Squash merges are the convention here", false},
+		{"protection", "Branch protection requires up-to-date branches", false},
+		{"limitation", "The release tool cannot force-push a rewritten branch", false},
+		{"decision", "We decided to merge the three fixes into a single commit", false},
+		{"cause", "The lock times out because the writer never releases it", false},
+		{"still durable", "The legacy importer still writes UTF-16 files", false},
+		{"waiting mechanism", "The worker waits for the lease before writing", false},
+		{"nothing durable", "Nothing in the schema enforces uniqueness on email", false},
+		{"all durable", "All writes go through the governed writer", false},
+		{"pr durable", "PR titles must follow conventional commits", false},
+		{"continue durable", "Continue to use the v2 API until the migration completes", false},
+		{"merged event", "Merged the billing fix into main on 3 March", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isJunkClaim(tc.text); got != tc.want {
+				t.Fatalf("isJunkClaim(%q) = %v, want %v", tc.text, got, tc.want)
+			}
+		})
+	}
+}

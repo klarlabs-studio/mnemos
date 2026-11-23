@@ -148,3 +148,25 @@ test_cases:
     expected_count: 2
     not_expected_claims: []
 
+
+  - id: edge-013
+    description: "Moment-in-time operational narration yields no claims (#565)"
+    tags: [edge_cases, narration]
+    input: "Pushing #214\nWaiting on the deploy lock\nDeploy lock cleared\nNow rebasing #88 onto main and merging it\nAll pass, including the new cases"
+    expected_claims: []
+    expected_count: 0
+    not_expected_claims: []
+
+  - id: edge-014
+    description: "Durable knowledge survives among moment narration that shares its vocabulary (#565)"
+    tags: [edge_cases, narration]
+    input: "Merging #305 as-is\nSquash merges are the convention for this repository\nWant me to file that follow-up\nRebasing onto main avoids merge commits"
+    expected_claims:
+      - text: "Squash merges are the convention for this repository"
+        type: fact
+      - text: "Rebasing onto main avoids merge commits"
+        type: fact
+    expected_count: 2
+    not_expected_claims:
+      - "Merging #305 as-is"
+      - "Want me to file that follow-up"

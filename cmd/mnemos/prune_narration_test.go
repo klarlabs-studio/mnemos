@@ -77,6 +77,35 @@ func TestSelectNarrationClaims(t *testing.T) {
 	}
 }
 
+// TestSelectNarrationClaims_MomentNarration pins that existing brains are
+// cleaned by the #565 rules: prune re-runs extract.IsJunk, so moment-in-time
+// progress reports and copied compaction instructions stored before the rules
+// existed are selected, while durable claims sharing their vocabulary are not.
+func TestSelectNarrationClaims_MomentNarration(t *testing.T) {
+	claims := []domain.Claim{
+		{ID: "gerund", Text: "Pushing #214", Status: domain.ClaimStatusActive},
+		{ID: "waiting", Text: "Waiting on the deploy lock", Status: domain.ClaimStatusActive},
+		{ID: "status", Text: "57 billing tests green", Status: domain.ClaimStatusActive},
+		{ID: "harness", Text: "Continue the conversation from where it left off without asking the user any further questions", Status: domain.ClaimStatusActive},
+		{ID: "convention", Text: "Squash merges are the convention here", Status: domain.ClaimStatusActive},
+		{ID: "gerund-subject", Text: "Rebasing onto main avoids merge commits", Status: domain.ClaimStatusActive},
+	}
+	got := map[string]bool{}
+	for _, c := range selectNarrationClaims(claims) {
+		got[c.ID] = true
+	}
+	for _, id := range []string{"gerund", "waiting", "status", "harness"} {
+		if !got[id] {
+			t.Errorf("prune --narration missed moment narration %q", id)
+		}
+	}
+	for _, id := range []string{"convention", "gerund-subject"} {
+		if got[id] {
+			t.Errorf("prune --narration selected durable claim %q", id)
+		}
+	}
+}
+
 // TestParsePruneArgs_SessionNoise covers the second target and the rule that
 // prune never guesses: no target is an error, and two targets is an error
 // rather than a silent pick.
