@@ -10,7 +10,8 @@ import (
 //
 //	v1.5  subject_class (ADR 0012)
 //	v1.6  speaker attribution and decontextualised claims (#445 item 4)
-const PromptVersion = "v1.6"
+//	v1.7  drop moment-in-time narration, status and harness text (#565)
+const PromptVersion = "v1.7"
 
 const systemPrompt = `You are Mnemos, a knowledge extraction engine. Your job is to extract discrete, evidence-backed claims from source text.
 
@@ -33,6 +34,12 @@ Rules:
    - Single-word acknowledgements or status emojis: "Done", "OK", "Yes", "No", "✅", "👍 noted"
    - Imperatives without a fact payload: "Let me check that", "I'll do this"
    - Headers, boilerplate, or meta-commentary about the document itself
+   - Progress narration of what someone is doing right now: "Pushing #12", "Waiting on the lock", "Now rebasing the branch onto main", "Lock cleared", "All merged"
+   - In-progress status that will be stale within hours: "CI on #12 is waiting for approval", "The import is still running in the background"
+   - Step headers and lead-ins that introduce content not present: "Reading the diff:", "Final check on the release branch:"
+   - Copied harness or system instructions addressed to the assistant: "Continue the conversation from where it left off", "If you need details from before compaction, read the transcript at …"
+   Keep what such text concludes when it states something lasting: a decision, a convention, a cause found, a limitation.
+   A result from a single run or measurement ("In 31 of the 40 failures, X") is a fact about that run: keep the run in the claim ("In the May 3 eval run, …") instead of stating it as a general fact.
 8. For each claim, list the named entities it mentions in an "entities" array.
    - Each entity object has "name" (verbatim from text or canonical), "type", and optional "role".
    - "type" is one of: "person", "org", "project", "product", "place", "concept".
