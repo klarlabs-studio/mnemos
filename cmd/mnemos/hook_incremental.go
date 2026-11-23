@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -252,6 +253,19 @@ func hookCaptureIncremental(ev hookEvent, isWorker bool, raw []byte) {
 		// this turn, and SessionEnd still sweeps the remainder.
 		_ = spawnDetachedCapture("capture-incremental", raw)
 		return
+	}
+	// Another worker has this session, or every slot is busy: leave the lines
+	// for the next reply's worker. The offset has not moved, so nothing is lost.
+	locks, err := tryCaptureLocks(ev.SessionID)
+	switch {
+	case errors.Is(err, errLockHeld):
+		return
+	case err != nil:
+		// Locking itself failed (an unwritable state dir). Capture fails open,
+		// as it always has: unbounded is better than not capturing.
+		fmt.Fprintf(os.Stderr, "mnemos: capture lock unavailable, capturing unlocked: %v\n", err)
+	default:
+		defer locks.release()
 	}
 	captureRange(ev, incrementalChunkBytes)
 }

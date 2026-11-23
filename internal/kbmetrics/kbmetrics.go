@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/ports"
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
@@ -134,4 +135,53 @@ func keepEmbeddings(in []domain.EmbeddingRecord, visible map[string]struct{}) []
 		}
 	}
 	return out
+}
+
+// BriefCounts is what the session-start brief reports.
+type BriefCounts struct {
+	Claims         int64
+	Runs           int64
+	Contradictions int64
+}
+
+// Brief returns the brief's three numbers from counting queries. They equal
+// what Compute reports unscoped, but Compute loads every episode, belief,
+// association and embedding vector to count them: on a 1.1 GB brain about
+// 11 s of CPU, 9 s of it decoding vectors the brief never shows. The brief
+// runs on every Claude Code session start, headless ones included, so a
+// script making many `claude -p` calls paid that per call.
+//
+// Unscoped only: a run-restricted caller needs Compute's filtering.
+func Brief(ctx context.Context, conn *store.Conn) (BriefCounts, error) {
+	claims, err := conn.Claims.CountAll(ctx)
+	if err != nil {
+		return BriefCounts{}, fmt.Errorf("count beliefs: %w", err)
+	}
+	contradictions, err := conn.Relationships.CountByType(ctx, string(domain.RelationshipTypeContradicts))
+	if err != nil {
+		return BriefCounts{}, fmt.Errorf("count dissonances: %w", err)
+	}
+	runs, err := countRuns(ctx, conn)
+	if err != nil {
+		return BriefCounts{}, err
+	}
+	return BriefCounts{Claims: claims, Runs: runs, Contradictions: contradictions}, nil
+}
+
+// countRuns counts distinct runs, in the store when it can.
+func countRuns(ctx context.Context, conn *store.Conn) (int64, error) {
+	if rc, ok := conn.Events.(ports.RunCounter); ok {
+		return rc.CountRuns(ctx)
+	}
+	events, err := conn.Events.ListAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list episodes: %w", err)
+	}
+	runs := map[string]struct{}{}
+	for _, e := range events {
+		if e.RunID != "" {
+			runs[e.RunID] = struct{}{}
+		}
+	}
+	return int64(len(runs)), nil
 }

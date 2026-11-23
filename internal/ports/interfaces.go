@@ -253,6 +253,16 @@ type TrustScorer interface {
 	CountClaimsBelowTrust(ctx context.Context, threshold float64) (int64, error)
 }
 
+// RunCounter counts the distinct runs the stored events belong to, without
+// loading the events. The session-start brief reports it on every Claude Code
+// session, and listing every event to count their runs read the whole brain.
+//
+// Optional so a backend without it keeps working: callers fall back to
+// listing the events.
+type RunCounter interface {
+	CountRuns(ctx context.Context) (int64, error)
+}
+
 // ScopedTrustScorer is the optional capability to recompute trust for a
 // bounded set of claims rather than the whole store.
 //

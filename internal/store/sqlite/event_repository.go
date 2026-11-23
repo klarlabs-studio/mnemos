@@ -148,6 +148,16 @@ func (r EventRepository) CountAll(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
+// CountRuns returns how many distinct non-empty runs the events belong to
+// (ports.RunCounter).
+func (r EventRepository) CountRuns(ctx context.Context) (int64, error) {
+	var n int64
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT run_id) FROM events WHERE run_id <> ''`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count runs: %w", err)
+	}
+	return n, nil
+}
+
 // DeleteByID removes the event with the given id. Idempotent.
 func (r EventRepository) DeleteByID(ctx context.Context, id string) error {
 	// Deleting an event destroys it: its closed evidence links go with it.

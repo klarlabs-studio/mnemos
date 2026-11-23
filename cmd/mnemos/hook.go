@@ -11,6 +11,7 @@ import (
 
 	"go.klarlabs.de/mnemos/client"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/kbmetrics"
 	"go.klarlabs.de/mnemos/internal/query"
 )
 
@@ -543,7 +544,7 @@ func hookBrief(ev hookEvent) {
 		return
 	}
 
-	gm, err := mcpRunMetrics(context.Background())
+	gm, err := briefCounts(context.Background())
 	if err != nil {
 		return
 	}
@@ -561,7 +562,7 @@ func hookBrief(ev hookEvent) {
 			sbCancel()
 		}
 		withBrainDSN(dsn, func() {
-			if rm, e := mcpRunMetrics(context.Background()); e == nil {
+			if rm, e := briefCounts(context.Background()); e == nil {
 				repoClaims = rm.Claims
 			}
 		})
@@ -570,6 +571,17 @@ func hookBrief(ev hookEvent) {
 		return // both tiers empty: nothing worth announcing
 	}
 	emitContext("SessionStart", renderBrief(gm.Claims, gm.Runs, gm.Contradictions, repoClaims, query.PrecedenceOrDefault()))
+}
+
+// briefCounts opens the active brain and counts what the brief reports, with
+// counting queries rather than the full metrics pass (see kbmetrics.Brief).
+func briefCounts(ctx context.Context) (kbmetrics.BriefCounts, error) {
+	conn, err := openConn(ctx)
+	if err != nil {
+		return kbmetrics.BriefCounts{}, err
+	}
+	defer closeConn(conn)
+	return kbmetrics.Brief(ctx, conn)
 }
 
 // renderBrief formats the session-start brain summary. repoClaims > 0 adds a
@@ -664,6 +676,22 @@ const sessionEndChunkBytes = 20 * 1024
 func captureDrain(ev hookEvent, maxBytes int) {
 	ctx, cancel := context.WithTimeout(context.Background(), captureBudget())
 	defer cancel()
+
+	// The session's last chance, so wait for a running worker instead of
+	// skipping: it may hold this session's lines, and racing it would capture
+	// them twice. The wait spends the same budget as the capture.
+	locks, err := waitCaptureLocks(ctx, ev.SessionID)
+	switch {
+	case err == nil:
+		defer locks.release()
+	case ctx.Err() != nil:
+		fmt.Fprintf(os.Stderr,
+			"mnemos: capture budget (%s) spent waiting for another capture worker; transcript remainder not captured\n",
+			captureBudget())
+		return
+	default:
+		fmt.Fprintf(os.Stderr, "mnemos: capture lock unavailable, capturing unlocked: %v\n", err)
+	}
 
 	for chunks := 0; ; chunks++ {
 		if ctx.Err() != nil {

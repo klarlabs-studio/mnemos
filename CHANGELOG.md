@@ -28,6 +28,19 @@ notable changes.
   claim), `prune --narration-judge` fails with the cause instead of reporting each claim
   unanswered, and `mnemos doctor` gains a `narration_judge` check that lists the
   installed models when the configured one is missing.
+- Capture workers no longer pile up. A worker is spawned after every assistant reply in
+  every session, and nothing bounded them: with several sessions open, overlapping workers
+  each held the brain, waited on the local model and related against the whole store, and
+  two for one session could capture the same lines twice. A worker now holds its
+  session's lock and one of two machine-wide slots (kernel file locks, released however
+  the worker exits). An incremental worker that finds either busy leaves its lines for the
+  next reply; the SessionEnd sweep waits for them within its budget.
+- The session-start brief costs 0.2 s instead of 14 s. It printed three counts but computed
+  them by loading every episode, belief, association and embedding vector: on a 1.1 GB
+  brain, 14.5 s and 1.2 GB resident per Claude Code session start, headless `claude -p`
+  calls included, so a script making many such calls saturated the machine. It now counts
+  in the store (`kbmetrics.Brief`, plus an optional `ports.RunCounter` that SQLite, libSQL,
+  Postgres and MySQL implement) and prints the same numbers in 0.22 s and 36 MB.
 
 ## [0.133.0] — 2026-11-23
 

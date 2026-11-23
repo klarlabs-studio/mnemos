@@ -78,3 +78,37 @@ func TestCompute(t *testing.T) {
 		})
 	}
 }
+
+// Brief's counting queries must agree with Compute, on a backend that counts
+// runs in the store (sqlite) and one that falls back to listing (memory). An
+// episode without a run is not a run on either path.
+func TestBriefAgreesWithCompute(t *testing.T) {
+	for _, dsn := range []string{"memory://", "sqlite://" + filepath.Join(t.TempDir(), "b.db")} {
+		t.Run(dsn[:6], func(t *testing.T) {
+			ctx := context.Background()
+			conn, err := store.Open(ctx, dsn)
+			if err != nil {
+				t.Fatalf("open: %v", err)
+			}
+			t.Cleanup(func() { _ = conn.Close() })
+			seed(t, conn)
+			now := time.Now().UTC()
+			if err := conn.Events.Append(ctx, domain.Event{ID: "ev-norun", SchemaVersion: "v1", SourceInputID: "in", Content: "c", Timestamp: now, IngestedAt: now}); err != nil {
+				t.Fatalf("event: %v", err)
+			}
+
+			full, err := kbmetrics.Compute(ctx, conn, nil)
+			if err != nil {
+				t.Fatalf("Compute: %v", err)
+			}
+			got, err := kbmetrics.Brief(ctx, conn)
+			if err != nil {
+				t.Fatalf("Brief: %v", err)
+			}
+			want := kbmetrics.BriefCounts{Claims: full.Claims, Runs: full.Runs, Contradictions: full.Contradictions}
+			if got != want || got.Runs != 2 {
+				t.Errorf("Brief = %+v, want %+v (2 runs)", got, want)
+			}
+		})
+	}
+}
