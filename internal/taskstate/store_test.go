@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 	"go.klarlabs.de/mnemos/internal/store"
 	_ "go.klarlabs.de/mnemos/internal/store/memory"
 )
@@ -73,6 +74,50 @@ func TestStoreProbe_Missing(t *testing.T) {
 	}
 	if strings.Join(got, ",") != "nope" {
 		t.Fatalf("missing = %v, want [nope]", got)
+	}
+}
+
+// The handoff writes through the governed writer, and what the STORE returns
+// is candidate claims evidenced by the handoff episode — never beliefs.
+func TestService_HandOffWritesCandidatesThroughGovernedWriter(t *testing.T) {
+	conn := seededConn(t, "Latency budget for checkout is 200ms")
+	svc := Service{Blocks: conn.Blocks, Probe: StoreProbe{Conn: conn}, Limit: 2000}
+	ctx := context.Background()
+	for _, it := range []Item{
+		{Kind: KindGoal, Text: "Cut checkout latency"},
+		{Kind: KindHypothesis, Text: "The tax lookup is synchronous", RestsOn: []string{"ca", "ca"}},
+		{Kind: KindQuestion, Text: "Is the tax API cached?"},
+	} {
+		if _, err := svc.Admit(ctx, "agent", "s1", it); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w, err := govwrite.Wrap(conn, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.HandOffAll(ctx, w, "agent", "tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 || len(res[0].Candidates) != 2 {
+		t.Fatalf("handoff = %+v, want one session with 2 candidates", res)
+	}
+	stored, err := conn.Claims.ListByIDs(ctx, res[0].Candidates)
+	if err != nil || len(stored) != 2 {
+		t.Fatalf("stored = %d, %v", len(stored), err)
+	}
+	for _, c := range stored {
+		if c.Lifecycle != domain.ClaimLifecycleCandidate {
+			t.Errorf("%q lifecycle = %q, want candidate", c.Text, c.Lifecycle)
+		}
+	}
+	links, err := conn.Claims.ListEvidenceByClaimIDs(ctx, res[0].Candidates)
+	if err != nil || len(links) != 2 || links[0].EventID != res[0].EventID {
+		t.Fatalf("evidence = %+v, %v; want each candidate evidenced by %s", links, err, res[0].EventID)
+	}
+	if st, _ := svc.Load(ctx, "agent", "s1"); len(st.Items) != 0 {
+		t.Fatal("block must be cleared after a successful handoff")
 	}
 }
 

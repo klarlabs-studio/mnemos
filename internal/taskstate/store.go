@@ -219,3 +219,98 @@ func (s Service) Clear(ctx context.Context, owner, session string) error {
 	}
 	return s.Blocks.Delete(ctx, owner, Label(session))
 }
+
+// ArtifactWriter is the governed write the handoff goes through
+// (*govwrite.Writer satisfies it).
+type ArtifactWriter interface {
+	Artifacts(ctx context.Context, events []domain.Event, claims []domain.Claim, links []domain.ClaimEvidence, rels []domain.Relationship) (int, error)
+}
+
+// HandoffResult reports one session's handoff.
+type HandoffResult struct {
+	Session    string
+	EventID    string
+	Candidates []string
+}
+
+// HandOff writes owner's session task state to long-term memory as candidate
+// claims anchored to one episode, through w, then clears the block. A session
+// with no task state is a no-op. The block is cleared only after the write
+// succeeds, so a failed handoff loses nothing; ids are deterministic, so a
+// retry after a failed clear does not duplicate.
+func (s Service) HandOff(ctx context.Context, w ArtifactWriter, owner, session, actor string) (HandoffResult, error) {
+	st, err := s.Load(ctx, owner, session)
+	if err != nil {
+		return HandoffResult{}, err
+	}
+	h, ok := BuildHandoff(owner, session, st, s.now(), actor)
+	if !ok {
+		return HandoffResult{Session: session}, nil
+	}
+	rels, err := s.liveEdges(ctx, h.Relationships)
+	if err != nil {
+		return HandoffResult{}, err
+	}
+	if _, err := w.Artifacts(ctx, []domain.Event{h.Event}, h.Claims, h.Links, rels); err != nil {
+		return HandoffResult{}, fmt.Errorf("taskstate: hand off %s: %w", Label(session), err)
+	}
+	if err := s.Clear(ctx, owner, session); err != nil {
+		return HandoffResult{}, fmt.Errorf("taskstate: clear %s after handoff: %w", Label(session), err)
+	}
+	res := HandoffResult{Session: session, EventID: h.Event.ID}
+	for _, c := range h.Claims {
+		res.Candidates = append(res.Candidates, c.ID)
+	}
+	return res, nil
+}
+
+// HandOffAll hands off every task-state block owner holds.
+func (s Service) HandOffAll(ctx context.Context, w ArtifactWriter, owner, actor string) ([]HandoffResult, error) {
+	if s.Blocks == nil {
+		return nil, ErrUnsupported
+	}
+	blocks, err := s.Blocks.List(ctx, owner)
+	if err != nil {
+		return nil, err
+	}
+	var out []HandoffResult
+	for _, b := range blocks {
+		session, ok := SessionOf(b.Label)
+		if !ok {
+			continue
+		}
+		res, err := s.HandOff(ctx, w, owner, session, actor)
+		if err != nil {
+			return out, err
+		}
+		out = append(out, res)
+	}
+	return out, nil
+}
+
+// liveEdges drops edges to claims that no longer exist (a hypothesis can
+// outlive a claim it rested on), which would otherwise fail the whole write.
+func (s Service) liveEdges(ctx context.Context, rels []domain.Relationship) ([]domain.Relationship, error) {
+	if len(rels) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, 0, len(rels))
+	for _, r := range rels {
+		ids = append(ids, r.ToClaimID)
+	}
+	missing, err := s.Probe.Missing(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("taskstate: check edge targets: %w", err)
+	}
+	gone := make(map[string]bool, len(missing))
+	for _, id := range missing {
+		gone[id] = true
+	}
+	out := rels[:0:0]
+	for _, r := range rels {
+		if !gone[r.ToClaimID] {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
