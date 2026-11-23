@@ -26,6 +26,13 @@ at most --retries times. An item whose response never validates is recorded
 as failed in its notes with no stage marked done, never filled in. Every
 response is cached under labels/cache-<labeller>/ (0600), keyed on the exact
 request, so a rerun with the same --as-of is free and reproducible.
+
+--pass 1 makes a model the first labeller instead: it labels every item, not
+just the kappa subset, into labels/pass1-<model>.json. Use it only when no
+human pass 1 is available, and with a different model from the pass-2
+labeller, so kappa still compares two independent labellers. Truth labels
+from a model are its best guess about the operator's projects, not knowledge
+of them; a report built on a model pass 1 must say so.
 """
 
 from __future__ import annotations
@@ -50,7 +57,7 @@ MAX_TEXT = 1000
 ROLE = """
 ---
 
-You are the independent second labeller for this golden set. Apply the guide
+You are the independent {ordinal} labeller for this golden set. Apply the guide
 above exactly. You label one episode at a time, in the same two steps a human
 labeller follows. Reply with a single JSON object and nothing else: no prose,
 no code fences.
@@ -255,10 +262,11 @@ def complete_label(lab: dict | None) -> bool:
 
 
 def run(d: Path, model: str = DEFAULT_MODEL, guide: Path = GUIDE, retries: int = 2,
-        as_of: str | None = None, labeller: str | None = None, limit: int | None = None) -> dict:
+        as_of: str | None = None, labeller: str | None = None, limit: int | None = None,
+        pass_no: int = 2) -> dict:
     labeller = labeller or re.sub(r"[^A-Za-z0-9_-]", "-", model)[:32]
-    session = label.Session(privacy.check_output_dir(d), labeller, 2)
-    system = guide.read_text() + ROLE
+    session = label.Session(privacy.check_output_dir(d), labeller, pass_no)
+    system = guide.read_text() + ROLE.format(ordinal="first" if pass_no == 1 else "second")
     as_of = as_of or date.today().isoformat()
     lab = Labeller(session, model, system, retries, as_of)
     view = session.view()
@@ -285,11 +293,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--guide", default=str(GUIDE), help="labelling guide used as the system prompt")
     p.add_argument("--retries", type=int, default=2, help="re-asks after an invalid response, per step")
     p.add_argument("--as-of", help="the 'today' of the truth labels (default: today); fix it to rerun from cache")
-    p.add_argument("--limit", type=int, help="label at most this many kappa items (for a smoke run)")
+    p.add_argument("--limit", type=int, help="label at most this many items (for a smoke run)")
+    p.add_argument("--pass", dest="pass_no", type=int, choices=[1, 2], default=2,
+                   help="2 (default): the kappa items, as second labeller; 1: every item, as first labeller")
     args = p.parse_args(argv)
     try:
         out = run(Path(args.dir).expanduser(), args.model, Path(args.guide), args.retries, args.as_of,
-                  args.labeller, args.limit)
+                  args.labeller, args.limit, args.pass_no)
     except (ValueError, FileNotFoundError, privacy.UnsafeOutputDir) as e:
         print(f"claude_label: {e}", file=sys.stderr)
         return 2
