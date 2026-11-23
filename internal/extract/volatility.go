@@ -46,7 +46,10 @@ const VolatileHalfLifeDays = 14.0
 // The `<classifier>/<version>` shape mirrors extract.PromptVersion, which
 // exists for the same reason one layer up: to know which revision of a
 // text-processing rule produced a stored artefact.
-const VolatilityClassifierVersion = "volatility/v1"
+//
+// v2 (#565) adds timeBoundRE: single-run tallies, still-open status, and
+// first-person reports of an action on a numbered PR or issue.
+const VolatilityClassifierVersion = "volatility/v2"
 
 // systemStateRE matches assertions about mutable system state — what exists,
 // what is installed or wired, what is running, what version is deployed.
@@ -64,6 +67,34 @@ var systemStateRE = regexp.MustCompile(`(?i)\b(?:` +
 	`|\bv\d+\.\d+\.\d+\b` +
 	`|\bport\s+\d{2,5}\b` +
 	`)`)
+
+// timeBoundRE matches results that describe one moment rather than how things
+// are: a single run's tally ("In 31 of the 40 failures …", "412 claims (6.1%)
+// …"), status that is open or pending, and the agent reporting what it just
+// did to a numbered PR or issue. Each was true when written and is worth
+// recalling for a while; none should recall as settled fact months later
+// (#565). They get the volatile half-life rather than a drop: the result may
+// still matter during the work it came from.
+//
+// The tally patterns require a ratio — "N of M", "(N%)", "N% of <runs>" — so
+// a plain quantity ("the retry budget is 3", "revenue grew 15% in Q3") stays
+// durable.
+var timeBoundRE = regexp.MustCompile(`(?i)` +
+	`\b\d+\s+of\s+(?:the\s+)?\d+\b` +
+	`|^of\s+the\s+\d+\b` +
+	`|\(\d+(?:\.\d+)?%\)` +
+	`|\b\d+(?:\.\d+)?%\s+of\s+(?:the\s+)?(?:\w+\s+){0,2}` +
+	`(?:questions|queries|cases|runs|failures|samples|sessions|beliefs|claims|tests|items|requests|conversations)\b` +
+	`|\b(?:is|are)\s+still\s+(?:open|pending|unmerged|unresolved|blocked)\b` +
+	// In-flight jobs: "the import is still running (in the background)". The
+	// clause must end there, so "still running on Java 8" stays durable.
+	`|\b(?:is|are)\s+still\s+(?:running|in\s+progress|building|queued|executing|` +
+	`uploading|downloading|indexing|syncing)(?:\s+in\s+the\s+background)?\s*(?:[,.;:(—–]|$)` +
+	// "CI on #N is waiting for maintainer approval"
+	`|\b(?:is|are)\s+(?:still\s+)?waiting\s+(?:for|on)\s+(?:\w+\s+){0,2}` +
+	`(?:approval|review|ci|checks|the\s+lock|lock|merge)\b` +
+	`|^still\s+open\b` +
+	`|^i(?:'ve|\s+have)?\s+(?:reviewed|merged|pushed|rebased|retargeted|approved|tagged|closed|reopened)\s+#\d+`)
 
 // durableRE matches claims whose value does not decay with system state:
 // decisions, rationale, constraints and policy. A match here vetoes the
@@ -94,7 +125,7 @@ func HalfLifeFor(claimType, text string) float64 {
 	if durableRE.MatchString(t) {
 		return 0
 	}
-	if systemStateRE.MatchString(t) {
+	if systemStateRE.MatchString(t) || timeBoundRE.MatchString(t) {
 		return VolatileHalfLifeDays
 	}
 	return 0

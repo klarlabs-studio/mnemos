@@ -3,6 +3,8 @@ package main
 import (
 	"regexp"
 	"strings"
+
+	"go.klarlabs.de/mnemos/internal/extract"
 )
 
 // Harness-injected text is stripped from transcript content before capture
@@ -106,15 +108,15 @@ var summaryHeadingRE = regexp.MustCompile(`(?i)^(?:\d+\.\s*)?[*_]*\s*` +
 	`pending tasks|current work|optional next step)` +
 	`\s*:?\s*[*_]*\s*:?\s*$`)
 
-// harnessSentenceRE matches the harness's own instructions and frames, which
-// open a line and have no conversational counterpart: the compaction closing
-// instruction, the autonomous-continuation note, and the subagent hand-back
-// frame.
+// harnessSentenceRE matches the harness frames that open a line and have no
+// conversational counterpart: the subagent hand-back frame. The compaction
+// instructions ("Continue the conversation from where it left off …", "If you
+// need specific details from before compaction …") are defined once in
+// extract.IsHarnessInstruction, which extraction also applies, so a brain
+// captured before this filter can be cleaned with `prune --narration` by the
+// same rule (#565).
 var harnessSentenceRE = regexp.MustCompile(`(?i)^[(*_\s]*(?:` +
-	`(?:please\s+)?continue the conversation from where (?:it|we|you) left` +
-	`|pick up the last task as if the break never happened` +
-	`|no new user messages were sent` +
-	`|\[subagent hand-back\]` +
+	`\[subagent hand-back\]` +
 	`|the report follows:\s*$` +
 	`)`)
 
@@ -150,7 +152,8 @@ func isHarnessLine(line string) bool {
 			return true
 		}
 	}
-	if summaryHeadingRE.MatchString(trimmed) || harnessSentenceRE.MatchString(trimmed) {
+	if summaryHeadingRE.MatchString(trimmed) || harnessSentenceRE.MatchString(trimmed) ||
+		extract.IsHarnessInstruction(trimmed) {
 		return true
 	}
 	// An unclosed harness tag (the block regexes need both halves) still marks

@@ -233,6 +233,10 @@ func TestStripHarnessText_DropsHarnessBoilerplateLines(t *testing.T) {
 		"All user messages",
 		"[Subagent hand-back] The text below is the final report of a subagent this session delegated to. The report follows:",
 		"The report follows:",
+		// #565: the compaction tail. Pre-#469 brains stored it as facts, since
+		// only the marker line was stripped; it must go even without the marker.
+		"If you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: /home/u/.claude/projects/p/abc.jsonl",
+		"No new user messages arrived during this session.",
 	}
 	const real = "The deploy failed because the migration lock was still held."
 	for _, line := range boilerplate {
