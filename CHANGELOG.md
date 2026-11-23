@@ -35,6 +35,26 @@ notable changes.
   the old loop (correction lag 0 vs 0), but keeps the stable beliefs the old loop archives
   (stable accuracy 1.00 vs 0.07).
 
+- Gated task-state working memory (ADR 0050, #447). This is an experiment and is off unless
+  `MNEMOS_TASK_STATE` or `working_memory.task_state` turns it on. With it on, the MCP tools
+  `get_task_state` and `update_task_state` keep a per-session block of typed items: goals,
+  constraints, commitments, hypotheses with the claim ids they rest on, and open questions.
+  - **Admission.** An item is admitted only if it is new to long-term memory, relevant to a
+    goal, or contradicts a stored claim.
+  - **Placement.** Goals and constraints are placed first, and `get_blocks` lists the
+    task-state block first.
+  - **Eviction.** Open questions are evicted before anything else.
+  - **Handoff.** At SessionEnd, the governed writer hands the block off as candidate claims,
+    anchored to one episode.
+
+  The new `make brain-eval-taskstate` measures the block against today's FIFO block. Compared
+  with the FIFO block, the result is mixed:
+  - **Early constraints needed late:** kept 1.00, against 0.40 for the FIFO block.
+  - **Late burst of open questions:** kept 0.75, against 1.00.
+  - **Short session:** no difference.
+
+  The ablations attribute the win to priority eviction, not to the gate. No schema change.
+
 - Deterministic vs LLM reconciliation experiment (ADR 0042, nothing wired into production):
   `go run ./tools/brainbench -mode reconcile [-llm-model gemma3:12b,qwen2.5:3b]` scores
   the relate classifier, a local Ollama model alone, and a pre-registered hybrid on 201
