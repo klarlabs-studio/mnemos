@@ -250,3 +250,11 @@ order: it writes gold claims from the episode alone, and only then sees the
 extracted claims, with stored trust, status and validity hidden. It never
 reads pass-1 labels. Its labels go to `labels/pass2-<model>.json`, in the
 same format as the labelling page's.
+
+When no human pass 1 is available, `claude_label.py --pass 1 --model <model>`
+makes a model the first labeller: it labels every item into
+`labels/pass1-<model>.json`. Use a different model from the pass-2 labeller,
+so kappa still compares two independent labellers. A model's truth labels are
+its best guess about the operator's projects, not knowledge of them, so a
+report scored against a model pass 1 must say so, and its calibration verdict
+is weaker than one scored against a human pass 1.

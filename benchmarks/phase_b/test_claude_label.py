@@ -213,6 +213,19 @@ class ClaudeLabelTest(unittest.TestCase):
         r = self.run_labeller(FakeModel(), model="claude-sonnet-5.1")
         self.assertTrue(r["labels"].endswith("pass2-claude-sonnet-5-1.json"))
 
+    def test_pass1_labels_every_item(self):
+        r = self.run_labeller(FakeModel(), model="claude-sonnet-5.5", pass_no=1)
+        self.assertTrue(r["labels"].endswith("pass1-claude-sonnet-5-5.json"))
+        self.assertEqual((r["labelled"], r["failed"]), (len(self.sample["items"]), 0))
+        self.assertGreater(len(self.sample["items"]), len(self.kappa))
+        data = json.loads(Path(r["labels"]).read_text())
+        self.assertEqual(data["pass"], 1)
+        self.assertEqual(set(data["items"]), {i["item_id"] for i in self.sample["items"]})
+
+    def test_rejects_an_unknown_pass(self):
+        with self.assertRaises(ValueError):
+            self.run_labeller(FakeModel(), pass_no=3)
+
     def test_refuses_output_inside_a_git_worktree(self):
         with self.assertRaises(privacy.UnsafeOutputDir):
             claude_label.run(privacy.REPO_ROOT / "benchmarks" / "phase_b" / "out")
