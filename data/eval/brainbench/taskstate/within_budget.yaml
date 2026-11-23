@@ -1,0 +1,20 @@
+# A short session that never overflows the block.
+#
+# Expected: a null result. With nothing to evict, ordering and eviction policy
+# cannot matter, and the gate only ever drops what long-term memory already
+# holds. If the gated block "wins" here the metric is measuring something other
+# than retention.
+id: within_budget
+description: Short session inside the budget; no eviction happens
+limit: 2000
+long_term:
+  - The design system tokens live in the shared ui-kit repository
+turns:
+  - {kind: goal, text: "Add a dark theme to the settings page"}
+  - {kind: constraint, text: "Contrast must meet WCAG AA for every text colour"}
+  - {kind: hypothesis, text: "The design system tokens live in the shared ui-kit repository"}
+  - {kind: question, text: "Does the settings page still use hard-coded hex colours anywhere?"}
+  - {kind: commitment, text: "Add a visual regression snapshot for both themes"}
+questions:
+  - {id: contrast, implicit: true, needs: ["WCAG AA"]}
+  - {id: snapshot, needs: ["visual regression snapshot"]}

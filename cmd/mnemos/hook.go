@@ -647,6 +647,9 @@ func hookCapture(ev hookEvent) {
 	// carries far more than one chunk of backlog, and a single pass would leave
 	// the remainder permanently uncaptured.
 	captureDrain(ev, sessionEndChunkBytes)
+	// Experiment (ADR 0050): hand the session's task state to consolidation as
+	// candidate claims. A no-op unless MNEMOS_TASK_STATE opts in.
+	handOffTaskStateOnSessionEnd()
 }
 
 // sessionEndChunkBytes caps one chunk of the SessionEnd sweep. The sweep loops,

@@ -11,6 +11,7 @@
 //	go run ./tools/brainbench -mode ablation                   # retrieval ablation at fixed token budgets
 //	go run ./tools/brainbench -mode ablation -budgets 64,256   # explicit budgets
 //	go run ./tools/brainbench -mode reconcile                  # deterministic reconciliation arm only
+//	go run ./tools/brainbench -mode taskstate                  # gated task-state block vs FIFO block (ADR 0050)
 //	go run ./tools/brainbench -mode reconcile -llm-model gemma3:12b,qwen2.5:3b  # + llm and hybrid arms (local Ollama)
 //
 // See internal/brainbench for the method and its limitations; the limitations
@@ -23,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -49,7 +51,7 @@ func main() {
 	flag.StringVar(&workDir, "work", "", "keep experiment databases here instead of a temp dir (for debugging)")
 	flag.BoolVar(&human, "human", true, "print the human-readable report to stdout")
 	flag.BoolVar(&failOnReg, "fail-on-regression", false, "exit 1 when any scored metric degraded")
-	flag.StringVar(&mode, "mode", "ab", "ab: the paired consolidation experiment; ablation: retrieval ranking ablation; reconcile: deterministic vs LLM reconciliation (ADR 0042)")
+	flag.StringVar(&mode, "mode", "ab", "ab: the paired consolidation experiment; ablation: retrieval ranking ablation; reconcile: deterministic vs LLM reconciliation (ADR 0042); taskstate: gated task-state block vs FIFO block (ADR 0050)")
 	flag.StringVar(&budgets, "budgets", "", "ablation token budgets, comma-separated (default 32,64,128,256,512,1024,2048)")
 	flag.StringVar(&recon.pairs, "pairs", "data/eval/reconciliation/pairs.yaml", "reconcile: labelled pair set")
 	flag.StringVar(&recon.models, "llm-model", "", "reconcile: comma-separated local Ollama models for the llm and hybrid arms (empty: deterministic arm only)")
@@ -65,6 +67,13 @@ func main() {
 		}
 		return
 	}
+	if mode == "taskstate" {
+		if err := runTaskState(filepath.Join(scenarioDir, "taskstate"), jsonOut, workDir, human); err != nil {
+			fmt.Fprintf(os.Stderr, "brainbench: %v\n", err)
+			os.Exit(2)
+		}
+		return
+	}
 	if mode == "ablation" {
 		if err := runAblation(scenarioDir, jsonOut, workDir, budgets, human); err != nil {
 			fmt.Fprintf(os.Stderr, "brainbench: %v\n", err)
@@ -73,7 +82,7 @@ func main() {
 		return
 	}
 	if mode != "ab" {
-		fmt.Fprintf(os.Stderr, "brainbench: unknown -mode %q (want ab, ablation or reconcile)\n", mode)
+		fmt.Fprintf(os.Stderr, "brainbench: unknown -mode %q (want ab, ablation, reconcile or taskstate)\n", mode)
 		os.Exit(2)
 	}
 	if err := run(scenarioDir, jsonOut, workDir, human, failOnReg); err != nil {
@@ -126,6 +135,30 @@ func run(scenarioDir, jsonOut, workDir string, human, failOnReg bool) error {
 }
 
 // runAblation runs the retrieval ablation and writes its report.
+// runTaskState runs the gated task-state experiment (ADR 0050). Like the other
+// modes it reports and never gates.
+func runTaskState(dir, jsonOut, workDir string, human bool) error {
+	scenarios, err := brainbench.LoadTaskStateScenarios(dir)
+	if err != nil {
+		return err
+	}
+	workDir, cleanup, err := prepareWorkDir(workDir)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	report, err := brainbench.RunTaskState(context.Background(), scenarios, workDir)
+	if err != nil {
+		return err
+	}
+	if human {
+		if err := report.WriteHuman(os.Stdout); err != nil {
+			return err
+		}
+	}
+	return writeJSON(jsonOut, report.WriteJSON)
+}
+
 func runAblation(scenarioDir, jsonOut, workDir, budgetList string, human bool) error {
 	budgets, err := parseBudgets(budgetList)
 	if err != nil {

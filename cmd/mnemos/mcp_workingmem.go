@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"sort"
 
 	mnemos "go.klarlabs.de/mnemos"
+	"go.klarlabs.de/mnemos/internal/taskstate"
 )
 
 // Working-memory + temporal MCP tools (parity with gRPC GetBlocks/SetBlock/
@@ -31,6 +33,14 @@ func mcpGetBlocks(ctx context.Context, mem mnemos.Memory, in mcpGetBlocksInput) 
 		return mcpGetBlocksOutput{}, err
 	}
 	out := mcpGetBlocksOutput{Owner: in.Owner, Blocks: []mcpBlock{}}
+	if taskStateEnabled() {
+		// Placement (ADR 0050): the task-state block opens the context block.
+		sort.SliceStable(blocks, func(i, j int) bool {
+			_, ti := taskstate.SessionOf(blocks[i].Label)
+			_, tj := taskstate.SessionOf(blocks[j].Label)
+			return ti && !tj
+		})
+	}
 	for _, b := range blocks {
 		out.Blocks = append(out.Blocks, mcpBlock{b.Owner, b.Label, b.Value, rfc3339OrEmpty(b.UpdatedAt)})
 	}

@@ -978,6 +978,20 @@ func handleMCP(args []string) {
 			return mcpSetBlock(ctx, mem, input)
 		})
 
+	srv.Tool("get_task_state").
+		Description("Experiment (ADR 0050; needs MNEMOS_TASK_STATE): read a session's gated task-state block — goals and constraints first, then commitments, hypotheses and open questions.").
+		OutputSchema(mcpGetTaskStateOutput{}).
+		Handler(func(ctx context.Context, input mcpGetTaskStateInput) (mcpGetTaskStateOutput, error) {
+			return mcpGetTaskState(ctx, input)
+		})
+
+	srv.Tool("update_task_state").
+		Description("Experiment (ADR 0050; needs MNEMOS_TASK_STATE): admit an item to the gated task-state block (kept only if new to long-term memory, relevant to a goal, or surprising against a stored claim), remove a resolved one, or hand the block off to long-term memory as candidate claims.").
+		OutputSchema(mcpUpdateTaskStateOutput{}).
+		Handler(func(ctx context.Context, input mcpUpdateTaskStateInput) (mcpUpdateTaskStateOutput, error) {
+			return mcpUpdateTaskState(ctx, mcpActorFor(ctx, mcpActor), input)
+		})
+
 	srv.Tool("signals").
 		Description("Detected temporal patterns (trend|spike|drop|stall|anomaly|...) over a run's event series — the 'what is changing?' reading that complements recall.").
 		OutputSchema(mcpSignalsOutput{}).

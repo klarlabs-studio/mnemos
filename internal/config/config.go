@@ -296,6 +296,16 @@ type Config struct {
 		EpisodicEvents scalar `yaml:"episodic_events"`
 	} `yaml:"pipeline"`
 
+	// WorkingMemory tunes the working-memory blocks. TaskState turns on the
+	// gated task-state block experiment (ADR 0050): the task-state MCP tools
+	// and the SessionEnd handoff of task state as candidate claims. Off by
+	// default — it is an experiment that beat the FIFO block on one scenario
+	// and lost on another.
+	WorkingMemory struct {
+		// TaskState enables the gated task-state block. Off by default.
+		TaskState scalar `yaml:"task_state"`
+	} `yaml:"working_memory"`
+
 	// Metrics tunes the `serve` Prometheus product-metrics sampler (ADR 0020).
 	// SampleInterval is a Go duration (default 60s; 0 disables the sampler).
 	Metrics struct {
@@ -398,6 +408,7 @@ func (c *Config) EnvOverrides() map[string]string {
 
 		{"MNEMOS_PLASTICITY_SENSITIVITY", c.Plasticity.Sensitivity},
 		{"MNEMOS_EPISODIC_EVENTS", c.Pipeline.EpisodicEvents},
+		{"MNEMOS_TASK_STATE", c.WorkingMemory.TaskState},
 
 		{"MNEMOS_METRICS_SAMPLE_INTERVAL", c.Metrics.SampleInterval},
 

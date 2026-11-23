@@ -177,6 +177,14 @@ pipeline:
   # is fine for an extra tag but not something to impose on every install.
   episodic_events:     # MNEMOS_EPISODIC_EVENTS (truthy, default off)
 
+working_memory:
+  # Gated task-state block (ADR 0050, experiment): typed goals, constraints,
+  # commitments, hypotheses and open questions, gated on admission, evicted by
+  # kind priority, and handed off at SessionEnd as candidate claims. Off by
+  # default: it beat the FIFO block where constraints must survive a long
+  # session and lost where a late burst of questions is needed.
+  task_state:          # MNEMOS_TASK_STATE (truthy, default off)
+
 metrics:
   # How often `mnemos serve` samples product + cognitive metrics for Prometheus
   # (ADR 0020): counts, trust, free-energy, calibration, dissonance, brain-health
