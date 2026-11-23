@@ -27,6 +27,27 @@ func TestInstall_RoutesNowAndRestores(t *testing.T) {
 	}
 }
 
+// Restart replays a sequence of reads from one instant, so two experiment arms
+// run one after the other see the same instants.
+func TestSimulated_RestartReplaysFromAnInstant(t *testing.T) {
+	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	s := NewSimulated(start, time.Microsecond)
+	arm := func() []time.Time {
+		s.Advance(24 * time.Hour)
+		return []time.Time{s.Now(), s.Now()}
+	}
+	mark := s.Now()
+	s.Restart(mark)
+	first := arm()
+	s.Restart(mark)
+	second := arm()
+	for i := range first {
+		if !first[i].Equal(second[i]) {
+			t.Fatalf("read %d after restart = %v, want %v", i, second[i], first[i])
+		}
+	}
+}
+
 func TestSimulated_IsStrictlyIncreasingAndReproducible(t *testing.T) {
 	start := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	read := func() []time.Time {

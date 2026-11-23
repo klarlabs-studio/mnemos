@@ -48,6 +48,14 @@ type Report struct {
 	RetractionBaselineSummary map[string]BaselineSummary `json:"retraction_baseline_summary"`
 	// RetractionHypotheses counts the retraction tracks' hypothesis verdicts.
 	RetractionHypotheses map[HypothesisVerdict]int `json:"retraction_hypotheses"`
+
+	// ShiftingSummary totals the shifting-world tracks' revision-vs-current-
+	// loop comparisons. A stable belief lost or a correction slowed is a
+	// regression caused by the mechanism under test, so it counts in
+	// HasRegression.
+	ShiftingSummary Summary `json:"shifting_summary"`
+	// ShiftingHypotheses counts the shifting-world hypothesis verdicts.
+	ShiftingHypotheses map[HypothesisVerdict]int `json:"shifting_hypotheses"`
 }
 
 // Config records the conditions the numbers were produced under. It travels
@@ -143,6 +151,12 @@ func Limitations() []string {
 			"and decay see no age difference between phases " +
 			"(TestRun_TimelinePhasesAreOrderedOnTheWriteClock guards the order). " +
 			"Trust is current on a recorded-as-of read (ADR 0036 §3) and merges are not rewound.",
+		"The shifting-world track (ADR 0049) scripts the agent: its decisions, predictions and the " +
+			"world's outcomes are fixed in the scenario, and only whether a decision is taken depends on " +
+			"the arm (its premises must come back from recall). It measures what each prediction loop " +
+			"does to the brain, not whether a real agent would predict or decide well. The current-loop " +
+			"control records one expectation on every rested-on belief, the fastest use of the old API; " +
+			"no arm can beat it on speed, only on what it destroys getting there.",
 	}
 }
 
@@ -161,8 +175,13 @@ func BuildReport(results []ScenarioResult) Report {
 
 		RetractionBaselineSummary: map[string]BaselineSummary{},
 		RetractionHypotheses:      map[HypothesisVerdict]int{},
+		ShiftingHypotheses:        map[HypothesisVerdict]int{},
 	}
 	for _, s := range results {
+		if sw := s.ShiftingWorld; sw != nil {
+			r.ShiftingSummary.add(sw.Summary)
+			r.ShiftingHypotheses[sw.Hypothesis.Verdict]++
+		}
 		if rt := s.Retraction; rt != nil {
 			r.RetractionSummary.add(rt.Summary)
 			r.RetractionHypotheses[rt.Hypothesis.Verdict]++
@@ -198,7 +217,7 @@ func (s *Summary) add(o Summary) {
 // harness's job is to report honestly, not to block on a number nobody has
 // baselined yet.
 func (r Report) HasRegression() bool {
-	return r.Summary.Worse > 0 || r.RetractionSummary.Worse > 0
+	return r.Summary.Worse > 0 || r.RetractionSummary.Worse > 0 || r.ShiftingSummary.Worse > 0
 }
 
 // WriteJSON emits the machine-readable report.
@@ -286,6 +305,9 @@ func (r Report) WriteHuman(w io.Writer) error {
 		if s.Retraction != nil {
 			writeRetraction(p, s.Retraction)
 		}
+		if s.ShiftingWorld != nil {
+			writeShifting(p, s.ShiftingWorld)
+		}
 	}
 
 	p("──────────────────────────────────────────────────────────────────────\n")
@@ -327,6 +349,17 @@ func (r Report) WriteHuman(w io.Writer) error {
 			p("RETRACTED MNEMOS vs %s: %d mnemos-better, %d baseline-better, %d tie, %d unknown\n",
 				n, b.MnemosBetter, b.BaselineBetter, b.Tie, b.Unknown)
 		}
+	}
+	if len(r.ShiftingHypotheses) > 0 {
+		s := r.ShiftingSummary
+		p("SHIFTING WORLD (revision vs current loop): %d better, %d worse, %d unchanged, %d changed-but-unscored, %d unknown\n",
+			s.Better, s.Worse, s.Unchanged, s.Changed, s.Unknown)
+		hyp := make([]string, 0, len(r.ShiftingHypotheses))
+		for v, n := range r.ShiftingHypotheses {
+			hyp = append(hyp, fmt.Sprintf("%s=%d", v, n))
+		}
+		sort.Strings(hyp)
+		p("SHIFTING WORLD HYPOTHESIS: %s\n", strings.Join(hyp, " "))
 	}
 	p("\n")
 

@@ -147,6 +147,10 @@ type ScenarioResult struct {
 	// declares one. Its own arms, verdict and baselines (retraction.go).
 	Retraction *RetractionResult `json:"retraction,omitempty"`
 
+	// ShiftingWorld is the surprise-revision track, for a scenario that
+	// declares one (shifting.go).
+	ShiftingWorld *ShiftingResult `json:"shifting_world,omitempty"`
+
 	DurationMS int64 `json:"duration_ms"`
 }
 
@@ -295,6 +299,12 @@ func runScenario(ctx context.Context, sc Scenario, workDir string, retract retra
 			return res, err
 		}
 	}
+	if sc.ShiftingWorld != nil {
+		res.ShiftingWorld, err = runShiftingTrack(ctx, sc, dir, seedPath, sim)
+		if err != nil {
+			return res, err
+		}
+	}
 	res.DurationMS = time.Since(started).Milliseconds()
 	return res, nil
 }
@@ -342,20 +352,7 @@ func applyProcess(ctx context.Context, dsn string, p Process) (Activity, error) 
 	}
 	defer func() { _ = mem.Close() }()
 
-	out, err := mem.Consolidate(ctx, mnemos.ConsolidateOptions{
-		DedupeThreshold:    p.DedupeThreshold,
-		ForgetBelowTrust:   p.ForgetBelowTrust,
-		ForgetRefuted:      p.ForgetRefuted,
-		Synthesize:         p.Synthesize,
-		ReinforceValidated: p.ReinforceValidated,
-		ReinforcePlaybooks: p.ReinforcePlaybooks,
-		AssignCredit:       p.AssignCredit,
-		AssignSalience:     p.AssignSalience,
-		ReplayTopK:         p.ReplayTopK,
-		Plastic:            p.Plastic,
-		DecayAssociations:  p.DecayAssociations,
-		DecayInhibition:    p.DecayInhibition,
-	})
+	out, err := mem.Consolidate(ctx, consolidateOptions(p))
 	if err != nil {
 		return Activity{}, fmt.Errorf("brainbench: consolidate: %w", err)
 	}
