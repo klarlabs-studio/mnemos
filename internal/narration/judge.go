@@ -21,12 +21,15 @@
 // Every failure keeps the claim. A narration claim that survives costs one
 // noisy recall line; a durable claim that is dropped is knowledge lost without
 // anyone seeing it go. So an unreachable model, an unparsable answer and a
-// missing verdict all mean Keep.
+// missing verdict all mean Keep. A judge that cannot be reached at all is still
+// reported (ErrUnavailable), because keeping everything forever without a word
+// is a filter that silently does nothing.
 package narration
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -57,6 +60,14 @@ DROP a statement when it is one of these:
 KEEP a statement that says how a system, codebase, tool, API or service is built, configured or behaves; a decision, rule or preference that was adopted (including "the user chose X"); a root cause, bug mechanism or lesson. If a statement opens with an acknowledgement or with "I" but goes on to state such a fact, judge the fact: KEEP. KEEP anything you are unsure about.
 
 Return ONLY a JSON array, one object per statement, in order: [{"n": 1, "verdict": "keep"}, ...]`
+
+// ErrUnavailable reports that the judge asked and the model never answered:
+// every request failed. The verdicts that come with it are all Unknown, so the
+// claims are kept as always; the error exists so that a judge which cannot run
+// at all (a model that is not installed, a provider that is down) is reported
+// instead of quietly keeping everything forever. A single failed batch among
+// answered ones is not this error.
+var ErrUnavailable = errors.New("narration judge unavailable")
 
 // Verdict is the judge's answer for one statement.
 type Verdict uint8
@@ -105,8 +116,9 @@ func (j *Judge) Identity() string {
 // text in order. Cached verdicts cost nothing, so an interrupted pass resumes
 // where it stopped. Each batch's verdicts are cached as soon as they land.
 //
-// The only error is the context's: a failed request or unparsable answer
-// leaves that batch Unknown and the pass continues.
+// A failed request or unparsable answer leaves that batch Unknown and the pass
+// continues. The errors are the context's, and ErrUnavailable when every
+// request failed, which means the judge cannot run at all.
 func (j *Judge) Classify(ctx context.Context, texts []string) ([]Verdict, error) {
 	out := make([]Verdict, len(texts))
 	var missIdx []int
@@ -117,6 +129,8 @@ func (j *Judge) Classify(ctx context.Context, texts []string) ([]Verdict, error)
 		}
 		missIdx = append(missIdx, i)
 	}
+	var requests, failed int
+	var lastErr error
 	for start := 0; start < len(missIdx); start += BatchSize {
 		if err := ctx.Err(); err != nil {
 			return out, err
@@ -126,19 +140,32 @@ func (j *Judge) Classify(ctx context.Context, texts []string) ([]Verdict, error)
 		for k, i := range idx {
 			batch[k] = texts[i]
 		}
-		for k, v := range j.classifyBatch(ctx, batch) {
+		verdicts, err := j.classifyBatch(ctx, batch)
+		requests++
+		if err != nil {
+			failed++
+			lastErr = err
+		}
+		for k, v := range verdicts {
 			out[idx[k]] = v
 			if v != Unknown {
 				j.store(batch[k], v)
 			}
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
+	if requests > 0 && failed == requests {
+		return out, fmt.Errorf("%w (%s): %w", ErrUnavailable, j.Identity(), lastErr)
+	}
 	return out, nil
 }
 
 // classifyBatch asks the model about one batch. Any failure returns Unknown
-// for the whole batch.
-func (j *Judge) classifyBatch(ctx context.Context, texts []string) []Verdict {
+// for the whole batch; the error is the request's, never the answer's, since an
+// unparsable answer still proves the model is there.
+func (j *Judge) classifyBatch(ctx context.Context, texts []string) ([]Verdict, error) {
 	var b strings.Builder
 	for i, t := range texts {
 		fmt.Fprintf(&b, "%d. %s\n", i+1, strings.Join(strings.Fields(t), " "))
@@ -148,9 +175,9 @@ func (j *Judge) classifyBatch(ctx context.Context, texts []string) []Verdict {
 		{Role: llm.RoleUser, Content: b.String()},
 	})
 	if err != nil {
-		return make([]Verdict, len(texts))
+		return make([]Verdict, len(texts)), err
 	}
-	return ParseVerdicts(resp.Content, len(texts))
+	return ParseVerdicts(resp.Content, len(texts)), nil
 }
 
 // ParseVerdicts reads the model's answer for n statements. A statement the

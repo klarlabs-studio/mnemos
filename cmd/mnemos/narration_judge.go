@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,20 +32,30 @@ const defaultNarrationModel = "llama3.1"
 // MNEMOS_NARRATION_MODEL picks its model; otherwise Ollama uses
 // defaultNarrationModel and a hosted provider keeps its configured model.
 func narrationJudgeFromEnv() (*narration.Judge, error) {
-	cfg, err := llm.ConfigFromEnv()
+	cfg, err := narrationJudgeConfig()
 	if err != nil {
 		return nil, err
-	}
-	if m := strings.TrimSpace(os.Getenv("MNEMOS_NARRATION_MODEL")); m != "" {
-		cfg.Model = m
-	} else if cfg.Provider == llm.ProviderOllama {
-		cfg.Model = defaultNarrationModel
 	}
 	client, err := llm.NewClient(cfg)
 	if err != nil {
 		return nil, err
 	}
 	return narration.New(client, narrationCacheDir()), nil
+}
+
+// narrationJudgeConfig is the LLM config the judge runs on: the configured
+// provider with the judge's own model. `mnemos doctor` checks the same model.
+func narrationJudgeConfig() (llm.Config, error) {
+	cfg, err := llm.ConfigFromEnv()
+	if err != nil {
+		return llm.Config{}, err
+	}
+	if m := strings.TrimSpace(os.Getenv("MNEMOS_NARRATION_MODEL")); m != "" {
+		cfg.Model = m
+	} else if cfg.Provider == llm.ProviderOllama {
+		cfg.Model = defaultNarrationModel
+	}
+	return cfg, nil
 }
 
 // newCaptureNarrationJudge builds the judge process_text runs over a session
@@ -96,6 +109,10 @@ func judgeBudget(ctx context.Context) time.Duration {
 	return budget
 }
 
+// narrationWarnings receives capture's warning that the judge could not run.
+// A variable so a test can read it.
+var narrationWarnings io.Writer = os.Stderr
+
 // filterSessionNarration drops the claims the judge reads as session narration
 // before a capture persists them, together with their evidence links and
 // entities.
@@ -120,7 +137,15 @@ func filterSessionNarration(
 	for i, c := range claims {
 		texts[i] = c.Text
 	}
-	verdicts, _ := judge.Classify(jctx, texts)
+	verdicts, err := judge.Classify(jctx, texts)
+	if errors.Is(err, narration.ErrUnavailable) {
+		// Still fail open, but say so: a judge that can never answer keeps
+		// every claim, and without this line nobody would know the filter
+		// had stopped filtering.
+		_, _ = fmt.Fprintf(narrationWarnings, "warning: kept all %d captured claims unjudged: %v; "+
+			"set llm.narration_model (MNEMOS_NARRATION_MODEL) to an installed model, or check with `mnemos doctor`\n",
+			len(claims), err)
+	}
 
 	dropped := make(map[string]struct{})
 	kept := claims[:0:0]

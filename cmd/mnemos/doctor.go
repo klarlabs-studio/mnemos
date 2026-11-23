@@ -85,6 +85,7 @@ func runDoctorChecks(ctx context.Context) healthCheckResult {
 
 	checks = append(checks,
 		probeLLM(ctx),
+		probeNarrationJudge(ctx),
 		probeEmbedding(ctx),
 	)
 
