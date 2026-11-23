@@ -206,6 +206,9 @@ service MnemosService {
   rpc GetExpectation(GetExpectationRequest) returns (Expectation);
   // RecordObservation records the observed value for a belief's expectation.
   rpc RecordObservation(RecordObservationRequest) returns (Expectation);
+  // RecordDecisionObservation records the observed outcome of a decision
+  // recorded with an expectation (ADR 0049).
+  rpc RecordDecisionObservation(RecordDecisionObservationRequest) returns (Expectation);
   // ReconcileExpectations closes every observed prediction into a
   // validates/refutes verdict.
   rpc ReconcileExpectations(ReconcileExpectationsRequest) returns (ReconcileExpectationsResponse);
@@ -574,6 +577,17 @@ message Decision {
   google.protobuf.Timestamp chosen_at    = 10;
   string                    created_by   = 11;
   google.protobuf.Timestamp created_at   = 12;
+  // expectation is the outcome the decision is expected to produce, resting
+  // on beliefs (ADR 0049). Write-only: AppendDecisions stores it; reads leave
+  // it unset.
+  DecisionExpectation       expectation  = 13;
+}
+
+// DecisionExpectation is a decision's expected outcome (ADR 0049).
+message DecisionExpectation {
+  double                    predicted = 1;
+  double                    tolerance = 2;
+  google.protobuf.Timestamp horizon   = 3;
 }
 
 message ListDecisionsRequest {
@@ -1246,6 +1260,15 @@ message PredictiveErrorResponse {
   double                        total           = 2;
   string                        hotspot         = 3;
   int32                         levels_measured = 4;
+  // attributed is the outcome surprise attributed to each belief a decision
+  // rested on (ADR 0049), largest first.
+  repeated AttributedSurprise   attributed      = 5;
+}
+message AttributedSurprise {
+  string claim_id    = 1;
+  double surprise    = 2;
+  int32  predictions = 3;
+  int32  refuted     = 4;
 }
 
 message BrainHealthRequest {
@@ -1299,13 +1322,30 @@ message RecordObservationRequest {
   string belief_id = 1;
   double observed  = 2;
 }
+message RecordDecisionObservationRequest {
+  string decision_id = 1;
+  double observed    = 2;
+}
 message ReconcileExpectationsRequest {}
 message Reconciliation {
-  string belief_id = 1;
-  double predicted = 2;
-  double observed  = 3;
-  double surprise  = 4;
-  bool   confirmed = 5;
+  // belief_id is the expectation's key: the belief, or the decision key for
+  // a decision-tied expectation (ADR 0049).
+  string                  belief_id     = 1;
+  double                  predicted     = 2;
+  double                  observed      = 3;
+  double                  surprise      = 4;
+  bool                    confirmed     = 5;
+  string                  decision_id   = 6;
+  repeated string         attributed_to = 7;
+  repeated SurpriseRevision revisions     = 8;
+  bool                    rechecked     = 9;
+}
+// SurpriseRevision is one surprise-triggered revision (ADR 0049): kind is
+// "flag", "supersede" or "clear"; by is the superseding belief.
+message SurpriseRevision {
+  string claim_id = 1;
+  string kind     = 2;
+  string by       = 3;
 }
 message ReconcileExpectationsResponse { repeated Reconciliation reconciliations = 1; }
 

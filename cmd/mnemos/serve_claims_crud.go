@@ -7,6 +7,7 @@ import (
 
 	mnemos "go.klarlabs.de/mnemos"
 	"go.klarlabs.de/mnemos/internal/domain"
+	"go.klarlabs.de/mnemos/internal/govwrite"
 )
 
 // Claim CRUD parity (v0.67): single-claim Get, lifecycle transitions, novelty
@@ -198,6 +199,8 @@ type recordDecisionRequest struct {
 	Alternatives []string `json:"alternatives,omitempty"`
 	OutcomeID    string   `json:"outcome_id,omitempty"`
 	ChosenAt     string   `json:"chosen_at,omitempty"`
+	// Expectation is the decision's expected outcome (ADR 0049).
+	Expectation *decisionExpectationInput `json:"expectation,omitempty"`
 }
 
 // recordDecisionHandler records a decision through mcpRunRecordDecision, the
@@ -236,9 +239,18 @@ func recordDecisionHandler(mem mnemos.Memory, w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusCreated, decisionToDTO(stored))
 }
 
-// makeDecisionSubresourceHandler serves GET /v1/decisions/{id}.
-func makeDecisionSubresourceHandler(mem mnemos.Memory) http.HandlerFunc {
+// makeDecisionSubresourceHandler serves GET /v1/decisions/{id} and
+// POST /v1/decisions/{id}/observation (ADR 0049).
+func makeDecisionSubresourceHandler(mem mnemos.Memory, gw *govwrite.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/decisions/"), "/"); len(parts) == 2 {
+			if parts[0] == "" || parts[1] != "observation" {
+				writeError(w, http.StatusNotFound, "not found")
+				return
+			}
+			makeDecisionObservationHandler(gw, parts[0])(w, r)
+			return
+		}
 		mem := scopedMem(r.Context(), mem)
 		if !requireGET(w, r) || memUnavailable(w, mem) {
 			return

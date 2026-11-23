@@ -279,8 +279,20 @@ func (s *Server) AppendDecisions(ctx context.Context, req *mnemosv1.AppendDecisi
 			ChosenAt:     chosen,
 			CreatedBy:    firstNonEmptyStr(d.CreatedBy, actor),
 		}
-		if _, err := s.writerFor(ctx).Decision(ctx, decision); err != nil {
+		// The expected outcome (ADR 0049) is checked before the decision is
+		// written, so a decision with an unusable expectation is refused whole.
+		w := s.writerFor(ctx)
+		expReq, err := s.checkDecisionExpectation(ctx, w, decision, d.GetExpectation())
+		if err != nil {
+			return nil, err
+		}
+		if _, err := w.Decision(ctx, decision); err != nil {
 			return nil, status.Errorf(codes.Internal, "append decision %s: %v", decision.ID, err)
+		}
+		if expReq != nil {
+			if _, err := w.SetDecisionExpectation(ctx, *expReq); err != nil {
+				return nil, decisionExpectationError("set decision expectation "+decision.ID, err)
+			}
 		}
 		accepted++
 	}

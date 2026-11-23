@@ -159,6 +159,9 @@ type mcpPredictiveErrorOutput struct {
 	Levels  []mcpPredictiveErrorLevel `json:"levels"`
 	Total   float64                   `json:"total"`
 	Hotspot string                    `json:"hotspot"`
+	// Attributed is the outcome surprise attributed to each belief a decision
+	// rested on (ADR 0049), largest first.
+	Attributed []mnemos.AttributedSurprise `json:"attributed,omitempty"`
 }
 
 // mcpPredictiveError exposes the ADR-0017 hierarchical prediction-error surface — the
@@ -169,7 +172,7 @@ func mcpPredictiveError(ctx context.Context, mem mnemos.Memory, _ struct{}) (mcp
 	if err != nil {
 		return mcpPredictiveErrorOutput{}, err
 	}
-	out := mcpPredictiveErrorOutput{Total: pe.Total, Hotspot: pe.Hotspot}
+	out := mcpPredictiveErrorOutput{Total: pe.Total, Hotspot: pe.Hotspot, Attributed: pe.Attributed}
 	for _, l := range pe.Levels {
 		out.Levels = append(out.Levels, mcpPredictiveErrorLevel{l.Level, l.Error, l.Samples, l.Basis})
 	}

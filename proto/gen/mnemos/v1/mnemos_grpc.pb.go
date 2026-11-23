@@ -19,75 +19,76 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MnemosService_Health_FullMethodName                   = "/mnemos.v1.MnemosService/Health"
-	MnemosService_ListEpisodes_FullMethodName             = "/mnemos.v1.MnemosService/ListEpisodes"
-	MnemosService_AppendEpisodes_FullMethodName           = "/mnemos.v1.MnemosService/AppendEpisodes"
-	MnemosService_ListBeliefs_FullMethodName              = "/mnemos.v1.MnemosService/ListBeliefs"
-	MnemosService_AppendBeliefs_FullMethodName            = "/mnemos.v1.MnemosService/AppendBeliefs"
-	MnemosService_ListAssociations_FullMethodName         = "/mnemos.v1.MnemosService/ListAssociations"
-	MnemosService_AppendAssociations_FullMethodName       = "/mnemos.v1.MnemosService/AppendAssociations"
-	MnemosService_ListEmbeddings_FullMethodName           = "/mnemos.v1.MnemosService/ListEmbeddings"
-	MnemosService_AppendEmbeddings_FullMethodName         = "/mnemos.v1.MnemosService/AppendEmbeddings"
-	MnemosService_Metrics_FullMethodName                  = "/mnemos.v1.MnemosService/Metrics"
-	MnemosService_ListActions_FullMethodName              = "/mnemos.v1.MnemosService/ListActions"
-	MnemosService_AppendActions_FullMethodName            = "/mnemos.v1.MnemosService/AppendActions"
-	MnemosService_ListOutcomes_FullMethodName             = "/mnemos.v1.MnemosService/ListOutcomes"
-	MnemosService_AppendOutcomes_FullMethodName           = "/mnemos.v1.MnemosService/AppendOutcomes"
-	MnemosService_ListSchemas_FullMethodName              = "/mnemos.v1.MnemosService/ListSchemas"
-	MnemosService_AppendSchemas_FullMethodName            = "/mnemos.v1.MnemosService/AppendSchemas"
-	MnemosService_ListDecisions_FullMethodName            = "/mnemos.v1.MnemosService/ListDecisions"
-	MnemosService_AppendDecisions_FullMethodName          = "/mnemos.v1.MnemosService/AppendDecisions"
-	MnemosService_ListReflexes_FullMethodName             = "/mnemos.v1.MnemosService/ListReflexes"
-	MnemosService_AppendReflexes_FullMethodName           = "/mnemos.v1.MnemosService/AppendReflexes"
-	MnemosService_ListGlobalSchemas_FullMethodName        = "/mnemos.v1.MnemosService/ListGlobalSchemas"
-	MnemosService_OpenIncident_FullMethodName             = "/mnemos.v1.MnemosService/OpenIncident"
-	MnemosService_ListIncidents_FullMethodName            = "/mnemos.v1.MnemosService/ListIncidents"
-	MnemosService_GetIncident_FullMethodName              = "/mnemos.v1.MnemosService/GetIncident"
-	MnemosService_ResolveIncident_FullMethodName          = "/mnemos.v1.MnemosService/ResolveIncident"
-	MnemosService_WhyWereWeWrong_FullMethodName           = "/mnemos.v1.MnemosService/WhyWereWeWrong"
-	MnemosService_ListEntityAssociations_FullMethodName   = "/mnemos.v1.MnemosService/ListEntityAssociations"
-	MnemosService_AppendEntityAssociations_FullMethodName = "/mnemos.v1.MnemosService/AppendEntityAssociations"
-	MnemosService_WhoKnows_FullMethodName                 = "/mnemos.v1.MnemosService/WhoKnows"
-	MnemosService_KnowledgeGaps_FullMethodName            = "/mnemos.v1.MnemosService/KnowledgeGaps"
-	MnemosService_Calibration_FullMethodName              = "/mnemos.v1.MnemosService/Calibration"
-	MnemosService_Hypercorrections_FullMethodName         = "/mnemos.v1.MnemosService/Hypercorrections"
-	MnemosService_Recombinations_FullMethodName           = "/mnemos.v1.MnemosService/Recombinations"
-	MnemosService_AnalogousBeliefs_FullMethodName         = "/mnemos.v1.MnemosService/AnalogousBeliefs"
-	MnemosService_GetBelief_FullMethodName                = "/mnemos.v1.MnemosService/GetBelief"
-	MnemosService_SetBeliefLifecycle_FullMethodName       = "/mnemos.v1.MnemosService/SetBeliefLifecycle"
-	MnemosService_RetractEpisode_FullMethodName           = "/mnemos.v1.MnemosService/RetractEpisode"
-	MnemosService_UnretractEpisode_FullMethodName         = "/mnemos.v1.MnemosService/UnretractEpisode"
-	MnemosService_ListEpisodeDependencies_FullMethodName  = "/mnemos.v1.MnemosService/ListEpisodeDependencies"
-	MnemosService_DeclareEpisodeDependency_FullMethodName = "/mnemos.v1.MnemosService/DeclareEpisodeDependency"
-	MnemosService_RemoveEpisodeDependency_FullMethodName  = "/mnemos.v1.MnemosService/RemoveEpisodeDependency"
-	MnemosService_Classify_FullMethodName                 = "/mnemos.v1.MnemosService/Classify"
-	MnemosService_GetDecision_FullMethodName              = "/mnemos.v1.MnemosService/GetDecision"
-	MnemosService_Recall_FullMethodName                   = "/mnemos.v1.MnemosService/Recall"
-	MnemosService_GetBlocks_FullMethodName                = "/mnemos.v1.MnemosService/GetBlocks"
-	MnemosService_SetBlock_FullMethodName                 = "/mnemos.v1.MnemosService/SetBlock"
-	MnemosService_Synthesize_FullMethodName               = "/mnemos.v1.MnemosService/Synthesize"
-	MnemosService_Timeline_FullMethodName                 = "/mnemos.v1.MnemosService/Timeline"
-	MnemosService_Signals_FullMethodName                  = "/mnemos.v1.MnemosService/Signals"
-	MnemosService_ProcessText_FullMethodName              = "/mnemos.v1.MnemosService/ProcessText"
-	MnemosService_Search_FullMethodName                   = "/mnemos.v1.MnemosService/Search"
-	MnemosService_Passages_FullMethodName                 = "/mnemos.v1.MnemosService/Passages"
-	MnemosService_ContextBlock_FullMethodName             = "/mnemos.v1.MnemosService/ContextBlock"
-	MnemosService_PredictiveError_FullMethodName          = "/mnemos.v1.MnemosService/PredictiveError"
-	MnemosService_BrainHealth_FullMethodName              = "/mnemos.v1.MnemosService/BrainHealth"
-	MnemosService_SetExpectation_FullMethodName           = "/mnemos.v1.MnemosService/SetExpectation"
-	MnemosService_GetExpectation_FullMethodName           = "/mnemos.v1.MnemosService/GetExpectation"
-	MnemosService_RecordObservation_FullMethodName        = "/mnemos.v1.MnemosService/RecordObservation"
-	MnemosService_ReconcileExpectations_FullMethodName    = "/mnemos.v1.MnemosService/ReconcileExpectations"
-	MnemosService_RememberFact_FullMethodName             = "/mnemos.v1.MnemosService/RememberFact"
-	MnemosService_ScanBeliefs_FullMethodName              = "/mnemos.v1.MnemosService/ScanBeliefs"
-	MnemosService_DeprecateBelief_FullMethodName          = "/mnemos.v1.MnemosService/DeprecateBelief"
-	MnemosService_UpdateBelief_FullMethodName             = "/mnemos.v1.MnemosService/UpdateBelief"
-	MnemosService_ResolveDissonance_FullMethodName        = "/mnemos.v1.MnemosService/ResolveDissonance"
-	MnemosService_EscalateBelief_FullMethodName           = "/mnemos.v1.MnemosService/EscalateBelief"
-	MnemosService_VerifyBelief_FullMethodName             = "/mnemos.v1.MnemosService/VerifyBelief"
-	MnemosService_RecordBeliefFeedback_FullMethodName     = "/mnemos.v1.MnemosService/RecordBeliefFeedback"
-	MnemosService_BeliefProvenance_FullMethodName         = "/mnemos.v1.MnemosService/BeliefProvenance"
-	MnemosService_BeliefHistory_FullMethodName            = "/mnemos.v1.MnemosService/BeliefHistory"
+	MnemosService_Health_FullMethodName                    = "/mnemos.v1.MnemosService/Health"
+	MnemosService_ListEpisodes_FullMethodName              = "/mnemos.v1.MnemosService/ListEpisodes"
+	MnemosService_AppendEpisodes_FullMethodName            = "/mnemos.v1.MnemosService/AppendEpisodes"
+	MnemosService_ListBeliefs_FullMethodName               = "/mnemos.v1.MnemosService/ListBeliefs"
+	MnemosService_AppendBeliefs_FullMethodName             = "/mnemos.v1.MnemosService/AppendBeliefs"
+	MnemosService_ListAssociations_FullMethodName          = "/mnemos.v1.MnemosService/ListAssociations"
+	MnemosService_AppendAssociations_FullMethodName        = "/mnemos.v1.MnemosService/AppendAssociations"
+	MnemosService_ListEmbeddings_FullMethodName            = "/mnemos.v1.MnemosService/ListEmbeddings"
+	MnemosService_AppendEmbeddings_FullMethodName          = "/mnemos.v1.MnemosService/AppendEmbeddings"
+	MnemosService_Metrics_FullMethodName                   = "/mnemos.v1.MnemosService/Metrics"
+	MnemosService_ListActions_FullMethodName               = "/mnemos.v1.MnemosService/ListActions"
+	MnemosService_AppendActions_FullMethodName             = "/mnemos.v1.MnemosService/AppendActions"
+	MnemosService_ListOutcomes_FullMethodName              = "/mnemos.v1.MnemosService/ListOutcomes"
+	MnemosService_AppendOutcomes_FullMethodName            = "/mnemos.v1.MnemosService/AppendOutcomes"
+	MnemosService_ListSchemas_FullMethodName               = "/mnemos.v1.MnemosService/ListSchemas"
+	MnemosService_AppendSchemas_FullMethodName             = "/mnemos.v1.MnemosService/AppendSchemas"
+	MnemosService_ListDecisions_FullMethodName             = "/mnemos.v1.MnemosService/ListDecisions"
+	MnemosService_AppendDecisions_FullMethodName           = "/mnemos.v1.MnemosService/AppendDecisions"
+	MnemosService_ListReflexes_FullMethodName              = "/mnemos.v1.MnemosService/ListReflexes"
+	MnemosService_AppendReflexes_FullMethodName            = "/mnemos.v1.MnemosService/AppendReflexes"
+	MnemosService_ListGlobalSchemas_FullMethodName         = "/mnemos.v1.MnemosService/ListGlobalSchemas"
+	MnemosService_OpenIncident_FullMethodName              = "/mnemos.v1.MnemosService/OpenIncident"
+	MnemosService_ListIncidents_FullMethodName             = "/mnemos.v1.MnemosService/ListIncidents"
+	MnemosService_GetIncident_FullMethodName               = "/mnemos.v1.MnemosService/GetIncident"
+	MnemosService_ResolveIncident_FullMethodName           = "/mnemos.v1.MnemosService/ResolveIncident"
+	MnemosService_WhyWereWeWrong_FullMethodName            = "/mnemos.v1.MnemosService/WhyWereWeWrong"
+	MnemosService_ListEntityAssociations_FullMethodName    = "/mnemos.v1.MnemosService/ListEntityAssociations"
+	MnemosService_AppendEntityAssociations_FullMethodName  = "/mnemos.v1.MnemosService/AppendEntityAssociations"
+	MnemosService_WhoKnows_FullMethodName                  = "/mnemos.v1.MnemosService/WhoKnows"
+	MnemosService_KnowledgeGaps_FullMethodName             = "/mnemos.v1.MnemosService/KnowledgeGaps"
+	MnemosService_Calibration_FullMethodName               = "/mnemos.v1.MnemosService/Calibration"
+	MnemosService_Hypercorrections_FullMethodName          = "/mnemos.v1.MnemosService/Hypercorrections"
+	MnemosService_Recombinations_FullMethodName            = "/mnemos.v1.MnemosService/Recombinations"
+	MnemosService_AnalogousBeliefs_FullMethodName          = "/mnemos.v1.MnemosService/AnalogousBeliefs"
+	MnemosService_GetBelief_FullMethodName                 = "/mnemos.v1.MnemosService/GetBelief"
+	MnemosService_SetBeliefLifecycle_FullMethodName        = "/mnemos.v1.MnemosService/SetBeliefLifecycle"
+	MnemosService_RetractEpisode_FullMethodName            = "/mnemos.v1.MnemosService/RetractEpisode"
+	MnemosService_UnretractEpisode_FullMethodName          = "/mnemos.v1.MnemosService/UnretractEpisode"
+	MnemosService_ListEpisodeDependencies_FullMethodName   = "/mnemos.v1.MnemosService/ListEpisodeDependencies"
+	MnemosService_DeclareEpisodeDependency_FullMethodName  = "/mnemos.v1.MnemosService/DeclareEpisodeDependency"
+	MnemosService_RemoveEpisodeDependency_FullMethodName   = "/mnemos.v1.MnemosService/RemoveEpisodeDependency"
+	MnemosService_Classify_FullMethodName                  = "/mnemos.v1.MnemosService/Classify"
+	MnemosService_GetDecision_FullMethodName               = "/mnemos.v1.MnemosService/GetDecision"
+	MnemosService_Recall_FullMethodName                    = "/mnemos.v1.MnemosService/Recall"
+	MnemosService_GetBlocks_FullMethodName                 = "/mnemos.v1.MnemosService/GetBlocks"
+	MnemosService_SetBlock_FullMethodName                  = "/mnemos.v1.MnemosService/SetBlock"
+	MnemosService_Synthesize_FullMethodName                = "/mnemos.v1.MnemosService/Synthesize"
+	MnemosService_Timeline_FullMethodName                  = "/mnemos.v1.MnemosService/Timeline"
+	MnemosService_Signals_FullMethodName                   = "/mnemos.v1.MnemosService/Signals"
+	MnemosService_ProcessText_FullMethodName               = "/mnemos.v1.MnemosService/ProcessText"
+	MnemosService_Search_FullMethodName                    = "/mnemos.v1.MnemosService/Search"
+	MnemosService_Passages_FullMethodName                  = "/mnemos.v1.MnemosService/Passages"
+	MnemosService_ContextBlock_FullMethodName              = "/mnemos.v1.MnemosService/ContextBlock"
+	MnemosService_PredictiveError_FullMethodName           = "/mnemos.v1.MnemosService/PredictiveError"
+	MnemosService_BrainHealth_FullMethodName               = "/mnemos.v1.MnemosService/BrainHealth"
+	MnemosService_SetExpectation_FullMethodName            = "/mnemos.v1.MnemosService/SetExpectation"
+	MnemosService_GetExpectation_FullMethodName            = "/mnemos.v1.MnemosService/GetExpectation"
+	MnemosService_RecordObservation_FullMethodName         = "/mnemos.v1.MnemosService/RecordObservation"
+	MnemosService_RecordDecisionObservation_FullMethodName = "/mnemos.v1.MnemosService/RecordDecisionObservation"
+	MnemosService_ReconcileExpectations_FullMethodName     = "/mnemos.v1.MnemosService/ReconcileExpectations"
+	MnemosService_RememberFact_FullMethodName              = "/mnemos.v1.MnemosService/RememberFact"
+	MnemosService_ScanBeliefs_FullMethodName               = "/mnemos.v1.MnemosService/ScanBeliefs"
+	MnemosService_DeprecateBelief_FullMethodName           = "/mnemos.v1.MnemosService/DeprecateBelief"
+	MnemosService_UpdateBelief_FullMethodName              = "/mnemos.v1.MnemosService/UpdateBelief"
+	MnemosService_ResolveDissonance_FullMethodName         = "/mnemos.v1.MnemosService/ResolveDissonance"
+	MnemosService_EscalateBelief_FullMethodName            = "/mnemos.v1.MnemosService/EscalateBelief"
+	MnemosService_VerifyBelief_FullMethodName              = "/mnemos.v1.MnemosService/VerifyBelief"
+	MnemosService_RecordBeliefFeedback_FullMethodName      = "/mnemos.v1.MnemosService/RecordBeliefFeedback"
+	MnemosService_BeliefProvenance_FullMethodName          = "/mnemos.v1.MnemosService/BeliefProvenance"
+	MnemosService_BeliefHistory_FullMethodName             = "/mnemos.v1.MnemosService/BeliefHistory"
 )
 
 // MnemosServiceClient is the client API for MnemosService service.
@@ -270,6 +271,9 @@ type MnemosServiceClient interface {
 	GetExpectation(ctx context.Context, in *GetExpectationRequest, opts ...grpc.CallOption) (*Expectation, error)
 	// RecordObservation records the observed value for a belief's expectation.
 	RecordObservation(ctx context.Context, in *RecordObservationRequest, opts ...grpc.CallOption) (*Expectation, error)
+	// RecordDecisionObservation records the observed outcome of a decision
+	// recorded with an expectation (ADR 0049).
+	RecordDecisionObservation(ctx context.Context, in *RecordDecisionObservationRequest, opts ...grpc.CallOption) (*Expectation, error)
 	// ReconcileExpectations closes every observed prediction into a
 	// validates/refutes verdict.
 	ReconcileExpectations(ctx context.Context, in *ReconcileExpectationsRequest, opts ...grpc.CallOption) (*ReconcileExpectationsResponse, error)
@@ -904,6 +908,16 @@ func (c *mnemosServiceClient) RecordObservation(ctx context.Context, in *RecordO
 	return out, nil
 }
 
+func (c *mnemosServiceClient) RecordDecisionObservation(ctx context.Context, in *RecordDecisionObservationRequest, opts ...grpc.CallOption) (*Expectation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Expectation)
+	err := c.cc.Invoke(ctx, MnemosService_RecordDecisionObservation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *mnemosServiceClient) ReconcileExpectations(ctx context.Context, in *ReconcileExpectationsRequest, opts ...grpc.CallOption) (*ReconcileExpectationsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReconcileExpectationsResponse)
@@ -1194,6 +1208,9 @@ type MnemosServiceServer interface {
 	GetExpectation(context.Context, *GetExpectationRequest) (*Expectation, error)
 	// RecordObservation records the observed value for a belief's expectation.
 	RecordObservation(context.Context, *RecordObservationRequest) (*Expectation, error)
+	// RecordDecisionObservation records the observed outcome of a decision
+	// recorded with an expectation (ADR 0049).
+	RecordDecisionObservation(context.Context, *RecordDecisionObservationRequest) (*Expectation, error)
 	// ReconcileExpectations closes every observed prediction into a
 	// validates/refutes verdict.
 	ReconcileExpectations(context.Context, *ReconcileExpectationsRequest) (*ReconcileExpectationsResponse, error)
@@ -1421,6 +1438,9 @@ func (UnimplementedMnemosServiceServer) GetExpectation(context.Context, *GetExpe
 }
 func (UnimplementedMnemosServiceServer) RecordObservation(context.Context, *RecordObservationRequest) (*Expectation, error) {
 	return nil, status.Error(codes.Unimplemented, "method RecordObservation not implemented")
+}
+func (UnimplementedMnemosServiceServer) RecordDecisionObservation(context.Context, *RecordDecisionObservationRequest) (*Expectation, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecordDecisionObservation not implemented")
 }
 func (UnimplementedMnemosServiceServer) ReconcileExpectations(context.Context, *ReconcileExpectationsRequest) (*ReconcileExpectationsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReconcileExpectations not implemented")
@@ -2520,6 +2540,24 @@ func _MnemosService_RecordObservation_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_RecordDecisionObservation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordDecisionObservationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).RecordDecisionObservation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_RecordDecisionObservation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).RecordDecisionObservation(ctx, req.(*RecordDecisionObservationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MnemosService_ReconcileExpectations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReconcileExpectationsRequest)
 	if err := dec(in); err != nil {
@@ -2956,6 +2994,10 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RecordObservation",
 			Handler:    _MnemosService_RecordObservation_Handler,
+		},
+		{
+			MethodName: "RecordDecisionObservation",
+			Handler:    _MnemosService_RecordDecisionObservation_Handler,
 		},
 		{
 			MethodName: "ReconcileExpectations",

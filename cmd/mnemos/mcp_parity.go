@@ -94,15 +94,18 @@ func mcpRunRecordExpectation(ctx context.Context, input mcpRecordExpectationInpu
 }
 
 type mcpRecordObservationInput struct {
-	ClaimID  string  `json:"claimId" jsonschema:"required,description=Belief whose expectation this observation resolves"`
-	Observed float64 `json:"observed" jsonschema:"required,description=The value actually observed"`
+	ClaimID    string  `json:"claimId,omitempty" jsonschema:"description=Belief whose expectation this observation resolves (set exactly one of claimId and decisionId)"`
+	DecisionID string  `json:"decisionId,omitempty" jsonschema:"description=Decision recorded with an expectation whose outcome this observation resolves (ADR 0049; set exactly one of claimId and decisionId)"`
+	Observed   float64 `json:"observed" jsonschema:"required,description=The value actually observed"`
 }
 
 type mcpRecordObservationOutput struct {
-	ClaimID   string  `json:"claim_id"`
-	Predicted float64 `json:"predicted"`
-	Observed  float64 `json:"observed"`
-	Validates bool    `json:"validates"`
+	// ClaimID is the expectation's key: the belief, or the decision key.
+	ClaimID    string  `json:"claim_id"`
+	DecisionID string  `json:"decision_id,omitempty"`
+	Predicted  float64 `json:"predicted"`
+	Observed   float64 `json:"observed"`
+	Validates  bool    `json:"validates"`
 }
 
 // mcpRunRecordObservation records what actually happened through the governed
@@ -116,6 +119,15 @@ type mcpRecordObservationOutput struct {
 // verdict; it is domain.Expectation.Confirmed, the rule every consumer reads.
 func mcpRunRecordObservation(ctx context.Context, input mcpRecordObservationInput) (mcpRecordObservationOutput, error) {
 	claimID := strings.TrimSpace(input.ClaimID)
+	decisionID := strings.TrimSpace(input.DecisionID)
+	switch {
+	case claimID != "" && decisionID != "":
+		return mcpRecordObservationOutput{}, userInputError(errors.New("set exactly one of claimId and decisionId"))
+	case decisionID != "":
+		return mcpRunRecordDecisionObservation(ctx, decisionID, input.Observed)
+	case claimID == "":
+		return mcpRecordObservationOutput{}, userInputError(errors.New("claimId or decisionId is required"))
+	}
 	// Resolve the belief's own brain (#341) — the expectation this observation
 	// resolves was written there, so looking anywhere else reports "no
 	// expectation" for a belief that has one.
@@ -144,6 +156,25 @@ func mcpRunRecordObservation(ctx context.Context, input mcpRecordObservationInpu
 	}, nil
 }
 
+// mcpRunRecordDecisionObservation observes a decision's expected outcome
+// (ADR 0049) through the governed writer, confined to the token's runs.
+func mcpRunRecordDecisionObservation(ctx context.Context, decisionID string, observed float64) (mcpRecordObservationOutput, error) {
+	w, err := openWriter(ctx)
+	if err != nil {
+		return mcpRecordObservationOutput{}, err
+	}
+	defer closeWriter(w)
+	exp, err := observeDecision(ctx, w, decisionID, observed)
+	if err != nil {
+		return mcpRecordObservationOutput{}, mcpExpectationError(err)
+	}
+	validates, _ := exp.Confirmed()
+	return mcpRecordObservationOutput{
+		ClaimID: exp.ClaimID, DecisionID: decisionID,
+		Predicted: exp.Predicted, Observed: exp.Observed, Validates: validates,
+	}, nil
+}
+
 // mcpRequireBeliefInRuns refuses a belief outside a run-scoped token's runs
 // (runscope.ClaimAllowed) as "no such belief", so the answer never confirms
 // another run's belief exists. Stdio carries no token and is unrestricted.
@@ -167,7 +198,9 @@ func mcpRequireBeliefInRuns(ctx context.Context, w *govwrite.Writer, claimID str
 func mcpExpectationError(err error) error {
 	switch {
 	case errors.Is(err, govwrite.ErrBeliefNotFound), errors.Is(err, govwrite.ErrExpectationNotFound),
-		errors.Is(err, govwrite.ErrBeliefIDRequired), errors.Is(err, govwrite.ErrExpectationsUnsupported):
+		errors.Is(err, govwrite.ErrBeliefIDRequired), errors.Is(err, govwrite.ErrExpectationsUnsupported),
+		errors.Is(err, govwrite.ErrDecisionIDRequired), errors.Is(err, govwrite.ErrExpectationRestsOnNothing),
+		errors.Is(err, govwrite.ErrReservedExpectationKey):
 		return userInputError(err)
 	}
 	return err

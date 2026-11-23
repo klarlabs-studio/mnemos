@@ -850,19 +850,19 @@ Attach a forward prediction to a belief (and read it back) (write).
 
 ### expectation.observe
 
-Record the observed value for a belief's prediction (write).
+Record the observed value for a belief's prediction or a decision's expected outcome (write).
 
 | Transport | Binding |
 |---|---|
-| go | `RecordObservation` |
-| rest | `POST /v1/beliefs/{id}/observation` |
-| grpc | `RecordObservation` |
+| go | `RecordObservation`, `RecordDecisionObservation` |
+| rest | `POST /v1/beliefs/{id}/observation`, `POST /v1/decisions/{id}/observation` |
+| grpc | `RecordObservation`, `RecordDecisionObservation` |
 | mcp | `record_observation` |
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
-| client | `RecordObservation` |
+| client | `RecordObservation`, `RecordDecisionObservation` |
 
-> Every binding observes through govwrite (CheckObservation, then the observe_expectation governed write); no expectation is REST 404 / gRPC NotFound / mnemos.ErrExpectationNotFound. Run-scoped tokens are confined as for expectation.set.
+> Every binding observes through govwrite (CheckObservation / CheckDecisionObservation, then the observe_expectation governed write); no expectation is REST 404 / gRPC NotFound / mnemos.ErrExpectationNotFound. MCP record_observation takes exactly one of claimId and decisionId. Run-scoped tokens are confined as for expectation.set; a decision's observation requires every belief the decision rested on to lie in the token's runs (ADR 0049).
 
 ### expectation.reconcile
 
@@ -1050,7 +1050,7 @@ Record an agent decision with its beliefs and alternatives (write).
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `RecordDecision` |
 
-> REST POST /v1/decisions and MCP record_decision share mcpRunRecordDecision (server-assigned id, validation, govwrite); gRPC AppendDecisions writes caller-supplied ids through govwrite; Go records through the library's governed kernel.
+> REST POST /v1/decisions and MCP record_decision share mcpRunRecordDecision (server-assigned id, validation, govwrite); gRPC AppendDecisions writes caller-supplied ids through govwrite; Go records through the library's governed kernel. Every binding takes an optional expected outcome (ADR 0049: predicted, tolerance, horizon) resting on the decision's beliefs, checked with govwrite.CheckDecisionExpectation BEFORE the decision is written and stored by the set_expectation governed write under the decision's key; a run-scoped token may attach one only when every rested-on belief lies in its runs.
 
 ### decision.get
 

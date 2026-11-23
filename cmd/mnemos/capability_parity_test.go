@@ -232,7 +232,17 @@ func restSurface() ([]string, error) {
 			}
 			return out, nil
 		},
-		"/v1/decisions/": func() ([]string, error) { return []string{"/v1/decisions/{id}"}, nil },
+		"/v1/decisions/": func() ([]string, error) {
+			subs, err := comparedLiterals("serve_claims_crud.go", "makeDecisionSubresourceHandler", "parts[1]")
+			if err != nil {
+				return nil, err
+			}
+			out := []string{"/v1/decisions/{id}"}
+			for _, s := range subs {
+				out = append(out, "/v1/decisions/{id}/"+s)
+			}
+			return out, nil
+		},
 	}
 	var out []string
 	for _, p := range append(handleFunc, handle...) {
