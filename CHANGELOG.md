@@ -8,6 +8,20 @@ notable changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Moment-in-time operational narration is no longer stored as durable knowledge (#565).
+  Extraction (rule-based and LLM, prompt `v1.7`) drops agent progress reports ("Pushing
+  #N", "Waiting on the lock", "Now rebasing …"), terse completed steps and check tallies
+  ("Lock cleared", "All pass"), offers to the user, and copied compaction instructions.
+  Single-run tallies, still-open status and in-flight jobs get the 14-day volatile
+  half-life instead (`volatility/v2`). On a hand-labelled held-out sample of 140 live
+  claims the junk filter now drops 51 (was 21) and 17 more get the short half-life;
+  every newly dropped claim the operator labelled true was narration or harness text.
+  `mnemos prune --narration` and `mnemos recompute-half-life` apply the new rules to
+  existing brains. Capture also strips the compaction tail even when its marker line is
+  missing; the leaked instructions came from brains captured before #469.
+
 ## [0.133.0] — 2026-11-23
 
 Speaker attribution in extraction, expectations tied to decisions with
