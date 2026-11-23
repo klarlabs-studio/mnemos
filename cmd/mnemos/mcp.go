@@ -246,12 +246,17 @@ type mcpRecordDecisionInput struct {
 	Alternatives []string `json:"alternatives,omitempty" jsonschema:"description=Plans considered but not chosen"`
 	OutcomeID    string   `json:"outcomeId,omitempty" jsonschema:"description=Optional Outcome id when the result is already known"`
 	ChosenAt     string   `json:"chosenAt,omitempty" jsonschema:"description=When the decision was made (RFC3339 / 'now', defaults to now)"`
+	// Expectation is the outcome the decision is expected to produce, resting
+	// on Beliefs (ADR 0049). Shared with the REST body, so it has one type.
+	Expectation *decisionExpectationInput `json:"expectation,omitempty" jsonschema:"description=Optional expected outcome {predicted, tolerance, horizon}; rests on beliefs (at least one required). Observe it with record_observation decisionId; reconcile_expectations attributes its surprise to the beliefs and revises them"`
 }
 
 type mcpRecordDecisionOutput struct {
 	ID        string `json:"id"`
 	Statement string `json:"statement"`
 	RiskLevel string `json:"risk_level"`
+	// HasExpectation reports that an expected outcome was recorded with it.
+	HasExpectation bool `json:"has_expectation,omitempty"`
 }
 
 type mcpQueryDecisionsInput struct {
@@ -563,7 +568,7 @@ func handleMCP(args []string) {
 		})
 
 	srv.Tool("record_observation").
-		Description("Record what was actually observed for a belief that carries an expectation, resolving it into a signed prediction error. Returns whether the prediction validated. Mirrors POST /v1/beliefs/<id>/observation.").
+		Description("Record what was actually observed for a belief that carries an expectation (claimId), or for a decision recorded with an expected outcome (decisionId, ADR 0049), resolving it into a signed prediction error. Set exactly one id. Returns whether the prediction validated. Mirrors POST /v1/beliefs/<id>/observation and POST /v1/decisions/<id>/observation.").
 		OutputSchema(mcpRecordObservationOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordObservationInput) (mcpRecordObservationOutput, error) {
 			return mcpRunRecordObservation(ctx, input)
@@ -612,7 +617,7 @@ func handleMCP(args []string) {
 		})
 
 	srv.Tool("record_decision").
-		Description("Record a decision: the belief claims that justified it, the plan chosen, the alternatives considered, and the risk level. Optional outcomeId attaches an already-observed Outcome.").
+		Description("Record a decision: the belief claims that justified it, the plan chosen, the alternatives considered, and the risk level. Optional outcomeId attaches an already-observed Outcome. Optional expectation {predicted, tolerance, horizon} records the outcome the decision is expected to produce, resting on its beliefs (ADR 0049): observe it with record_observation decisionId, and reconcile_expectations attributes the surprise to the beliefs and revises them.").
 		OutputSchema(mcpRecordDecisionOutput{}).
 		Handler(func(ctx context.Context, input mcpRecordDecisionInput) (mcpRecordDecisionOutput, error) {
 			return mcpRunRecordDecision(ctx, mcpActorFor(ctx, mcpActor), input)
@@ -1752,10 +1757,23 @@ func mcpRunRecordDecision(ctx context.Context, actor string, input mcpRecordDeci
 	if err := d.Validate(); err != nil {
 		return mcpRecordDecisionOutput{}, userInputError(err)
 	}
+	// The expected outcome (ADR 0049) is checked before the decision is
+	// written, so a decision with an unusable expectation is refused whole.
+	expReq, err := checkDecisionExpectationInput(ctx, w, d, input.Expectation)
+	if err != nil {
+		return mcpRecordDecisionOutput{}, err
+	}
 	if _, err := w.Decision(ctx, d); err != nil {
 		return mcpRecordDecisionOutput{}, err
 	}
-	return mcpRecordDecisionOutput{ID: d.ID, Statement: d.Statement, RiskLevel: string(d.RiskLevel)}, nil
+	out := mcpRecordDecisionOutput{ID: d.ID, Statement: d.Statement, RiskLevel: string(d.RiskLevel)}
+	if expReq != nil {
+		if _, err := w.SetDecisionExpectation(ctx, *expReq); err != nil {
+			return out, fmt.Errorf("decision %s recorded, expectation not: %w", d.ID, err)
+		}
+		out.HasExpectation = true
+	}
+	return out, nil
 }
 
 func mcpRunQueryPlaybook(ctx context.Context, input mcpQueryPlaybookInput) (mcpQueryPlaybookOutput, error) {

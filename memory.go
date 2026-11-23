@@ -198,6 +198,10 @@ type Decision struct {
 	Alternatives []string
 	// OutcomeID links to an observed outcome once known (optional).
 	OutcomeID string
+	// Expectation, when set on write, records the outcome the decision is
+	// expected to produce, resting on Beliefs (ADR 0049). It requires at least
+	// one belief. Write-only: reads leave it nil.
+	Expectation *ExpectedOutcome
 	// ChosenAt is when the decision was made; defaults to now when zero.
 	ChosenAt time.Time
 	// CreatedBy / CreatedAt are stamped by the store (read-only on write).
@@ -577,6 +581,47 @@ type Reconciliation struct {
 	// Confirmed is true when the observation fell within tolerance (a validates
 	// verdict); false means a refutation.
 	Confirmed bool
+	// DecisionID is set when the expectation was tied to a decision
+	// ([Decision.Expectation], ADR 0049); ClaimID is then the store key, not
+	// a claim.
+	DecisionID string
+	// AttributedTo are the beliefs the decision rested on: where its surprise
+	// is attributed.
+	AttributedTo []string
+	// Revisions are what the surprise did to those beliefs in this pass.
+	Revisions []BeliefRevision
+	// Rechecked marks a decision expectation reconciled in an earlier pass
+	// whose surprise was revised again in this one, because contrary evidence
+	// arrived since.
+	Rechecked bool
+}
+
+// BeliefRevision is one change surprise-triggered revision (ADR 0049) made to
+// a belief a surprised decision rested on.
+type BeliefRevision struct {
+	ClaimID string
+	// Kind is "flag" (active → contested: no evidence yet says which rested-on
+	// belief was wrong), "supersede" (valid time ended: a newer belief
+	// contradicts it) or "clear" (contested → active: another belief explained
+	// the surprise).
+	Kind string
+	// By is the superseding belief, for "supersede".
+	By string
+}
+
+// ExpectedOutcome is the outcome an agent expects from acting on a decision
+// (ADR 0049): a numeric value, predicted within a tolerance, by a horizon. It
+// rests on the decision's Beliefs, so when the observed outcome
+// ([Memory.RecordDecisionObservation]) falls outside the tolerance, the
+// surprise is attributed to them and revises them on the next
+// [Memory.ReconcileExpectations].
+type ExpectedOutcome struct {
+	Predicted float64
+	// Tolerance is the accepted |observed − predicted|; negative is taken as
+	// its magnitude. Zero confirms only an exact match.
+	Tolerance float64
+	// Horizon is when the outcome should be judged; zero means none.
+	Horizon time.Time
 }
 
 // WorkingMemoryBlockLimit is the default character cap on a single working-memory
@@ -1050,6 +1095,23 @@ type PredictiveError struct {
 	// Total is unmeasured, not perfect: 0.0 is the best value free energy can
 	// take, so a caller grading Total must check this first.
 	LevelsMeasured int `json:"levels_measured"`
+	// Attributed is the outcome surprise attributed to each belief a decision
+	// rested on (ADR 0049), largest first: where the outcome level's error
+	// points. Empty when no observed prediction rests on any belief.
+	Attributed []AttributedSurprise `json:"attributed,omitempty"`
+}
+
+// AttributedSurprise is the outcome prediction error attributed to one belief:
+// the decisions that rested on it whose observed outcome was predicted.
+type AttributedSurprise struct {
+	ClaimID string `json:"claim_id"`
+	// Surprise is the largest surprise among those predictions, in tolerance
+	// units (1 = the edge of the confirmed band).
+	Surprise float64 `json:"surprise"`
+	// Predictions is how many observed predictions rest on the belief.
+	Predictions int `json:"predictions"`
+	// Refuted is how many of them fell outside their tolerance.
+	Refuted int `json:"refuted"`
 }
 
 // HealthStatus is a brain-health verdict (ADR 0019), worst-wins across all vitals and
@@ -1493,12 +1555,24 @@ type Memory interface {
 	// no expectation.
 	RecordObservation(ctx context.Context, claimID string, observed float64) error
 
+	// RecordDecisionObservation reports the outcome value observed for a
+	// decision recorded with an [ExpectedOutcome], so the next reconciliation
+	// can close it. Returns [ErrExpectationNotFound] when the decision has no
+	// expectation.
+	RecordDecisionObservation(ctx context.Context, decisionID string, observed float64) error
+
 	// ReconcileExpectations closes every open expectation that has an observation:
 	// it computes a surprise scalar (precision-weighted |predicted − observed|),
 	// emits a validates (within tolerance) or refutes (beyond) verdict edge — so the
 	// existing surprise routing (reinforce / forget) picks it up — marks the
 	// expectation resolved, and returns the reconciliations. This is the mechanism
 	// that mints prediction-error as a first-class signal. Deterministic.
+	//
+	// A decision's expectation (ADR 0049) is verdicted on the decision, and its
+	// surprise revises the beliefs the decision rested on: a belief a newer
+	// belief contradicts is superseded by it; otherwise every rested-on belief
+	// is flagged contested until evidence decides. A confirmed decision, and a
+	// belief that was only recalled, are never revised.
 	ReconcileExpectations(ctx context.Context) ([]Reconciliation, error)
 
 	// KnowledgeGaps is the curiosity / knowledge-gap detector: it scans the store

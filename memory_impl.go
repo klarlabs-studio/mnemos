@@ -202,9 +202,28 @@ func (m *memory) RecordDecision(ctx context.Context, d Decision) (string, error)
 	if strings.TrimSpace(d.Statement) == "" {
 		return "", errors.New("mnemos: RecordDecision: Statement is required")
 	}
+	// An expected outcome (ADR 0049) is checked before the decision is
+	// written, under the id the decision will carry, so a decision with an
+	// unusable expectation is refused whole rather than recorded without it.
+	var exp *domain.Expectation
+	if d.Expectation != nil {
+		if strings.TrimSpace(d.ID) == "" {
+			d.ID = newDecisionID()
+		}
+		checked, err := m.checkDecisionExpectation(ctx, d.ID, d)
+		if err != nil {
+			return "", fmt.Errorf("mnemos: RecordDecision: expectation: %w", err)
+		}
+		exp = &checked
+	}
 	out, err := dispatchWrite[recordDecisionOutput](ctx, m, actionRecordDecision, recordDecisionInput{Decision: d})
 	if err != nil {
 		return "", err
+	}
+	if exp != nil {
+		if _, err := dispatchWrite[domain.Expectation](ctx, m, actionSetExpectation, *exp); err != nil {
+			return out.DecisionID, fmt.Errorf("mnemos: RecordDecision: decision %s recorded, expectation not: %w", out.DecisionID, err)
+		}
 	}
 	// Embed the decision so it is semantically recallable alongside events and
 	// claims (same async, best-effort embed-on-write path).
@@ -1644,45 +1663,24 @@ func plasticitySensitivity() float64 {
 // that consume surprise: neuromodulation (the time-ordered series, for the global
 // plasticity gain) and prioritized replay (the per-belief map, for rehearsal
 // priority). Each belief carrying a resolved (observed) expectation contributes
-// exp.Surprise() once; the series is ordered oldest→newest by the expectation's
-// creation time. Empty (not an error) on stores without decisions/expectations.
+// exp.Surprise() once, and so does each decision's expected outcome (ADR 0049),
+// whose surprise is attributed to every belief the decision rested on (the
+// per-belief map keeps the largest surprise attributed to a belief). The series
+// is ordered oldest→newest by the expectation's creation time. Empty (not an
+// error) on stores without decisions/expectations.
 func (m *memory) observedSurprises(ctx context.Context) ([]float64, map[string]float64, error) {
-	if m.conn.Expectations == nil || m.conn.Decisions == nil {
-		return nil, nil, nil
+	samples, err := m.outcomeObservations(ctx)
+	if err != nil || len(samples) == 0 {
+		return nil, nil, err
 	}
-	decisions, err := m.conn.Decisions.ListAll(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list decisions: %w", err)
-	}
-	type obs struct {
-		at       time.Time
-		surprise float64
-	}
-	var samples []obs
 	byClaim := map[string]float64{}
-	seen := map[string]bool{}
-	for _, d := range decisions {
-		for _, b := range d.Beliefs {
-			if seen[b] {
-				continue
+	for _, s := range samples {
+		for _, b := range s.restsOn {
+			if cur, ok := byClaim[b]; !ok || s.surprise > cur {
+				byClaim[b] = s.surprise
 			}
-			seen[b] = true
-			exp, ok, gerr := m.conn.Expectations.Get(ctx, b)
-			if gerr != nil {
-				return nil, nil, fmt.Errorf("get expectation %s: %w", b, gerr)
-			}
-			if !ok {
-				continue
-			}
-			s, ok := exp.Surprise()
-			if !ok {
-				continue // unobserved prediction — no error yet
-			}
-			byClaim[b] = s
-			samples = append(samples, obs{at: exp.CreatedAt, surprise: s})
 		}
 	}
-	sort.SliceStable(samples, func(i, j int) bool { return samples[i].at.Before(samples[j].at) })
 	series := make([]float64, len(samples))
 	for i, s := range samples {
 		series[i] = s.surprise
@@ -1733,6 +1731,15 @@ func (m *memory) assignCredit(ctx context.Context, metaplastic bool, gain float6
 	// Fetch the expectation attached to each belief a decision relied on.
 	exps := make(map[string]domain.Expectation)
 	for _, d := range decisions {
+		// The decision's own expected outcome (ADR 0049), under its key.
+		key := domain.DecisionExpectationKey(d.ID)
+		exp, ok, gerr := m.conn.Expectations.Get(ctx, key)
+		if gerr != nil {
+			return 0, nil, fmt.Errorf("get expectation %s: %w", key, gerr)
+		}
+		if ok {
+			exps[key] = exp
+		}
 		for _, b := range d.Beliefs {
 			if _, seen := exps[b]; seen {
 				continue
@@ -2221,20 +2228,24 @@ func (m *memory) PredictiveError(ctx context.Context) (PredictiveError, error) {
 func (m *memory) predictiveErrorIn(ctx context.Context, h *healthCorpus) (PredictiveError, error) {
 	levels := make([]PredictiveErrorLevel, 0, 4)
 
-	// Level 1 — outcome: mean saturated surprise over resolved decision predictions.
+	// Level 1 — outcome: mean saturated surprise over observed decision
+	// predictions: each belief's own expectation, and each decision's expected
+	// outcome (ADR 0049), counted once per prediction, not once per belief it
+	// is attributed to. The attribution itself is reported in Attributed.
 	outcome := PredictiveErrorLevel{Level: "outcome"}
-	series, _, err := m.observedSurprises(ctx)
+	obs, err := m.outcomeObservations(ctx)
 	if err != nil {
 		return PredictiveError{}, fmt.Errorf("mnemos: PredictiveError: outcome: %w", err)
 	}
-	outcome.Samples = len(series)
-	if len(series) > 0 {
+	attributed := attributedSurprises(obs)
+	outcome.Samples = len(obs)
+	if len(obs) > 0 {
 		sum := 0.0
-		for _, s := range series {
-			sum += saturateSurprise(s)
+		for _, o := range obs {
+			sum += saturateSurprise(o.surprise)
 		}
-		outcome.Error = sum / float64(len(series))
-		outcome.Basis = fmt.Sprintf("mean outcome surprise over %d resolved prediction(s)", len(series))
+		outcome.Error = sum / float64(len(obs))
+		outcome.Basis = fmt.Sprintf("mean outcome surprise over %d resolved prediction(s), attributed to %d belief(s)", len(obs), len(attributed))
 	} else {
 		outcome.Basis = "no resolved predictions yet"
 	}
@@ -2330,7 +2341,7 @@ func (m *memory) predictiveErrorIn(ctx context.Context, h *healthCorpus) (Predic
 	if n > 0 {
 		total = sum / float64(n)
 	}
-	return PredictiveError{Levels: levels, Total: total, Hotspot: hotspot, LevelsMeasured: n}, nil
+	return PredictiveError{Levels: levels, Total: total, Hotspot: hotspot, LevelsMeasured: n, Attributed: attributed}, nil
 }
 
 // hypercorrectionCount is len(hypercorrectionList), computed by the store

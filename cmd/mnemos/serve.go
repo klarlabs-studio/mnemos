@@ -517,7 +517,7 @@ func newServerMuxWithMemory(conn *store.Conn, mem mnemos.Memory, requireTenant, 
 	// Claim CRUD parity (v0.67): novelty classification + decision browse surface.
 	mux.HandleFunc("/v1/classify", makeClassifyHandler(mem))
 	mux.HandleFunc("/v1/decisions", makeDecisionsHandler(mem))
-	mux.HandleFunc("/v1/decisions/", makeDecisionSubresourceHandler(mem))
+	mux.HandleFunc("/v1/decisions/", makeDecisionSubresourceHandler(mem, gw))
 	// Advanced recall (v0.68): epistemic-honesty variants of retrieval.
 	mux.HandleFunc("/v1/recall", makeRecallHandler(mem))
 	mux.HandleFunc("/v1/passages", makePassagesHandler(mem))

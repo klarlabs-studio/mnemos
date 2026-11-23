@@ -161,7 +161,8 @@ func IsCreditKey(k string) bool { return strings.HasPrefix(k, componentKeyPrefix
 // deterministic — no I/O, no wall clock — so the same inputs always produce the
 // same result and re-running is idempotent.
 //
-// exps holds the expectation for any belief claim that has one; only expectations
+// exps holds the expectation for any belief claim that has one, and, under
+// domain.DecisionExpectationKey, any decision's expected outcome; only expectations
 // with an observation contribute (an unobserved prediction is neither confirmed
 // nor refuted, so its beliefs are left unchanged).
 //
@@ -184,6 +185,17 @@ func Assign(decisions []domain.Decision, exps map[string]domain.Expectation) map
 		n := len(d.Beliefs)
 		if n == 0 {
 			continue
+		}
+		// The decision's own expected outcome (ADR 0049), keyed in exps by
+		// domain.DecisionExpectationKey: its surprise is attributed to every
+		// belief it rested on, split equally like a per-belief prediction's.
+		if exp, ok := exps[domain.DecisionExpectationKey(d.ID)]; ok {
+			if delta, ok := decisionDelta(exp); ok {
+				key := fmt.Sprintf("%s%s:outcome", componentKeyPrefix, d.ID)
+				for _, target := range d.Beliefs {
+					out[target] = append(out[target], Contribution{Key: key, Delta: delta / float64(n)})
+				}
+			}
 		}
 		for _, b := range d.Beliefs {
 			exp, ok := exps[b]

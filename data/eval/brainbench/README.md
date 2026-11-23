@@ -305,6 +305,70 @@ report stays more precise (1.0 vs 0.75), because the baseline also deletes the
 corroborated sentence's chunk, and recall now ties (0.6). Before ADR 0038 the
 two tied at 0.6, and the blog's copy kept the false claim alive (`SQ-R`).
 
+### Shifting world (`shifting_world:` scenarios)
+
+Hypothesis (ADR 0049): after the world changes, beliefs that
+surprise-triggered revision acts on are corrected **faster** than with the
+prediction loop that existed before it, with no stable belief lost. Pass
+condition, fixed before the first run: a strictly lower
+`changed_correction_lag` than the current loop, and `changed_accuracy`,
+`stable_accuracy` and `stable_disturbed` no worse.
+
+The track replays one scripted agent episode on its own copies of the warmed
+seed, each on a simulated clock restarted at the same instant. A round is a
+day: documents arrive, the agent recalls and takes each scheduled decision
+only if **every belief it rests on came back from that recall**, the outcome
+is observed and reconciled, the arm sleeps (the same consolidation options on
+every arm), and every probe is asked. Because a decision needs its premises
+recalled, a corrected arm stops acting on the stale picture by itself.
+
+| Arm | What the agent can record |
+|---|---|
+| `evidence_only` | The decision and its beliefs. No prediction. |
+| `current_loop` | The decision, and one expectation on **each** rested-on belief, observed and reconciled. The sleep's ForgetRefuted then archives each refuted belief. Attaching a failed outcome to the decision does the same. It is the fastest use of the old API, which makes it the honest control for a speed claim. |
+| `revision` | The decision with its expected outcome (`Decision.Expectation`), observed with `RecordDecisionObservation`; reconciliation attributes the surprise and revises. |
+
+Two noise arms replay `current_loop` and `revision`; each must reproduce its
+twin or the hypothesis is `unknown`.
+
+| Metric | Direction | What it tells you |
+|---|---|---|
+| `changed_accuracy` | higher better | Strict accuracy of the changed probes over all rounds (expect returned, stale state not). |
+| `changed_corrected` | higher better | Share of changed probes correct from some round to the end. |
+| `changed_correction_lag` | lower better | Rounds from the one whose documents carry the new state to the first round a changed probe stays correct. Unknown when a probe never settles. |
+| `stable_accuracy` | higher better | **Anti-gaming.** Accuracy of the beliefs that stayed true. Archiving everything a surprise touched wins the rows above and loses here. |
+| `stable_disturbed` | lower better | Share of stable beliefs that end retired or not active (a flag counts). |
+| `decisions_taken`, `surprises`, `revisions`, `archived_by_sleep` | descriptive | What each loop did. |
+
+`shifting_world.yaml` changes two facts (the payments timeout, evidence in
+r2; the search refresh interval, evidence in r3), keeps two co-rested facts
+true, and gives the ledger one outlier outcome in r2 that later outcomes
+confirm. Each stale fact is stated twice, so it outranks the single document
+that reports the new state. The result, deterministic across runs:
+
+| Metric | evidence_only | current_loop | revision |
+|---|---|---|---|
+| `changed_accuracy` | 0.00 | 0.70 | 0.70 |
+| `changed_correction_lag` | unknown (never) | 0.00 | 0.00 |
+| `stable_accuracy` | 1.00 | 0.07 | 1.00 |
+| `stable_disturbed` | 0.00 | 1.00 | 0.33 |
+| `archived_by_sleep` | 0 | 5 | 0 |
+
+The hypothesis is **not supported**: revision corrects the changed beliefs
+in the same round as the current loop, not sooner. Read the reason before the
+verdict. The current loop archives every belief a failed decision rested on,
+at the first sleep after the surprise, so it cannot be beaten on speed. It
+pays for it: by round 2 it has archived both co-rested facts and the ledger
+belief that one outlier refuted, and answers 1 of 15 stable questions.
+Revision keeps all three answerable. It flags them contested on the first
+surprise, supersedes the stale fact when the newer contradicting document
+arrives, and clears the co-rested fact's flag once the stale fact explains
+the surprise. The ledger belief stays flagged (`stable_disturbed` 0.33),
+because nothing explained its outlier, and later confirmations leave it alone
+by design. Against `evidence_only`, both loops are faster: evidence alone
+never retires the better-corroborated stale fact, and the user-mode probe keeps
+returning both values.
+
 
 ## Retrieval ablation (`make retrieval-ablation`)
 
@@ -427,6 +491,31 @@ retraction:
       role: original
     - text: released on 3 March 2026
       role: corroborated
+```
+
+A scenario adds the shifting-world track with a `shifting_world:` block (see
+`shifting_world.yaml`):
+
+```yaml
+shifting_world:
+  sleep: {forget_refuted: true, credit: true}   # every arm, every round
+  rounds:
+    - id: r1
+      docs: []                       # evidence arriving this round
+      decisions:
+        - id: retry-budget
+          recall: payments API timeout and payment retries   # asked first
+          rests_on: [timeout is 30 seconds, retries are idempotent]
+          predicted: 30
+          tolerance: 5
+          observed: 5                # the world's outcome
+  probes:
+    - id: timeout-now
+      role: changed                  # or stable
+      evidence_in: r2                # round whose docs carry the new state
+      query: what is the payments API timeout
+      expect: timeout is 5 seconds
+      must_not: [timeout is 30 seconds]
 ```
 
 Three things to get right:

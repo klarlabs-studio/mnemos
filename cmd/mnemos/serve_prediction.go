@@ -30,18 +30,40 @@ func makePredictiveErrorHandler(mem mnemos.Memory) http.HandlerFunc {
 }
 
 // reconciliationDTO is one closed prediction on POST /v1/expectations/reconcile.
+//
+// A decision-tied expectation (ADR 0049) also names the decision, the beliefs
+// its surprise is attributed to and what revision did to them; belief_id is
+// then the expectation's store key.
 type reconciliationDTO struct {
-	BeliefID  string  `json:"belief_id"`
-	Predicted float64 `json:"predicted"`
-	Observed  float64 `json:"observed"`
-	Surprise  float64 `json:"surprise"`
-	Confirmed bool    `json:"confirmed"`
+	BeliefID     string        `json:"belief_id"`
+	Predicted    float64       `json:"predicted"`
+	Observed     float64       `json:"observed"`
+	Surprise     float64       `json:"surprise"`
+	Confirmed    bool          `json:"confirmed"`
+	DecisionID   string        `json:"decision_id,omitempty"`
+	AttributedTo []string      `json:"attributed_to,omitempty"`
+	Revisions    []revisionDTO `json:"revisions,omitempty"`
+	Rechecked    bool          `json:"rechecked,omitempty"`
+}
+
+// revisionDTO is one surprise-triggered revision of a belief.
+type revisionDTO struct {
+	ClaimID string `json:"claim_id"`
+	Kind    string `json:"kind"`
+	By      string `json:"by,omitempty"`
 }
 
 func reconciliationsToDTO(recs []govwrite.Reconciliation) []reconciliationDTO {
 	out := make([]reconciliationDTO, 0, len(recs))
 	for _, r := range recs {
-		out = append(out, reconciliationDTO{r.ClaimID, r.Predicted, r.Observed, r.Surprise, r.Confirmed})
+		dto := reconciliationDTO{
+			BeliefID: r.ClaimID, Predicted: r.Predicted, Observed: r.Observed, Surprise: r.Surprise, Confirmed: r.Confirmed,
+			DecisionID: r.DecisionID, AttributedTo: r.AttributedTo, Rechecked: r.Rechecked,
+		}
+		for _, rv := range r.Revisions {
+			dto.Revisions = append(dto.Revisions, revisionDTO{ClaimID: rv.ClaimID, Kind: rv.Kind, By: rv.By})
+		}
+		out = append(out, dto)
 	}
 	return out
 }

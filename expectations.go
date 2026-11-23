@@ -68,13 +68,7 @@ func (m *memory) ReconcileExpectations(ctx context.Context) ([]Reconciliation, e
 	if err != nil {
 		return nil, fmt.Errorf("mnemos: ReconcileExpectations: %w", err)
 	}
-	var out []Reconciliation
-	for _, r := range recs {
-		out = append(out, Reconciliation{
-			ClaimID: r.ClaimID, Predicted: r.Predicted, Observed: r.Observed, Surprise: r.Surprise, Confirmed: r.Confirmed,
-		})
-	}
-	return out, nil
+	return toPublicReconciliations(recs), nil
 }
 
 type setExpectationExecutor struct{ m *memory }
@@ -117,18 +111,11 @@ type reconcileExpectationsExecutor struct{ m *memory }
 
 // Execute closes observed expectations and records the verdict counts.
 func (e reconcileExpectationsExecutor) Execute(ctx context.Context, _ any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
-	recs, err := govwrite.ApplyReconcileExpectations(ctx, e.m.conn, clock.Now().UTC())
+	recs, err := govwrite.ApplyReconcileExpectations(ctx, e.m.conn, clock.Now().UTC(), e.m.actorID)
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, err
 	}
-	confirmed := 0
-	for _, r := range recs {
-		if r.Confirmed {
-			confirmed++
-		}
-	}
-	return axidomain.ExecutionResult{Data: recs, Summary: fmt.Sprintf("reconciled %d expectation(s), %d confirmed", len(recs), confirmed)},
-		[]axidomain.EvidenceRecord{{Kind: "mnemos.reconcile_expectations", Source: evidenceSourceLibrary, Value: map[string]any{
-			"reconciled": len(recs), "confirmed": confirmed, "refuted": len(recs) - confirmed,
-		}}}, nil
+	sum := govwrite.SummarizeReconciliations(recs)
+	return axidomain.ExecutionResult{Data: recs, Summary: sum.String()},
+		[]axidomain.EvidenceRecord{{Kind: "mnemos.reconcile_expectations", Source: evidenceSourceLibrary, Value: sum.Evidence()}}, nil
 }

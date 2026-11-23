@@ -62,6 +62,10 @@
 //     dependent beliefs stop surviving, which supported ones keep surviving,
 //     and how well the impact report matches the gold, against raw retrieval
 //     that deletes the document's chunks only.
+//   - Shifting world (shifting.go): a scripted agent episode replayed after
+//     the world changes, once per prediction loop (none, the per-belief loop,
+//     decision-tied revision, ADR 0049), scored on how fast the changed
+//     beliefs are corrected and whether the stable ones survive.
 package brainbench
 
 import (
@@ -124,6 +128,12 @@ type Scenario struct {
 	// source (ADR 0037) and the brain is scored on which beliefs it stops
 	// holding. It is a separate experiment from Process, with its own arms.
 	Retraction *Retraction `yaml:"retraction"`
+
+	// ShiftingWorld, when set, adds the surprise-revision track
+	// (shifting.go, ADR 0049): an agent episode replayed after the world
+	// changes, once per prediction loop, scored on how fast the changed
+	// beliefs are corrected and whether the stable ones survive.
+	ShiftingWorld *ShiftingWorld `yaml:"shifting_world"`
 }
 
 // Doc is one ingested document.
@@ -384,6 +394,9 @@ func (s Scenario) Validate() error {
 		return err
 	}
 	if err := s.validateRetraction(); err != nil {
+		return err
+	}
+	if err := s.validateShifting(); err != nil {
 		return err
 	}
 	if s.Process.DedupeThreshold < 0 || s.Process.DedupeThreshold > 1 {

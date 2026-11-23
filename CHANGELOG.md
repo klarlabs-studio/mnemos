@@ -19,6 +19,22 @@ notable changes.
   backfill. Nothing in scoring or recall reads it yet; it lets a bad extractor's
   claims be found and re-extracted.
 
+- Expectations tied to decisions, with surprise-triggered revision (ADR 0049, #446). A
+  decision can carry its expected outcome (`Decision.Expectation`: predicted, tolerance,
+  horizon), resting on its beliefs; `RecordDecisionObservation` records what happened.
+  Reconciliation verdicts the decision, never its beliefs, and attributes the surprise to
+  the beliefs it rested on through credit assignment and the new
+  `PredictiveError.Attributed`. A surprised belief that a newer belief contradicts is
+  superseded; otherwise every rested-on belief is flagged contested until evidence
+  decides, and the flags are cleared once another belief explains the surprise. Confirmed
+  decisions and recall never revise. No schema change: the expectation is a
+  `claim_expectations` row under a reserved `decision:` key. Carried on REST, gRPC, MCP and
+  the Go client. `recompute-contested` leaves surprise flags alone.
+- brainbench shifting-world track (`data/eval/brainbench/shifting_world.yaml`). Result: the
+  speed hypothesis is not supported. Revision corrects changed beliefs in the same round as
+  the old loop (correction lag 0 vs 0), but keeps the stable beliefs the old loop archives
+  (stable accuracy 1.00 vs 0.07).
+
 - Deterministic vs LLM reconciliation experiment (ADR 0042, nothing wired into production):
   `go run ./tools/brainbench -mode reconcile [-llm-model gemma3:12b,qwen2.5:3b]` scores
   the relate classifier, a local Ollama model alone, and a pre-registered hybrid on 201

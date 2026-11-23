@@ -30,7 +30,10 @@ func (s *Server) PredictiveError(ctx context.Context, _ *mnemosv1.PredictiveErro
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "predictive error: %v", err)
 	}
-	out := &mnemosv1.PredictiveErrorResponse{Total: pe.Total, Hotspot: pe.Hotspot, LevelsMeasured: int32(pe.LevelsMeasured)}
+	out := &mnemosv1.PredictiveErrorResponse{
+		Total: pe.Total, Hotspot: pe.Hotspot, LevelsMeasured: int32(pe.LevelsMeasured),
+		Attributed: attributedToProto(pe.Attributed),
+	}
 	for _, l := range pe.Levels {
 		out.Levels = append(out.Levels, &mnemosv1.PredictiveErrorLevel{
 			Level: l.Level, Error: l.Error, Samples: int32(l.Samples), Basis: l.Basis,
@@ -171,13 +174,7 @@ func (s *Server) ReconcileExpectations(ctx context.Context, _ *mnemosv1.Reconcil
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "reconcile expectations: %v", err)
 	}
-	out := &mnemosv1.ReconcileExpectationsResponse{Reconciliations: make([]*mnemosv1.Reconciliation, 0, len(recs))}
-	for _, r := range recs {
-		out.Reconciliations = append(out.Reconciliations, &mnemosv1.Reconciliation{
-			BeliefId: r.ClaimID, Predicted: r.Predicted, Observed: r.Observed, Surprise: r.Surprise, Confirmed: r.Confirmed,
-		})
-	}
-	return out, nil
+	return &mnemosv1.ReconcileExpectationsResponse{Reconciliations: reconciliationsToProto(recs)}, nil
 }
 
 // requireBeliefInRuns refuses a missing belief id, and a belief outside a

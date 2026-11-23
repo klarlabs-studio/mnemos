@@ -1,0 +1,186 @@
+id: shifting_world
+description: >-
+  Two operational facts change without announcement; an agent keeps acting on
+  the stale picture and is surprised by the outcomes. Does surprise-triggered
+  revision (ADR 0049) correct the changed beliefs faster than the prediction
+  loop that existed before it, without disturbing the beliefs that stayed true?
+
+# The world before the change. Each stale fact is stated twice (deduped at
+# ingest into one belief with two pieces of evidence), so it is better
+# corroborated than the single document that later reports the new state:
+# corroboration alone keeps the stale belief alive.
+corpus:
+  - id: payments-runbook
+    age_days: 40
+    text: The payments API timeout is 30 seconds.
+  - id: payments-wiki
+    age_days: 30
+    text: The payments API timeout is 30 seconds.
+  - id: payments-retries
+    age_days: 40
+    text: Payment retries are idempotent.
+  - id: search-runbook
+    age_days: 40
+    text: The search index refresh interval is 60 seconds.
+  - id: search-wiki
+    age_days: 30
+    text: The search index refresh interval is 60 seconds.
+  - id: search-cluster
+    age_days: 40
+    text: The search cluster has three nodes.
+  - id: ledger-db
+    age_days: 40
+    text: The ledger database is PostgreSQL 16.
+
+# The A/B track asks about the world as seeded: the sleep options below on an
+# untouched brain. It is expected to be inert; the point of this scenario is the
+# shifting_world track.
+probes:
+  - id: seed-timeout
+    query: what is the payments API timeout
+    expect: timeout is 30 seconds
+  - id: seed-refresh
+    query: what is the search index refresh interval
+    expect: interval is 60 seconds
+  - id: seed-ledger
+    query: which database does the ledger use
+    expect: PostgreSQL 16
+
+process: &sleep
+  forget_refuted: true
+  reinforce_validated: true
+  credit: true
+  salience: true
+  plastic: true
+  decay_associations: true
+  decay_inhibition: true
+
+shifting_world:
+  # The production sleep pass (sleepArgs) minus the LLM and skill-layer steps,
+  # run on every arm after every round.
+  sleep: *sleep
+  rounds:
+    # The payments timeout dropped to 5s and the refresh interval to 1s before
+    # round 1. Nothing written says so yet.
+    - id: r1
+      decisions:
+        - id: payments-retry-budget
+          recall: payments API timeout and whether payment retries are idempotent
+          rests_on: [timeout is 30 seconds, retries are idempotent]
+          predicted: 30
+          tolerance: 5
+          observed: 5
+        - id: search-freshness-sla
+          recall: search index refresh interval and the search cluster nodes
+          rests_on: [interval is 60 seconds, cluster has three nodes]
+          predicted: 60
+          tolerance: 10
+          observed: 1
+    # The new payments timeout is written down. The ledger outcome is a
+    # one-off outlier: nothing about the ledger changed.
+    - id: r2
+      docs:
+        - id: payments-change
+          text: The payments API timeout is 5 seconds.
+      decisions:
+        - id: payments-retry-budget
+          recall: payments API timeout and whether payment retries are idempotent
+          rests_on: [timeout is 30 seconds, retries are idempotent]
+          predicted: 30
+          tolerance: 5
+          observed: 5
+        - id: search-freshness-sla
+          recall: search index refresh interval and the search cluster nodes
+          rests_on: [interval is 60 seconds, cluster has three nodes]
+          predicted: 60
+          tolerance: 10
+          observed: 1
+        - id: ledger-capacity
+          recall: which database does the ledger use
+          rests_on: [ledger database is PostgreSQL 16]
+          predicted: 100
+          tolerance: 20
+          observed: 400
+    # The new refresh interval is written down; the ledger behaves again.
+    - id: r3
+      docs:
+        - id: search-change
+          text: The search index refresh interval is 1 second.
+      decisions:
+        - id: payments-retry-budget
+          recall: payments API timeout and whether payment retries are idempotent
+          rests_on: [timeout is 30 seconds, retries are idempotent]
+          predicted: 30
+          tolerance: 5
+          observed: 5
+        - id: search-freshness-sla
+          recall: search index refresh interval and the search cluster nodes
+          rests_on: [interval is 60 seconds, cluster has three nodes]
+          predicted: 60
+          tolerance: 10
+          observed: 1
+        - id: ledger-capacity
+          recall: which database does the ledger use
+          rests_on: [ledger database is PostgreSQL 16]
+          predicted: 100
+          tolerance: 20
+          observed: 105
+    - id: r4
+      decisions:
+        - id: payments-retry-budget
+          recall: payments API timeout and whether payment retries are idempotent
+          rests_on: [timeout is 30 seconds, retries are idempotent]
+          predicted: 30
+          tolerance: 5
+          observed: 5
+        - id: search-freshness-sla
+          recall: search index refresh interval and the search cluster nodes
+          rests_on: [interval is 60 seconds, cluster has three nodes]
+          predicted: 60
+          tolerance: 10
+          observed: 1
+        - id: ledger-capacity
+          recall: which database does the ledger use
+          rests_on: [ledger database is PostgreSQL 16]
+          predicted: 100
+          tolerance: 20
+          observed: 98
+    - id: r5
+      decisions:
+        - id: payments-retry-budget
+          recall: payments API timeout and whether payment retries are idempotent
+          rests_on: [timeout is 30 seconds, retries are idempotent]
+          predicted: 30
+          tolerance: 5
+          observed: 5
+        - id: search-freshness-sla
+          recall: search index refresh interval and the search cluster nodes
+          rests_on: [interval is 60 seconds, cluster has three nodes]
+          predicted: 60
+          tolerance: 10
+          observed: 1
+  probes:
+    - id: timeout-now
+      role: changed
+      evidence_in: r2
+      query: what is the payments API timeout
+      expect: timeout is 5 seconds
+      must_not: [timeout is 30 seconds]
+    - id: refresh-now
+      role: changed
+      evidence_in: r3
+      query: what is the search index refresh interval
+      expect: interval is 1 second
+      must_not: [interval is 60 seconds]
+    - id: retries
+      role: stable
+      query: are payment retries idempotent
+      expect: retries are idempotent
+    - id: cluster
+      role: stable
+      query: how many nodes does the search cluster have
+      expect: cluster has three nodes
+    - id: ledger
+      role: stable
+      query: which database does the ledger use
+      expect: ledger database is PostgreSQL 16

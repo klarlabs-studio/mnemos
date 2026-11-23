@@ -86,6 +86,17 @@ func (s *Simulated) Advance(d time.Duration) {
 	s.at = s.at.Add(d)
 }
 
+// Restart moves the clock to t, backwards if need be. It exists for an
+// experiment that replays several arms from one instant, each on its own copy
+// of a store written before t: without it the second arm would run later than
+// the first, and freshness decay alone would separate their results. Never use
+// it while a store written after t is still being compared.
+func (s *Simulated) Restart(t time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.at = t.UTC()
+}
+
 // AdvanceTo moves the clock forward to t. It never moves backwards; a t at or
 // before the current instant is a no-op and reports false.
 func (s *Simulated) AdvanceTo(t time.Time) bool {
