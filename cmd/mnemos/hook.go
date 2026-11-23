@@ -665,6 +665,22 @@ func captureDrain(ev hookEvent, maxBytes int) {
 	ctx, cancel := context.WithTimeout(context.Background(), captureBudget())
 	defer cancel()
 
+	// The session's last chance, so wait for a running worker instead of
+	// skipping: it may hold this session's lines, and racing it would capture
+	// them twice. The wait spends the same budget as the capture.
+	locks, err := waitCaptureLocks(ctx, ev.SessionID)
+	switch {
+	case err == nil:
+		defer locks.release()
+	case ctx.Err() != nil:
+		fmt.Fprintf(os.Stderr,
+			"mnemos: capture budget (%s) spent waiting for another capture worker; transcript remainder not captured\n",
+			captureBudget())
+		return
+	default:
+		fmt.Fprintf(os.Stderr, "mnemos: capture lock unavailable, capturing unlocked: %v\n", err)
+	}
+
 	for chunks := 0; ; chunks++ {
 		if ctx.Err() != nil {
 			// Out of budget with backlog left. The offset still points at the

@@ -28,6 +28,13 @@ notable changes.
   claim), `prune --narration-judge` fails with the cause instead of reporting each claim
   unanswered, and `mnemos doctor` gains a `narration_judge` check that lists the
   installed models when the configured one is missing.
+- Capture workers no longer pile up. A worker is spawned after every assistant reply in
+  every session, and nothing bounded them: with several sessions open, overlapping workers
+  each held the brain, waited on the local model and related against the whole store, and
+  two for one session could capture the same lines twice. A worker now holds its
+  session's lock and one of two machine-wide slots (kernel file locks, released however
+  the worker exits). An incremental worker that finds either busy leaves its lines for the
+  next reply; the SessionEnd sweep waits for them within its budget.
 
 ## [0.133.0] — 2026-11-23
 
