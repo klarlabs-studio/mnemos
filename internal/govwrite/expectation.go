@@ -14,17 +14,18 @@ import (
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
-// Structured expectations (forward predictions on a belief) and their
-// resolution. This is the one implementation: the Go library (through its own
-// governed kernel and the Apply* functions), REST, gRPC and the MCP tools
-// (through [Writer]) all set, observe and reconcile here, so every surface
-// validates, normalises, audits and reads back the same way.
+// Structured expectations (forward predictions on a belief, or on the outcome
+// of a decision) and their resolution. This is the one implementation: the Go
+// library (through its own governed kernel and the Apply* functions), REST,
+// gRPC and the MCP tools (through [Writer]) all set, observe and reconcile
+// here, so every surface validates, normalises, audits and reads back the
+// same way.
 //
-// Request checks run BEFORE dispatch ([CheckExpectation], [CheckObservation])
-// because the kernel flattens an executor's error into a string: a sentinel
-// returned from inside an executor would reach the caller as an opaque
-// failure, and a transport could no longer tell "no such belief" from a
-// storage fault.
+// Request checks run BEFORE dispatch ([CheckExpectation], [CheckObservation],
+// [CheckDecisionExpectation], [CheckDecisionObservation]) because the kernel
+// flattens an executor's error into a string: a sentinel returned from inside
+// an executor would reach the caller as an opaque failure, and a transport
+// could no longer tell "no such belief" from a storage fault.
 
 const (
 	actionSetExpectation         = "set_expectation"
@@ -43,6 +44,14 @@ var (
 	ErrBeliefNotFound = errors.New("no such belief")
 	// ErrBeliefIDRequired is returned when the request names no belief.
 	ErrBeliefIDRequired = errors.New("belief id is required")
+	// ErrReservedExpectationKey is returned when a belief id starts with the
+	// prefix that namespaces decision-tied expectations (ADR 0049).
+	ErrReservedExpectationKey = errors.New("belief id uses the reserved decision-expectation prefix")
+	// ErrDecisionIDRequired is returned when a decision expectation names no decision.
+	ErrDecisionIDRequired = errors.New("decision id is required")
+	// ErrExpectationRestsOnNothing is returned when a decision expectation
+	// names no belief to rest on: its surprise could be attributed to nothing.
+	ErrExpectationRestsOnNothing = errors.New("a decision expectation must rest on at least one belief")
 )
 
 // ExpectationRequest attaches (or replaces) a forward prediction on a belief.
@@ -56,13 +65,50 @@ type ExpectationRequest struct {
 	Horizon time.Time
 }
 
+// DecisionExpectationRequest records the outcome an agent expects from a
+// decision, resting on the beliefs it acted on (ADR 0049).
+type DecisionExpectationRequest struct {
+	DecisionID string
+	// RestsOn are the claim ids the decision rested on: its Beliefs.
+	RestsOn   []string
+	Predicted float64
+	// Tolerance is the accepted |observed − predicted|; a negative value is
+	// taken as its magnitude.
+	Tolerance float64
+	// Horizon is when the outcome should be judged; zero means none.
+	Horizon time.Time
+}
+
 // Reconciliation is one expectation closed against its observation.
 type Reconciliation struct {
+	// ClaimID is the expectation's key: the belief it was set on, or the
+	// decision key for a decision-tied expectation.
 	ClaimID   string
 	Predicted float64
 	Observed  float64
 	Surprise  float64
 	Confirmed bool
+	// DecisionID is set for a decision-tied expectation (ADR 0049).
+	DecisionID string
+	// AttributedTo are the beliefs the decision rested on: where its surprise
+	// is attributed. Empty for an expectation on a single belief.
+	AttributedTo []string
+	// Revisions are what the surprise did to those beliefs in this pass.
+	Revisions []Revision
+	// Rechecked marks an expectation reconciled in an EARLIER pass whose
+	// surprise was revised again in this one, because evidence arrived since.
+	Rechecked bool
+}
+
+// Revision is one change surprise-triggered revision made to a belief.
+type Revision struct {
+	ClaimID string
+	// Kind is "flag" (active → contested), "supersede" (valid time ended by
+	// a newer contradicting belief) or "clear" (a surprise flag lifted because
+	// another belief explained the surprise).
+	Kind string
+	// By is the superseding belief, for "supersede".
+	By string
 }
 
 type observeExpectationInput struct {
@@ -80,6 +126,9 @@ func CheckExpectation(ctx context.Context, conn *store.Conn, req ExpectationRequ
 	if id == "" {
 		return domain.Expectation{}, ErrBeliefIDRequired
 	}
+	if domain.IsDecisionExpectationKey(id) {
+		return domain.Expectation{}, fmt.Errorf("%w: %s", ErrReservedExpectationKey, id)
+	}
 	found, err := conn.Claims.ListByIDs(ctx, []string{id})
 	if err != nil {
 		return domain.Expectation{}, fmt.Errorf("look up belief %s: %w", id, err)
@@ -87,11 +136,42 @@ func CheckExpectation(ctx context.Context, conn *store.Conn, req ExpectationRequ
 	if len(found) == 0 {
 		return domain.Expectation{}, fmt.Errorf("%w: %s", ErrBeliefNotFound, id)
 	}
-	tol := req.Tolerance
-	if tol < 0 {
-		tol = -tol
+	return domain.Expectation{ClaimID: id, Predicted: req.Predicted, Tolerance: magnitude(req.Tolerance), Horizon: req.Horizon, CreatedAt: now}, nil
+}
+
+// CheckDecisionExpectation validates a decision expectation and returns the
+// expectation to store under the decision's key. Every rested-on belief must
+// exist: a surprise is attributed to them, so an unknown id would silently
+// absorb blame that belongs elsewhere.
+func CheckDecisionExpectation(ctx context.Context, conn *store.Conn, req DecisionExpectationRequest, now time.Time) (domain.Expectation, error) {
+	if conn.Expectations == nil {
+		return domain.Expectation{}, ErrExpectationsUnsupported
 	}
-	return domain.Expectation{ClaimID: id, Predicted: req.Predicted, Tolerance: tol, Horizon: req.Horizon, CreatedAt: now}, nil
+	id := strings.TrimSpace(req.DecisionID)
+	if id == "" {
+		return domain.Expectation{}, ErrDecisionIDRequired
+	}
+	restsOn := nonBlankIDs(req.RestsOn)
+	if len(restsOn) == 0 {
+		return domain.Expectation{}, ErrExpectationRestsOnNothing
+	}
+	found, err := conn.Claims.ListByIDs(ctx, restsOn)
+	if err != nil {
+		return domain.Expectation{}, fmt.Errorf("look up rested-on beliefs: %w", err)
+	}
+	have := make(map[string]bool, len(found))
+	for _, c := range found {
+		have[c.ID] = true
+	}
+	for _, b := range restsOn {
+		if !have[b] {
+			return domain.Expectation{}, fmt.Errorf("%w: %s", ErrBeliefNotFound, b)
+		}
+	}
+	return domain.Expectation{
+		ClaimID: domain.DecisionExpectationKey(id), Predicted: req.Predicted,
+		Tolerance: magnitude(req.Tolerance), Horizon: req.Horizon, CreatedAt: now,
+	}, nil
 }
 
 // CheckObservation reports whether claimID has an expectation to observe.
@@ -103,6 +183,9 @@ func CheckObservation(ctx context.Context, conn *store.Conn, claimID string) err
 	if id == "" {
 		return ErrBeliefIDRequired
 	}
+	if domain.IsDecisionExpectationKey(id) {
+		return fmt.Errorf("%w: %s", ErrReservedExpectationKey, id)
+	}
 	_, ok, err := conn.Expectations.Get(ctx, id)
 	if err != nil {
 		return fmt.Errorf("get expectation %s: %w", id, err)
@@ -113,10 +196,42 @@ func CheckObservation(ctx context.Context, conn *store.Conn, claimID string) err
 	return nil
 }
 
+// CheckDecisionObservation reports whether decisionID has an expectation to
+// observe and returns its store key.
+func CheckDecisionObservation(ctx context.Context, conn *store.Conn, decisionID string) (string, error) {
+	if conn.Expectations == nil {
+		return "", ErrExpectationsUnsupported
+	}
+	id := strings.TrimSpace(decisionID)
+	if id == "" {
+		return "", ErrDecisionIDRequired
+	}
+	key := domain.DecisionExpectationKey(id)
+	_, ok, err := conn.Expectations.Get(ctx, key)
+	if err != nil {
+		return "", fmt.Errorf("get expectation for decision %s: %w", id, err)
+	}
+	if !ok {
+		return "", fmt.Errorf("%w: decision %s", ErrExpectationNotFound, id)
+	}
+	return key, nil
+}
+
 // SetExpectation attaches (or replaces) a belief's expectation and returns it
 // as stored.
 func (w *Writer) SetExpectation(ctx context.Context, req ExpectationRequest) (domain.Expectation, error) {
 	exp, err := CheckExpectation(ctx, w.conn, req, clock.Now().UTC())
+	if err != nil {
+		return domain.Expectation{}, err
+	}
+	return dispatch[domain.Expectation](ctx, w, actionSetExpectation, exp)
+}
+
+// SetDecisionExpectation stores the outcome expected from a decision (ADR
+// 0049) and returns it as stored: the set_expectation governed write, under
+// the decision's key.
+func (w *Writer) SetDecisionExpectation(ctx context.Context, req DecisionExpectationRequest) (domain.Expectation, error) {
+	exp, err := CheckDecisionExpectation(ctx, w.conn, req, clock.Now().UTC())
 	if err != nil {
 		return domain.Expectation{}, err
 	}
@@ -133,9 +248,20 @@ func (w *Writer) ObserveExpectation(ctx context.Context, claimID string, observe
 		observeExpectationInput{ClaimID: strings.TrimSpace(claimID), Observed: observed})
 }
 
+// ObserveDecision records the outcome value observed for a decision's
+// expectation and returns the expectation as stored.
+func (w *Writer) ObserveDecision(ctx context.Context, decisionID string, observed float64) (domain.Expectation, error) {
+	key, err := CheckDecisionObservation(ctx, w.conn, decisionID)
+	if err != nil {
+		return domain.Expectation{}, err
+	}
+	return dispatch[domain.Expectation](ctx, w, actionObserveExpectation,
+		observeExpectationInput{ClaimID: key, Observed: observed})
+}
+
 // ReconcileExpectations closes every observed-but-open expectation into a
-// validates/refutes verdict. A backend with no expectation store has nothing
-// to reconcile.
+// validates/refutes verdict and runs surprise-triggered revision (ADR 0049).
+// A backend with no expectation store has nothing to reconcile.
 func (w *Writer) ReconcileExpectations(ctx context.Context) ([]Reconciliation, error) {
 	if w.conn.Expectations == nil {
 		return nil, nil
@@ -173,11 +299,20 @@ func ApplyObserveExpectation(ctx context.Context, conn *store.Conn, claimID stri
 
 // ApplyReconcileExpectations closes observed expectations directly against
 // conn; the library-kernel counterpart of [Writer.ReconcileExpectations].
-// Each verdict is emitted as a validates/refutes edge, which the surprise
-// routing (ForgetRefuted / ReinforceValidated) consumes, and the expectation
-// is marked resolved. An unobserved expectation, even past its horizon, stays
-// open: absence of evidence never refutes.
-func ApplyReconcileExpectations(ctx context.Context, conn *store.Conn, now time.Time) ([]Reconciliation, error) {
+//
+// An expectation on a belief is emitted as a validates/refutes edge to that
+// belief, which the surprise routing (ForgetRefuted / ReinforceValidated)
+// consumes. A decision-tied expectation (ADR 0049) is emitted as an edge to
+// the DECISION, never to its beliefs: its surprise is evidence against the
+// conjunction of the beliefs, not against each one, so it must not reach the
+// per-belief verdict consumers (calibration, ForgetRefuted). Its surprise is
+// attributed to the beliefs through credit assignment and revised through
+// [reviseSurprised], which runs after every pass. actor is recorded on the
+// status and validity changes revision makes.
+//
+// An unobserved expectation, even past its horizon, stays open: absence of
+// evidence never refutes.
+func ApplyReconcileExpectations(ctx context.Context, conn *store.Conn, now time.Time, actor string) ([]Reconciliation, error) {
 	if conn.Expectations == nil {
 		return nil, nil
 	}
@@ -190,31 +325,54 @@ func ApplyReconcileExpectations(ctx context.Context, conn *store.Conn, now time.
 		if !exp.HasObservation {
 			continue
 		}
-		confirmed, _ := exp.Confirmed()
-		surprise, _ := exp.Surprise()
-		kind := domain.RelationshipTypeRefutes
-		if confirmed {
-			kind = domain.RelationshipTypeValidates
+		rec, err := closeExpectation(ctx, conn, exp, now)
+		if err != nil {
+			return out, err
 		}
-		if conn.EntityRels != nil {
-			edge := domain.EntityRelationship{
-				ID: expectationVerdictEdgePrefix + exp.ClaimID, Kind: kind,
-				FromID: expectationSourcePrefix + exp.ClaimID, FromType: domain.RelEntityOutcome,
-				ToID: exp.ClaimID, ToType: domain.RelEntityClaim, CreatedAt: now,
-			}
-			if err := conn.EntityRels.Upsert(ctx, []domain.EntityRelationship{edge}); err != nil {
-				return out, fmt.Errorf("emit verdict for %s: %w", exp.ClaimID, err)
-			}
-		}
-		exp.Resolved = true
-		if err := conn.Expectations.Upsert(ctx, exp); err != nil {
-			return out, fmt.Errorf("mark resolved %s: %w", exp.ClaimID, err)
-		}
-		out = append(out, Reconciliation{
-			ClaimID: exp.ClaimID, Predicted: exp.Predicted, Observed: exp.Observed, Surprise: surprise, Confirmed: confirmed,
-		})
+		out = append(out, rec)
 	}
-	return out, nil
+	return reviseSurprised(ctx, conn, out, now, actor)
+}
+
+// closeExpectation emits one observed expectation's verdict edge and marks it
+// resolved.
+func closeExpectation(ctx context.Context, conn *store.Conn, exp domain.Expectation, now time.Time) (Reconciliation, error) {
+	confirmed, _ := exp.Confirmed()
+	surprise, _ := exp.Surprise()
+	rec := Reconciliation{
+		ClaimID: exp.ClaimID, Predicted: exp.Predicted, Observed: exp.Observed, Surprise: surprise, Confirmed: confirmed,
+	}
+	kind := domain.RelationshipTypeRefutes
+	if confirmed {
+		kind = domain.RelationshipTypeValidates
+	}
+	toID, toType := exp.ClaimID, domain.RelEntityClaim
+	if decisionID, ok := exp.DecisionID(); ok {
+		rec.DecisionID = decisionID
+		toID, toType = decisionID, domain.RelEntityDecision
+		if conn.Decisions != nil {
+			beliefs, err := conn.Decisions.ListBeliefs(ctx, decisionID)
+			if err != nil {
+				return rec, fmt.Errorf("list beliefs of decision %s: %w", decisionID, err)
+			}
+			rec.AttributedTo = beliefs
+		}
+	}
+	if conn.EntityRels != nil {
+		edge := domain.EntityRelationship{
+			ID: expectationVerdictEdgePrefix + exp.ClaimID, Kind: kind,
+			FromID: expectationSourcePrefix + exp.ClaimID, FromType: domain.RelEntityOutcome,
+			ToID: toID, ToType: toType, CreatedAt: now,
+		}
+		if err := conn.EntityRels.Upsert(ctx, []domain.EntityRelationship{edge}); err != nil {
+			return rec, fmt.Errorf("emit verdict for %s: %w", exp.ClaimID, err)
+		}
+	}
+	exp.Resolved = true
+	if err := conn.Expectations.Upsert(ctx, exp); err != nil {
+		return rec, fmt.Errorf("mark resolved %s: %w", exp.ClaimID, err)
+	}
+	return rec, nil
 }
 
 func readExpectation(ctx context.Context, conn *store.Conn, claimID string) (domain.Expectation, error) {
@@ -226,6 +384,27 @@ func readExpectation(ctx context.Context, conn *store.Conn, claimID string) (dom
 		return domain.Expectation{}, fmt.Errorf("expectation %s did not persist", claimID)
 	}
 	return stored, nil
+}
+
+func magnitude(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func nonBlankIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 type setExpectationExecutor struct{ conn *store.Conn }
@@ -266,20 +445,61 @@ func (e observeExpectationExecutor) Execute(ctx context.Context, input any, _ ax
 
 type reconcileExpectationsExecutor struct{ conn *store.Conn }
 
-// Execute closes observed expectations and records the verdict counts.
+// Execute closes observed expectations, revises what their surprise rested
+// on, and records the verdict and revision counts.
 func (e reconcileExpectationsExecutor) Execute(ctx context.Context, _ any, _ axidomain.CapabilityInvoker) (axidomain.ExecutionResult, []axidomain.EvidenceRecord, error) {
-	recs, err := ApplyReconcileExpectations(ctx, e.conn, clock.Now().UTC())
+	recs, err := ApplyReconcileExpectations(ctx, e.conn, clock.Now().UTC(), domain.SystemUser)
 	if err != nil {
 		return axidomain.ExecutionResult{}, nil, err
 	}
-	confirmed := 0
+	sum := SummarizeReconciliations(recs)
+	return axidomain.ExecutionResult{Data: recs, Summary: sum.String()},
+		ev("mnemos.write.reconcile_expectations", sum.Evidence()), nil
+}
+
+// ReconcileSummary counts what one reconcile pass did, for the audit trail.
+type ReconcileSummary struct {
+	Reconciled, Confirmed, Refuted int
+	Flagged, Superseded, Cleared   int
+}
+
+// SummarizeReconciliations counts verdicts and revisions. A rechecked
+// expectation was reconciled earlier, so it counts only its revisions.
+func SummarizeReconciliations(recs []Reconciliation) ReconcileSummary {
+	var s ReconcileSummary
 	for _, r := range recs {
-		if r.Confirmed {
-			confirmed++
+		if !r.Rechecked {
+			s.Reconciled++
+			if r.Confirmed {
+				s.Confirmed++
+			} else {
+				s.Refuted++
+			}
+		}
+		for _, rv := range r.Revisions {
+			switch rv.Kind {
+			case RevisionFlag:
+				s.Flagged++
+			case RevisionSupersede:
+				s.Superseded++
+			case RevisionClear:
+				s.Cleared++
+			}
 		}
 	}
-	return axidomain.ExecutionResult{Data: recs, Summary: fmt.Sprintf("reconciled %d expectation(s), %d confirmed", len(recs), confirmed)},
-		ev("mnemos.write.reconcile_expectations", map[string]any{
-			"reconciled": len(recs), "confirmed": confirmed, "refuted": len(recs) - confirmed,
-		}), nil
+	return s
+}
+
+// String is the session summary line.
+func (s ReconcileSummary) String() string {
+	return fmt.Sprintf("reconciled %d expectation(s), %d confirmed; revised: %d flagged, %d superseded, %d cleared",
+		s.Reconciled, s.Confirmed, s.Flagged, s.Superseded, s.Cleared)
+}
+
+// Evidence is the evidence-record value.
+func (s ReconcileSummary) Evidence() map[string]any {
+	return map[string]any{
+		"reconciled": s.Reconciled, "confirmed": s.Confirmed, "refuted": s.Refuted,
+		"flagged": s.Flagged, "superseded": s.Superseded, "cleared": s.Cleared,
+	}
 }

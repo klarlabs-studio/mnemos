@@ -156,4 +156,41 @@ func TestDecisionDelta_Bounds(t *testing.T) {
 	}
 }
 
+// A decision-tied expectation (ADR 0049) attributes its surprise to every
+// belief the decision rested on, split equally, keyed by the decision alone,
+// and coexists with per-belief expectations.
+func TestAssign_DecisionTiedExpectation(t *testing.T) {
+	key := domain.DecisionExpectationKey("d")
+	tests := []struct {
+		name     string
+		exps     map[string]domain.Expectation
+		wantEach float64
+		wantKeys int
+	}{
+		{"refuted outcome blames each rested-on belief", map[string]domain.Expectation{key: obsExp(key, 200, 900, 10)}, -Step / 2, 1},
+		{"confirmed outcome credits each", map[string]domain.Expectation{key: obsExp(key, 200, 200, 10)}, Step / 2, 1},
+		{"unobserved outcome is neutral", map[string]domain.Expectation{key: {ClaimID: key, Predicted: 200, Tolerance: 10}}, 0, 0},
+		{"per-belief expectation adds its own entry", map[string]domain.Expectation{
+			key: obsExp(key, 200, 900, 10),
+			"a": obsExp("a", 10, 10, 5),
+		}, -Step/2 + Step/2, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Assign([]domain.Decision{{ID: "d", Beliefs: []string{"a", "b"}}}, tt.exps)
+			for _, b := range []string{"a", "b"} {
+				if s := SumFor(got[b]); !approxEq(s, tt.wantEach, 1e-9) {
+					t.Errorf("%s credit = %v, want %v", b, s, tt.wantEach)
+				}
+				if len(got[b]) != tt.wantKeys {
+					t.Errorf("%s contributions = %+v, want %d", b, got[b], tt.wantKeys)
+				}
+			}
+			if tt.wantKeys > 0 && got["a"][0].Key != domain.CreditComponentPrefix+"d:outcome" {
+				t.Errorf("decision-level key = %q", got["a"][0].Key)
+			}
+		})
+	}
+}
+
 func approxEq(a, b, eps float64) bool { return math.Abs(a-b) < eps }

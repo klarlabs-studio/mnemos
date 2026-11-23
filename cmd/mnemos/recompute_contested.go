@@ -57,6 +57,17 @@ func recomputeContested(dryRun bool, f Flags) {
 				return err
 			}
 			cleared := recomputeContestedClaims(claims, links, events)
+			latest := make(map[string]domain.ClaimStatusTransition, len(cleared))
+			for _, c := range cleared {
+				hist, herr := conn.Claims.ListStatusHistoryByClaimID(ctx, c.ID)
+				if herr != nil {
+					return NewSystemError(herr, "load status history")
+				}
+				if len(hist) > 0 {
+					latest[c.ID] = hist[len(hist)-1]
+				}
+			}
+			cleared = withoutSurpriseFlags(cleared, latest)
 
 			contested := 0
 			for _, c := range claims {
@@ -102,6 +113,21 @@ func recomputeContested(dryRun bool, f Flags) {
 	if err != nil {
 		exitWithMnemosError(f.Verbose, err)
 	}
+}
+
+// withoutSurpriseFlags drops the claims whose latest status transition is a
+// surprise-revision flag (ADR 0049). The extraction heuristic never produces
+// that flag, so recomputing against it would clear every one as stale; it is
+// revision's to lift, when evidence explains the surprise.
+func withoutSurpriseFlags(cleared []domain.Claim, latest map[string]domain.ClaimStatusTransition) []domain.Claim {
+	out := cleared[:0:0]
+	for _, c := range cleared {
+		if t, ok := latest[c.ID]; ok && govwrite.IsSurpriseFlag(t) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 // recomputeContestedClaims returns the currently-contested claims that today's

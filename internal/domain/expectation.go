@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,12 @@ const CreditComponentPrefix = "credit:"
 // Tolerance, by Horizon". A reconciliation pass closes it against an observed
 // value, emits a validates/refutes verdict, and yields a surprise scalar — the
 // mechanism that mints prediction-error as a first-class signal. One per claim.
+//
+// An expectation can instead be tied to a decision (ADR 0049): the outcome the
+// agent expected when it acted on the decision's beliefs. It is stored in the
+// same table under [DecisionExpectationKey], so ClaimID is the expectation's
+// subject key (a claim id, or a decision key) and [Expectation.DecisionID]
+// tells the two apart. The beliefs it rests on are the decision's Beliefs.
 type Expectation struct {
 	ClaimID   string
 	Predicted float64   // the expected value
@@ -70,6 +77,31 @@ func (e Expectation) ExcessSurprise() (float64, bool) {
 		return 0, false
 	}
 	return math.Max(0, e.absError()-e.Tolerance) / e.errorScale(), true
+}
+
+// decisionExpectationPrefix namespaces decision-tied expectations in the
+// expectation store. CheckExpectation refuses a claim id that starts with it,
+// so the two key spaces cannot collide.
+const decisionExpectationPrefix = "decision:"
+
+// DecisionExpectationKey is the expectation-store key of the expectation tied
+// to decisionID.
+func DecisionExpectationKey(decisionID string) string {
+	return decisionExpectationPrefix + decisionID
+}
+
+// IsDecisionExpectationKey reports whether key is in the decision namespace.
+func IsDecisionExpectationKey(key string) bool {
+	return strings.HasPrefix(key, decisionExpectationPrefix)
+}
+
+// DecisionID returns the decision the expectation is tied to, and whether it
+// is tied to one at all (false for an expectation on a claim).
+func (e Expectation) DecisionID() (string, bool) {
+	if !IsDecisionExpectationKey(e.ClaimID) {
+		return "", false
+	}
+	return strings.TrimPrefix(e.ClaimID, decisionExpectationPrefix), true
 }
 
 func (e Expectation) absError() float64 {

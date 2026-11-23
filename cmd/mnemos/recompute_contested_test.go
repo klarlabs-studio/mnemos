@@ -11,6 +11,22 @@ func lk(claim, event string) domain.ClaimEvidence {
 	return domain.ClaimEvidence{ClaimID: claim, EventID: event}
 }
 
+// A flag set by surprise-triggered revision (ADR 0049) is not the extraction
+// heuristic's to clear: the heuristic never produces it, so without this it
+// would read every surprise flag as stale and undo it.
+func TestRecomputeContested_LeavesSurpriseFlagsAlone(t *testing.T) {
+	cleared := []domain.Claim{{ID: "surprised"}, {ID: "stale_rule"}, {ID: "cleared_since"}}
+	latest := map[string]domain.ClaimStatusTransition{
+		"surprised":     {ToStatus: domain.ClaimStatusContested, Reason: "surprise-revision: flagged: rested on by surprised decision(s) d1"},
+		"stale_rule":    {ToStatus: domain.ClaimStatusContested, Reason: "auto: contradiction detected"},
+		"cleared_since": {ToStatus: domain.ClaimStatusActive, Reason: "surprise-revision: cleared"},
+	}
+	got := withoutSurpriseFlags(cleared, latest)
+	if len(got) != 2 || got[0].ID != "stale_rule" || got[1].ID != "cleared_since" {
+		t.Fatalf("kept for clearing = %+v, want stale_rule and cleared_since", got)
+	}
+}
+
 // The core contract: a claim contested by the OLD loose rule, which today's
 // rule would not flag, is returned for clearing.
 func TestRecomputeContested_ClearsNoLongerFlagged(t *testing.T) {
