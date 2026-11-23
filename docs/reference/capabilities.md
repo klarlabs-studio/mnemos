@@ -15,7 +15,7 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | http-lite | the root `http` package, a core subset |
 | client | `go.klarlabs.de/mnemos/client` |
 
-80 capabilities, 0 acknowledged gaps.
+82 capabilities, 0 acknowledged gaps.
 
 | Capability | Effect | go | rest | grpc | mcp | mcp-lite | http-lite | client |
 |---|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -87,6 +87,8 @@ Every operation Mnemos exposes, and how each transport provides it. A cell is ei
 | [`decision.list`](#decisionlist) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`blocks.read`](#blocksread) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`blocks.write`](#blockswrite) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
+| [`blocks.task_state.read`](#blockstask_stateread) | read | — | — | — | ✓ | — | — | — |
+| [`blocks.task_state.write`](#blockstask_statewrite) | write | — | — | — | ✓ | — | — | — |
 | [`incident.manage`](#incidentmanage) | write | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`incident.why_wrong`](#incidentwhy_wrong) | read | ✓ | ✓ | ✓ | ✓ | — | — | ✓ |
 | [`federation.export`](#federationexport) | read | — | ✓ | — | — | — | — | — |
@@ -1109,6 +1111,34 @@ Set or append to a working-memory block (write).
 | mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
 | client | `SetBlock`, `AppendBlock` |
+
+### blocks.task_state.read
+
+Read a session's gated task-state block (experiment, ADR 0050) (read).
+
+| Transport | Binding |
+|---|---|
+| go | _opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks_ |
+| rest | _opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks_ |
+| grpc | _opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks_ |
+| mcp | `get_task_state` |
+| mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| client | _opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks_ |
+
+### blocks.task_state.write
+
+Admit to, remove from, or hand off a gated task-state block (experiment, ADR 0050) (write).
+
+| Transport | Binding |
+|---|---|
+| go | _opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks_ |
+| rest | _opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks_ |
+| grpc | _opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks_ |
+| mcp | `update_task_state` |
+| mcp-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| http-lite | _the lite adapters expose only the core Store port: remember, remember_claim/event, recall, get, scan, timeline_ |
+| client | _opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks_ |
 
 ### incident.manage
 

@@ -9,6 +9,11 @@ const (
 	notLibraryRaw = "raw record I/O for remote clients; the library writes and reads through its own Memory operations"
 	// Operations over the server's process, not the knowledge.
 	notServer = "server process plumbing; meaningless for this transport"
+	// taskStateExperiment marks the task-state block's deliberate MCP-only
+	// footprint: it is an opt-in experiment that beat the FIFO block on one
+	// brainbench scenario and lost on another (ADR 0050), so it gets no stable
+	// API on the other transports until a decision to ship it.
+	taskStateExperiment = "opt-in experiment (ADR 0050), MCP-only until it is shown to beat FIFO blocks"
 	// Agent-workflow tools built for an MCP client in a working directory.
 	agentWorkflow = "agent-workflow tool that operates on the caller's working directory or session"
 	// Library-only plumbing.
@@ -614,6 +619,22 @@ var Registry = []Capability{
 		On: map[Transport]Binding{
 			Go: Has("SetBlock", "AppendBlock"), REST: Has("POST /v1/blocks"), GRPC: Has("SetBlock"),
 			MCP: Has("set_block"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("SetBlock", "AppendBlock"),
+		},
+	},
+	{
+		ID: "blocks.task_state.read", Effect: Read,
+		Summary: "Read a session's gated task-state block (experiment, ADR 0050)",
+		On: map[Transport]Binding{
+			Go: No(taskStateExperiment), REST: No(taskStateExperiment), GRPC: No(taskStateExperiment),
+			MCP: Has("get_task_state"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: No(taskStateExperiment),
+		},
+	},
+	{
+		ID: "blocks.task_state.write", Effect: Write,
+		Summary: "Admit to, remove from, or hand off a gated task-state block (experiment, ADR 0050)",
+		On: map[Transport]Binding{
+			Go: No(taskStateExperiment), REST: No(taskStateExperiment), GRPC: No(taskStateExperiment),
+			MCP: Has("update_task_state"), MCPLite: No(notLite), HTTPLite: No(notLite), Client: No(taskStateExperiment),
 		},
 	},
 

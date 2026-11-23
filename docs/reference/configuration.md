@@ -66,6 +66,7 @@ file, the code, or any `MNEMOS_*` name the code reads disagree.
 | `MNEMOS_FLOATBACK_ON_CAPTURE` | `floatback.on_capture` | Also floats repo learnings to the personal brain at session end. Off by default. |
 | `MNEMOS_PLASTICITY_SENSITIVITY` | `plasticity.sensitivity` | Scales surprise-driven learning-rate gain. Default 1.0; 0 disables neuromodulation only. |
 | `MNEMOS_EPISODIC_EVENTS` | `pipeline.episodic_events` | Types operational events (deploys, releases, merges, incidents) at ingest. Off by default. |
+| `MNEMOS_TASK_STATE` | `working_memory.task_state` | Enables the gated task-state block. Off by default. |
 | `MNEMOS_METRICS_SAMPLE_INTERVAL` | `metrics.sample_interval` | The product-metrics sampler cadence, as a Go duration. Default 60s; 0 disables it. |
 | `MNEMOS_LOG_LEVEL` | `log.level` | Sets log verbosity: trace, debug, info, warn or error. Default info. |
 | `MNEMOS_PRECEDENCE` | `precedence` | Selects the read-time federation policy (ADR 0011 Phase C): tenant-wins (default), global-wins, or surface-dissonance. It decides which tier wins — or whether the conflict is surfaced — when a federated read turns up the same topic from both the global and the tenant/repo brain. |
