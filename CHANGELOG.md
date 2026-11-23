@@ -8,6 +8,12 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.133.0] — 2026-11-23
+
+Speaker attribution in extraction, expectations tied to decisions with
+surprise-triggered revision, an opt-in gated task-state block, source
+dependence between episodes, and the Phase A/B evaluation tooling (#441).
+
 ### Added
 
 - Claims record the extractor that produced them (#445 item 3, ADR 0029). New
