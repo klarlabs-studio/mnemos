@@ -1,0 +1,57 @@
+# Constraints stated at the start of a long session and needed at its end,
+# with no word in common with the question that needs them (the LoCoMo-Plus
+# failure mode #447 cites). The session offers ~3,000 characters of task state
+# against a 2,000-character block, so something must be evicted.
+#
+# Expected: the gated block keeps the early constraints (constraints outrank
+# hypotheses and questions on eviction); the FIFO block evicts them first
+# because they are the oldest lines. This is the case the experiment was built
+# around, so a win here is necessary but not sufficient — see the other files.
+id: implicit_constraints
+description: Early constraints needed late, after a long session overflows the block
+limit: 2000
+long_term:
+  - The billing service runs on MySQL 8 in the eu-west-1 region
+  - The office VPN requires a hardware security key for every login
+  - The staging cluster is rebuilt from scratch every Sunday night
+turns:
+  - {kind: goal, text: "Migrate the billing service from MySQL to Postgres without losing a single invoice"}
+  - {kind: constraint, text: "Invoices must always be issued in EUR, never in the customer's local currency"}
+  - {kind: constraint, text: "No production deploys between 09:00 and 17:00 CET on weekdays"}
+  - {kind: constraint, text: "Legal must sign off before any change to how long records are retained"}
+  - {kind: hypothesis, text: "The billing service runs on MySQL 8 in the eu-west-1 region"}
+  - {kind: hypothesis, text: "The office VPN requires a hardware security key for every login"}
+  - {kind: hypothesis, text: "Most of the replication lag comes from the nightly ledger reconciliation batch"}
+  - {kind: question, text: "Does the ORM emit MySQL-specific upserts that Postgres will reject at runtime?"}
+  - {kind: hypothesis, text: "Logical replication with pglogical can keep Postgres within a second of the primary"}
+  - {kind: commitment, text: "Write a dual-write shim behind a flag so both databases receive every insert"}
+  - {kind: question, text: "Are there stored procedures in the payments schema nobody has documented?"}
+  - {kind: hypothesis, text: "Collation differences will reorder customer names in the dunning report"}
+  - {kind: question, text: "How large is the audit_log table once compressed for transfer?"}
+  - {kind: hypothesis, text: "Sequence gaps after cutover will confuse the invoice numbering checker"}
+  - {kind: commitment, text: "Run a shadow-read comparison for one full billing cycle before cutover"}
+  - {kind: question, text: "Which dashboards query the replica directly instead of the reporting API?"}
+  - {kind: hypothesis, text: "Timestamp columns without time zones will shift by an hour during DST"}
+  - {kind: question, text: "Can the tax export job tolerate ten minutes of read-only mode?"}
+  - {kind: hypothesis, text: "The JSON columns will need jsonb indexes to keep the search page fast"}
+  - {kind: commitment, text: "Draft the rollback runbook and walk the on-call team through it"}
+  - {kind: question, text: "Do any partners connect to MySQL over a private link we would have to move?"}
+  - {kind: hypothesis, text: "Connection pooling through PgBouncer in transaction mode breaks prepared statements"}
+  - {kind: question, text: "Is the 2019 archive still read by the finance quarterly close?"}
+  - {kind: hypothesis, text: "Foreign keys disabled in MySQL hide orphaned line items we will trip over"}
+  - {kind: question, text: "What is the p99 write latency budget the checkout flow can absorb?"}
+  - {kind: hypothesis, text: "Bulk loading with COPY will finish the backfill in under four hours"}
+  - {kind: commitment, text: "Schedule the cutover rehearsal on the staging cluster next Tuesday"}
+  - {kind: question, text: "Who owns the cron host that still writes refunds straight to the database?"}
+  - {kind: hypothesis, text: "The refund writer is the only client still using the legacy MySQL user"}
+questions:
+  # "When can we cut over?" — needs the deploy window; shares no content word.
+  - {id: cutover_window, implicit: true, needs: ["between 09:00 and 17:00"]}
+  # "What currency does the new invoice table store?" — needs the EUR rule.
+  - {id: invoice_currency, implicit: true, needs: ["issued in EUR"]}
+  # "Can we drop the 2019 archive during migration?" — needs the retention sign-off.
+  - {id: archive_drop, implicit: true, needs: ["Legal must sign off"]}
+  # Explicit, recent: what is the open question about the refund cron host?
+  - {id: refund_owner, needs: ["cron host that still writes refunds"]}
+  # Explicit, mid-session commitment.
+  - {id: rollback_plan, needs: ["rollback runbook"]}

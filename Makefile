@@ -17,7 +17,7 @@ PROTO_GEN := proto/gen
 # never used. The same version is recorded as a `tool` dependency in go.mod.
 SQLC_VERSION := v1.30.0
 
-.PHONY: security-gate nox-scan scale-gate fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query brain-eval brain-eval-strict retrieval-ablation
+.PHONY: security-gate nox-scan scale-gate fmt lint test test-integration build cross check sqlc install release-snapshot release-check proto mutation mutation-trust mutation-relate mutation-query brain-eval brain-eval-strict brain-eval-taskstate retrieval-ablation
 
 fmt:
 	$(GO) fmt ./...
@@ -136,6 +136,12 @@ brain-eval:
 
 brain-eval-strict:
 	@MNEMOS_DB_URL=memory://brain-eval $(GO) run ./tools/brainbench -json brainbench.json -fail-on-regression
+
+# brain-eval-taskstate runs the gated task-state block experiment (ADR 0050,
+# #447): treatment vs today's FIFO block vs a replica control (noise floor),
+# plus gate-only and eviction-only ablations. Reports, never gates.
+brain-eval-taskstate:
+	@MNEMOS_DB_URL=memory://brain-eval $(GO) run ./tools/brainbench -mode taskstate -json brainbench-taskstate.json
 
 # retrieval-ablation asks whether Mnemos's ranking puts more USEFUL beliefs into
 # a fixed token budget than similarity alone: every brainbench question under

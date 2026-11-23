@@ -1,0 +1,42 @@
+# A burst of open questions late in a session, after a long run of hypotheses.
+# The questions needed at the end are the EARLIER questions of the burst.
+#
+# Expected: this is where the gated block should LOSE. Priority eviction drops
+# open questions first, so the oldest questions of the burst go before any
+# hypothesis; the FIFO block drops the oldest hypotheses instead and keeps the
+# whole burst. It is here so the experiment can report a regression, not only
+# a win — if this scenario ever shows the gated block ahead, check the harness.
+id: question_burst
+description: Late burst of open questions; the early questions of the burst are needed
+limit: 2000
+turns:
+  - {kind: goal, text: "Find why the search page got slower after the March release"}
+  - {kind: hypothesis, text: "The new ranking model doubled the per-request CPU time on the search nodes"}
+  - {kind: hypothesis, text: "A missing index on documents.updated_at forces a sequential scan per query"}
+  - {kind: hypothesis, text: "The cache hit rate fell because keys now include the user's locale"}
+  - {kind: hypothesis, text: "Garbage collection pauses grew once the heap limit was raised to 8 GiB"}
+  - {kind: hypothesis, text: "The autocomplete endpoint now fans out to three shards instead of one"}
+  - {kind: hypothesis, text: "TLS renegotiation to the vector store adds forty milliseconds per call"}
+  - {kind: hypothesis, text: "The spell-correction step runs twice since the middleware was reordered"}
+  - {kind: hypothesis, text: "Logging every query at debug level saturates the disk on two of the nodes"}
+  - {kind: hypothesis, text: "The thread pool is too small for the new synchronous facet computation"}
+  - {kind: hypothesis, text: "Network policy changes route shard traffic through the egress proxy"}
+  - {kind: hypothesis, text: "The embedding service cold-starts after the autoscaler scales it to zero"}
+  - {kind: hypothesis, text: "Result highlighting now tokenizes the whole document instead of the snippet"}
+  - {kind: hypothesis, text: "The query planner picks a nested loop once the synonyms table passed 1M rows"}
+  - {kind: hypothesis, text: "Feature flags are fetched per request because the flag client cache is off"}
+  - {kind: question, text: "Did the slowdown start on the deploy itself or a day later with the reindex?"}
+  - {kind: question, text: "Is the regression visible for anonymous users or only for signed-in ones?"}
+  - {kind: question, text: "Does the p50 move or only the p99 tail of search latency?"}
+  - {kind: question, text: "Are the slow requests concentrated on one region's search nodes?"}
+  - {kind: question, text: "Did the load test before the release use production-sized indexes?"}
+  - {kind: question, text: "Which release flag gates the new ranking model, and can we flip it?"}
+  - {kind: question, text: "Is the slow path hit by the mobile app, the web app, or both?"}
+  - {kind: question, text: "Did anyone change the shard count during the release window?"}
+  - {kind: question, text: "Do the slow traces share a tenant or a query shape?"}
+  - {kind: question, text: "Was the vector store upgraded in the same week as the release?"}
+questions:
+  - {id: onset, needs: ["start on the deploy itself"]}
+  - {id: audience, needs: ["anonymous users or only for signed-in"]}
+  - {id: percentile, needs: ["Does the p50 move"]}
+  - {id: shard_count, needs: ["change the shard count"]}
