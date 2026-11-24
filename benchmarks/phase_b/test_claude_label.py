@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from benchmarks.phase_b import _brain_fixture, claude_label, privacy, sample, score  # noqa: E402
 
 HIDDEN = ("trust_score", "status", "valid_to", "confidence", "lifecycle", "merged_into")
+PASS1_MARKER = "pass-one-only-7f3a9c"  # written into pass-1 labels; must never reach the model
 
 
 def data_block(prompt: str) -> dict:
@@ -80,6 +81,7 @@ class ClaudeLabelTest(unittest.TestCase):
                 "relations": {"edges": [{"a": r["from_claim_id"], "b": r["to_claim_id"], "type": "supports"}
                                         for r in it["relationships"] if r["type"] == "supports"]},
                 "truth": {c["id"]: "true" for c in it["claims"]},
+                "notes": PASS1_MARKER,
             }
         path = self.out / "labels" / "pass1-felix.json"
         privacy.write_json(path, {"format": "mnemos-phase-b-labels/1", "labeller": "felix", "pass": 1,
@@ -104,10 +106,13 @@ class ClaudeLabelTest(unittest.TestCase):
         self.assertNotIn(str(p1.resolve()), opened)
         allowed = {str((self.out / "sample.json").resolve()), str(claude_label.GUIDE.resolve())}
         self.assertTrue(set(opened) <= allowed, f"unexpected reads: {set(opened) - allowed}")
-        # Nothing of pass 1, and nothing the page hides, reaches the model.
+        # Nothing of pass 1, and nothing the page hides, reaches the model. The
+        # guide may name the pass-1 file convention (labels/pass1-<model>.json);
+        # what must never appear is this pass 1's file or its contents.
         for messages in fake.prompts:
             text = json.dumps(messages)
-            self.assertNotIn("pass1", text)
+            self.assertNotIn(PASS1_MARKER, text)
+            self.assertNotIn(p1.name, text)
             for h in HIDDEN:
                 self.assertNotIn(f'"{h}"', messages[1]["content"])
 
