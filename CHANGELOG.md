@@ -8,6 +8,11 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.134.0] — 2026-11-24
+
+Capture stops storing moment-in-time narration, the narration judge reports when it
+cannot answer, capture workers are bounded, and the session-start brief is cheap.
+
 ### Fixed
 
 - Moment-in-time operational narration is no longer stored as durable knowledge (#565).
