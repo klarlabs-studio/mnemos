@@ -70,9 +70,11 @@ homebrew_casks:
       post:
         # The release archives are not notarized, so Gatekeeper quarantines the
         # binary on first run. A formula was never subject to this; a cask is.
-        install: |
-          if OS.mac?
-            system_command "xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/mnemos"]
+        # install_steps (GoReleaser v2.19+) takes Homebrew's declarative steps
+        # DSL, not Ruby; the raw `install:` hook is deprecated.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/mnemos"]
           end
 
 # dockers_v2 replaces the old dockers + docker_manifests pair (deprecated in
