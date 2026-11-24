@@ -18,6 +18,18 @@ the triple
   buckets of AGE_BUCKETS. Measured from the newest episode, not the wall clock,
   so the same brain always gives the same buckets.
 
+Trust strata (--trust-bands N). For a calibration set, the episode's stratum
+is instead the band of [0, 1], in N equal widths, that holds the mean
+trust_score of its live claims (not deprecated, not merged). Episodes without
+a live scored claim are skipped: they have nothing to calibrate. With
+--allocation equal, every band gets the same number of episodes, so the
+reliability curve has points across the whole range rather than piling up in
+the band the brain's trust model favours. That pile-up is what made #442's
+first two verdicts rest on one bin.
+
+Independence (--exclude SAMPLE). Episodes already in an earlier sample.json
+are skipped, so a new held-out set shares no episode with one that was seen.
+
 Allocation. --n episodes are allocated across strata by --allocation
 (`sqrt`, the default, is proportional to the square root of the stratum's
 size: small projects and rare session types still appear, and large ones still
@@ -198,12 +210,32 @@ def systematic(n: int, fraction: Fraction) -> set[int]:
 
 # ---- reading episodes ------------------------------------------------------
 
+def trust_band(mean: float, bands: int) -> str:
+    """The equal-width band of [0, 1] that mean falls in; 1.0 joins the top band."""
+    i = min(bands - 1, max(0, math.floor(mean * bands + 1e-9)))
+    return f"{i / bands:g}-{(i + 1) / bands:g}"
+
+
+def live_trust(conn: sqlite3.Connection) -> dict[str, float]:
+    """event id -> mean trust_score of its live claims (not deprecated, not merged).
+    Episodes whose claims are all dead or unscored are absent."""
+    merged = "AND (c.merged_into IS NULL OR c.merged_into = '')" if "merged_into" in columns(conn, "claims") else ""
+    return {r[0]: r[1] for r in conn.execute(
+        "SELECT ce.event_id, avg(c.trust_score) FROM claim_evidence ce JOIN claims c ON c.id = ce.claim_id "
+        f"WHERE c.status != 'deprecated' {merged} AND c.trust_score IS NOT NULL GROUP BY ce.event_id")}
+
+
 def population(conn: sqlite3.Connection, label: str, args) -> tuple[list[dict], dict]:
     rows = conn.execute("SELECT id, timestamp, metadata_json, length(content) AS chars FROM events").fetchall()
     times = [parse_time(r["timestamp"]) for r in rows]
     newest = max((t for t in times if t), default=None)
-    eligible, excluded = [], {"too_short": 0, "too_long": 0}
+    trust = live_trust(conn) if args.trust_bands else {}
+    skip = getattr(args, "exclude_ids", set())
+    eligible, excluded = [], {"too_short": 0, "too_long": 0, "no_live_claims": 0, "earlier_sample": 0}
     for r, t in zip(rows, times):
+        if f"{label}/{r['id']}" in skip:
+            excluded["earlier_sample"] += 1
+            continue
         chars = r["chars"] or 0
         if chars < args.min_chars:
             excluded["too_short"] += 1
@@ -211,11 +243,19 @@ def population(conn: sqlite3.Connection, label: str, args) -> tuple[list[dict], 
         if args.max_chars and chars > args.max_chars:
             excluded["too_long"] += 1
             continue
+        band = None
+        if args.trust_bands:
+            if r["id"] not in trust:
+                excluded["no_live_claims"] += 1
+                continue
+            band = trust_band(trust[r["id"]], args.trust_bands)
         meta = parse_metadata(r["metadata_json"])
         project = meta.get(args.project_key) or label
+        stratum = (project, session_type(meta), age_bucket(t, newest))
         eligible.append({
-            "brain": label, "event_id": r["id"],
-            "stratum": (project, session_type(meta), age_bucket(t, newest)),
+            "brain": label, "event_id": r["id"], "stratum": stratum, "trust_band": band,
+            # The allocation key: the trust band alone when stratifying by trust.
+            "key": (band,) if band is not None else stratum,
         })
     info = {"events_total": len(rows), "eligible": len(eligible), "excluded": excluded,
             "newest_episode": newest.isoformat() if newest else None}
@@ -311,7 +351,7 @@ def draw(brains: list[tuple[str, Path]], args) -> tuple[dict, dict]:
 
     by_stratum: dict[tuple, list[dict]] = {}
     for e in pop:
-        by_stratum.setdefault(e["stratum"], []).append(e)
+        by_stratum.setdefault(e["key"], []).append(e)
     alloc = allocate({k: len(v) for k, v in by_stratum.items()}, args.n, args.allocation)
 
     picked = []
@@ -320,7 +360,7 @@ def draw(brains: list[tuple[str, Path]], args) -> tuple[dict, dict]:
         picked += ordered[: alloc[k]]
 
     def draw_subset(salt: str, fraction: Fraction) -> set[int]:
-        ordered = sorted(picked, key=lambda e: (e["stratum"], seeded_key(args.seed, salt, e["brain"], e["event_id"])))
+        ordered = sorted(picked, key=lambda e: (e["key"], seeded_key(args.seed, salt, e["brain"], e["event_id"])))
         return {id(ordered[i]) for i in systematic(len(ordered), fraction)}
 
     heldout = draw_subset("heldout", Fraction(args.heldout_fraction).limit_denominator(1000))
@@ -332,6 +372,8 @@ def draw(brains: list[tuple[str, Path]], args) -> tuple[dict, dict]:
         item = export_item(conns[e["brain"]], e["brain"], e["event_id"], args.max_cross_edges)
         project, stype, age = e["stratum"]
         item["stratum"] = {"project": project, "session_type": stype, "age": age}
+        if e["trust_band"] is not None:
+            item["stratum"]["trust_band"] = e["trust_band"]
         item["split"] = "heldout" if id(e) in heldout else "dev"
         item["kappa"] = id(e) in kappa
         items.append(item)
@@ -341,8 +383,9 @@ def draw(brains: list[tuple[str, Path]], args) -> tuple[dict, dict]:
     sample = {"format": FORMAT, "seed": args.seed, "items": items}
     strata = []
     for k in sorted(by_stratum):
-        chosen = [e for e in picked if e["stratum"] == k]
-        strata.append({"project": k[0], "session_type": k[1], "age": k[2], "population": len(by_stratum[k]),
+        chosen = [e for e in picked if e["key"] == k]
+        name = {"trust_band": k[0]} if args.trust_bands else {"project": k[0], "session_type": k[1], "age": k[2]}
+        strata.append({**name, "population": len(by_stratum[k]),
                        "sampled": len(chosen), "heldout": sum(id(e) in heldout for e in chosen),
                        "kappa": sum(id(e) in kappa for e in chosen)})
     manifest = {
@@ -352,7 +395,8 @@ def draw(brains: list[tuple[str, Path]], args) -> tuple[dict, dict]:
                        "heldout_fraction": args.heldout_fraction, "kappa_n": args.kappa_n,
                        "min_chars": args.min_chars, "max_chars": args.max_chars,
                        "project_key": args.project_key, "max_cross_edges": args.max_cross_edges,
-                       "age_buckets": [b[0] for b in AGE_BUCKETS]},
+                       "age_buckets": [b[0] for b in AGE_BUCKETS], "trust_bands": args.trust_bands,
+                       "exclude": [str(p) for p in args.exclude]},
         "brains": brain_info,
         "counts": {"items": len(items), "heldout": sum(i["split"] == "heldout" for i in items),
                    "kappa": sum(i["kappa"] for i in items), "claims": sum(len(i["claims"]) for i in items),
@@ -395,7 +439,19 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--max-cross-edges", type=int, default=40, help="cap on edges leaving the episode, per item")
     p.add_argument("--ignore-wal", action="store_true", help="sample even when the brain has a non-empty -wal")
     p.add_argument("--force", action="store_true", help="replace an existing sample.json")
+    p.add_argument("--trust-bands", type=int, default=0, metavar="N",
+                   help="stratify by the mean trust of an episode's live claims in N equal bands, instead of "
+                        "project/session/age; episodes without a live scored claim are skipped (0: off)")
+    p.add_argument("--exclude", action="append", default=[], metavar="SAMPLE",
+                   help="skip episodes already in this sample.json (repeatable), for an independent sample")
     return p
+
+
+def excluded_ids(paths: list[str]) -> set[str]:
+    ids: set[str] = set()
+    for p in paths:
+        ids |= {i["item_id"] for i in json.loads(Path(p).expanduser().read_text())["items"]}
+    return ids
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -403,6 +459,9 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out).expanduser() if args.out else privacy.DEFAULT_OUT / args.run
     try:
         out = privacy.check_output_dir(out)  # refuse before reading anything
+        if args.trust_bands < 0:
+            raise ValueError("--trust-bands must be 0 (off) or a positive band count")
+        args.exclude_ids = excluded_ids(args.exclude)
         sample, manifest = draw([brain_label(s) for s in args.brains], args)
         write(out, sample, manifest, args.force)
     except (privacy.UnsafeOutputDir, FileExistsError, FileNotFoundError, RuntimeError, ValueError) as e:

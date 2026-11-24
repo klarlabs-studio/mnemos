@@ -177,6 +177,51 @@ class SamplerTest(unittest.TestCase):
         self.assertGreater(b["excluded"]["too_long"], 0)
         self.assertEqual(b["eligible"] + b["excluded"]["too_long"] + b["excluded"]["too_short"], b["events_total"])
 
+    def test_trust_bands_stratify_by_live_claim_trust(self):
+        # Every third fixture episode has no claims, and claim trust spans 0.30-0.75.
+        out = self.root / "bands"
+        self.assertEqual(run(self.brain, out, "--n", "12", "--trust-bands", "10", "--allocation", "equal"), 0)
+        s, m = self.load(out)
+        self.assertEqual(len(s["items"]), 12)
+        for item in s["items"]:
+            live = [c for c in item["claims"] if c["status"] != "deprecated" and not c.get("merged_into")]
+            self.assertTrue(live, f"{item['item_id']} has no live claim to label")
+            mean = sum(c["trust_score"] for c in live) / len(live)
+            band = item["stratum"]["trust_band"]
+            lo, hi = (float(x) for x in band.split("-"))
+            self.assertTrue(lo <= mean < hi or (hi == 1.0 and mean == 1.0), f"{mean} outside {band}")
+        bands = {st["trust_band"]: st["sampled"] for st in m["strata"]}
+        self.assertEqual(set(bands), {"0.3-0.4", "0.4-0.5", "0.5-0.6", "0.6-0.7", "0.7-0.8"})
+        self.assertLessEqual(max(bands.values()) - min(bands.values()), 1)  # equal allocation
+        self.assertGreater(m["brains"][0]["excluded"]["no_live_claims"], 0)
+        self.assertEqual(m["parameters"]["trust_bands"], 10)
+
+    def test_trust_bands_ignore_deprecated_claims(self):
+        conn = sqlite3.connect(self.brain)
+        eid = conn.execute("SELECT event_id FROM claim_evidence ORDER BY event_id LIMIT 1").fetchone()[0]
+        conn.execute("UPDATE claims SET status = 'deprecated' WHERE id IN "
+                     "(SELECT claim_id FROM claim_evidence WHERE event_id = ?)", (eid,))
+        conn.commit()
+        conn.close()
+        out = self.root / "dep"
+        self.assertEqual(run(self.brain, out, "--n", "500", "--trust-bands", "10"), 0)
+        s, _ = self.load(out)
+        picked = {i["episode"]["id"] for i in s["items"]}
+        self.assertGreater(len(picked), 5)
+        self.assertNotIn(eid, picked)
+
+    def test_exclude_drops_episodes_of_an_earlier_sample(self):
+        first, second = self.root / "first", self.root / "second"
+        self.assertEqual(run(self.brain, first, "--n", "15"), 0)
+        self.assertEqual(run(self.brain, second, "--n", "500", "--exclude", str(first / "sample.json")), 0)
+        a = {i["item_id"] for i in self.load(first)[0]["items"]}
+        s, m = self.load(second)
+        b = {i["item_id"] for i in s["items"]}
+        self.assertEqual(a & b, set())
+        self.assertEqual(m["brains"][0]["excluded"]["earlier_sample"], 15)
+        self.assertEqual(len(a) + len(b), m["brains"][0]["events_total"] - sum(
+            v for k, v in m["brains"][0]["excluded"].items() if k != "earlier_sample"))
+
 
 class UnitTest(unittest.TestCase):
     def test_allocate(self):
