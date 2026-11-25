@@ -144,6 +144,9 @@ func (f fakeClaimRepo) ListLiveByTextKeys(context.Context, []string) ([]domain.C
 func (f fakeClaimRepo) ListMergedByTextKeys(context.Context, []string) ([]domain.Claim, error) {
 	return nil, nil
 }
+func (f fakeClaimRepo) ListRetiredByTextKeys(context.Context, []string) ([]domain.Claim, error) {
+	return nil, nil
+}
 func (f fakeClaimRepo) ListMergedInto(context.Context, []string) ([]domain.Claim, error) {
 	return nil, nil
 }

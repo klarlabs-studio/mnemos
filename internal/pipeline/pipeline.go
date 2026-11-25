@@ -183,7 +183,7 @@ func PersistArtifacts(ctx context.Context, conn *store.Conn, events []domain.Eve
 		return fmt.Errorf("persist artifacts: %w", err)
 	}
 	claims, links = known.Claims, known.Links
-	relationships = remapRelationships(relationships, known.Remap)
+	relationships = append(remapRelationships(relationships, known.Remap), known.Relearned...)
 
 	for _, event := range events {
 		if err := conn.Events.Append(ctx, event); err != nil {

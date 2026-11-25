@@ -21,6 +21,13 @@ func (r ClaimRepository) ListMergedByTextKeys(ctx context.Context, keys []string
 	return r.listByTextKeys(ctx, keys, `merged_into <> ''`)
 }
 
+// ListRetiredByTextKeys implements ports.ClaimRepository: the claims whose
+// text_key is one of keys that are not live (valid time closed or deprecated)
+// and not merge redirects, oldest first.
+func (r ClaimRepository) ListRetiredByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(ctx, keys, `(valid_to IS NOT NULL OR status = 'deprecated') AND COALESCE(merged_into, '') = ''`)
+}
+
 // ListMergedInto implements ports.ClaimRepository: the redirects whose
 // merged_into is one of targetIDs, oldest first.
 func (r ClaimRepository) ListMergedInto(ctx context.Context, targetIDs []string) ([]domain.Claim, error) {

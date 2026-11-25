@@ -37,12 +37,24 @@ import (
 // therefore leaves the claim's evidence and trust exactly where they were. A
 // restatement from a new session is a new origin and is linked, which counts no
 // more than the duplicate row it replaces would have.
+//
+// A belief learned again after it was retired (#393) comes back as a new
+// claim, and the new claim is linked derived_from the retired claim that held
+// it last, so the history of the belief survives: recall shows what is held
+// now, and the link shows it was held, and dropped, before. Retired means
+// deprecated or valid time closed; a merge redirect is not retired, it
+// forwards. The link is made once, when the new claim is first written, and
+// its id is derived from its endpoints, so writing the batch again changes
+// nothing.
 
 // KnownClaims is a write batch folded onto the beliefs the brain already holds.
 type KnownClaims struct {
 	// Claims are the claims still to write. None restates a live claim of the
 	// same scope and audience, or another claim in the batch.
 	Claims []domain.Claim
+	// Relearned links each new claim that restates a retired belief to the
+	// retired claim that held it last (derived_from, new -> retired).
+	Relearned []domain.Relationship
 	// Links point each piece of evidence at the claim that holds its text, less
 	// any link that would give a claim a second piece of evidence from the same
 	// origin.
@@ -70,7 +82,82 @@ func CollapseKnownClaims(ctx context.Context, conn *store.Conn, events []domain.
 	if err != nil {
 		return KnownClaims{}, err
 	}
-	return KnownClaims{Claims: kept, Links: links, Remap: remap}, nil
+	relearned, err := relearnedLinks(ctx, conn, kept)
+	if err != nil {
+		return KnownClaims{}, err
+	}
+	return KnownClaims{Claims: kept, Links: links, Remap: remap, Relearned: relearned}, nil
+}
+
+// RelearnDerivedBy stamps the derived_from edges that link a relearned belief
+// to its retired predecessor. It is not a relate/ rule set, so relate's
+// --prune-stale never removes them.
+const RelearnDerivedBy = "relearn/v1"
+
+// relearnedLinks returns a derived_from edge from each claim about to be
+// created whose belief a retired claim held, to the most recent such claim.
+// A claim already stored is an update, not a relearning, and gets none.
+func relearnedLinks(ctx context.Context, conn *store.Conn, kept []domain.Claim) ([]domain.Relationship, error) {
+	keys := make([]string, 0, len(kept))
+	for _, c := range kept {
+		if domain.NormalizeClaimText(c.Text) != "" {
+			keys = append(keys, domain.ClaimTextKey(c.Text))
+		}
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	retired, err := conn.Claims.ListRetiredByTextKeys(ctx, keys)
+	if err != nil {
+		return nil, fmt.Errorf("look up retired beliefs: %w", err)
+	}
+	if len(retired) == 0 {
+		return nil, nil
+	}
+	last := make(map[beliefIdentity]domain.Claim, len(retired))
+	for _, r := range retired { // oldest first, so the last write wins
+		last[identityOf(r)] = r
+	}
+	candidates := map[string]domain.Claim{}
+	ids := []string{}
+	for _, c := range kept {
+		if r, ok := last[identityOf(c)]; ok && r.ID != c.ID {
+			candidates[c.ID] = r
+			ids = append(ids, c.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	stored, err := conn.Claims.ListByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("look up relearned claim ids: %w", err)
+	}
+	for _, c := range stored {
+		delete(candidates, c.ID)
+	}
+	out := make([]domain.Relationship, 0, len(candidates))
+	for _, c := range kept {
+		r, ok := candidates[c.ID]
+		if !ok {
+			continue
+		}
+		out = append(out, domain.Relationship{
+			ID:          relearnedEdgeID(c.ID, r.ID),
+			Type:        domain.RelationshipTypeDerivedFrom,
+			FromClaimID: c.ID,
+			ToClaimID:   r.ID,
+			CreatedAt:   c.CreatedAt,
+			CreatedBy:   c.CreatedBy,
+			DerivedBy:   RelearnDerivedBy,
+		})
+	}
+	return out, nil
+}
+
+func relearnedEdgeID(from, to string) string {
+	sum := sha256.Sum256([]byte("derived_from\x00" + from + "\x00" + to))
+	return "rl_" + hex.EncodeToString(sum[:8])
 }
 
 // beliefIdentity is what makes two claims the same belief.

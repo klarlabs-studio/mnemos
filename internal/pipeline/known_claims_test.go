@@ -310,3 +310,80 @@ func TestPersistArtifacts_RestatingAMergedBeliefLandsOnItsWinner(t *testing.T) {
 		}
 	}
 }
+
+// derivedFromEdges returns the derived_from edges leaving claimID.
+func derivedFromEdges(t *testing.T, conn *store.Conn, claimID string) []domain.Relationship {
+	t.Helper()
+	edges, err := conn.Relationships.ListByClaim(context.Background(), claimID)
+	if err != nil {
+		t.Fatalf("list edges of %s: %v", claimID, err)
+	}
+	var out []domain.Relationship
+	for _, e := range edges {
+		if e.Type == domain.RelationshipTypeDerivedFrom && e.FromClaimID == claimID {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// A belief learned again after it was retired comes back as a new claim linked
+// derived_from the retired claim that held it last (#393), whether it was
+// deprecated or its valid time was closed.
+func TestPersistArtifacts_RelearnedBeliefIsLinkedToTheRetiredClaim(t *testing.T) {
+	for name, conn := range knownClaimStores(t) {
+		older := knownClaim("cl-older", "The nightly job runs at 02:00")
+		older.Status = domain.ClaimStatusDeprecated
+		older.CreatedAt = knownAt.Add(-48 * time.Hour)
+		newer := knownClaim("cl-newer", "the nightly job runs at 02:00.")
+		newer.CreatedAt = knownAt.Add(-24 * time.Hour)
+		elsewhere := knownClaim("cl-elsewhere", "The nightly job runs at 02:00")
+		elsewhere.Status = domain.ClaimStatusDeprecated
+		elsewhere.Scope = domain.Scope{Env: "prod"}
+		// Separate writes: one batch folds its own repeats onto its first claim.
+		persistOne(t, conn, captureEvent("ev-old", "session-1", "old"), older, elsewhere)
+		persistOne(t, conn, captureEvent("ev-mid", "session-3", "mid"), newer)
+		if err := conn.Claims.SetValidity(context.Background(), newer.ID, knownAt.Add(-time.Hour), domain.ChangeNote{}); err != nil {
+			t.Fatalf("%s: close valid time: %v", name, err)
+		}
+
+		persistOne(t, conn, captureEvent("ev-new", "session-2", "new"), knownClaim("cl-back", "The nightly job runs at 02:00"))
+
+		edges := derivedFromEdges(t, conn, "cl-back")
+		if len(edges) != 1 || edges[0].ToClaimID != "cl-newer" || edges[0].DerivedBy != RelearnDerivedBy {
+			t.Fatalf("%s: derived_from edges of the relearned claim = %+v, want one to cl-newer stamped %s", name, edges, RelearnDerivedBy)
+		}
+
+		// Writing the same batch again is an update of cl-back: no second edge.
+		persistOne(t, conn, captureEvent("ev-new", "session-2", "new"), knownClaim("cl-back", "The nightly job runs at 02:00"))
+		if again := derivedFromEdges(t, conn, "cl-back"); len(again) != 1 {
+			t.Errorf("%s: rewriting the batch left %d derived_from edges, want 1", name, len(again))
+		}
+	}
+}
+
+// A belief a live claim holds is folded, not relearned, and a retired claim in
+// another scope or a merge redirect is not its predecessor: no edge either way.
+func TestPersistArtifacts_OnlyARetiredBeliefIsRelearned(t *testing.T) {
+	for name, conn := range knownClaimStores(t) {
+		live := knownClaim("cl-live", "Releases are tagged on main")
+		dead := knownClaim("cl-dead", "Releases are tagged on main")
+		dead.Status = domain.ClaimStatusDeprecated
+		dead.CreatedAt = knownAt.Add(-time.Hour)
+		winner := knownClaim("cl-winner", "Builds are reproducible")
+		redirect := knownClaim("cl-redirect", "Every build is reproducible")
+		redirect.Status, redirect.MergedInto = domain.ClaimStatusDeprecated, "cl-gone"
+		persistOne(t, conn, captureEvent("ev-old", "session-1", "old"), live, dead, winner, redirect)
+
+		persistOne(t, conn, captureEvent("ev-new", "session-2", "new"),
+			knownClaim("cl-restated", "Releases are tagged on main"),
+			knownClaim("cl-fresh", "Every build is reproducible"))
+
+		if e := derivedFromEdges(t, conn, "cl-live"); len(e) != 0 {
+			t.Errorf("%s: a restatement folded onto a live claim gained derived_from edges %+v", name, e)
+		}
+		if e := derivedFromEdges(t, conn, "cl-fresh"); len(e) != 0 {
+			t.Errorf("%s: a merge redirect was treated as a retired predecessor: %+v", name, e)
+		}
+	}
+}
