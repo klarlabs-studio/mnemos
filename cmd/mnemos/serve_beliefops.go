@@ -20,13 +20,13 @@ import (
 // internal/beliefops for governance and entity edges, the Memory facade for
 // remember_fact and scan.
 
-// --- POST /v1/beliefs/{id}/{deprecate,update,resolve,escalate,verify} -------
+// --- POST /v1/beliefs/{id}/{deprecate,restore,update,resolve,escalate,verify}
 
 // beliefEditRequest is the body of the governance routes. Each route reads
 // the fields it needs; all are optional except where noted.
 type beliefEditRequest struct {
-	// Reason is recorded on the status transition (deprecate, update, resolve)
-	// or carried by the escalation.
+	// Reason is recorded on the status transition (deprecate, restore, update,
+	// resolve) or carried by the escalation.
 	Reason string `json:"reason,omitempty"`
 	// Text is the replacement text (update; required).
 	Text string `json:"text,omitempty"`
@@ -72,6 +72,8 @@ func makeBeliefEditHandler(conn *store.Conn, gw *govwrite.Writer, claimID, op st
 		switch op {
 		case "deprecate":
 			out, err = beliefops.Deprecate(ctx, conn, gw, edit, beliefops.ReasonDeprecate)
+		case "restore":
+			out, err = beliefops.Restore(ctx, conn, gw, edit)
 		case "update":
 			out, err = beliefops.Update(ctx, conn, gw, beliefops.UpdateRequest{Edit: edit, Text: req.Text, Confidence: req.Confidence})
 		case "resolve":

@@ -57,6 +57,14 @@ func (d *DirectWriter) MarkVerified(ctx context.Context, claimID string, verifie
 	return err
 }
 
+// SetValidity mirrors [Writer.SetValidity].
+func (d *DirectWriter) SetValidity(ctx context.Context, claimID string, validTo time.Time, why ClaimReason) error {
+	_, err := runDirect[string](ctx, actionSetValidity, setValidityExecutor(*d), setValidityInput{
+		ClaimID: claimID, ValidTo: validTo, Why: why,
+	})
+	return err
+}
+
 // Feedback mirrors [Writer.Feedback].
 func (d *DirectWriter) Feedback(ctx context.Context, state domain.ClaimFeedback) (string, error) {
 	return runDirect[string](ctx, actionWriteFeedback, feedbackExecutor(*d), feedbackInput{State: state})

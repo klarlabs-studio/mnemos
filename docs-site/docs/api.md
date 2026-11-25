@@ -124,7 +124,7 @@ Designed to be dropped directly into an agent's system prompt. Layout is fixed s
 | `memory_escalate` | request human review the agent can't resolve |
 | `memory_promote` | re-verify a belief against fresh evidence |
 | `memory_context` | render the Context Block for a run |
-| `remember` / `update` / `forget` / `search_memory` | agent self-edit primitives |
+| `remember` / `update` / `forget` / `restore` / `search_memory` | agent self-edit primitives; `restore` undoes `forget` and a closed valid time |
 
 The tool names moved to the brain vocabulary in v0.85.0 alongside the REST
 paths — `list_claims` → `list_beliefs`, `get_claim` → `get_belief`,

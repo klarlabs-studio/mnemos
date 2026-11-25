@@ -181,16 +181,16 @@ var Registry = []Capability{
 	},
 	{
 		ID: "belief.govern", Effect: Write,
-		Summary: "Agent governance edits: deprecate, forget, update text, resolve or escalate a dissonance, promote",
+		Summary: "Agent governance edits: deprecate, forget, restore, update text, resolve or escalate a dissonance, promote",
 		On: map[Transport]Binding{
-			Go: Has("DeprecateClaim", "UpdateClaim", "ResolveContradiction", "EscalateClaim", "VerifyClaim"),
-			REST: Has("POST /v1/beliefs/{id}/deprecate", "POST /v1/beliefs/{id}/update", "POST /v1/beliefs/{id}/resolve",
+			Go: Has("DeprecateClaim", "RestoreClaim", "UpdateClaim", "ResolveContradiction", "EscalateClaim", "VerifyClaim"),
+			REST: Has("POST /v1/beliefs/{id}/deprecate", "POST /v1/beliefs/{id}/restore", "POST /v1/beliefs/{id}/update", "POST /v1/beliefs/{id}/resolve",
 				"POST /v1/beliefs/{id}/escalate", "POST /v1/beliefs/{id}/verify"),
-			GRPC:    Has("DeprecateBelief", "UpdateBelief", "ResolveDissonance", "EscalateBelief", "VerifyBelief"),
-			MCP:     Has("memory_deprecate", "forget", "update", "memory_resolve_dissonance", "memory_escalate", "memory_promote"),
-			MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("DeprecateClaim", "UpdateClaim", "ResolveContradiction", "EscalateClaim", "VerifyClaim"),
+			GRPC:    Has("DeprecateBelief", "RestoreBelief", "UpdateBelief", "ResolveDissonance", "EscalateBelief", "VerifyBelief"),
+			MCP:     Has("memory_deprecate", "forget", "restore", "update", "memory_resolve_dissonance", "memory_escalate", "memory_promote"),
+			MCPLite: No(notLite), HTTPLite: No(notLite), Client: Has("DeprecateClaim", "RestoreClaim", "UpdateClaim", "ResolveContradiction", "EscalateClaim", "VerifyClaim"),
 		},
-		Notes: "Every binding runs internal/beliefops. MCP forget and memory_deprecate are one operation (Deprecate) recording different default reasons, so the other transports expose it once; memory_promote is Verify (last_verified, verify_count, last_confirmed) and takes promote:global on every transport. Escalate returns a verdict and writes nothing.",
+		Notes: "Every binding runs internal/beliefops. MCP forget and memory_deprecate are one operation (Deprecate) recording different default reasons, so the other transports expose it once; restore (Restore) undoes it and a closed valid time (#393), and writes nothing when a newer live belief already holds the text; memory_promote is Verify (last_verified, verify_count, last_confirmed) and takes promote:global on every transport. Escalate returns a verdict and writes nothing.",
 	},
 	{
 		ID: "belief.purge", Effect: Write,

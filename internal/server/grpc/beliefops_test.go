@@ -97,6 +97,16 @@ func TestGRPC_BeliefGovernance(t *testing.T) {
 	if s := readBelief(t, conn, "cl-c").Status; s != domain.ClaimStatusDeprecated {
 		t.Errorf("stored status = %s", s)
 	}
+	if _, err := client.RestoreBelief(ctx, &mnemosv1.RestoreBeliefRequest{BeliefId: "cl-missing"}); status.Code(err) != codes.NotFound {
+		t.Errorf("restore unknown: %v, want NotFound", err)
+	}
+	rs, err := client.RestoreBelief(ctx, &mnemosv1.RestoreBeliefRequest{BeliefId: "cl-c", Reason: "still true"})
+	if err != nil || rs.GetNewStatus() != "active" || rs.GetOldStatus() != "deprecated" {
+		t.Fatalf("RestoreBelief = %v, %v", rs, err)
+	}
+	if s := readBelief(t, conn, "cl-c").Status; s != domain.ClaimStatusActive {
+		t.Errorf("stored status after restore = %s", s)
+	}
 
 	if _, err := client.UpdateBelief(ctx, &mnemosv1.UpdateBeliefRequest{BeliefId: "cl-a"}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("update without text: %v, want InvalidArgument", err)

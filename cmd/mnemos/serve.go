@@ -2614,7 +2614,7 @@ func makeClaimSubresourceHandler(conn *store.Conn, gw *govwrite.Writer, mem mnem
 			makeObservationHandler(gw, claimID)(w, r)
 		case "analogous":
 			makeAnalogousHandler(mem, claimID)(w, r)
-		case "deprecate", "update", "resolve", "escalate", "verify":
+		case "deprecate", "restore", "update", "resolve", "escalate", "verify":
 			makeBeliefEditHandler(conn, gw, claimID, subresource)(w, r)
 		default:
 			writeError(w, http.StatusNotFound, fmt.Sprintf("unknown subresource %q", subresource))

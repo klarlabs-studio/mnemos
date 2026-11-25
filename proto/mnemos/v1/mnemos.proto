@@ -229,6 +229,10 @@ service MnemosService {
   // DeprecateBelief marks a belief deprecated (MCP memory_deprecate / forget,
   // REST POST /v1/beliefs/{id}/deprecate). Requires claims:write.
   rpc DeprecateBelief(DeprecateBeliefRequest) returns (BeliefStatusChange);
+  // RestoreBelief brings a retired belief back: it undoes a deprecation and a
+  // closed valid time (MCP restore, REST POST /v1/beliefs/{id}/restore). A
+  // merged belief is INVALID_ARGUMENT. Requires claims:write.
+  rpc RestoreBelief(RestoreBeliefRequest) returns (BeliefRestoration);
   // UpdateBelief rewrites a belief's text and optionally its confidence
   // (MCP update, REST POST /v1/beliefs/{id}/update). Requires claims:write.
   rpc UpdateBelief(UpdateBeliefRequest) returns (BeliefRevision);
@@ -1376,6 +1380,19 @@ message ScanBeliefsResponse { repeated BeliefDetail beliefs = 1; }
 message DeprecateBeliefRequest {
   string belief_id = 1;
   string reason    = 2;
+}
+message RestoreBeliefRequest {
+  string belief_id = 1;
+  string reason    = 2;
+}
+message BeliefRestoration {
+  string belief_id         = 1;
+  string old_status        = 2;
+  string new_status        = 3;
+  bool   reopened_validity = 4;
+  // held_by names the live belief that already holds this one; when set,
+  // nothing was written.
+  string held_by           = 5;
 }
 message EscalateBeliefRequest {
   string belief_id = 1;

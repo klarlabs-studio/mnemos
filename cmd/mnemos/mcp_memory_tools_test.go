@@ -154,6 +154,29 @@ func TestMCP_Forget_FlipsStatusToDeprecated(t *testing.T) {
 	}
 }
 
+// TestMCP_Restore_UndoesForget pins the agent's way back from forget (#393).
+func TestMCP_Restore_UndoesForget(t *testing.T) {
+	setIsolatedDB(t)
+	ctx := context.Background()
+	remembered, err := mcpRunRemember(ctx, "a", mcpRememberInput{Text: "to-be-restored", RunID: "tenant:A"})
+	if err != nil {
+		t.Fatalf("Remember: %v", err)
+	}
+	if _, err := mcpRunForget(ctx, "a", mcpForgetInput{ClaimID: remembered.ClaimID}); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+	out, err := mcpRunRestore(ctx, "a", mcpRestoreInput{ClaimID: remembered.ClaimID, Reason: "forgot by mistake"})
+	if err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	if out.OldStatus != "deprecated" || out.NewStatus != "active" || out.HeldBy != "" {
+		t.Errorf("unexpected restore: %+v", out)
+	}
+	if _, err := mcpRunRestore(ctx, "a", mcpRestoreInput{ClaimID: "cl-no-such-belief"}); err == nil {
+		t.Error("restore of an unknown belief succeeded")
+	}
+}
+
 // TestMCP_Forget_UnknownClaim errors rather than silently no-op.
 // "Forget a non-existent claim" almost certainly means a bug in the
 // caller, so we surface it.

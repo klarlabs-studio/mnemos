@@ -126,6 +126,20 @@ func TestServe_BeliefGovernanceRoutes(t *testing.T) {
 		t.Errorf("stored status after deprecate = %s", s)
 	}
 
+	// restore undoes the deprecation (#393) and takes the same scope.
+	if got := f.call(t, http.MethodPost, "/v1/beliefs/cl-c/restore", reader, nil, nil); got != http.StatusForbidden {
+		t.Errorf("restore with claims:read = %d, want 403", got)
+	}
+	var restored struct {
+		NewStatus string `json:"new_status"`
+	}
+	if got := f.call(t, http.MethodPost, "/v1/beliefs/cl-c/restore", writer, map[string]string{"reason": "still true"}, &restored); got != http.StatusOK || restored.NewStatus != "active" {
+		t.Fatalf("restore = %d %+v", got, restored)
+	}
+	if s := f.stored(t, "cl-c").Status; s != domain.ClaimStatusActive {
+		t.Errorf("stored status after restore = %s", s)
+	}
+
 	if got := f.call(t, http.MethodPost, "/v1/beliefs/cl-a/update", writer, map[string]any{"text": " "}, nil); got != http.StatusBadRequest {
 		t.Errorf("update with blank text = %d, want 400", got)
 	}

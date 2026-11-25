@@ -40,6 +40,21 @@ func TestClaimGovernance_EditsPersistAndAreGoverned(t *testing.T) {
 		t.Error("DeprecateClaim left no write session")
 	}
 
+	// RestoreClaim undoes it (#393); a second restore changes nothing.
+	rs, err := mem.RestoreClaim(ctx, c, "runbook still applies")
+	if err != nil || rs.OldStatus != "deprecated" || rs.NewStatus != "active" || rs.HeldBy != "" {
+		t.Fatalf("RestoreClaim = %+v, %v", rs, err)
+	}
+	if again, err := mem.RestoreClaim(ctx, c, ""); err != nil || again.OldStatus != "active" || again.NewStatus != "active" {
+		t.Errorf("RestoreClaim of a live claim = %+v, %v; want unchanged", again, err)
+	}
+	if _, err := mem.RestoreClaim(ctx, "cl_missing", ""); !errors.Is(err, mnemos.ErrClaimNotFound) {
+		t.Errorf("RestoreClaim(unknown) = %v, want ErrClaimNotFound", err)
+	}
+	if _, err := mem.DeprecateClaim(ctx, c, "stale runbook"); err != nil {
+		t.Fatalf("DeprecateClaim again: %v", err)
+	}
+
 	rev, err := mem.UpdateClaim(ctx, a, "The cache is warm after 9am.", 0.7, "")
 	if err != nil || rev.OldText != "The cache is warm." {
 		t.Fatalf("UpdateClaim = %+v, %v", rev, err)

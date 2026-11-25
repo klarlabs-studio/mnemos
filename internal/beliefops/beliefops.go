@@ -1,6 +1,6 @@
 // Package beliefops holds the belief operations every transport exposes:
-// governance edits (deprecate, update, resolve a dissonance, escalate,
-// verify), feedback, provenance and history reads, and entity-association
+// governance edits (deprecate, restore, update, resolve a dissonance,
+// escalate, verify), feedback, provenance and history reads, and entity-association
 // browse and append.
 //
 // Each operation is implemented ONCE here. The MCP tools, the REST routes,
@@ -50,6 +50,7 @@ func invalid(format string, args ...any) error {
 type Writer interface {
 	Claims(ctx context.Context, claims []domain.Claim, reason govwrite.ClaimReason) (int, error)
 	MarkVerified(ctx context.Context, claimID string, verifiedAt time.Time, halfLifeDays float64) error
+	SetValidity(ctx context.Context, claimID string, validTo time.Time, why govwrite.ClaimReason) error
 	Feedback(ctx context.Context, state domain.ClaimFeedback) (string, error)
 }
 
@@ -60,6 +61,7 @@ const (
 	ReasonForget    = "agent-forget"
 	ReasonUpdate    = "agent-update"
 	ReasonResolve   = "agent-resolved-contradiction"
+	ReasonRestore   = "agent-restored"
 )
 
 // Require reports ErrInvalid for a blank id and ErrNotFound for an unknown

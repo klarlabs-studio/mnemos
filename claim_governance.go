@@ -43,6 +43,7 @@ var ErrUnsupported = beliefops.ErrUnsupported
 // Library write actions for the governance edits and feedback.
 const (
 	actionDeprecateClaim       = "deprecate_claim"
+	actionRestoreClaim         = "restore_claim"
 	actionUpdateClaim          = "update_claim"
 	actionResolveContradiction = "resolve_contradiction"
 	actionVerifyClaim          = "verify_claim"
@@ -54,6 +55,19 @@ type ClaimStatusChange struct {
 	ClaimID   string
 	OldStatus string
 	NewStatus string
+}
+
+// ClaimRestoration is the receipt of [Memory.RestoreClaim].
+type ClaimRestoration struct {
+	ClaimID   string
+	OldStatus string
+	NewStatus string
+	// ReopenedValidity is true when the claim's valid time had been closed
+	// and was opened again.
+	ReopenedValidity bool
+	// HeldBy names the live claim that already holds the belief; when set,
+	// nothing was written.
+	HeldBy string
 }
 
 // ClaimRevision is the receipt of [Memory.UpdateClaim].
@@ -147,6 +161,8 @@ func governanceActions() []kernel.Action {
 	return []kernel.Action{
 		{Name: actionDeprecateClaim, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Deprecate a claim, recording the reason on the status transition."},
+		{Name: actionRestoreClaim, Effect: axidomain.EffectWriteLocal, Idempotent: true,
+			Description: "Restore a retired claim: undo a deprecation or a closed valid time, recording the reason."},
 		{Name: actionUpdateClaim, Effect: axidomain.EffectWriteLocal, Idempotent: true,
 			Description: "Rewrite a claim's text (and optionally its confidence), recording the reason."},
 		{Name: actionResolveContradiction, Effect: axidomain.EffectWriteLocal, Idempotent: true,
@@ -164,6 +180,10 @@ func governanceExecutors(m *memory) map[string]axidomain.ActionExecutor {
 		kernel.ExecutorRef(actionDeprecateClaim): beliefExecutor[claimEditInput, beliefops.StatusChange]{m: m, action: actionDeprecateClaim,
 			run: func(ctx context.Context, m *memory, in claimEditInput) (beliefops.StatusChange, error) {
 				return beliefops.Deprecate(ctx, m.conn, govwrite.Direct(m.conn), in.Edit, beliefops.ReasonDeprecate)
+			}},
+		kernel.ExecutorRef(actionRestoreClaim): beliefExecutor[claimEditInput, beliefops.Restoration]{m: m, action: actionRestoreClaim,
+			run: func(ctx context.Context, m *memory, in claimEditInput) (beliefops.Restoration, error) {
+				return beliefops.Restore(ctx, m.conn, govwrite.Direct(m.conn), in.Edit)
 			}},
 		kernel.ExecutorRef(actionUpdateClaim): beliefExecutor[updateClaimInput, beliefops.Revision]{m: m, action: actionUpdateClaim,
 			run: func(ctx context.Context, m *memory, in updateClaimInput) (beliefops.Revision, error) {
@@ -223,6 +243,23 @@ func (m *memory) DeprecateClaim(ctx context.Context, claimID, reason string) (Cl
 		return ClaimStatusChange{}, err
 	}
 	return ClaimStatusChange(out), nil
+}
+
+// RestoreClaim implements [Memory.RestoreClaim].
+func (m *memory) RestoreClaim(ctx context.Context, claimID, reason string) (ClaimRestoration, error) {
+	if err := beliefops.Require(ctx, m.conn, claimID); err != nil {
+		return ClaimRestoration{}, fmt.Errorf("mnemos: RestoreClaim: %w", err)
+	}
+	if err := beliefops.RequireRestorable(ctx, m.conn, claimID); err != nil {
+		return ClaimRestoration{}, fmt.Errorf("mnemos: RestoreClaim: %w", err)
+	}
+	out, err := dispatchWrite[beliefops.Restoration](ctx, m, actionRestoreClaim, claimEditInput{
+		Edit: beliefops.Edit{ClaimID: claimID, Reason: reason, Actor: m.actorID},
+	})
+	if err != nil {
+		return ClaimRestoration{}, err
+	}
+	return ClaimRestoration(out), nil
 }
 
 // UpdateClaim implements [Memory.UpdateClaim].

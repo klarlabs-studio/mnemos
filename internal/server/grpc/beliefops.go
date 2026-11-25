@@ -132,6 +132,24 @@ func (s *Server) DeprecateBelief(ctx context.Context, req *mnemosv1.DeprecateBel
 	return &mnemosv1.BeliefStatusChange{BeliefId: ch.ClaimID, OldStatus: ch.OldStatus, NewStatus: ch.NewStatus}, nil
 }
 
+// RestoreBelief brings a retired belief back (beliefops.Restore).
+func (s *Server) RestoreBelief(ctx context.Context, req *mnemosv1.RestoreBeliefRequest) (*mnemosv1.BeliefRestoration, error) {
+	w, err := s.govern(ctx, domain.ScopeClaimsWrite)
+	if err != nil {
+		return nil, err
+	}
+	r, err := beliefops.Restore(ctx, w.Conn(), w, beliefops.Edit{
+		ClaimID: req.GetBeliefId(), Reason: req.GetReason(), Actor: actorFromContext(ctx),
+	})
+	if err != nil {
+		return nil, beliefOpStatus("restore belief", err)
+	}
+	return &mnemosv1.BeliefRestoration{
+		BeliefId: r.ClaimID, OldStatus: r.OldStatus, NewStatus: r.NewStatus,
+		ReopenedValidity: r.ReopenedValidity, HeldBy: r.HeldBy,
+	}, nil
+}
+
 // UpdateBelief rewrites a belief's text (beliefops.Update).
 func (s *Server) UpdateBelief(ctx context.Context, req *mnemosv1.UpdateBeliefRequest) (*mnemosv1.BeliefRevision, error) {
 	w, err := s.govern(ctx, domain.ScopeClaimsWrite)
