@@ -96,6 +96,12 @@ type ClaimRepository interface {
 	// belief lands on the claim that absorbed it (#387). No keys returns none.
 	ListMergedByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error)
 
+	// ListRetiredByTextKeys returns the retired claims — deprecated or with
+	// valid time closed, and not merge redirects — whose domain.ClaimTextKey is
+	// one of keys, in the same order. The write path links a belief it learns
+	// again to the claim that held it before (#393). No keys returns none.
+	ListRetiredByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error)
+
 	// ListMergedInto returns the merge redirects pointing directly at one of
 	// targetIDs — claims whose MergedInto is in targetIDs — oldest first. A
 	// recorded-as-of read walks it backwards from the claim that holds a

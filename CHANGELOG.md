@@ -8,6 +8,16 @@ notable changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- A belief learned again after it was retired is linked to its history (#393). The new
+  claim gets a `derived_from` edge to the retired claim that held the belief last
+  (deprecated, or with valid time closed; a merge redirect is not retired). Every write
+  path goes through `PersistArtifacts`, so ingest, capture, `remember` and the API all
+  link it the same way. The edge is stamped `relearn/v1`, which `relate --prune-stale`
+  leaves alone, and its id comes from its endpoints, so writing the same batch again
+  adds nothing.
+
 ## [0.134.0] — 2026-11-24
 
 Capture stops storing moment-in-time narration, the narration judge reports when it

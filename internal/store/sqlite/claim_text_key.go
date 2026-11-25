@@ -23,6 +23,13 @@ func (r ClaimRepository) ListMergedByTextKeys(ctx context.Context, keys []string
 	return r.listByColumn(ctx, "text_key", keys, `merged_into <> ''`)
 }
 
+// ListRetiredByTextKeys implements ports.ClaimRepository: the claims whose
+// text_key is one of keys that are not live and not merge redirects, oldest
+// first.
+func (r ClaimRepository) ListRetiredByTextKeys(ctx context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByColumn(ctx, "text_key", keys, `NOT (`+liveClaimSQL+`) AND COALESCE(merged_into, '') = ''`)
+}
+
 // ListMergedInto implements ports.ClaimRepository: the redirects whose
 // merged_into is one of targetIDs, oldest first.
 func (r ClaimRepository) ListMergedInto(ctx context.Context, targetIDs []string) ([]domain.Claim, error) {

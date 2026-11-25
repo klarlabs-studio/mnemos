@@ -114,3 +114,45 @@ func TestClaims_ListMergedIntoOnEveryBackend(t *testing.T) {
 		}
 	}
 }
+
+// A belief learned again is linked to the retired claim that held it (#393).
+// Every backend must return, by text key and oldest first, exactly the claims
+// that are retired — deprecated or with valid time closed — and never a live
+// claim or a merge redirect, which forwards rather than retires.
+func TestClaims_ListRetiredByTextKeysOnEveryBackend(t *testing.T) {
+	ctx := context.Background()
+	at := time.Date(2026, 10, 25, 9, 0, 0, 0, time.UTC)
+	const text = "the importer runs every six hours"
+	key := domain.ClaimTextKey(text)
+
+	for _, b := range openBackends(t) {
+		claim := func(id string, status domain.ClaimStatus, created time.Time, mergedInto string) domain.Claim {
+			return domain.Claim{ID: id, Text: text, Type: domain.ClaimTypeFact, Confidence: 0.8,
+				Status: status, CreatedAt: created, MergedInto: mergedInto}
+		}
+		claims := []domain.Claim{
+			claim("c-ret-live", domain.ClaimStatusActive, at.Add(3*time.Hour), ""),
+			claim("c-ret-closed", domain.ClaimStatusActive, at.Add(time.Hour), ""),
+			claim("c-ret-deprecated", domain.ClaimStatusDeprecated, at, ""),
+			claim("c-ret-redirect", domain.ClaimStatusDeprecated, at.Add(2*time.Hour), "c-ret-live"),
+		}
+		if err := b.conn.Claims.Upsert(ctx, claims); err != nil {
+			t.Fatalf("%s: upsert: %v", b.name, err)
+		}
+		if err := b.conn.Claims.SetValidity(ctx, "c-ret-closed", at.Add(90*time.Minute), domain.ChangeNote{}); err != nil {
+			t.Fatalf("%s: close valid time: %v", b.name, err)
+		}
+
+		got, err := b.conn.Claims.ListRetiredByTextKeys(ctx, []string{key, domain.ClaimTextKey("an unrelated belief")})
+		if err != nil {
+			t.Fatalf("%s: ListRetiredByTextKeys: %v", b.name, err)
+		}
+		if ids := claimIDs(got); len(ids) != 2 || ids[0] != "c-ret-deprecated" || ids[1] != "c-ret-closed" {
+			t.Fatalf("%s: ListRetiredByTextKeys = %v, want [c-ret-deprecated c-ret-closed] oldest first", b.name, ids)
+		}
+		none, err := b.conn.Claims.ListRetiredByTextKeys(ctx, nil)
+		if err != nil || len(none) != 0 {
+			t.Fatalf("%s: no keys returned %v (%v)", b.name, claimIDs(none), err)
+		}
+	}
+}

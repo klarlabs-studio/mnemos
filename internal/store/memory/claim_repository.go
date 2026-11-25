@@ -292,6 +292,13 @@ func (r ClaimRepository) ListMergedByTextKeys(_ context.Context, keys []string) 
 	return r.listByTextKeys(keys, func(c domain.Claim) bool { return c.MergedInto != "" }), nil
 }
 
+// ListRetiredByTextKeys implements ports.ClaimRepository: the claims whose
+// text key is one of keys that are neither live nor merge redirects, oldest
+// first.
+func (r ClaimRepository) ListRetiredByTextKeys(_ context.Context, keys []string) ([]domain.Claim, error) {
+	return r.listByTextKeys(keys, func(c domain.Claim) bool { return !isLive(c) && c.MergedInto == "" }), nil
+}
+
 // ListMergedInto implements ports.ClaimRepository: the redirects whose
 // MergedInto is one of targetIDs, oldest first.
 func (r ClaimRepository) ListMergedInto(_ context.Context, targetIDs []string) ([]domain.Claim, error) {
