@@ -8,6 +8,18 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- Restore a retired belief: the undo of `forget`, of deprecate and of a closed valid time
+  (#393). MCP `restore`, REST `POST /v1/beliefs/{id}/restore`, gRPC `RestoreBelief`,
+  `Memory.RestoreClaim` and `client.RestoreClaim` all run `beliefops.Restore`. A
+  deprecated belief returns to the status it held before it was deprecated, and a
+  closed valid time is opened again; both changes are recorded with the reason in the
+  belief's history. A belief that is already live is returned unchanged. If a newer
+  live belief already holds the same text (it was learned again), nothing is written and
+  `held_by` names that belief. A merged belief is refused, because the belief it was
+  merged into holds it. Requires `claims:write`.
+
 ### Fixed
 
 - A belief learned again after it was retired is linked to its history (#393). The new

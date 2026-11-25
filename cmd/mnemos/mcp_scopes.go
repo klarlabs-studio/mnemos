@@ -92,6 +92,7 @@ var mcpToolScopes = map[string]string{
 	"remember_episode":           domain.ScopeClaimsWrite,
 	"update":                     domain.ScopeClaimsWrite,
 	"forget":                     domain.ScopeClaimsWrite,
+	"restore":                    domain.ScopeClaimsWrite,
 	"retract_episode":            domain.ScopeClaimsWrite,
 	"unretract_episode":          domain.ScopeClaimsWrite,
 	"declare_episode_dependency": domain.ScopeClaimsWrite,

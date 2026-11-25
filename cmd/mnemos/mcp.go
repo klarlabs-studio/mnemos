@@ -727,6 +727,13 @@ func handleMCP(args []string) {
 			return mcpRunForget(ctx, mcpActorFor(ctx, mcpActor), input)
 		})
 
+	srv.Tool("restore").
+		Description("Bring back a belief that was forgotten, deprecated, or whose valid time was closed. It returns to the status it held before and its valid time is opened again; the restore is recorded in its history with the reason. A belief that is already live is returned unchanged. If the belief has since been learned again, the newer belief holds it: nothing is written and held_by names it. A merged belief is refused; restore the belief it was merged into instead.").
+		OutputSchema(mcpRestoreOutput{}).
+		Handler(func(ctx context.Context, input mcpRestoreInput) (mcpRestoreOutput, error) {
+			return mcpRunRestore(ctx, mcpActorFor(ctx, mcpActor), input)
+		})
+
 	srv.Tool("retract_episode").
 		Description("Withdraw an episode as evidence when its source was wrong or has been revised. The episode is kept and the retraction is recorded (who, when, why). Beliefs left with no other live evidence are retracted (deprecated, with the reason in their history); beliefs with other evidence are rescored. Returns an impact report: what changed, and what may be affected (associations, decisions that cited a retracted belief), without judging those wrong. Repeating it changes nothing.").
 		OutputSchema(mcpRetractEpisodeOutput{}).
@@ -2224,6 +2231,19 @@ type mcpForgetOutput struct {
 	NewStatus string `json:"new_status"`
 }
 
+type mcpRestoreInput struct {
+	ClaimID string `json:"belief_id" jsonschema:"required,description=ID of the retired belief to restore"`
+	Reason  string `json:"reason,omitempty" jsonschema:"description=Why the belief is being restored (recorded in its history)"`
+}
+
+type mcpRestoreOutput struct {
+	ClaimID          string `json:"belief_id"`
+	OldStatus        string `json:"old_status"`
+	NewStatus        string `json:"new_status"`
+	ReopenedValidity bool   `json:"reopened_validity"`
+	HeldBy           string `json:"held_by,omitempty"`
+}
+
 type mcpUpdateInput struct {
 	ClaimID    string  `json:"belief_id" jsonschema:"required,description=ID of the claim to update"`
 	NewText    string  `json:"new_text" jsonschema:"required,description=Replacement text for the claim"`
@@ -2400,6 +2420,24 @@ func mcpRunForget(ctx context.Context, actor string, input mcpForgetInput) (mcpF
 	}
 	ch, err := mcpRunDeprecate(ctx, actor, input.ClaimID, input.Reason, beliefops.ReasonForget)
 	return mcpForgetOutput(ch), err
+}
+
+func mcpRunRestore(ctx context.Context, actor string, input mcpRestoreInput) (mcpRestoreOutput, error) {
+	// Restore the belief in the brain that HOLDS it (#341), as forget does.
+	ctx, _, err := mcpScopeToClaimBrain(ctx, input.ClaimID)
+	if err != nil {
+		return mcpRestoreOutput{}, err
+	}
+	gw, err := openWriter(ctx)
+	if err != nil {
+		return mcpRestoreOutput{}, err
+	}
+	defer closeWriter(gw)
+	r, err := beliefops.Restore(ctx, gw.Conn(), gw, beliefops.Edit{ClaimID: input.ClaimID, Reason: input.Reason, Actor: actor})
+	if err != nil {
+		return mcpRestoreOutput{}, mcpBeliefOpError(err)
+	}
+	return mcpRestoreOutput(r), nil
 }
 
 func mcpRunUpdate(ctx context.Context, actor string, input mcpUpdateInput) (mcpUpdateOutput, error) {

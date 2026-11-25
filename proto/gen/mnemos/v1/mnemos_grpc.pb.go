@@ -82,6 +82,7 @@ const (
 	MnemosService_RememberFact_FullMethodName              = "/mnemos.v1.MnemosService/RememberFact"
 	MnemosService_ScanBeliefs_FullMethodName               = "/mnemos.v1.MnemosService/ScanBeliefs"
 	MnemosService_DeprecateBelief_FullMethodName           = "/mnemos.v1.MnemosService/DeprecateBelief"
+	MnemosService_RestoreBelief_FullMethodName             = "/mnemos.v1.MnemosService/RestoreBelief"
 	MnemosService_UpdateBelief_FullMethodName              = "/mnemos.v1.MnemosService/UpdateBelief"
 	MnemosService_ResolveDissonance_FullMethodName         = "/mnemos.v1.MnemosService/ResolveDissonance"
 	MnemosService_EscalateBelief_FullMethodName            = "/mnemos.v1.MnemosService/EscalateBelief"
@@ -293,6 +294,10 @@ type MnemosServiceClient interface {
 	// DeprecateBelief marks a belief deprecated (MCP memory_deprecate / forget,
 	// REST POST /v1/beliefs/{id}/deprecate). Requires claims:write.
 	DeprecateBelief(ctx context.Context, in *DeprecateBeliefRequest, opts ...grpc.CallOption) (*BeliefStatusChange, error)
+	// RestoreBelief brings a retired belief back: it undoes a deprecation and a
+	// closed valid time (MCP restore, REST POST /v1/beliefs/{id}/restore). A
+	// merged belief is INVALID_ARGUMENT. Requires claims:write.
+	RestoreBelief(ctx context.Context, in *RestoreBeliefRequest, opts ...grpc.CallOption) (*BeliefRestoration, error)
 	// UpdateBelief rewrites a belief's text and optionally its confidence
 	// (MCP update, REST POST /v1/beliefs/{id}/update). Requires claims:write.
 	UpdateBelief(ctx context.Context, in *UpdateBeliefRequest, opts ...grpc.CallOption) (*BeliefRevision, error)
@@ -958,6 +963,16 @@ func (c *mnemosServiceClient) DeprecateBelief(ctx context.Context, in *Deprecate
 	return out, nil
 }
 
+func (c *mnemosServiceClient) RestoreBelief(ctx context.Context, in *RestoreBeliefRequest, opts ...grpc.CallOption) (*BeliefRestoration, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeliefRestoration)
+	err := c.cc.Invoke(ctx, MnemosService_RestoreBelief_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *mnemosServiceClient) UpdateBelief(ctx context.Context, in *UpdateBeliefRequest, opts ...grpc.CallOption) (*BeliefRevision, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(BeliefRevision)
@@ -1230,6 +1245,10 @@ type MnemosServiceServer interface {
 	// DeprecateBelief marks a belief deprecated (MCP memory_deprecate / forget,
 	// REST POST /v1/beliefs/{id}/deprecate). Requires claims:write.
 	DeprecateBelief(context.Context, *DeprecateBeliefRequest) (*BeliefStatusChange, error)
+	// RestoreBelief brings a retired belief back: it undoes a deprecation and a
+	// closed valid time (MCP restore, REST POST /v1/beliefs/{id}/restore). A
+	// merged belief is INVALID_ARGUMENT. Requires claims:write.
+	RestoreBelief(context.Context, *RestoreBeliefRequest) (*BeliefRestoration, error)
 	// UpdateBelief rewrites a belief's text and optionally its confidence
 	// (MCP update, REST POST /v1/beliefs/{id}/update). Requires claims:write.
 	UpdateBelief(context.Context, *UpdateBeliefRequest) (*BeliefRevision, error)
@@ -1453,6 +1472,9 @@ func (UnimplementedMnemosServiceServer) ScanBeliefs(context.Context, *ScanBelief
 }
 func (UnimplementedMnemosServiceServer) DeprecateBelief(context.Context, *DeprecateBeliefRequest) (*BeliefStatusChange, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeprecateBelief not implemented")
+}
+func (UnimplementedMnemosServiceServer) RestoreBelief(context.Context, *RestoreBeliefRequest) (*BeliefRestoration, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestoreBelief not implemented")
 }
 func (UnimplementedMnemosServiceServer) UpdateBelief(context.Context, *UpdateBeliefRequest) (*BeliefRevision, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateBelief not implemented")
@@ -2630,6 +2652,24 @@ func _MnemosService_DeprecateBelief_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MnemosService_RestoreBelief_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestoreBeliefRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MnemosServiceServer).RestoreBelief(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MnemosService_RestoreBelief_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MnemosServiceServer).RestoreBelief(ctx, req.(*RestoreBeliefRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MnemosService_UpdateBelief_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateBeliefRequest)
 	if err := dec(in); err != nil {
@@ -3014,6 +3054,10 @@ var MnemosService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeprecateBelief",
 			Handler:    _MnemosService_DeprecateBelief_Handler,
+		},
+		{
+			MethodName: "RestoreBelief",
+			Handler:    _MnemosService_RestoreBelief_Handler,
 		},
 		{
 			MethodName: "UpdateBelief",

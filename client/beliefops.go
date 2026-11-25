@@ -88,6 +88,17 @@ type ClaimStatusChange struct {
 	NewStatus string `json:"new_status"`
 }
 
+// ClaimRestoration is the receipt of [Client.RestoreClaim].
+type ClaimRestoration struct {
+	ClaimID          string `json:"belief_id"`
+	OldStatus        string `json:"old_status"`
+	NewStatus        string `json:"new_status"`
+	ReopenedValidity bool   `json:"reopened_validity"`
+	// HeldBy names the live claim that already holds the belief; when set,
+	// nothing was written.
+	HeldBy string `json:"held_by,omitempty"`
+}
+
 // ClaimRevision is the receipt of [Client.UpdateClaim].
 type ClaimRevision struct {
 	ClaimID    string  `json:"belief_id"`
@@ -113,6 +124,17 @@ func (c *Client) editClaim(ctx context.Context, claimID, op string, body, dst an
 func (c *Client) DeprecateClaim(ctx context.Context, claimID, reason string) (*ClaimStatusChange, error) {
 	var out ClaimStatusChange
 	if err := c.editClaim(ctx, claimID, "deprecate", map[string]string{"reason": reason}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RestoreClaim brings a retired claim back: it undoes a deprecation (MCP
+// forget) and a closed valid time, recording reason. A merged claim is a 400.
+// POST /v1/beliefs/{id}/restore; needs claims:write.
+func (c *Client) RestoreClaim(ctx context.Context, claimID, reason string) (*ClaimRestoration, error) {
+	var out ClaimRestoration
+	if err := c.editClaim(ctx, claimID, "restore", map[string]string{"reason": reason}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

@@ -1371,6 +1371,18 @@ type Memory interface {
 	// RPC. Errors wrap [ErrClaimNotFound] or [ErrInvalidArgument].
 	DeprecateClaim(ctx context.Context, claimID, reason string) (ClaimStatusChange, error)
 
+	// RestoreClaim brings a retired claim back: the undo of DeprecateClaim
+	// (and of MCP forget) and of a closed valid time. A deprecated claim
+	// returns to the status it held before; a closed valid time is opened
+	// again; both are recorded with reason. A claim that is already live is
+	// returned unchanged. When another live claim already holds the same
+	// belief (it was learned again), nothing is written and HeldBy names it.
+	// It is the restore MCP tool, REST POST /v1/beliefs/{id}/restore and the
+	// gRPC RestoreBelief RPC. Errors wrap [ErrClaimNotFound], or
+	// [ErrInvalidArgument] for a merged claim, whose belief lives on in the
+	// claim it was merged into.
+	RestoreClaim(ctx context.Context, claimID, reason string) (ClaimRestoration, error)
+
 	// UpdateClaim rewrites a claim's text, and its confidence when confidence
 	// > 0, recording reason on the change. It is the update MCP tool, REST
 	// POST /v1/beliefs/{id}/update and the gRPC UpdateBelief RPC.
