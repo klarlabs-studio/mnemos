@@ -253,6 +253,7 @@ MNEMOS_EMBED_MODEL     # Embedding model name
 MNEMOS_EMBED_BASE_URL  # Embedding endpoint
 MNEMOS_LLM_CACHE_MAX_BYTES  # LLM extraction cache cap (default 1 GiB; 0 disables eviction)
 MNEMOS_CAPTURE_TIMEOUT      # SessionEnd capture budget (Go duration, default 4m). Ceiling, not a reservation; sized for a slow local model. Bounds the whole SessionEnd drain (all chunks share it), not one chunk. `mnemos init` derives the Claude Code hook timeout from it (`captureHookTimeoutFor`, budget + 60s headroom, floor 300s) — re-run init after raising this so the installed timeout widens to match.
+MNEMOS_CAPTURE_DURABILITY   # Session captures classify each stored belief durable/session-local (ADR 0023) so recall's session-local demotion has a verdict to act on; before this only the bulk `classify-durability` pass set it and 88% of a real brain's live beliefs had none. Default on; `off` disables. Fails open (unclassified), budgeted by `judgeBudget` after the narration filter. `cmd/mnemos/capture_durability.go`.
 MNEMOS_CONSOLIDATE_INTERVAL # `mnemos serve` sleep cadence (Go duration, default 20h = sleepInterval; 0 disables). The hosted analogue of the local session-start sleep: a ticker in serve consolidates every tenant, plus one pass ~2m after boot. Per process — set 0 on all but one replica. Flag: `serve --consolidate-interval`; YAML: `serve.consolidate_interval`.
 MNEMOS_DB_MAX_CONNS         # Postgres/MySQL pool MaxOpenConns (default 25)
 MNEMOS_DB_MAX_IDLE_CONNS    # Postgres/MySQL pool MaxIdleConns (default 5)
