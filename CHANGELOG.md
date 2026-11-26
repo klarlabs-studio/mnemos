@@ -10,6 +10,17 @@ notable changes.
 
 ### Added
 
+- Session capture classifies durability (ADR 0023). Each belief a session capture
+  stores is classified durable or session-local with the configured LLM, so recall's
+  existing session-local demotion applies from the moment a belief exists. Until now
+  only `classify-durability` and `prune --session-noise` set the verdict, and 40,851 of
+  46,246 live beliefs (88%) in a real brain had none. On 34 classified beliefs a human
+  had labelled false, `qwen2.5:3b` classified 27 as session-local and never classified a
+  true one that way. A typical 22-belief chunk costs about 20s, taken from the capture
+  budget after the narration filter; any classifier failure stores the belief
+  unclassified, as before. `capture.durability` / `MNEMOS_CAPTURE_DURABILITY` (default
+  on).
+
 - Restore a retired belief: the undo of `forget`, of deprecate and of a closed valid time
   (#393). MCP `restore`, REST `POST /v1/beliefs/{id}/restore`, gRPC `RestoreBelief`,
   `Memory.RestoreClaim` and `client.RestoreClaim` all run `beliefops.Restore`. A

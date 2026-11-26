@@ -63,6 +63,7 @@ file, the code, or any `MNEMOS_*` name the code reads disagree.
 | `MNEMOS_CAPTURE_STRATEGY` | `capture.strategy` | Chooses when the capture hook ingests: auto, incremental, end or off. auto picks incremental for local inference and end for hosted providers; mnemos.example.yaml has the per-provider guidance. |
 | `MNEMOS_CAPTURE_TIMEOUT` | `capture.timeout` | Bounds one session's capture pipeline, as a Go duration. Default 4m. |
 | `MNEMOS_NARRATION_FILTER` | `capture.narration_filter` | Runs the narration judge over the claims capture extracts from a session and drops session narration before it is stored. On by default; off disables it. It fails open: any judge error keeps the claim. |
+| `MNEMOS_CAPTURE_DURABILITY` | `capture.durability` | Classifies each belief capture stores from a session as durable or session-local, so recall can rank session-local beliefs after durable ones. On by default; off disables it. It fails open: any classifier error stores the belief unclassified. |
 | `MNEMOS_FLOATBACK_ON_CAPTURE` | `floatback.on_capture` | Also floats repo learnings to the personal brain at session end. Off by default. |
 | `MNEMOS_PLASTICITY_SENSITIVITY` | `plasticity.sensitivity` | Scales surprise-driven learning-rate gain. Default 1.0; 0 disables neuromodulation only. |
 | `MNEMOS_EPISODIC_EVENTS` | `pipeline.episodic_events` | Types operational events (deploys, releases, merges, incidents) at ingest. Off by default. |

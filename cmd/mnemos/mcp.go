@@ -1550,6 +1550,11 @@ func mcpRunProcessText(ctx context.Context, actor string, input mcpProcessTextIn
 				claims, links, mcpEntities = filterSessionNarration(ctx, judge, claims, links, mcpEntities)
 			}
 		}
+		// After the narration filter, so the classifier only spends budget on
+		// beliefs that will be stored; see capture_durability.go.
+		if input.SessionID != "" && input.UseLLM && captureDurabilityEnabled() {
+			stampSessionDurability(ctx, newCaptureDurabilityClassifier, claims)
+		}
 		_ = progress.Report(2, &total)
 		// Fold beliefs the brain already holds onto their claims before
 		// relating, embedding and tagging, so that work lands on the claim

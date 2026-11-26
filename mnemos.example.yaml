@@ -155,6 +155,12 @@ capture:
   # `mnemos init` after raising it.
   timeout:             # MNEMOS_CAPTURE_TIMEOUT (Go duration, default 4m)
 
+  # Classifies each captured belief as durable or session-local with the
+  # configured LLM, so recall ranks progress reports and status snapshots
+  # after durable knowledge. ~20s for a typical chunk on qwen2.5:3b, bounded
+  # by what the capture budget has left; any failure stores it unclassified.
+  durability:          # MNEMOS_CAPTURE_DURABILITY (on|off, default on)
+
 floatback:
   # When true, a session-end capture inside a repo/workspace also floats
   # important learnings up into the personal central brain (best-effort, the

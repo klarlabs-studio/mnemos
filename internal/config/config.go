@@ -260,6 +260,11 @@ type Config struct {
 		// stored. On by default; off disables it. It fails open: any judge
 		// error keeps the claim.
 		NarrationFilter scalar `yaml:"narration_filter"`
+		// Durability classifies each belief capture stores from a session as
+		// durable or session-local, so recall can rank session-local beliefs
+		// after durable ones. On by default; off disables it. It fails open:
+		// any classifier error stores the belief unclassified.
+		Durability scalar `yaml:"durability"`
 	} `yaml:"capture"`
 
 	// Floatback tunes the local upward flow that promotes important repo/workspace
@@ -403,6 +408,7 @@ func (c *Config) EnvOverrides() map[string]string {
 		{"MNEMOS_CAPTURE_STRATEGY", c.Capture.Strategy},
 		{"MNEMOS_CAPTURE_TIMEOUT", c.Capture.Timeout},
 		{"MNEMOS_NARRATION_FILTER", c.Capture.NarrationFilter},
+		{"MNEMOS_CAPTURE_DURABILITY", c.Capture.Durability},
 
 		{"MNEMOS_FLOATBACK_ON_CAPTURE", c.Floatback.OnCapture},
 
