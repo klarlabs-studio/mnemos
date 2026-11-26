@@ -359,8 +359,8 @@ func TestClaimRepository_IndependenceAwareCorroboration(t *testing.T) {
 	if trust["clA"] != 3 { // 3 distinct sources → full credit
 		t.Errorf("clA (three independent voices) graded count = %v, want 3", trust["clA"])
 	}
-	if trust["clB"] != 2 { // 1 source, 3 events → 1 + floor(0.5*2) = 2
-		t.Errorf("clB (one voice thrice) graded count = %v, want 2 (repeats discounted)", trust["clB"])
+	if trust["clB"] != 1 { // 1 source, 3 events → repeats add nothing (ADR 0048)
+		t.Errorf("clB (one voice thrice) graded count = %v, want 1 (repeats are not corroboration)", trust["clB"])
 	}
 	if trust["clA"] <= trust["clB"] {
 		t.Fatal("three independent voices must corroborate more than one voice repeated")

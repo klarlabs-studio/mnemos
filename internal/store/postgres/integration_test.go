@@ -348,8 +348,9 @@ func TestPostgres_IndependenceAwareCorroboration(t *testing.T) {
 	for _, c := range got {
 		trust[c.ID] = c.TrustScore
 	}
-	if trust["clA"] != 3 || trust["clB"] != 2 {
-		t.Fatalf("graded corroboration wrong: clA=%v (want 3), clB=%v (want 2)", trust["clA"], trust["clB"])
+	// One voice thrice is one source: repeats add nothing (ADR 0048).
+	if trust["clA"] != 3 || trust["clB"] != 1 {
+		t.Fatalf("graded corroboration wrong: clA=%v (want 3), clB=%v (want 1)", trust["clA"], trust["clB"])
 	}
 }
 

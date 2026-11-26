@@ -13,8 +13,11 @@ import (
 // the earlier global-time-constant formula are trust/v1. trust/v3 (ADR 0046)
 // keeps the formula of trust/v2 and changes its evidence-count input: distinct
 // sources are distinct evidence origins (domain.EvidenceOrigin), not distinct
-// ingesting principals. `mnemos recompute-trust --stale` rescores v2 rows.
-const ModelVersion = "trust/v3"
+// ingesting principals. trust/v5 (#443) keeps the formula and grades the
+// evidence count by independent origins only (domain.EvidenceRepeatWeight 0);
+// trust/v4 is skipped because it names the refuted #442 model in the #441
+// records. `mnemos recompute-trust --stale` rescores rows of earlier versions.
+const ModelVersion = "trust/v5"
 
 // At is THE trust of a belief at an instant (ADR 0026). Every subsystem that
 // needs a belief's trust reads the stored value or calls At; nothing computes a
