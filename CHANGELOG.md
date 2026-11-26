@@ -8,6 +8,11 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.136.0] — 2026-11-26
+
+Trust stops counting repetition as corroboration: a belief repeated by one file or one
+session grades as one source. Run `mnemos recompute-trust --stale` after upgrading.
+
 ### Changed
 
 - **Trust: a repeat from one evidence origin no longer raises credibility** (#443, ADR 0048,
