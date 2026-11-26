@@ -623,7 +623,7 @@ uses that value: recall, `--min-trust`, brain health, forgetting and the API.
 ```
 trust     = clamp01(base + credit)
 base      = confidence × corroboration × freshness
-corroboration = 1 + ln(n) × 0.2           # n graded by independence: repeats from one source count half
+corroboration = 1 + ln(n) × 0.2           # n = independent evidence origins; a repeat from one origin adds nothing
 freshness = max(0.3, exp(-d / τ))         # τ = the belief's own time constant, default 90 days
 d         = days since max(newest evidence, last explicit confirmation)
 credit    = outcome credit (ADR 0014), capped at ±0.30

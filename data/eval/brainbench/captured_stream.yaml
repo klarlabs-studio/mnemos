@@ -1,0 +1,94 @@
+# Does a stream that captured a falsehood out-trust the truth?
+#
+# Hypothesis (#443): corroboration counts independent evidence only. A repeat
+# from an evidence origin already counted adds provenance but no credibility;
+# reliability is learned from consequences (outcome credit, ADR 0014).
+#
+# The adversarial shape is the one agent capture produces:
+#   - Source A, a stale notes file, asserts a false belief about webhook
+#     retries and restates it in four of its chunks. One file is one source
+#     (ADR 0046), however many chunks repeat it.
+#   - Session B is a later conversation that says the false belief three
+#     times. It is a second origin; its restatements are repeats of it.
+#   - Session C states the true belief once. An agent then acted on it, and the
+#     outcome bore it out (a decision, an expectation, a matching observation).
+#
+# Pass condition: the credibility track's gold pair holds, the true belief's
+# stored trust strictly above the false belief's. With same-origin repeats at
+# half weight, the false belief's five episodes from two origins graded n = 3
+# and out-trusted the true belief's single episode plus credit. With repeats
+# at zero weight they grade n = 2. Whether session B was itself seeded by
+# recall is not modelled here: that half of #443 is not shipped. The process
+# track is a plain consolidation pass and is reported as usual; it is not what
+# this scenario is about.
+id: captured_stream
+description: A falsehood repeated by one file and restated by a second session, against a truth corroborated once by an outcome.
+
+corpus:
+  - id: a1
+    path: notes/webhooks.md
+    age_days: 30
+    text: |
+      Failed webhooks are retried ten times before the delivery is dropped.
+      The webhook worker reads its queue from Redis streams.
+  - id: a2
+    path: notes/webhooks.md
+    age_days: 30
+    text: |
+      Failed webhooks are retried ten times before the delivery is dropped.
+      Each webhook payload is signed with an HMAC header.
+  - id: a3
+    path: notes/webhooks.md
+    age_days: 30
+    text: |
+      Failed webhooks are retried ten times before the delivery is dropped.
+      Webhook endpoints must answer within five seconds.
+  - id: a4
+    path: notes/webhooks.md
+    age_days: 30
+    text: |
+      Failed webhooks are retried ten times before the delivery is dropped.
+      Customers register webhook endpoints in the developer console.
+  - id: b1
+    session: sess-b
+    age_days: 5
+    text: |
+      Failed webhooks are retried ten times before the delivery is dropped.
+  - id: b2
+    session: sess-b
+    age_days: 5
+    text: |
+      Failed webhooks are retried ten times before the delivery is dropped.
+  - id: b3
+    session: sess-b
+    age_days: 5
+    text: |
+      Failed webhooks are retried ten times before the delivery is dropped.
+  - id: c1
+    session: sess-c
+    age_days: 3
+    text: |
+      The webhook dead letter queue receives deliveries after three failed attempts.
+
+probes:
+  - id: p-dlq
+    query: when do webhook deliveries go to the dead letter queue
+    expect: three failed attempts
+  - id: p-queue
+    query: where does the webhook worker read its queue from
+    expect: Redis streams
+  - id: p-signing
+    query: how are webhook payloads signed
+    expect: HMAC
+
+credibility:
+  outcomes:
+    - belief: three failed attempts
+      note: an agent relied on it to size the alert threshold, and the observed failure count matched
+  order:
+    - higher: three failed attempts
+      lower: retried ten times
+      note: corroborated once by an independent outcome vs repeated by one file and restated by a second session
+
+process:
+  dedupe_threshold: 0.92

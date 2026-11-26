@@ -9,6 +9,7 @@
   inputs (SQLite and libSQL through `ListClaimTrustInputs*`, Postgres, MySQL,
   memory) and `recorded.TrustInputAt`.
 - **Closes:** #390
+- **Amended by:** ADR 0048 (the repeat weight is now 0; `trust/v5`)
 
 ## Context
 

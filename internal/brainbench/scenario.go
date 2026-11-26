@@ -73,6 +73,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"go.klarlabs.de/mnemos/internal/domain"
 )
 
 // Scenario is one controlled experiment: a corpus to seed both arms from, the
@@ -134,6 +136,11 @@ type Scenario struct {
 	// changes, once per prediction loop, scored on how fast the changed
 	// beliefs are corrected and whether the stable ones survive.
 	ShiftingWorld *ShiftingWorld `yaml:"shifting_world"`
+
+	// Credibility, when set, adds the credibility-order track
+	// (credibility.go): validated outcomes are recorded and credited, and the
+	// stored trust of declared belief pairs is judged against the gold order.
+	Credibility *Credibility `yaml:"credibility"`
 }
 
 // Doc is one ingested document.
@@ -148,7 +155,34 @@ type Doc struct {
 	// behaviour offline and deterministically.
 	AgeDays int `yaml:"age_days"`
 
+	// Session, when set, is the agent session the document was said in: its
+	// episode carries it as metadata session_id, exactly as capture stamps a
+	// captured chunk, so its evidence origin (ADR 0046) is the session. Many
+	// documents of one session are one source restating itself.
+	Session string `yaml:"session"`
+
+	// Path, when set, is the file the document is a chunk of: its episode
+	// carries it as metadata input_source_path, as file ingestion records it,
+	// so its evidence origin is the file and outranks Session. Many chunks of
+	// one file are one source.
+	Path string `yaml:"path"`
+
 	Text string `yaml:"text"`
+}
+
+// metadata is the episode metadata the document's fields imply.
+func (d Doc) metadata() map[string]string {
+	if d.Session == "" && d.Path == "" {
+		return nil
+	}
+	meta := map[string]string{}
+	if d.Session != "" {
+		meta[domain.OriginSessionKey] = d.Session
+	}
+	if d.Path != "" {
+		meta[domain.OriginPathKey] = d.Path
+	}
+	return meta
 }
 
 // Probe is one retrieval question plus what a correct answer looks like.
@@ -397,6 +431,9 @@ func (s Scenario) Validate() error {
 		return err
 	}
 	if err := s.validateShifting(); err != nil {
+		return err
+	}
+	if err := s.validateCredibility(); err != nil {
 		return err
 	}
 	if s.Process.DedupeThreshold < 0 || s.Process.DedupeThreshold > 1 {

@@ -4,18 +4,26 @@ import "strings"
 
 // EvidenceRepeatWeight is how much a REPEATED piece of evidence from an
 // already-seen source counts toward corroboration, relative to a fresh
-// independent source (which counts 1.0). 0.5 = "a second voice saying the same
-// thing corroborates more than the same voice saying it twice, but the repeat
-// isn't worthless." This is the echo-chamber guard.
-const EvidenceRepeatWeight = 0.5
+// independent source (which counts 1.0).
+//
+// It is 0 (#443; it was 0.5 through trust/v3). A repeat from an origin already
+// counted adds provenance, its episode stored and listed like any other, and
+// leaves credibility unchanged. Repetition makes a statement feel true whether
+// or not it is (the illusory-truth effect: Hasher, Goldstein & Toppino 1977;
+// Fazio et al. 2015), and Mnemos's main writers are capture hooks that
+// re-capture the same narration and the same assumptions across sessions, the
+// setting in which repetition and truth come apart. On 141 human-labelled
+// claims the change was non-inferior in calibration, not shown better
+// (issue #441); consequences, through outcome credit, are what raise
+// credibility.
+const EvidenceRepeatWeight = 0.0
 
 // EffectiveEvidenceCount grades a claim's evidence for corroboration by
 // INDEPENDENCE, not raw volume: each distinct source (an evidence episode's
 // origin, see [EvidenceOrigin]) counts fully, and same-source repeats count at
-// [EvidenceRepeatWeight]. So five episodes from one document corroborate far
-// less than five episodes from five documents, preventing a single source from
-// manufacturing consensus. The result is floored (conservative) and never below
-// the distinct-source count. Storage backends pass it as the evidenceCount to
+// [EvidenceRepeatWeight], which is 0. So five episodes from one document
+// corroborate exactly as much as one, and no single source can manufacture
+// consensus. The result is never below the distinct-source count. Storage backends pass it as the evidenceCount to
 // the trust scorer; the trust formula is unchanged.
 //
 // It lives in domain (not trust) so every storage backend can call it without

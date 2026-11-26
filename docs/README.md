@@ -76,6 +76,7 @@ Four kinds of document live here, kept apart so each is trusted for what it is.
 - [ADR 0044: Scope-aware numeric contradictions](adr/0044-scope-aware-numeric-contradictions.md)
 - [ADR 0045: A clock seam for reproducible experiments](adr/0045-clock-seam-for-reproducible-experiments.md)
 - [ADR 0046: Evidence independence is keyed on origin](adr/0046-evidence-independence-is-keyed-on-origin.md)
+- [ADR 0048: Corroboration counts independent evidence only](adr/0048-corroboration-counts-independent-evidence-only.md)
 - [ADR 0049: Expectations tied to decisions, and surprise-triggered revision](adr/0049-expectations-tied-to-decisions-and-surprise-triggered-revision.md)
 - [ADR 0050: Gated task-state working memory (experiment)](adr/0050-gated-task-state-working-memory.md)
 

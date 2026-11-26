@@ -8,6 +8,20 @@ notable changes.
 
 ## [Unreleased]
 
+### Changed
+
+- **Trust: a repeat from one evidence origin no longer raises credibility** (#443, ADR 0048,
+  `trust/v5`). `domain.EvidenceRepeatWeight` goes from 0.5 to 0, so corroboration counts
+  independent origins only: five chunks of one file, or one session restating a belief, grade
+  as one source. The episodes are still stored and listed as provenance; outcome credit stays
+  the way consequences raise credibility. Measured on 141 human-labelled claims (issue #441,
+  pre-registered): ECE 0.276 → 0.245, Δ −0.031, 95% CI [−0.093, +0.020]. That is
+  non-inferior, not shown better, and the golden subset alone got worse (0.180 → 0.232).
+  Recompute stored scores with `mnemos recompute-trust --stale`. Previous behaviour: a repeat
+  counted half a source, so a falsehood re-captured across sessions out-trusted a truth
+  stated once and borne out by an outcome (brainbench `captured_stream`, 0.923 vs 0.874; now
+  0.862 vs 0.874).
+
 ## [0.135.0] — 2026-11-26
 
 Session capture classifies each belief as durable or session-local so recall ranks

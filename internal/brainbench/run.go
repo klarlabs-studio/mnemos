@@ -151,6 +151,10 @@ type ScenarioResult struct {
 	// declares one (shifting.go).
 	ShiftingWorld *ShiftingResult `json:"shifting_world,omitempty"`
 
+	// Credibility is the credibility-order track, for a scenario that
+	// declares one (credibility.go).
+	Credibility *CredibilityResult `json:"credibility,omitempty"`
+
 	DurationMS int64 `json:"duration_ms"`
 }
 
@@ -301,6 +305,12 @@ func runScenario(ctx context.Context, sc Scenario, workDir string, retract retra
 	}
 	if sc.ShiftingWorld != nil {
 		res.ShiftingWorld, err = runShiftingTrack(ctx, sc, dir, seedPath, sim)
+		if err != nil {
+			return res, err
+		}
+	}
+	if sc.Credibility != nil {
+		res.Credibility, err = runCredibilityTrack(ctx, sc, dir, seedPath)
 		if err != nil {
 			return res, err
 		}

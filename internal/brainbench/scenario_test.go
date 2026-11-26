@@ -72,6 +72,16 @@ func TestScenario_Validate(t *testing.T) {
 		{"negative age", func(s *Scenario) { s.Corpus[0].AgeDays = -1 }, "age_days"},
 		{"out of range forget", func(s *Scenario) { s.Process.ForgetBelowTrust = 1.5 }, "forget_below_trust"},
 		{"out of range dedupe", func(s *Scenario) { s.Process.DedupeThreshold = -0.1 }, "dedupe_threshold"},
+		{"credibility without pairs", func(s *Scenario) { s.Credibility = &Credibility{} }, "order pair"},
+		{"credibility pair naming one belief twice", func(s *Scenario) {
+			s.Credibility = &Credibility{Order: []CredibilityOrder{{Higher: "text", Lower: " TEXT "}}}
+		}, "same belief"},
+		{"credibility outcome without a belief", func(s *Scenario) {
+			s.Credibility = &Credibility{
+				Outcomes: []CredibilityOutcome{{}},
+				Order:    []CredibilityOrder{{Higher: "a", Lower: "b"}},
+			}
+		}, "belief is required"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
