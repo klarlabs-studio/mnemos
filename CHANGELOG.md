@@ -8,6 +8,12 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.135.0] — 2026-11-26
+
+Session capture classifies each belief as durable or session-local so recall ranks
+progress reports after lasting knowledge, a retired belief can be restored on every
+transport, and a belief learned again is linked to the one it replaced.
+
 ### Added
 
 - Session capture classifies durability (ADR 0023). Each belief a session capture
