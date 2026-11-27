@@ -452,7 +452,7 @@ CREATE TABLE IF NOT EXISTS embeddings (
 	PRIMARY KEY (entity_id, entity_type)
 );
 
-CREATE INDEX IF NOT EXISTS idx_embeddings_entity_type ON embeddings(entity_type);
+CREATE INDEX IF NOT EXISTS idx_embeddings_type_created ON embeddings(entity_type, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
 	id TEXT PRIMARY KEY,
@@ -1177,6 +1177,13 @@ CREATE INDEX IF NOT EXISTS idx_claims_text_key ON claims(text_key);
 -- ADR 0036 step 2: a recorded-as-of read walks merge redirects backwards
 -- (ListMergedInto); unindexed every walk would scan the brain.
 CREATE INDEX IF NOT EXISTS idx_claims_merged_into ON claims(merged_into);
+-- ListEmbeddingsByEntityType filters on entity_type and orders by created_at,
+-- and recall runs it on every query. Indexed on entity_type alone, SQLite
+-- sorted every matching row, vector blobs included, in temporary files: on a
+-- brain with 156k vectors (456 MB) that was a large share of each recall.
+-- Supersedes idx_embeddings_entity_type, its prefix.
+DROP INDEX IF EXISTS idx_embeddings_entity_type;
+CREATE INDEX IF NOT EXISTS idx_embeddings_type_created ON embeddings(entity_type, created_at);
 `
 
 // ensurePostMigrateIndexes creates any missing post-migrate index. migrate

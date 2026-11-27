@@ -370,7 +370,7 @@ CREATE TABLE IF NOT EXISTS embeddings (
   PRIMARY KEY (entity_id, entity_type)
 );
 
-CREATE INDEX IF NOT EXISTS idx_embeddings_entity_type ON embeddings(entity_type);
+CREATE INDEX IF NOT EXISTS idx_embeddings_type_created ON embeddings(entity_type, created_at);
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,

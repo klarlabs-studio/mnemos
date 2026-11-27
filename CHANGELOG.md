@@ -8,6 +8,18 @@ notable changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Recall on a large SQLite brain took tens of seconds, so the recall hook timed out and
+  injected nothing.** Two costs grew with the brain on every query: belief similarity hits
+  were ranked with an insertion sort (quadratic; about 10 s of CPU at 68k beliefs), and the
+  embeddings read ordered by `created_at` without an index, so SQLite sorted every vector blob
+  in temporary files. Hits now use one stable sort shared by every backend
+  (`ports.SortClaimHitsDesc`), and SQLite indexes embeddings on `(entity_type, created_at)`,
+  replacing `idx_embeddings_entity_type`; existing brains get it on their next open. On a copy
+  of a 156k-vector brain one recall went from 43–60 s to 1.5–2.2 s under heavy load, with the
+  same beliefs in the same order.
+
 ## [0.137.0] — 2026-11-27
 
 The recall hook starts recording which beliefs it showed each session. Trust is unchanged;

@@ -71,7 +71,7 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 			Model:      row.Model,
 		})
 	}
-	sortHitsDesc(hits)
+	ports.SortClaimHitsDesc(hits)
 	if topK > 0 && len(hits) > topK {
 		hits = hits[:topK]
 	}
@@ -205,14 +205,6 @@ func (r EmbeddingRepository) ListAll(ctx context.Context) ([]domain.EmbeddingRec
 		return nil, fmt.Errorf("iterate embedding rows: %w", err)
 	}
 	return out, nil
-}
-
-func sortHitsDesc(hits []ports.ClaimSimilarityHit) {
-	for i := 1; i < len(hits); i++ {
-		for j := i; j > 0 && hits[j].Similarity > hits[j-1].Similarity; j-- {
-			hits[j-1], hits[j] = hits[j], hits[j-1]
-		}
-	}
 }
 
 func mapSQLEmbedding(row sqlcgen.Embedding) (domain.EmbeddingRecord, error) {
