@@ -8,6 +8,12 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.137.0] — 2026-11-27
+
+The recall hook starts recording which beliefs it showed each session. Trust is unchanged;
+the record is what lets the recall-seeded rule (#443) be measured later. SQLite brains
+migrate to schema v41 on first open.
+
 ### Added
 
 - **The recall hook records what it showed each session** (#443). After emitting its
