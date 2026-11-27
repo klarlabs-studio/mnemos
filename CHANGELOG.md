@@ -8,6 +8,11 @@ notable changes.
 
 ## [Unreleased]
 
+## [0.138.0] — 2026-11-27
+
+Recall on a large SQLite brain drops from tens of seconds to about two, so the recall hook
+fits its budget again. Existing brains build one new index on first open.
+
 ### Fixed
 
 - **Recall on a large SQLite brain took tens of seconds, so the recall hook timed out and
