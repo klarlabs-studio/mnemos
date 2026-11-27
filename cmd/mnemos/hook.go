@@ -296,8 +296,8 @@ func hookRecall(ev hookEvent) {
 	claims, contra := mergeRecall(repoClaims, repoContra, globalClaims, globalContra, query.PrecedenceOrDefault())
 	emitContext("UserPromptSubmit", renderRecall(claims, contra))
 
-	// Record what this session was just shown (ADR 0048), so a later capture
-	// of the session saying it back is not counted as independent evidence.
+	// Record what this session was just shown (#443), so a later capture of the
+	// session saying it back can be told apart from independent evidence.
 	// Detached, after the context is emitted: the prompt never waits on it.
 	spawnRecallExposures(ev, claims, time.Now())
 

@@ -400,10 +400,10 @@ CREATE TABLE IF NOT EXISTS event_dependency_history (
 
 -- recall_exposures (ADR 0048): recall showed belief claim_id to agent session
 -- session_id at exposed_at. An evidence episode of that session for that
--- belief, timestamped at or after the exposure, is recall-seeded and adds no
--- distinct source to the trust aggregate. One row per (session, belief); the
+-- belief, timestamped at or after the exposure, is recall-seeded
+-- (domain.RecallSeeded); nothing reads the rows into trust yet. One row per (session, belief); the
 -- first exposure is kept. session_id compares byte-for-byte (utf8mb4_bin), as
--- the trust aggregate compares it with the episode's session. No foreign keys.
+-- the episode's session id does. No foreign keys.
 CREATE TABLE IF NOT EXISTS recall_exposures (
   session_id VARCHAR(190) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   claim_id   VARCHAR(190) NOT NULL,

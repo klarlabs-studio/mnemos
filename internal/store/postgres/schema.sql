@@ -380,8 +380,8 @@ CREATE INDEX IF NOT EXISTS idx_event_dependency_history_depends_on ON event_depe
 
 -- recall_exposures (ADR 0048): recall showed belief claim_id to agent session
 -- session_id at exposed_at. An evidence episode of that session for that
--- belief, timestamped at or after the exposure, is recall-seeded and adds no
--- distinct source to the trust aggregate. One row per (session, belief); the
+-- belief, timestamped at or after the exposure, is recall-seeded
+-- (domain.RecallSeeded); nothing reads the rows into trust yet. One row per (session, belief); the
 -- first exposure is kept. No foreign keys. In the RLS scoped array below.
 CREATE TABLE IF NOT EXISTS recall_exposures (
   session_id text        NOT NULL,

@@ -44,6 +44,11 @@ reporting independently. Excluding such episodes needs a record of what recall
 showed each session. No existing brain has that record, so the rule could not
 be measured, and it does not ship on this measurement.
 
+The record now exists: from SQLite schema v41 the recall hook writes one
+`recall_exposures` row per (session, belief) it showed, and
+`domain.RecallSeeded` defines which episodes it seeded. Nothing reads the rows
+into trust; that waits until enough exposures accumulate to measure the rule.
+
 ## Measurement (pre-registered on #441)
 
 The test used 141 human-labelled claims (golden and heldout2), with v3 `At` at

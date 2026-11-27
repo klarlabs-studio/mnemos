@@ -25,8 +25,8 @@ func (r ClaimRepository) RecordRecallExposures(ctx context.Context, exposures []
 	}
 	defer rollbackTx(tx)
 	for _, x := range exposures {
-		// RFC3339Nano like events.timestamp; the trust aggregate compares the
-		// two through julianday(), never as text (fractional digits vary).
+		// RFC3339Nano like events.timestamp. Compare the two through
+		// julianday(), never as text (fractional digits vary).
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO recall_exposures (session_id, claim_id, exposed_at) VALUES (?, ?, ?)`,
 			x.SessionID, x.ClaimID, x.ExposedAt.UTC().Format(time.RFC3339Nano),

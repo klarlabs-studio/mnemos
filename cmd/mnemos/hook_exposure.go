@@ -10,11 +10,13 @@ import (
 	"go.klarlabs.de/mnemos/internal/domain"
 )
 
-// Recall exposures (ADR 0048).
+// Recall exposures (#443, ADR 0048 "Deferred").
 //
 // The recall hook injects beliefs into a session's context. When that session
-// later says one of them back, its captured episode is the brain's own belief
-// returning, not an independent report, and must not count as corroboration.
+// later says one of them back, its captured episode may be the brain's own
+// belief returning rather than an independent report. Whether such episodes
+// should stop counting as corroboration is not decided: it has to be measured,
+// and no brain had the record the measurement needs.
 // Nothing stored linked a recall to a session — reconsolidation bumps
 // last_verified, which says that a belief was recalled, never by whom — so the
 // hook records it: one row per (session, belief) it showed.
@@ -62,8 +64,7 @@ func shownExposures(claims []recallClaim) map[string][]string {
 
 // spawnRecallExposures hands the shown beliefs to a detached worker. It is a
 // no-op without a session id (nothing to key the exposure on) and on a hosted
-// brain (the REST search API has no session field; ADR 0048 lists it as not
-// addressed).
+// brain (the REST search API has no session field).
 func spawnRecallExposures(ev hookEvent, claims []recallClaim, at time.Time) {
 	if strings.TrimSpace(ev.SessionID) == "" || hostedConfigured() {
 		return

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"go.klarlabs.de/mnemos/internal/domain"
 	"go.klarlabs.de/mnemos/internal/ports"
 )
 
@@ -30,43 +31,65 @@ func TestShownExposures_AreTheRenderedBeliefsByTier(t *testing.T) {
 	}
 }
 
-// End to end through the hook worker and the capture write path (ADR 0048):
-// a session the recall hook showed a belief, which then says it back, adds an
-// evidence episode (provenance) but no independent source, so the belief's
-// trust does not move. A session that was never shown it is a second source.
-func TestE2E_ASessionRecallSeededDoesNotCorroborate(t *testing.T) {
+// End to end through the hook worker (#443): the exposures the recall hook
+// hands its worker land in the brain, the first exposure of a (session,
+// belief) is the one kept, and the session that then says the belief back is
+// classified as recall-seeded while a session never shown it is not. Nothing
+// reads the rows into trust yet; this pins the record the measurement needs.
+func TestE2E_RecallHookWorkerRecordsExposures(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("MNEMOS_DB_URL", "sqlite://"+filepath.Join(t.TempDir(), "exposure.db"))
 	text := "The retry budget for the outbox drain is three attempts."
 	if _, err := mcpRunProcessText(ctx, captureActor, mcpProcessTextInput{Text: text, SessionID: "sess-origin"}); err != nil {
 		t.Fatal(err)
 	}
-	claimID, inputs := onlyClaimInputs(t)
-	before := inputs.EvidenceCount
+	claimID := onlyClaimID(t)
 
+	first := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 	recordRecallExposures(ctx, recallExposurePayload{
-		SessionID: "sess-recalled", ShownAt: time.Now().UTC().Add(-time.Second),
+		SessionID: "sess-recalled", ShownAt: first,
 		Shown: map[string][]string{"global": {claimID}},
 	})
-	if _, err := mcpRunProcessText(ctx, captureActor, mcpProcessTextInput{Text: text, SessionID: "sess-recalled"}); err != nil {
-		t.Fatal(err)
-	}
-	if got := countBrain(t); got.claims != 1 || got.evidence != 2 {
-		t.Fatalf("brain = %+v, want one belief with both episodes kept as provenance", got)
-	}
-	if _, in := onlyClaimInputs(t); in.EvidenceCount != before {
-		t.Errorf("a recall-seeded restatement moved the evidence count %d -> %d", before, in.EvidenceCount)
+	recordRecallExposures(ctx, recallExposurePayload{
+		SessionID: "sess-recalled", ShownAt: first.Add(30 * time.Second),
+		Shown: map[string][]string{"global": {claimID}},
+	})
+	for _, s := range []string{"sess-recalled", "sess-independent"} {
+		if _, err := mcpRunProcessText(ctx, captureActor, mcpProcessTextInput{Text: text, SessionID: s}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	if _, err := mcpRunProcessText(ctx, captureActor, mcpProcessTextInput{Text: text, SessionID: "sess-independent"}); err != nil {
+	conn, err := openConn(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, in := onlyClaimInputs(t); in.EvidenceCount != before+1 {
-		t.Errorf("an independent session left the evidence count at %d, want %d", in.EvidenceCount, before+1)
+	defer func() { _ = conn.Close() }()
+	exposures, err := conn.Claims.(ports.RecallExposureRepository).ListRecallExposures(ctx, []string{claimID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exposures) != 1 || exposures[0].SessionID != "sess-recalled" || !exposures[0].ExposedAt.Equal(first) {
+		t.Fatalf("exposures = %+v, want the first exposure of sess-recalled only", exposures)
+	}
+
+	events, err := conn.Events.ListAll(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seeded := map[string]bool{}
+	for _, ev := range events {
+		if s := domain.EvidenceSession(ev); s != "" {
+			seeded[s] = domain.RecallSeeded(ev, claimID, exposures)
+		}
+	}
+	want := map[string]bool{"sess-origin": false, "sess-recalled": true, "sess-independent": false}
+	if !reflect.DeepEqual(seeded, want) {
+		t.Errorf("recall-seeded by session = %v, want %v", seeded, want)
 	}
 }
 
-func onlyClaimInputs(t *testing.T) (string, struct{ EvidenceCount int }) {
+func onlyClaimID(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 	conn, err := openConn(ctx)
@@ -78,9 +101,5 @@ func onlyClaimInputs(t *testing.T) (string, struct{ EvidenceCount int }) {
 	if err != nil || len(claims) != 1 {
 		t.Fatalf("claims = %d (%v), want exactly one", len(claims), err)
 	}
-	inputs, err := conn.Claims.(ports.TrustInputLister).ListTrustInputs(ctx, []string{claims[0].ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return claims[0].ID, struct{ EvidenceCount int }{inputs[claims[0].ID].EvidenceCount}
+	return claims[0].ID
 }

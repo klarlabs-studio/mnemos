@@ -8,12 +8,13 @@ import (
 )
 
 // RecallExposure records that recall showed a belief to an agent session: the
-// recall hook injected ClaimID into SessionID's context at ExposedAt (ADR 0048).
+// recall hook injected ClaimID into SessionID's context at ExposedAt (#443).
 //
 // It exists for one reason. A session that was shown a belief and then says it
-// again is repeating what the brain told it, not reporting from an independent
-// source, so an evidence episode of that session is recall-seeded and adds no
-// corroboration (see [RecallSeeded]). Nothing else links a recall to a
+// again may be repeating what the brain told it, not reporting from an
+// independent source; such an evidence episode is recall-seeded (see
+// [RecallSeeded]). Whether it should stop counting as corroboration is not yet
+// decided (ADR 0048 "Deferred"). Nothing else links a recall to a
 // session: reconsolidation bumps a belief's last_verified, which says that
 // something recalled it, never who.
 //
@@ -56,18 +57,13 @@ func EvidenceSession(ev Event) string {
 }
 
 // RecallSeeded reports whether ev, an evidence episode of claimID, was seeded
-// by recall (ADR 0048): its origin is a session, and that session was shown
-// claimID at or before the episode's timestamp. Such an episode is provenance,
-// not corroboration: it is stored, listed and counted toward the total, and it
-// adds no distinct source.
+// by recall: its origin is a session, and that session was shown claimID at
+// or before the episode's timestamp. It is the definition the #443
+// measurement uses; no trust path calls it yet.
 //
 // The match is exact on (session, belief) and never by similarity (ADR 0038):
 // the session must have been shown THIS belief, and the episode must support
 // THIS belief. exposures may hold other sessions' and other beliefs' rows.
-//
-// The SQL backends restate this rule as a NOT EXISTS over recall_exposures and
-// must agree with it; internal/store/trust_origin_parity_test.go checks that on
-// every backend.
 func RecallSeeded(ev Event, claimID string, exposures []RecallExposure) bool {
 	session := EvidenceSession(ev)
 	if session == "" {

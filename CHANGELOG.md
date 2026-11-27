@@ -8,6 +8,16 @@ notable changes.
 
 ## [Unreleased]
 
+### Added
+
+- **The recall hook records what it showed each session** (#443). After emitting its
+  context, the `UserPromptSubmit` hook hands the beliefs it rendered to a detached worker,
+  which writes one `recall_exposures` row per (session, belief) through a new governed write
+  (`write_recall_exposures`), keeping the first exposure. The table exists on every backend
+  (SQLite schema v41, Postgres with RLS, MySQL, memory). Nothing reads it into trust yet: it
+  is the record needed to measure whether a session repeating a belief recall just showed it
+  should stop counting as corroboration. Skipped without a session id and on hosted brains.
+
 ## [0.136.0] — 2026-11-26
 
 Trust stops counting repetition as corroboration: a belief repeated by one file or one

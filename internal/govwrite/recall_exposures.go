@@ -11,11 +11,11 @@ import (
 	"go.klarlabs.de/mnemos/internal/store"
 )
 
-// Recall exposures (ADR 0048).
+// Recall exposures (#443).
 //
 // The recall hook records which beliefs it injected into an agent session's
-// context, so an episode that session later produces for one of them is read
-// as recall-seeded, not as independent corroboration. Recording is idempotent:
+// context, so an episode that session later produces for one of them can be
+// identified as recall-seeded. Nothing reads the rows into trust yet. Recording is idempotent:
 // the store keeps the first exposure of a (session, belief).
 
 type recallExposuresInput struct{ Exposures []domain.RecallExposure }
