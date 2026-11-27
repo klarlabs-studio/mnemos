@@ -76,11 +76,7 @@ func (r EmbeddingRepository) SearchClaimsByVector(
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate claim embeddings: %w", err)
 	}
-	for i := 1; i < len(hits); i++ {
-		for j := i; j > 0 && hits[j].Similarity > hits[j-1].Similarity; j-- {
-			hits[j-1], hits[j] = hits[j], hits[j-1]
-		}
-	}
+	ports.SortClaimHitsDesc(hits)
 	if topK > 0 && len(hits) > topK {
 		hits = hits[:topK]
 	}
