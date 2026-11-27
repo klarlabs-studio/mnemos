@@ -378,6 +378,19 @@ CREATE TABLE IF NOT EXISTS event_dependency_history (
 CREATE INDEX IF NOT EXISTS idx_event_dependency_history_event_id ON event_dependency_history(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_dependency_history_depends_on ON event_dependency_history(depends_on);
 
+-- recall_exposures (ADR 0048): recall showed belief claim_id to agent session
+-- session_id at exposed_at. An evidence episode of that session for that
+-- belief, timestamped at or after the exposure, is recall-seeded
+-- (domain.RecallSeeded); nothing reads the rows into trust yet. One row per (session, belief); the
+-- first exposure is kept. No foreign keys. In the RLS scoped array below.
+CREATE TABLE IF NOT EXISTS recall_exposures (
+  session_id text        NOT NULL,
+  claim_id   text        NOT NULL,
+  exposed_at timestamptz NOT NULL,
+  PRIMARY KEY (session_id, claim_id)
+);
+CREATE INDEX IF NOT EXISTS idx_recall_exposures_claim_id ON recall_exposures(claim_id);
+
 -- pending_references (ADR 0038, late citations): a citation in episode
 -- event_id that named no stored episode when it was written, under a
 -- canonical lookup_key a later source would carry. Writing an episode with
@@ -691,7 +704,7 @@ DECLARE
   t text;
   scoped text[] := ARRAY[
     'events','claims','entities','claim_entities','claim_evidence','relationships',
-    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','closed_claim_evidence','closed_relationships','event_dependencies','event_dependency_history','pending_references','embeddings','agents','actions',
+    'compilation_jobs','claim_status_history','claim_validity_history','claim_credit_history','claim_trust_input_history','closed_claim_evidence','closed_relationships','event_dependencies','event_dependency_history','pending_references','recall_exposures','embeddings','agents','actions',
     'outcomes','lessons','lesson_evidence','decisions','decision_beliefs',
     'playbooks','playbook_lessons','lesson_versions','playbook_versions',
     'entity_relationships','working_memory_blocks','claim_expectations',

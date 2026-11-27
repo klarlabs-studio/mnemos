@@ -339,6 +339,20 @@ type TrustInputHistoryLister interface {
 	ListTrustInputHistory(ctx context.Context, claimIDs []string) ([]domain.TrustInputChange, error)
 }
 
+// RecallExposureRepository records which beliefs recall showed to which agent
+// session (#443), so an evidence episode that session later produces for the
+// same belief can be identified as recall-seeded ([domain.RecallSeeded]).
+// Every claim repository implements it. No trust aggregate reads the rows yet:
+// whether seeded episodes should stop corroborating is still to be measured. Recording an exposure the store already holds for that
+// (session, belief) keeps the first one, so the earliest exposure decides.
+type RecallExposureRepository interface {
+	RecordRecallExposures(ctx context.Context, exposures []domain.RecallExposure) error
+	// ListRecallExposures returns the exposures of the given beliefs, ordered
+	// by session then belief. A recorded-as-of read uses it to reconstruct
+	// which episodes were seeded at T.
+	ListRecallExposures(ctx context.Context, claimIDs []string) ([]domain.RecallExposure, error)
+}
+
 // RelationshipRepository persists and retrieves relationships between claims.
 type RelationshipRepository interface {
 	Upsert(ctx context.Context, relationships []domain.Relationship) error

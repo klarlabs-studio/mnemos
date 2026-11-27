@@ -171,6 +171,7 @@ type state struct {
 	dependencies      []domain.EventDependency              // source dependence between episodes (ADR 0038), insertion order
 	dependencyHistory []domain.EventDependency              // closed intervals a revival superseded, append-only
 	pendingRefs       map[[2]string]domain.PendingReference // late citations (ADR 0038): (event_id, lookup_key) -> row
+	recallExposures   map[[2]string]domain.RecallExposure   // ADR 0048: (session_id, claim_id) -> first exposure
 }
 
 // storedEntityVersion is the in-memory analogue of a row in
@@ -239,6 +240,7 @@ func (s *state) clear() {
 	s.dependencies = nil
 	s.dependencyHistory = nil
 	s.pendingRefs = nil
+	s.recallExposures = nil
 	s.trustInputHistory = map[string][]domain.TrustInputChange{}
 	s.relationships = map[string]storedRelationship{}
 	s.embeddings = map[embeddingKey]storedEmbedding{}
